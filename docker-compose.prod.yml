@@ -1,0 +1,46 @@
+# Production image-pull stack for ReadyRoute V2.
+#
+# Workflow:
+#   docker compose --env-file .env -f docker-compose.prod.yml pull
+#   docker compose --env-file .env -f docker-compose.prod.yml up -d --remove-orphans
+#
+# Data persists in the named backend_data volume even when images are repulled.
+
+services:
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/dinkleburgh/readyroutev2-backend}:${IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: readyroutev2-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-sqlite:////app/.data/truckv2_prod.db}
+      SECRET_KEY: ${SECRET_KEY:-change-me-to-a-long-random-string}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      SESSION_EXPIRY_DAYS: ${SESSION_EXPIRY_DAYS:-30}
+      CORS_ORIGINS: ${CORS_ORIGINS:-*}
+      TIMEZONE: ${TIMEZONE:-America/New_York}
+    volumes:
+      - backend_data:/app/.data
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/dinkleburgh/readyroutev2-frontend}:${IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: readyroutev2-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-80}:80"
+
+volumes:
+  backend_data:

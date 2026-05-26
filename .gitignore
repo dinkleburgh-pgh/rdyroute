@@ -1,0 +1,29 @@
+# Environment
+.env
+.env.*
+!.env.example
+
+# Local runtime data
+.data/
+*.db
+*.sqlite
+*.sqlite3
+truckv2_dev.db
+
+# Node / Python / editor artifacts
+frontend/node_modules/
+frontend/dist/
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.vscode/
+.idea/
+*.log

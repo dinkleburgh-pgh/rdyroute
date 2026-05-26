@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" rx="96" fill="#0f172a"/>
+  <!-- Truck body -->
+  <rect x="60" y="220" width="260" height="140" rx="12" fill="#3b82f6"/>
+  <!-- Cab -->
+  <rect x="300" y="258" width="120" height="102" rx="10" fill="#2563eb"/>
+  <!-- Cab window -->
+  <rect x="312" y="268" width="96" height="54" rx="6" fill="#93c5fd"/>
+  <!-- Wheels -->
+  <circle cx="140" cy="370" r="36" fill="#1e293b"/>
+  <circle cx="140" cy="370" r="20" fill="#475569"/>
+  <circle cx="300" cy="370" r="36" fill="#1e293b"/>
+  <circle cx="300" cy="370" r="20" fill="#475569"/>
+  <circle cx="390" cy="370" r="36" fill="#1e293b"/>
+  <circle cx="390" cy="370" r="20" fill="#475569"/>
+  <!-- Route chevron -->
+  <path d="M90 170 L130 130 L170 170" stroke="#60a5fa" stroke-width="18" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M140 170 L180 130 L220 170" stroke="#93c5fd" stroke-width="18" fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

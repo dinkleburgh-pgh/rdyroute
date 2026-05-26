@@ -1,0 +1,11 @@
+# Frontend Docker build context excludes
+node_modules/
+dist/
+.vite/
+*.log
+.git/
+.gitignore
+.vscode/
+.idea/
+.env
+.env.*

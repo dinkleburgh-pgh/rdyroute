@@ -1,0 +1,39 @@
+# Backend Docker build context excludes
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local dev data — don't bake into image
+.data/
+*.db
+*.sqlite
+*.sqlite3
+truckv2_dev.db
+
+# Frontend (built separately by frontend/Dockerfile)
+frontend/node_modules/
+frontend/dist/
+
+# Editor / VCS
+.git/
+.gitignore
+.vscode/
+.idea/
+*.log
+
+# Compose / env (mount at runtime, don't bake)
+.env
+.env.*
+!.env.example
+
+# Docs / misc
+README.md
+*.md
