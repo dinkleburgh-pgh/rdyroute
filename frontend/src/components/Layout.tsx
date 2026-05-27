@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayMode } from "../api/hooks";
+import { useBoard, useHolidayMode, useWizardCompleted } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
@@ -97,6 +97,7 @@ export default function Layout() {
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
   const { data: holidayMode = false } = useHolidayMode(todayIso());
+  const { data: wizardDone = false } = useWizardCompleted(todayIso());
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Real-time sync: invalidates React Query caches on server-push events
@@ -202,21 +203,18 @@ export default function Layout() {
         )}
       >
         <div className="flex-1 space-y-3 overflow-y-auto p-4">
-          {/* Overview card */}
-          <NavLink
-            to="/"
-            end
-            className={({ isActive }) =>
-              clsx(
-                "block rounded-md border px-3 py-2 text-center text-sm font-semibold transition-colors",
-                isActive
-                  ? "border-amber-400 bg-slate-900 text-amber-300 ring-1 ring-amber-400"
-                  : "border-slate-700 bg-slate-800 hover:bg-slate-700",
-              )
-            }
+          {/* Setup Day button */}
+          <button
+            onClick={() => nav("/?setup=1")}
+            className={clsx(
+              "block w-full rounded-md border px-3 py-2 text-center text-sm font-semibold transition-colors",
+              wizardDone
+                ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                : "animate-pulse border-amber-500/80 bg-amber-950/30 text-amber-300 hover:bg-amber-950/50",
+            )}
           >
-            Overview
-          </NavLink>
+            {wizardDone ? "Setup Day" : "Setup Day — needs to run!"}
+          </button>
 
           {/* Workday context */}
           <div className="rounded-md bg-slate-950/60 px-3 py-2 text-center text-xs leading-tight">
