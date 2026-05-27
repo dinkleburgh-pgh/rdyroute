@@ -44,6 +44,9 @@ services:
     depends_on:
       backend:
         condition: service_healthy
+    environment:
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      BACKEND_HEALTH_URL: ${BACKEND_HEALTH_URL:-http://backend:8000/health}
     ports:
       - "${FRONTEND_PORT:-5173}:80"
 
