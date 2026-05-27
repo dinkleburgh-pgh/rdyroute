@@ -5,6 +5,7 @@ import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
 import { useSettings } from "./api/hooks";
+import useWakeLock from "./hooks/useWakeLock";
 import Login from "./pages/Login";
 import RunDay from "./pages/RunDay";
 import Board from "./pages/Board";
@@ -25,6 +26,7 @@ const queryClient = new QueryClient({
 });
 
 export default function App() {
+  useWakeLock();
   return (
     <QueryClientProvider client={queryClient}>
       <StatusColorApplier />

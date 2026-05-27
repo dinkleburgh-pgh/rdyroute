@@ -47,6 +47,30 @@ services:
     ports:
       - "${FRONTEND_PORT:-5173}:80"
 
+  watchdog:
+    image: alpine:3.20
+    container_name: readyroutev2-watchdog
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    environment:
+      WATCHDOG_BACKEND_URL: ${WATCHDOG_BACKEND_URL:-http://backend:8000/health}
+      WATCHDOG_FRONTEND_URL: ${WATCHDOG_FRONTEND_URL:-http://frontend}
+      WATCHDOG_BACKEND_CONTAINER: ${WATCHDOG_BACKEND_CONTAINER:-readyroutev2-backend}
+      WATCHDOG_FRONTEND_CONTAINER: ${WATCHDOG_FRONTEND_CONTAINER:-readyroutev2-frontend}
+      WATCHDOG_INTERVAL_SECONDS: ${WATCHDOG_INTERVAL_SECONDS:-20}
+      WATCHDOG_FAILURE_THRESHOLD: ${WATCHDOG_FAILURE_THRESHOLD:-3}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./watchdog-docker.sh:/watchdog-docker.sh:ro
+    command:
+      - /bin/sh
+      - -c
+      - apk add --no-cache wget > /dev/null && chmod +x /watchdog-docker.sh && /watchdog-docker.sh
+
   # Optional: spin up a local postgres by enabling the 'postgres' profile.
   # Then set DATABASE_URL=postgresql+psycopg://readyroute:readyroute@db:5432/readyroute
   db:

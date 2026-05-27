@@ -137,9 +137,24 @@ If you deploy the compose file in a stack manager that does not read `.env.produ
 
 ---
 
-## Host reliability (Windows)
+## Host reliability (Windows / Docker)
 
-If this project runs on a Windows host (local or Docker), two optional background helpers are included:
+When running with Docker, the stack now includes a watchdog container that starts automatically with the app and restarts unhealthy frontend/backend containers.
+
+### Docker-native watchdog (auto-start)
+
+- Included in both [docker-compose.yml](docker-compose.yml) and [docker-compose.prod.yml](docker-compose.prod.yml).
+- No extra startup command is required once the stack is deployed.
+- Tunable with:
+  - `WATCHDOG_INTERVAL_SECONDS` (default `20`)
+  - `WATCHDOG_FAILURE_THRESHOLD` (default `3`)
+
+### Host keep-awake note
+
+Containers cannot reliably control host OS sleep policy. If the machine itself sleeps, all containers pause.
+For unattended Windows hosts, set OS power sleep to `Never` (or use the keep-awake host script below).
+
+Two host-level helpers are also included for Windows hosts:
 
 ### 1) Keep the host awake
 
@@ -156,7 +171,7 @@ If this project runs on a Windows host (local or Docker), two optional backgroun
 .\uninstall-keep-awake-task.ps1
 ```
 
-### 2) Service watchdog daemon
+### 2) Service watchdog daemon (host-level)
 
 `watchdog.ps1` continuously checks frontend/backend health and restarts failed services.
 

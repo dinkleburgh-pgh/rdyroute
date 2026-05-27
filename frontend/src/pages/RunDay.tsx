@@ -485,9 +485,13 @@ function RunDayWizard({
                       : "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700",
                   )}
                   onClick={async () => {
-                    if (!holidayMode) await setHolidayMode.mutateAsync({ runDate, holiday: true });
+                    if (!holidayMode) {
+                      await setHolidayMode.mutateAsync({ runDate, holiday: true });
+                      await setHolidayLoad.mutateAsync({ runDate, value: true });
+                      await setHolidayUnload.mutateAsync({ runDate, value: true });
+                    }
                   }}
-                  disabled={setHolidayMode.isPending}
+                  disabled={setHolidayMode.isPending || setHolidayLoad.isPending || setHolidayUnload.isPending}
                 >
                   Holiday {holidayMode && "✓"}
                 </button>
