@@ -92,6 +92,22 @@ const FLEET_STATUS_OPTIONS: TruckStatus[] = ["dirty", "shop", "unloaded", "loade
 // All statuses shown in the fleet filter rail (ordered for display).
 const FLEET_RAIL_STATUSES: TruckStatus[] = ["dirty", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare"];
 
+// Filled t-shirt silhouette used to flag Dust trucks carrying a dust garment.
+// Matches the icon used on the Load page so the visual language stays consistent.
+function DustGarmentIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+      stroke="none"
+    >
+      <path d="M11 4c.4 1.7 2.2 3 5 3s4.6-1.3 5-3l5.5 2.5a1 1 0 0 1 .5 1.3l-2 5a1 1 0 0 1-1.3.5L21 11.6V27a1 1 0 0 1-1 1H12a1 1 0 0 1-1-1V11.6l-2.7 1.7a1 1 0 0 1-1.3-.5l-2-5a1 1 0 0 1 .5-1.3L11 4z" />
+    </svg>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Route Card panel (fleet mode only)
 // ---------------------------------------------------------------------------
@@ -689,7 +705,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             chipIsExtra = chipDay === loadDay2;
           }
           return (
-            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-3 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+            <div key={t.truck_number} className={clsx("card cursor-pointer relative", fleetMode ? "p-3 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {
@@ -782,6 +798,16 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
                 )}>
                   Day {chipDay}
+                </span>
+              )}
+
+              {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+                <span
+                  className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-950/80 px-2 py-0.5 text-[10px] font-semibold text-amber-300 shadow-sm"
+                  title="Garments assigned"
+                >
+                  <DustGarmentIcon className="h-3 w-3" />
+                  Garments
                 </span>
               )}
 
