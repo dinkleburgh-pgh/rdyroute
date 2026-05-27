@@ -105,7 +105,7 @@ export default function RunDay() {
       board
         .filter(
           (t) =>
-            t.truck_type !== "Spare" &&
+            (t.truck_type !== "Spare" || t.route_swap_route != null) &&
             (holidayUnload || !t.scheduled_off_days.includes(unloadsDay)),
         )
         .sort((a, b) => {
@@ -138,9 +138,38 @@ export default function RunDay() {
     [board, loadDay, holidayLoad],
   );
 
-  const unloadDone = unloadTrucks.filter((t) =>
-    isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)),
+  // Unload progress counts ROUTES, not trucks (same as Load). A spare covering
+  // an OOS truck's route returns to unload in that route's slot.
+  const unloadRouteTrucks = useMemo(
+    () => unloadTrucks.filter((t) => t.truck_type !== "Spare"),
+    [unloadTrucks],
+  );
+  const unloadedSpareRoutes = useMemo(
+    () =>
+      new Set(
+        unloadTrucks
+          .filter(
+            (t) =>
+              t.truck_type === "Spare" &&
+              t.route_swap_route != null &&
+              isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)),
+          )
+          .map((t) => t.route_swap_route as number),
+      ),
+    [unloadTrucks, unloadsDay, holidayUnload],
+  );
+  const unloadTotal = unloadRouteTrucks.length;
+  const unloadDone = unloadRouteTrucks.filter(
+    (t) =>
+      isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)) ||
+      unloadedSpareRoutes.has(t.truck_number),
   ).length;
+  const unloadSpareCount = unloadTrucks.length - unloadRouteTrucks.length;
+
+  // On holiday, two days' worth of routes are loaded/unloaded in one shift.
+  // The "second" day is the next ship day (Fri → Mon).
+  const loadDay2 = loadDay === 5 ? 1 : loadDay + 1;
+  const unloadsDay2 = unloadsDay === 5 ? 1 : unloadsDay + 1;
 
   // Load progress counts ROUTES, not trucks. A spare covering an OOS truck's
   // route fills the same slot — it must not double-count against the total,
@@ -186,16 +215,19 @@ export default function RunDay() {
       <section>
         <div className="mb-3 flex items-baseline gap-3">
           <h2 className="text-lg font-semibold text-slate-200">
-            Unload &mdash; Day {unloadsDay}
+            Unload &mdash; Day {unloadsDay}{holidayUnload ? ` + ${unloadsDay2}` : ""}
           </h2>
           <span className="text-sm text-slate-400">
-            {unloadDone} / {unloadTrucks.length} done
+            {unloadDone} / {unloadTotal} done
+            {unloadSpareCount > 0 && (
+              <span className="ml-1 text-slate-500">· {unloadSpareCount} spare{unloadSpareCount === 1 ? "" : "s"}</span>
+            )}
           </span>
-          {unloadTrucks.length > 0 && (
+          {unloadTotal > 0 && (
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
               <div
                 className="h-full rounded-full bg-emerald-500 transition-all"
-                style={{ width: `${Math.round((unloadDone / unloadTrucks.length) * 100)}%` }}
+                style={{ width: `${Math.round((unloadDone / unloadTotal) * 100)}%` }}
               />
             </div>
           )}
@@ -213,7 +245,7 @@ export default function RunDay() {
       <section>
         <div className="mb-3 flex items-baseline gap-3">
           <h2 className="text-lg font-semibold text-slate-200">
-            Load &mdash; Day {loadDay}
+            Load &mdash; Day {loadDay}{holidayLoad ? ` + ${loadDay2}` : ""}
           </h2>
           <span className="text-sm text-slate-400">
             {loadDone} / {loadTotal} done
