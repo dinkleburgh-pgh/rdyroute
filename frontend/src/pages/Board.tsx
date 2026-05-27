@@ -639,7 +639,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   });
                   return;
                 }
-                if (filter === "dirty" && !fleetMode) {
+                if (filter === "dirty" && !fleetMode && t.state?.status !== "oos") {
                   if (batchingDisabled) {
                     upsert.mutate({
                       truck_number: t.truck_number,
@@ -688,7 +688,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     </span>
                   </span>
                 </div>
-                {!fleetMode && filter === "dirty" && (
+                {!fleetMode && filter === "dirty" && t.state?.status !== "oos" && (
                   <span className="flex w-full items-center justify-center gap-1 rounded bg-blue-600/20 px-2 py-1 text-xs font-semibold text-blue-300">
                     {batchingDisabled ? "Mark Unloaded" : "Assign to Batch →"}
                   </span>
