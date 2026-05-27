@@ -528,18 +528,6 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         <div className="flex items-end gap-3">
           {!fleetMode && (
             <div>
-              <label className="label">Run date</label>
-              <input
-                className="input"
-                type="date"
-                max={todayIso()}
-                value={runDate}
-                onChange={(e) => setRunDate(e.target.value)}
-              />
-            </div>
-          )}
-          {!fleetMode && (
-            <div>
               <label className="label">Filter</label>
               <select
                 className="input"
