@@ -91,6 +91,7 @@ export default function Supervisor() {
           <input
             className="input"
             type="date"
+            max={todayIso()}
             value={runDate}
             onChange={(e) => setRunDate(e.target.value)}
           />
