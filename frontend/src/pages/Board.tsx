@@ -662,10 +662,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   {!fleetMode && t.state?.oos_spare_route != null ? (
                     <div className="flex flex-col leading-none gap-0.5">
                       <span className="text-3xl font-extrabold tabular-nums tracking-tight text-sky-300">
-                        Rt {t.state.oos_spare_route}
+                        {t.state.oos_spare_route}
                       </span>
                       <span className="text-xl font-bold tabular-nums text-slate-400">
-                        → #{t.truck_number}
+                        → {t.truck_number}
                       </span>
                     </div>
                   ) : (
@@ -674,7 +674,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       fleetMode ? "text-3xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
                       fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
                     )}>
-                      Rt {t.truck_number}
+                      {t.truck_number}
                     </span>
                   )}
                   <span className="flex h-9 flex-col items-end justify-start gap-0.5">
