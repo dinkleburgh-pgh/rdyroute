@@ -541,23 +541,6 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               </select>
             </div>
           )}
-          {!fleetMode && isAdmin && !isReadOnly && (
-            <button
-              type="button"
-              onClick={() => {
-                setMultiSelect((v) => !v);
-                setSelectedTrucks(new Set());
-              }}
-              className={clsx(
-                "rounded-md px-3 py-1.5 text-sm font-semibold transition-colors",
-                multiSelect
-                  ? "bg-blue-600 text-white"
-                  : "bg-slate-800 text-slate-400 hover:bg-slate-700",
-              )}
-            >
-              {multiSelect ? "✓ Bulk" : "Bulk change"}
-            </button>
-          )}
         </div>
       </div>
 
