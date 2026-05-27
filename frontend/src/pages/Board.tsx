@@ -658,7 +658,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               }}
             >
               <div className="flex w-full flex-col gap-1">
-                <div className="flex w-full items-start justify-between">
+                <div className="flex w-full items-start justify-between min-h-[3.75rem]">
                   {!fleetMode && t.state?.oos_spare_route != null ? (
                     <div className="flex flex-col leading-none gap-0.5">
                       <span className="text-3xl font-extrabold tabular-nums tracking-tight text-sky-300">
