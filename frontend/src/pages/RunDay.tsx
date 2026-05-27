@@ -54,6 +54,9 @@ export default function RunDay() {
   const { data: nextUp } = useNextUp(runDate);
   const { data: holidayMode = false } = useHolidayMode(runDate);
   const { data: wizardDone = false } = useWizardCompleted(runDate);
+  const { data: dailyNotes = "" } = useDailyNotes(runDate);
+  const [notesText, setNotesText] = useState<string | null>(null);
+  const setDailyNotes = useSetDailyNotes();
   const activeNotices = notices ?? [];
 
   const { loadDay } = workdayNumbers();
@@ -147,7 +150,32 @@ export default function RunDay() {
         </div>
       )}
 
-      <div className="grid flex-1 grid-cols-1 gap-4 p-4 pt-0 lg:grid-cols-[1fr_360px]">
+      <div className="grid flex-1 grid-cols-1 gap-4 p-4 pt-0 lg:grid-cols-[220px_1fr_360px]">
+        {/* Left rail: notes + quick links */}
+        <aside className="flex flex-col gap-3">
+          <div className="card flex flex-col gap-2">
+            <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Run Day Notes</p>
+            <textarea
+              className="input w-full resize-none text-sm"
+              rows={5}
+              placeholder="Notes about today's run…"
+              value={notesText ?? dailyNotes}
+              onChange={(e) => setNotesText(e.target.value)}
+              onBlur={() => {
+                if (notesText !== null && notesText !== dailyNotes) {
+                  setDailyNotes.mutate({ runDate, notes: notesText });
+                }
+              }}
+            />
+          </div>
+          <Link to="/shorts" className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2.5 text-center text-sm font-semibold transition-colors hover:bg-slate-700">
+            Shortages
+          </Link>
+          <Link to="/audit" className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2.5 text-center text-sm font-semibold transition-colors hover:bg-slate-700">
+            Audit
+          </Link>
+        </aside>
+
         <div className="space-y-4">
           {isAdmin && (
             <div className="flex gap-2">
