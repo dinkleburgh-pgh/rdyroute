@@ -119,6 +119,7 @@ export default function Load() {
   // Load progress: loaded vs all scheduled for tomorrow.
   // Unload progress: past-unload (unloaded/in_progress/loaded) vs all scheduled for today.
   const loadedCount = loaded.length;
+  const totalScheduledLoad = loadedCount + totalLeft;
   const unloadedCount = useMemo(
     () =>
       scheduledForUnload.filter((t) =>
@@ -126,7 +127,7 @@ export default function Load() {
       ).length,
     [scheduledForUnload],
   );
-  const loadPct = totalLeft > 0 ? Math.round((loadedCount / totalLeft) * 100) : 0;
+  const loadPct = totalScheduledLoad > 0 ? Math.round((loadedCount / totalScheduledLoad) * 100) : 0;
   const unloadPct =
     scheduledForUnload.length > 0
       ? Math.round((unloadedCount / scheduledForUnload.length) * 100)
@@ -247,7 +248,7 @@ export default function Load() {
 
       {/* Load / Unload progress */}
       <div className="card space-y-2">
-        <ProgressRow label="Load" done={loadedCount} total={totalLeft} pct={loadPct} color="bg-blue-500" />
+        <ProgressRow label="Load" done={loadedCount} total={totalScheduledLoad} pct={loadPct} color="bg-blue-500" />
         <ProgressRow label="Unload" done={unloadedCount} total={scheduledForUnload.length} pct={unloadPct} color="bg-emerald-500" />
       </div>
 
