@@ -189,6 +189,18 @@ export default function RunDay() {
   ).length;
   const loadSpareCount = loadTrucks.length - loadRouteTrucks.length;
 
+  // Map from route truck number → the spare that is covering it, for annotating
+  // OOS truck cards without rendering a separate spare card.
+  const coveringSpareMap = useMemo(
+    () =>
+      new Map<number, TruckWithState>(
+        board
+          .filter((t) => t.truck_type === "Spare" && t.route_swap_route != null)
+          .map((t) => [t.route_swap_route as number, t]),
+      ),
+    [board],
+  );
+
   return (
     <>
       {wizardOpen && (
@@ -222,16 +234,31 @@ export default function RunDay() {
           )}
         </div>
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
-          {unloadTrucks.map((t) => {
-            const raw = effectiveStatus(t, unloadsDay, holidayUnload);
-            // The unload lifecycle ends at "Unloaded". Once a truck moves on
-            // to "Loaded" (start of the load lifecycle), keep displaying it
-            // as Unloaded here so the unload board doesn't flip its badge.
-            const status: TruckStatus = raw === "loaded" ? "unloaded" : raw;
-            return (
-              <TruckCard key={t.truck_number} t={t} status={status} done={isUnloadDone(raw)} />
-            );
-          })}
+          {unloadTrucks
+            // Covering spares are absorbed into their OOS route truck's card.
+            .filter((t) => !(t.truck_type === "Spare" && t.route_swap_route != null))
+            .map((t) => {
+              const coveringSpare =
+                t.state?.status === "oos" ? coveringSpareMap.get(t.truck_number) : undefined;
+              const ownRaw = effectiveStatus(t, unloadsDay, holidayUnload);
+              // When OOS and covered, reflect the spare's lifecycle status.
+              const raw = coveringSpare
+                ? effectiveStatus(coveringSpare, unloadsDay, holidayUnload)
+                : ownRaw;
+              // The unload lifecycle ends at "Unloaded". Once a truck moves on
+              // to "Loaded" (start of the load lifecycle), keep displaying it
+              // as Unloaded here so the unload board doesn't flip its badge.
+              const status: TruckStatus = raw === "loaded" ? "unloaded" : raw;
+              return (
+                <TruckCard
+                  key={t.truck_number}
+                  t={t}
+                  status={status}
+                  done={isUnloadDone(raw)}
+                  coveringSpare={coveringSpare}
+                />
+              );
+            })}
         </div>
       </section>
 
@@ -256,12 +283,26 @@ export default function RunDay() {
           )}
         </div>
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
-          {loadTrucks.map((t) => {
-            const status = effectiveStatus(t, loadDay, holidayLoad);
-            return (
-              <TruckCard key={t.truck_number} t={t} status={status} done={isLoadDone(status)} />
-            );
-          })}
+          {loadTrucks
+            // Covering spares are absorbed into their OOS route truck's card.
+            .filter((t) => !(t.truck_type === "Spare" && t.route_swap_route != null))
+            .map((t) => {
+              const coveringSpare =
+                t.state?.status === "oos" ? coveringSpareMap.get(t.truck_number) : undefined;
+              // When OOS and covered, reflect the spare's lifecycle status.
+              const status = coveringSpare
+                ? effectiveStatus(coveringSpare, loadDay, holidayLoad)
+                : effectiveStatus(t, loadDay, holidayLoad);
+              return (
+                <TruckCard
+                  key={t.truck_number}
+                  t={t}
+                  status={status}
+                  done={isLoadDone(status)}
+                  coveringSpare={coveringSpare}
+                />
+              );
+            })}
         </div>
       </section>
       </div>
@@ -273,10 +314,12 @@ function TruckCard({
   t,
   status,
   done,
+  coveringSpare,
 }: {
   t: TruckWithState;
   status: TruckStatus;
   done: boolean;
+  coveringSpare?: TruckWithState;
 }) {
   return (
     <div
@@ -301,7 +344,12 @@ function TruckCard({
       >
         {STATUS_LABELS[status]}
       </span>
-      <span className="text-[10px] text-slate-500">{t.truck_type}</span>
+      <span className="text-[10px] text-slate-500">
+        {t.truck_type}
+        {coveringSpare && (
+          <span className="text-sky-400"> · #{coveringSpare.truck_number}</span>
+        )}
+      </span>
     </div>
   );
 }
