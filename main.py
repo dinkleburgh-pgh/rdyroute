@@ -80,25 +80,50 @@ async def lifespan(app: FastAPI):
     finally:
         db.close()
 
-    _db_url = str(engine.url)
-    load_ms = (time.monotonic() - _t_start) * 1000
+    _init_ms = (time.monotonic() - _t_start) * 1000
     print(f"\n{'='*58}")
-    print(f"  ReadyRoute V2  —  ready")
-    print(f"  API   : http://127.0.0.1:8000")
-    print(f"  Docs  : http://127.0.0.1:8000/docs")
-    print(f"  DB    : {_db_url}")
-    print(f"  Load  : {load_ms:.1f} ms")
+    print(f"  ReadyRoute V2  —  initialised ({_init_ms:.0f} ms)")
+    print(f"  DB    : {engine.url}")
     print(f"{'='*58}\n")
 
+    async def _confirm_healthy() -> None:
+        """Print a final banner once uvicorn is actually accepting TCP connections."""
+        _port = 8000
+        for _ in range(60):
+            await asyncio.sleep(1)
+            try:
+                _r, _w = await asyncio.open_connection("127.0.0.1", _port)
+                _w.close()
+                await _w.wait_closed()
+            except OSError:
+                continue
+            _up_ms = (time.monotonic() - _t_start) * 1000
+            _up_str  = f"{_up_ms:.0f} ms"
+            _db_str  = str(engine.url)
+            W = 54
+            print(f"\n╔{'═'*W}╗")
+            print(f"║{'  ReadyRoute V2  —  ✓ HEALTHY  ':^{W}}║")
+            print(f"╠{'═'*W}╣")
+            print(f"║  API   : http://127.0.0.1:{_port:<{W-18}}║")
+            print(f"║  Docs  : http://127.0.0.1:{_port}/docs{'':<{W-24}}║")
+            print(f"║  DB    : {_db_str:<{W-10}}║")
+            print(f"║  Up in : {_up_str:<{W-10}}║")
+            print(f"╚{'═'*W}╝\n")
+            return
+        log.warning("Health-confirm: server did not open port %d within 60 s", _port)
+
     backup_task = asyncio.create_task(backup_loop())
+    health_task = asyncio.create_task(_confirm_healthy())
     try:
         yield
     finally:
         backup_task.cancel()
-        try:
-            await backup_task
-        except (asyncio.CancelledError, Exception):
-            pass
+        health_task.cancel()
+        for _t in (backup_task, health_task):
+            try:
+                await _t
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 # ---------------------------------------------------------------------------
