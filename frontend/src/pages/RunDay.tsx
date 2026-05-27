@@ -109,10 +109,14 @@ export default function RunDay() {
             (holidayUnload || !t.scheduled_off_days.includes(unloadsDay)),
         )
         .sort((a, b) => {
+          // Clamp loaded→unloaded in unload sort: from this section's POV,
+          // "loaded" is just a downstream state of "unloaded".
           const sa = effectiveStatus(a, unloadsDay, holidayUnload);
           const sb = effectiveStatus(b, unloadsDay, holidayUnload);
-          const oa = UNLOAD_SORT[sa] ?? 9;
-          const ob = UNLOAD_SORT[sb] ?? 9;
+          const ka: TruckStatus = sa === "loaded" ? "unloaded" : sa;
+          const kb: TruckStatus = sb === "loaded" ? "unloaded" : sb;
+          const oa = UNLOAD_SORT[ka] ?? 9;
+          const ob = UNLOAD_SORT[kb] ?? 9;
           if (oa !== ob) return oa - ob;
           return a.truck_number - b.truck_number;
         }),
@@ -234,9 +238,13 @@ export default function RunDay() {
         </div>
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
           {unloadTrucks.map((t) => {
-            const status = effectiveStatus(t, unloadsDay, holidayUnload);
+            const raw = effectiveStatus(t, unloadsDay, holidayUnload);
+            // The unload lifecycle ends at "Unloaded". Once a truck moves on
+            // to "Loaded" (start of the load lifecycle), keep displaying it
+            // as Unloaded here so the unload board doesn't flip its badge.
+            const status: TruckStatus = raw === "loaded" ? "unloaded" : raw;
             return (
-              <TruckCard key={t.truck_number} t={t} status={status} done={isUnloadDone(status)} />
+              <TruckCard key={t.truck_number} t={t} status={status} done={isUnloadDone(raw)} />
             );
           })}
         </div>
