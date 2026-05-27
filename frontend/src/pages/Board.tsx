@@ -703,7 +703,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                 </div>
               )}
-              {fleetMode && !multiSelect && !isReadOnly && status !== "oos" && (
+              {fleetMode && !multiSelect && !isReadOnly && status !== "oos" && t.truck_type === "Spare" && (
                 <select
                   className="input text-xs"
                   value={status}
