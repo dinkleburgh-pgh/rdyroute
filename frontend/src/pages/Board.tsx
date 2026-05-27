@@ -705,7 +705,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             chipIsExtra = chipDay === loadDay2;
           }
           return (
-            <div key={t.truck_number} className={clsx("card cursor-pointer relative", fleetMode ? "p-3 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-3 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {
@@ -792,23 +792,26 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <div className="text-xs text-slate-400">Batch {t.state.batch_id}</div>
               )}
 
-              {chipDay != null && (
-                <span className={clsx(
-                  "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                  chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
-                )}>
-                  Day {chipDay}
-                </span>
-              )}
-
-              {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                <span
-                  className="pointer-events-none absolute bottom-2 right-2 inline-flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-950/80 px-2 py-0.5 text-[10px] font-semibold text-amber-300 shadow-sm"
-                  title="Garments assigned"
-                >
-                  <DustGarmentIcon className="h-3 w-3" />
-                  Garments
-                </span>
+              {(chipDay != null || (t.truck_type === "Dust" && t.state?.has_dust_garment)) && (
+                <div className="flex flex-wrap items-center gap-1.5">
+                  {chipDay != null && (
+                    <span className={clsx(
+                      "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                      chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
+                    )}>
+                      Day {chipDay}
+                    </span>
+                  )}
+                  {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+                    <span
+                      className="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-950/70 px-2 py-0.5 text-[10px] font-semibold text-amber-300"
+                      title="Garments assigned"
+                    >
+                      <DustGarmentIcon className="h-3 w-3" />
+                      Garments
+                    </span>
+                  )}
+                </div>
               )}
 
               {fleetMode && (
