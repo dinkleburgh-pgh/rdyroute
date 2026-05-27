@@ -2,7 +2,7 @@ import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayMode, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
@@ -96,7 +96,8 @@ export default function Layout() {
   const nav = useNavigate();
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
-  const { data: holidayMode = false } = useHolidayMode(todayIso());
+  const { data: holidayLoad = false } = useHolidayLoad(todayIso());
+  const { data: holidayUnload = false } = useHolidayUnload(todayIso());
   const { data: wizardDone = false } = useWizardCompleted(todayIso());
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
@@ -127,8 +128,10 @@ export default function Layout() {
     };
     (board ?? []).forEach((t) => {
       const raw = (t.state?.status ?? "dirty") as TruckStatus;
+      // Auto-off is decided by the NEXT load operation (will it be loaded tonight?).
+      // Skip when holiday_load is on, since holiday loads run every route.
       const s: TruckStatus =
-        !holidayMode &&
+        !holidayLoad &&
         t.truck_type !== "Spare" &&
         t.scheduled_off_days.includes(loadDayNum) &&
         (raw === "dirty" || raw === "unloaded")
@@ -141,22 +144,22 @@ export default function Layout() {
       out[s] = (out[s] ?? 0) + 1;
     });
     return out;
-  }, [board, loadDayNum, holidayMode]);
+  }, [board, loadDayNum, holidayLoad]);
 
   // Scheduled trucks for each direction (excludes off-day and spare-type trucks).
   const scheduledForLoad = useMemo(
     () =>
       (board ?? []).filter(
-        (t) => t.truck_type !== "Spare" && (holidayMode || !(t.scheduled_off_days ?? []).includes(loadDay)),
+        (t) => t.truck_type !== "Spare" && (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
       ),
-    [board, loadDay, holidayMode],
+    [board, loadDay, holidayLoad],
   );
   const scheduledForUnload = useMemo(
     () =>
       (board ?? []).filter(
-        (t) => t.truck_type !== "Spare" && (holidayMode || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
+        (t) => t.truck_type !== "Spare" && (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
       ),
-    [board, unloadsDay, holidayMode],
+    [board, unloadsDay, holidayUnload],
   );
   const loadedScheduled = scheduledForLoad.filter((t) => t.state?.status === "loaded").length;
   const unloadedScheduled = scheduledForUnload.filter((t) =>

@@ -5,7 +5,7 @@ import {
   useAssignSpare,
   useBoard,
   useBulkUpdateStatus,
-  useHolidayMode,
+  useHolidayLoad,
   useReturnSpare,
   useSettings,
   useShortages,
@@ -87,11 +87,11 @@ const FLEET_STATUS_OPTIONS: TruckStatus[] = ["dirty", "shop", "unloaded", "loade
 // All statuses shown in the fleet filter rail (ordered for display).
 const FLEET_RAIL_STATUSES: TruckStatus[] = ["dirty", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare"];
 
-/** V1 parity: trucks scheduled off for the load day show as "off" unless actively in a workflow state. Spares are never auto-off. In holiday mode, the scheduled-off check is skipped. */
-function effectiveStatus(t: TruckWithState, loadDayNum: number, holidayMode = false): TruckStatus {
+/** V1 parity: trucks scheduled off for the load day show as "off" unless actively in a workflow state. Spares are never auto-off. When holiday_load is on, the scheduled-off check is skipped. */
+function effectiveStatus(t: TruckWithState, loadDayNum: number, holidayLoad = false): TruckStatus {
   const raw = (t.state?.status ?? "dirty") as TruckStatus;
   if (
-    !holidayMode &&
+    !holidayLoad &&
     t.truck_type !== "Spare" &&
     t.scheduled_off_days.includes(loadDayNum) &&
     (raw === "dirty" || raw === "unloaded")
@@ -277,7 +277,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     return workdayNumbers(new Date(y, m - 1, d)).loadDay;
   }, [runDate]);
 
-  const { data: holidayMode = false } = useHolidayMode(runDate);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
 
   const batchingDisabled = useMemo(
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
@@ -350,7 +350,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       if (fleetMode && t.truck_type === "Spare" && t.state?.status !== "oos") {
         c.spare = (c.spare ?? 0) + 1;
       } else {
-        const s = effectiveStatus(t, runDayNum, holidayMode);
+        const s = effectiveStatus(t, runDayNum, holidayLoad);
         c[s] = (c[s] ?? 0) + 1;
       }
     });
@@ -367,7 +367,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     }
 
     return c;
-  }, [data, runDayNum, holidayMode, fleetMode, coveringSpareByRoute, truckStatusByNumber]);
+  }, [data, runDayNum, holidayLoad, fleetMode, coveringSpareByRoute, truckStatusByNumber]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -378,19 +378,19 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         if (fleetFilters.has("spare") && t.truck_type === "Spare" && t.state?.status !== "oos") return true;
         // spare-type trucks that are OOS match by effectiveStatus like regular trucks
         if (t.truck_type === "Spare" && t.state?.status !== "oos") return false;
-        return fleetFilters.has(effectiveStatus(t, runDayNum, holidayMode));
+        return fleetFilters.has(effectiveStatus(t, runDayNum, holidayLoad));
       });
     }
     if (filter === "all") return data;
     return data.filter((t) => {
-      if (effectiveStatus(t, runDayNum, holidayMode) === filter) {
+      if (effectiveStatus(t, runDayNum, holidayLoad) === filter) {
         if (filter === "unloaded" && t.truck_type === "Spare" && !t.state?.oos_spare_route && !t.route_swap_route) return false;
         return true;
       }
 
       return false;
     });
-  }, [data, filter, fleetMode, fleetFilters, runDayNum, holidayMode, coveringSpareByRoute, truckStatusByNumber]);
+  }, [data, filter, fleetMode, fleetFilters, runDayNum, holidayLoad, coveringSpareByRoute, truckStatusByNumber]);
 
   // Live lookup so the open detail modal reflects refreshed board data.
   const detailTruck = useMemo(
@@ -603,7 +603,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           : "grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
       )}>
         {filtered.map((t) => {
-          const status = effectiveStatus(t, runDayNum, holidayMode);
+          const status = effectiveStatus(t, runDayNum, holidayLoad);
           return (
             <div key={t.truck_number} className={clsx("card space-y-2 cursor-pointer", fleetMode ? "p-3" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4", fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
