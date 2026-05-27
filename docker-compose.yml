@@ -65,11 +65,30 @@ services:
       WATCHDOG_FAILURE_THRESHOLD: ${WATCHDOG_FAILURE_THRESHOLD:-3}
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
-      - ./watchdog-docker.sh:/watchdog-docker.sh:ro
     command:
       - /bin/sh
       - -c
-      - apk add --no-cache wget > /dev/null && chmod +x /watchdog-docker.sh && /watchdog-docker.sh
+      - |-
+        apk add --no-cache curl docker-cli > /dev/null 2>&1
+        bf=0; ff=0
+        log() { printf '[%s] %s\n' "$(date '+%Y-%m-%d %H:%M:%S')" "$1"; }
+        ok() { curl -fsSL --max-time 8 "$1" > /dev/null 2>&1; }
+        log "Watchdog started."
+        while true; do
+          if ok "$WATCHDOG_BACKEND_URL";  then bf=0; else bf=$((bf+1)); log "Backend unhealthy ${bf}/${WATCHDOG_FAILURE_THRESHOLD}"; fi
+          if ok "$WATCHDOG_FRONTEND_URL"; then ff=0; else ff=$((ff+1)); log "Frontend unhealthy ${ff}/${WATCHDOG_FAILURE_THRESHOLD}"; fi
+          if [ "$bf" -ge "$WATCHDOG_FAILURE_THRESHOLD" ]; then
+            log "Restarting $WATCHDOG_BACKEND_CONTAINER"
+            docker restart "$WATCHDOG_BACKEND_CONTAINER" || true
+            bf=0
+          fi
+          if [ "$ff" -ge "$WATCHDOG_FAILURE_THRESHOLD" ]; then
+            log "Restarting $WATCHDOG_FRONTEND_CONTAINER"
+            docker restart "$WATCHDOG_FRONTEND_CONTAINER" || true
+            ff=0
+          fi
+          sleep "$WATCHDOG_INTERVAL_SECONDS"
+        done
 
   # Optional: spin up a local postgres by enabling the 'postgres' profile.
   # Then set DATABASE_URL=postgresql+psycopg://readyroute:readyroute@db:5432/readyroute
