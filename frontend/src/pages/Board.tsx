@@ -705,6 +705,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               {t.state?.batch_id != null && !fleetMode && filter !== "unloaded" && (
                 <div className="text-xs text-slate-400">Batch {t.state.batch_id}</div>
               )}
+              {!fleetMode && t.state?.oos_spare_route != null && (
+                <div className="text-xs font-semibold text-sky-300">
+                  Rt {t.state.oos_spare_route} → #{t.truck_number}
+                </div>
+              )}
               {fleetMode && (
                 <div className="text-xs text-slate-400">
                   {t.truck_type}
