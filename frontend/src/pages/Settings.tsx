@@ -1290,7 +1290,7 @@ function UsersPanel() {
 
 function RecoveryPanel() {
   const { user } = useAuth();
-  const [runDate, setRunDate] = useState(todayIso());
+  const runDate = todayIso();
   const { data: board, isLoading } = useBoard(runDate);
   const { data: pace } = usePaceAverage(30);
   const upsert = useUpsertTruckState();
@@ -1329,17 +1329,8 @@ function RecoveryPanel() {
     <div className="space-y-4">
       <div className="flex items-end justify-between gap-4">
         <p className="text-xs text-slate-400">
-          Force-finish stuck loads and perform bulk status changes for {runDate}.
+          Force-finish stuck loads and perform bulk status changes for today.
         </p>
-        <div>
-          <label className="label">Run date</label>
-          <input
-            className="input"
-            type="date"
-            value={runDate}
-            onChange={(e) => setRunDate(e.target.value)}
-          />
-        </div>
       </div>
 
       {!isPrivileged && (
