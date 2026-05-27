@@ -141,9 +141,35 @@ export default function RunDay() {
   const unloadDone = unloadTrucks.filter((t) =>
     isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)),
   ).length;
-  const loadDone = loadTrucks.filter((t) =>
-    isLoadDone(effectiveStatus(t, loadDay, holidayLoad)),
+
+  // Load progress counts ROUTES, not trucks. A spare covering an OOS truck's
+  // route fills the same slot — it must not double-count against the total,
+  // and a loaded spare marks its covered route as done.
+  const loadRouteTrucks = useMemo(
+    () => loadTrucks.filter((t) => t.truck_type !== "Spare"),
+    [loadTrucks],
+  );
+  const loadedSpareRoutes = useMemo(
+    () =>
+      new Set(
+        loadTrucks
+          .filter(
+            (t) =>
+              t.truck_type === "Spare" &&
+              t.route_swap_route != null &&
+              isLoadDone(effectiveStatus(t, loadDay, holidayLoad)),
+          )
+          .map((t) => t.route_swap_route as number),
+      ),
+    [loadTrucks, loadDay, holidayLoad],
+  );
+  const loadTotal = loadRouteTrucks.length;
+  const loadDone = loadRouteTrucks.filter(
+    (t) =>
+      isLoadDone(effectiveStatus(t, loadDay, holidayLoad)) ||
+      loadedSpareRoutes.has(t.truck_number),
   ).length;
+  const loadSpareCount = loadTrucks.length - loadRouteTrucks.length;
 
   return (
     <>
@@ -190,13 +216,16 @@ export default function RunDay() {
             Load &mdash; Day {loadDay}
           </h2>
           <span className="text-sm text-slate-400">
-            {loadDone} / {loadTrucks.length} done
+            {loadDone} / {loadTotal} done
+            {loadSpareCount > 0 && (
+              <span className="ml-1 text-slate-500">· {loadSpareCount} spare{loadSpareCount === 1 ? "" : "s"}</span>
+            )}
           </span>
-          {loadTrucks.length > 0 && (
+          {loadTotal > 0 && (
             <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
               <div
                 className="h-full rounded-full bg-blue-500 transition-all"
-                style={{ width: `${Math.round((loadDone / loadTrucks.length) * 100)}%` }}
+                style={{ width: `${Math.round((loadDone / loadTotal) * 100)}%` }}
               />
             </div>
           )}
