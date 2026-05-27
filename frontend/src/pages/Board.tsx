@@ -645,7 +645,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       )}>
                         {t.truck_number}
                       </span>
-                      <span className="text-sm font-bold tabular-nums text-sky-400">
+                      <span className="text-xl font-bold tabular-nums text-sky-400">
                         cov. #{t.state.oos_spare_route}
                       </span>
                     </div>
