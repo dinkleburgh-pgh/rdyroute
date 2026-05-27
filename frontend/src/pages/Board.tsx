@@ -637,7 +637,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               <div className="flex w-full flex-col gap-1">
                 <div className="flex w-full items-start justify-between min-h-[3.75rem]">
                   {!fleetMode && t.state?.oos_spare_route != null ? (
-                    <div className="flex flex-col leading-none gap-0.5">
+                    <div className="flex items-baseline gap-2">
                       <span className={clsx(
                         "font-extrabold tracking-tight tabular-nums leading-none",
                         filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
@@ -645,8 +645,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       )}>
                         {t.truck_number}
                       </span>
-                      <span className="text-xl font-bold tabular-nums text-sky-400">
-                        cov. #{t.state.oos_spare_route}
+                      <span className="text-base font-bold tabular-nums text-sky-400">
+                        → cov. #{t.state.oos_spare_route}
                       </span>
                     </div>
                   ) : (
