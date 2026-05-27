@@ -28,6 +28,7 @@ export interface Truck {
   truck_type: TruckType;
   is_active: boolean;
   is_persistent_spare: boolean;
+  is_oos: boolean;
   scheduled_off_days: number[];
   created_at: string;
 }

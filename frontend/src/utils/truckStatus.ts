@@ -19,6 +19,8 @@ export function effectiveStatus(
   dayNum: number,
   holidayMode = false,
 ): TruckStatus {
+  // is_oos flag persists across dates until explicitly disabled
+  if (t.is_oos) return "oos";
   const raw = (t.state?.status ?? "dirty") as TruckStatus;
   if (
     !holidayMode &&
@@ -34,10 +36,12 @@ export function effectiveStatus(
  * Builds a route-aware status count map for the sidebar / progress display.
  *
  * Rules:
- * - Every spare counts once in the "spare" bucket regardless of lifecycle.
- * - A spare's in_progress / loaded state is promoted to the route it is
- *   covering (via route_swap_route) so the sidebar reflects route progress
- *   rather than inflating lifecycle buckets with spare trucks.
+ * - Route trucks always count in their own effectiveStatus bucket (OOS trucks
+ *   always appear in "oos", never promoted to a spare's status).
+ * - A spare covering an OOS route counts in its own lifecycle bucket so the
+ *   sidebar reflects whether that route is being actively serviced (loaded,
+ *   in_progress, etc.) in addition to the OOS count.
+ * - Spares not covering any OOS route count in the "spare" bucket.
  * - Non-spare trucks on a scheduled-off day (dirty or unloaded) count as
  *   "off" unless holiday mode is active.
  */
@@ -57,32 +61,30 @@ export function buildRouteStatusCounts(
     spare: 0,
   };
 
-  // Build a map of covered route → spare's current status so we can promote
-  // the route's bucket when the spare is further along (in_progress / loaded).
-  const swapByRoute = new Map<number, TruckStatus>();
+  // First pass: identify which route numbers are currently OOS so covering
+  // spares can be bucketed into their lifecycle status rather than "spare".
+  const oosRouteNumbers = new Set<number>();
   for (const t of trucks) {
-    if (t.truck_type === "Spare" && t.route_swap_route != null) {
-      swapByRoute.set(t.route_swap_route, (t.state?.status ?? "dirty") as TruckStatus);
+    if (t.truck_type !== "Spare" && effectiveStatus(t, loadDayNum, holidayLoad) === "oos") {
+      oosRouteNumbers.add(t.truck_number);
     }
   }
 
   for (const t of trucks) {
-    const raw = (t.state?.status ?? "dirty") as TruckStatus;
-
     if (t.truck_type === "Spare") {
-      out.spare += 1;
+      // A spare actively covering an OOS route represents that route in the
+      // workflow — count it under its own lifecycle status.
+      const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+      if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
+        out[effectiveStatus(t, loadDayNum, holidayLoad)] += 1;
+      } else {
+        out.spare += 1;
+      }
       continue;
     }
 
-    let s: TruckStatus = effectiveStatus(t, loadDayNum, holidayLoad);
-
-    // Promote the route's status when the covering spare is ahead in the
-    // workflow — the spare represents this route's operational progress.
-    const spareStatus = swapByRoute.get(t.truck_number);
-    if (spareStatus === "loaded") s = "loaded";
-    else if (spareStatus === "in_progress" && s !== "loaded") s = "in_progress";
-
-    out[s] += 1;
+    // Route trucks always count in their effective status (OOS stays OOS).
+    out[effectiveStatus(t, loadDayNum, holidayLoad)] += 1;
   }
 
   return out;

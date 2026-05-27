@@ -76,12 +76,11 @@ const CARD_GROUPS: CardGroup[] = [
   {
     id: "app",
     label: "App Settings",
-    desc: "General, pace, workflows, and badge colors",
+    desc: "General, pace, and badge colors",
     accent: "border-sky-500",
     tabs: [
       { id: "general",   label: "General" },
       { id: "pace",      label: "Pace" },
-      { id: "workflows", label: "Workflows" },
       { id: "colors",    label: "Badge Colors" },
     ],
   },
@@ -127,11 +126,12 @@ const CARD_GROUPS: CardGroup[] = [
   {
     id: "ops",
     label: "Operations",
-    desc: "Force-finish loads, bulk status changes, and workday resets",
+    desc: "Workflows, force-finish loads, bulk status changes, and workday resets",
     accent: "border-orange-500",
     tabs: [
-      { id: "recovery", label: "Recovery" },
-      { id: "resets",   label: "Resets" },
+      { id: "workflows", label: "Workflows" },
+      { id: "recovery",  label: "Recovery" },
+      { id: "resets",    label: "Resets" },
     ],
   },
   {
@@ -225,8 +225,6 @@ const WELL_KNOWN_KEYS = new Set([
   "pace_loader_baseline_count",
   "pace_loader_active_count",
   "status_badge_colors",
-  "shorts_mode",
-  "inprog_layout_style",
   "skip_batching_disabled",
   "batching_disabled",
   "communications_censor_words",
@@ -810,8 +808,6 @@ function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
     () => ({
       batching_disabled: asBool(map.get("batching_disabled"), false),
       skip_batching_disabled: asBool(map.get("skip_batching_disabled"), false),
-      shorts_mode: asString(map.get("shorts_mode"), "quick"),
-      inprog_layout_style: asString(map.get("inprog_layout_style"), "default"),
     }),
     [map],
   );
@@ -858,27 +854,6 @@ function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           />
           Require batch
         </label>
-      </FieldRow>
-      <FieldRow label="Shorts mode">
-        <select
-          className="input"
-          value={form.shorts_mode}
-          onChange={(e) => setForm({ ...form, shorts_mode: e.target.value })}
-        >
-          <option value="quick">Quick amounts</option>
-          <option value="detailed">Detailed entry</option>
-        </select>
-      </FieldRow>
-      <FieldRow label="In-progress layout">
-        <select
-          className="input"
-          value={form.inprog_layout_style}
-          onChange={(e) => setForm({ ...form, inprog_layout_style: e.target.value })}
-        >
-          <option value="default">Default</option>
-          <option value="compact">Compact</option>
-          <option value="focus">Focus (large)</option>
-        </select>
       </FieldRow>
       <SaveButton
         dirty={dirty}

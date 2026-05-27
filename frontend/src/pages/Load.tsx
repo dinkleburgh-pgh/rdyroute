@@ -1,8 +1,9 @@
 ﻿import { useEffect, useMemo, useState } from "react";
-import { Link } from "react-router-dom";
 import clsx from "clsx";
 import {
   useBoard,
+  useHolidayLoad,
+  useHolidayUnload,
   usePaceAverage,
   useRecordLoadDuration,
   useUpsertTruckState,
@@ -29,30 +30,52 @@ export default function Load() {
   const [busy, setBusy] = useState<number | null>(null);
   const [dustOpen, setDustOpen] = useState(false);
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
+  const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
 
   const board = data ?? [];
   const { loadDay, unloadsDay } = workdayNumbers();
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
+  const { data: holidayUnload = false } = useHolidayUnload(runDate);
 
   const inProgress = useMemo(
     () => board.find((t) => t.state?.status === "in_progress"),
     [board],
   );
-  // Only show trucks scheduled to run tomorrow (loadDay) — excludes trucks off tomorrow and spare-type trucks
-  // unless they have a route swap assigned (in which case they're loading a swapped route).
-  const ready = useMemo(
+  // Trucks scheduled for tomorrow's load (respects holidayLoad): route trucks + covering spares.
+  const loadTrucks = useMemo(
     () =>
       board.filter(
         (t) =>
-          t.state?.status === "unloaded" &&
           (t.truck_type !== "Spare" || t.route_swap_route != null) &&
-          !(t.scheduled_off_days ?? []).includes(loadDay),
+          (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
       ),
-    [board, loadDay],
+    [board, loadDay, holidayLoad],
   );
+  // Ready = unloaded and scheduled for tomorrow.
+  const ready = useMemo(
+    () => loadTrucks.filter((t) => t.state?.status === "unloaded"),
+    [loadTrucks],
+  );
+  // Loaded = physically loaded and scheduled for tomorrow.
   const loaded = useMemo(
-    () => board.filter((t) => t.state?.status === "loaded"),
-    [board],
+    () => loadTrucks.filter((t) => effectiveStatus(t, loadDay, holidayLoad) === "loaded"),
+    [loadTrucks, loadDay, holidayLoad],
   );
+  // Sort variant for the "Loaded today" grid.
+  const loadedSorted = useMemo(() => {
+    const arr = [...loaded];
+    if (loadedSort === "order") {
+      arr.sort((a, b) => {
+        const af = a.state?.load_finish_time ?? Number.POSITIVE_INFINITY;
+        const bf = b.state?.load_finish_time ?? Number.POSITIVE_INFINITY;
+        if (af !== bf) return af - bf;
+        return a.truck_number - b.truck_number;
+      });
+    } else {
+      arr.sort((a, b) => a.truck_number - b.truck_number);
+    }
+    return arr;
+  }, [loaded, loadedSort]);
 
   // Route-aware "not yet loaded" computation — mirrors Board/Sidebar logic.
   // Covering spares (route_swap_route set) stand in for their OOS route truck.
@@ -69,32 +92,32 @@ export default function Load() {
     const result: TruckWithState[] = [];
     for (const t of board) {
       if (t.truck_type !== "Dust") continue;
-      const eff = effectiveStatus(t, loadDay);
+      const eff = effectiveStatus(t, loadDay, holidayLoad);
       if (eff === "loaded" || eff === "off") continue;
       if (eff === "oos") {
         const spare = coveringSpareByRoute.get(t.truck_number);
-        if (spare && effectiveStatus(spare, loadDay) !== "loaded") result.push(spare);
+        if (spare && effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
         continue;
       }
       result.push(t);
     }
     return result;
-  }, [board, loadDay, coveringSpareByRoute]);
+  }, [board, loadDay, holidayLoad, coveringSpareByRoute]);
   const uniformsLeftTrucks = useMemo(() => {
     const result: TruckWithState[] = [];
     for (const t of board) {
       if (t.truck_type !== "Uniform") continue;
-      const eff = effectiveStatus(t, loadDay);
+      const eff = effectiveStatus(t, loadDay, holidayLoad);
       if (eff === "loaded" || eff === "off") continue;
       if (eff === "oos") {
         const spare = coveringSpareByRoute.get(t.truck_number);
-        if (spare && effectiveStatus(spare, loadDay) !== "loaded") result.push(spare);
+        if (spare && effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
         continue;
       }
       result.push(t);
     }
     return result;
-  }, [board, loadDay, coveringSpareByRoute]);
+  }, [board, loadDay, holidayLoad, coveringSpareByRoute]);
   const dustsLeft = dustsLeftTrucks.length;
   const uniformsLeft = uniformsLeftTrucks.length;
   const sparesLeft = 0;
@@ -105,32 +128,69 @@ export default function Load() {
     [dustsLeftTrucks, uniformsLeftTrucks],
   );
 
-  // Trucks scheduled to run today (unloadsDay) — the denominator for Unload progress.
-  const scheduledForUnload = useMemo(
+  // Load progress mirrors RunDay.tsx exactly.
+  const loadRouteTrucks = useMemo(
+    () => loadTrucks.filter((t) => t.truck_type !== "Spare"),
+    [loadTrucks],
+  );
+  const loadedSpareRoutes = useMemo(
+    () =>
+      new Set(
+        loadTrucks
+          .filter(
+            (t) =>
+              t.truck_type === "Spare" &&
+              t.route_swap_route != null &&
+              effectiveStatus(t, loadDay, holidayLoad) === "loaded",
+          )
+          .map((t) => t.route_swap_route as number),
+      ),
+    [loadTrucks, loadDay, holidayLoad],
+  );
+  const loadTotal = loadRouteTrucks.length;
+  const loadDone = loadRouteTrucks.filter(
+    (t) =>
+      effectiveStatus(t, loadDay, holidayLoad) === "loaded" ||
+      loadedSpareRoutes.has(t.truck_number),
+  ).length;
+  const loadPct = loadTotal > 0 ? Math.round((loadDone / loadTotal) * 100) : 0;
+
+  // Unload progress mirrors RunDay.tsx exactly.
+  const unloadTrucks = useMemo(
     () =>
       board.filter(
         (t) =>
-          t.truck_type !== "Spare" &&
-          !(t.scheduled_off_days ?? []).includes(unloadsDay),
+          (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+          (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
       ),
-    [board, unloadsDay],
+    [board, unloadsDay, holidayUnload],
   );
-
-  // Load progress: loaded vs all scheduled for tomorrow.
-  // Unload progress: past-unload (unloaded/in_progress/loaded) vs all scheduled for today.
-  const loadedCount = loaded.length;
-  const totalScheduledLoad = loadedCount + totalLeft;
-  const unloadedCount = useMemo(
+  const unloadRouteTrucks = useMemo(
+    () => unloadTrucks.filter((t) => t.truck_type !== "Spare"),
+    [unloadTrucks],
+  );
+  const unloadedSpareRoutes = useMemo(
     () =>
-      scheduledForUnload.filter((t) =>
-        ["unloaded", "in_progress", "loaded"].includes(t.state?.status ?? "dirty"),
-      ).length,
-    [scheduledForUnload],
+      new Set(
+        unloadTrucks
+          .filter(
+            (t) =>
+              t.truck_type === "Spare" &&
+              t.route_swap_route != null &&
+              ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)),
+          )
+          .map((t) => t.route_swap_route as number),
+      ),
+    [unloadTrucks, unloadsDay, holidayUnload],
   );
-  const loadPct = totalScheduledLoad > 0 ? Math.round((loadedCount / totalScheduledLoad) * 100) : 0;
+  const unloadDone = unloadRouteTrucks.filter(
+    (t) =>
+      ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)) ||
+      unloadedSpareRoutes.has(t.truck_number),
+  ).length;
   const unloadPct =
-    scheduledForUnload.length > 0
-      ? Math.round((unloadedCount / scheduledForUnload.length) * 100)
+    unloadRouteTrucks.length > 0
+      ? Math.round((unloadDone / unloadRouteTrucks.length) * 100)
       : 0;
 
   const anyInProgress = Boolean(inProgress);
@@ -206,10 +266,7 @@ export default function Load() {
     <div className="space-y-5 p-3 md:p-6">
       <div className="flex items-end justify-between gap-4">
         <h2 className="text-2xl font-semibold">Load</h2>
-        <div className="flex items-center gap-3">
-          <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
-          <Link to="/audit" className="btn-ghost text-sm">Audit</Link>
-        </div>
+        <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
       </div>
 
       {/* Stats grid */}
@@ -248,8 +305,8 @@ export default function Load() {
 
       {/* Load / Unload progress */}
       <div className="card space-y-2">
-        <ProgressRow label="Load" done={loadedCount} total={totalScheduledLoad} pct={loadPct} color="bg-blue-500" />
-        <ProgressRow label="Unload" done={unloadedCount} total={scheduledForUnload.length} pct={unloadPct} color="bg-emerald-500" />
+        <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} color="bg-blue-500" />
+        <ProgressRow label="Unload" done={unloadDone} total={unloadRouteTrucks.length} pct={unloadPct} color="bg-emerald-500" />
       </div>
 
       {/* Set Dust Clothes */}
@@ -325,35 +382,38 @@ export default function Load() {
             Finish the in-progress truck before starting another.
           </p>
         )}
-        <div className="flex flex-wrap gap-2">
-          {ready.map((t) => (
-            <button
-              key={t.truck_number}
-              type="button"
-              disabled={anyInProgress || busy === t.truck_number}
-              onClick={() => startLoad(t)}
-              className={clsx(
-                "relative flex flex-col h-16 w-16 items-center justify-center rounded-xl border-b-4 text-2xl font-black text-white shadow transition active:translate-y-px select-none",
-                anyInProgress || busy === t.truck_number
-                  ? "cursor-not-allowed border-emerald-900 bg-emerald-900 opacity-40"
-                  : "border-emerald-700 bg-emerald-600 hover:bg-emerald-500 active:border-emerald-800",
-              )}
-              style={{ WebkitTextStroke: "0.75px rgba(0,0,0,0.9)" }}
-              title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
-            >
-              {t.truck_number}
-              {t.state?.has_dust_garment && (
-                <span className="absolute -right-1 -top-1 rounded-full border border-amber-500/60 bg-amber-950 p-0.5">
-                  <DustGarmentIcon className="h-2.5 w-2.5 text-amber-300" />
-                </span>
-              )}
-              {t.route_swap_route != null && (
-                <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap text-[9px] font-semibold text-blue-300">
-                  R#{t.route_swap_route}
-                </span>
-              )}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-3">
+          {ready.map((t) => {
+            const disabled = anyInProgress || busy === t.truck_number;
+            return (
+              <button
+                key={t.truck_number}
+                type="button"
+                disabled={disabled}
+                onClick={() => startLoad(t)}
+                className={clsx(
+                  "group relative flex h-16 w-16 items-center justify-center rounded-xl text-2xl font-black text-white shadow-md ring-1 transition-all duration-150 select-none",
+                  disabled
+                    ? "cursor-not-allowed bg-emerald-900/40 ring-emerald-900/50 opacity-50"
+                    : "bg-gradient-to-b from-emerald-500 to-emerald-700 ring-emerald-400/40 shadow-emerald-900/40 hover:from-emerald-400 hover:to-emerald-600 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow",
+                )}
+                style={{ WebkitTextStroke: "0.75px rgba(0,0,0,0.9)" }}
+                title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
+              >
+                {t.truck_number}
+                {t.state?.has_dust_garment && (
+                  <span className="absolute -right-1.5 -top-1.5 rounded-full border border-amber-500/70 bg-amber-950 p-1 shadow">
+                    <DustGarmentIcon className="h-3 w-3 text-amber-300" />
+                  </span>
+                )}
+                {t.route_swap_route != null && (
+                  <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-blue-950/80 px-1.5 py-0.5 text-[9px] font-semibold text-blue-300 ring-1 ring-blue-800/60">
+                    R#{t.route_swap_route}
+                  </span>
+                )}
+              </button>
+            );
+          })}
           {ready.length === 0 && (
             <p className="col-span-full text-sm text-slate-500">
               No trucks ready to load.
@@ -364,11 +424,41 @@ export default function Load() {
 
       {/* Loaded today */}
       <section>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-blue-400">
-          Loaded today ({loaded.length})
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {loaded.map((t) => {
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-blue-400">
+            Loaded today ({loaded.length})
+          </h3>
+          {loaded.length > 1 && (
+            <div className="inline-flex overflow-hidden rounded-md border border-slate-700 text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setLoadedSort("number")}
+                className={clsx(
+                  "px-2 py-1 transition-colors",
+                  loadedSort === "number"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-900 text-slate-400 hover:bg-slate-800",
+                )}
+              >
+                # Number
+              </button>
+              <button
+                type="button"
+                onClick={() => setLoadedSort("order")}
+                className={clsx(
+                  "border-l border-slate-700 px-2 py-1 transition-colors",
+                  loadedSort === "order"
+                    ? "bg-blue-600 text-white"
+                    : "bg-slate-900 text-slate-400 hover:bg-slate-800",
+                )}
+              >
+                Load order
+              </button>
+            </div>
+          )}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {loadedSorted.map((t, idx) => {
             const coverRoute = t.state?.oos_spare_route ?? null;
             return (
             <div key={t.truck_number} className="group relative">
@@ -376,23 +466,29 @@ export default function Load() {
                 type="button"
                 disabled
                 className={clsx(
-                  "flex items-center justify-center rounded-xl border-b-4 border-blue-900 bg-blue-800 font-black text-white/80 shadow select-none opacity-80",
+                  "relative flex items-center justify-center rounded-xl font-black text-white shadow-md ring-1 ring-blue-400/30 select-none",
+                  "bg-gradient-to-b from-blue-500 to-blue-800 shadow-blue-950/40",
                   coverRoute != null ? "h-16 w-24 flex-col gap-0 px-1" : "h-16 w-16 text-2xl",
                 )}
                 style={{ WebkitTextStroke: "0.75px rgba(0,0,0,0.9)" }}
               >
                 {coverRoute != null ? (
                   <>
-                    <span className="text-xs font-semibold leading-none text-blue-200">Rt {coverRoute}</span>
-                    <span className="text-[10px] leading-none text-blue-300/70">→</span>
+                    <span className="text-xs font-semibold leading-none text-blue-100">Rt {coverRoute}</span>
+                    <span className="text-[10px] leading-none text-blue-200/80">→</span>
                     <span className="text-base font-black leading-none">#{t.truck_number}</span>
                   </>
                 ) : (
                   t.truck_number
                 )}
+                {loadedSort === "order" && (
+                  <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-900 px-1 text-[10px] font-bold text-blue-300 ring-1 ring-blue-500/60">
+                    {idx + 1}
+                  </span>
+                )}
                 {t.state?.has_dust_garment && (
-                  <span className="absolute -right-1 -top-1 rounded-full border border-amber-500/60 bg-amber-950 p-0.5">
-                    <DustGarmentIcon className="h-2.5 w-2.5 text-amber-300" />
+                  <span className="absolute -right-1.5 -top-1.5 rounded-full border border-amber-500/70 bg-amber-950 p-1 shadow">
+                    <DustGarmentIcon className="h-3 w-3 text-amber-300" />
                   </span>
                 )}
               </button>
@@ -559,19 +655,17 @@ function formatDuration(totalSeconds: number): string {
 }
 
 function DustGarmentIcon({ className }: { className?: string }) {
+  // Clean t-shirt silhouette: wide neckline, broad shoulders, short sleeves.
+  // Filled for clear recognition at small sizes (down to ~10px).
   return (
     <svg
-      viewBox="0 0 24 24"
+      viewBox="0 0 32 32"
       aria-hidden="true"
       className={className}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      strokeLinecap="round"
-      strokeLinejoin="round"
+      fill="currentColor"
+      stroke="none"
     >
-      <path d="M8 4h8l2 3-3 2v10H9V9L6 7l2-3z" />
-      <path d="M10 4c0 1.1.9 2 2 2s2-.9 2-2" />
+      <path d="M11 4c.4 1.7 2.2 3 5 3s4.6-1.3 5-3l5.5 2.5a1 1 0 0 1 .5 1.3l-2 5a1 1 0 0 1-1.3.5L21 11.6V27a1 1 0 0 1-1 1H12a1 1 0 0 1-1-1V11.6l-2.7 1.7a1 1 0 0 1-1.3-.5l-2-5a1 1 0 0 1 .5-1.3L11 4z" />
     </svg>
   );
 }

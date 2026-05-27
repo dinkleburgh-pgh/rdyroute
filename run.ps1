@@ -51,6 +51,7 @@ $BackendLog    = Join-Path $LogDir 'backend.log'
 $BackendPid    = Join-Path $LogDir 'backend.pid'
 $FrontendLog   = Join-Path $LogDir 'frontend.log'
 $FrontendPidF  = Join-Path $LogDir 'frontend.pid'
+$FrontendSentinel = Join-Path $LogDir 'frontend.sentinel'  # watchdog monitors this file
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -98,9 +99,29 @@ function Resolve-Python {
 # ---------------------------------------------------------------------------
 # Stop mode
 # ---------------------------------------------------------------------------
+function Stop-Frontend {
+    # Remove sentinel so watchdog exits gracefully and kills Vite itself
+    if (Test-Path $FrontendSentinel) { Remove-Item $FrontendSentinel -Force -ErrorAction SilentlyContinue }
+    Start-Sleep -Milliseconds 800
+    # Kill the watchdog process
+    Stop-Tracked -Label 'Frontend watchdog' -PidFile $FrontendPidF
+    # Kill any orphaned node process still holding the frontend port
+    $lines = netstat -ano 2>$null | Select-String ":${FrontendPort}\s+" | Where-Object { $_ -match 'LISTENING' }
+    foreach ($line in $lines) {
+        $pidStr = ($line.Line.Trim() -split '\s+')[-1]
+        if ($pidStr -match '^\d+$') {
+            $orphan = Get-Process -Id ([int]$pidStr) -ErrorAction SilentlyContinue
+            if ($orphan -and $orphan.ProcessName -match 'node') {
+                Write-Info "Killing orphaned Vite node (PID $([int]$pidStr))"
+                Stop-Process -Id ([int]$pidStr) -Force -ErrorAction SilentlyContinue
+            }
+        }
+    }
+}
+
 if ($Stop -or $Restart) {
     Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
-    Stop-Tracked -Label 'Frontend (vite)'   -PidFile $FrontendPidF
+    Stop-Frontend
     if ($Stop) { return }
 }
 
@@ -178,23 +199,40 @@ if (-not (Test-Path $FrontendDir)) {
         if ($existingFE) {
             Write-Info "Frontend already running (PID $($existingFE.Id)) — http://localhost:${FrontendPort}"
         } else {
-            Write-Info "Starting Vite dev server on http://localhost:${FrontendPort}..."
-            # Use cmd.exe to invoke npm.cmd so the child process is a real binary
-            # that PowerShell can track; otherwise the .ps1 shim exits immediately.
+            Write-Info "Starting Vite dev server (with watchdog) on http://localhost:${FrontendPort}..."
             $npmCmd = Join-Path (Split-Path $npm.Source -Parent) 'npm.cmd'
             if (-not (Test-Path $npmCmd)) { $npmCmd = $npm.Source }
-            $proc = Start-Process -FilePath $npmCmd -ArgumentList @('run', 'dev', '--', '--port', $FrontendPort) `
-                -WorkingDirectory $FrontendDir `
-                -RedirectStandardOutput $FrontendLog -RedirectStandardError "$FrontendLog.err" `
+
+            # Create sentinel — watchdog exits when this file is removed
+            'running' | Out-File -FilePath $FrontendSentinel -Encoding ascii
+
+            # Build the watchdog script with variables already substituted, then encode it
+            # so that Start-Process never needs to parse paths-with-spaces as arguments.
+            $esc = { param($s) $s -replace "'", "''" }   # escape single-quotes for PowerShell literals
+            $inlineScript = @"
+`$NpmCmd       = '$( & $esc $npmCmd )'
+`$FrontendDir  = '$( & $esc $FrontendDir )'
+`$FrontendPort = '$FrontendPort'
+`$LogFile      = '$( & $esc $FrontendLog )'
+`$SentinelFile = '$( & $esc $FrontendSentinel )'
+. '$( & $esc (Join-Path $PSScriptRoot '_vite_watchdog.ps1') )'
+"@
+            $encodedCmd = [Convert]::ToBase64String(
+                [System.Text.Encoding]::Unicode.GetBytes($inlineScript)
+            )
+
+            $proc = Start-Process -FilePath 'powershell.exe' `
+                -ArgumentList @('-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encodedCmd) `
+                -WorkingDirectory $PSScriptRoot `
                 -WindowStyle Hidden -PassThru
             $proc.Id | Out-File -FilePath $FrontendPidF -Encoding ascii
             Start-Sleep -Seconds 3
             if ($proc.HasExited) {
-                Write-Err "Frontend failed to start. Recent log:"
+                Write-Err "Frontend watchdog failed to start. Recent log:"
                 if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
                 if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
             } else {
-                Write-Info "Frontend started (PID $($proc.Id)). Log: $FrontendLog"
+                Write-Info "Frontend watchdog started (PID $($proc.Id)) — auto-restarts on crash. Log: $FrontendLog"
             }
         }
     }

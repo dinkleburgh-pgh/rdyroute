@@ -71,7 +71,7 @@ function _badgeTextColor(hex: string): string {
   const b = parseInt(hex.slice(5, 7), 16) / 255;
   const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.179 ? "#000000" : "#ffffff";
+  return L > 0.35 ? "#000000" : "#ffffff";
 }
 
 const STATUS_CLASS_MAP: Record<string, string> = {

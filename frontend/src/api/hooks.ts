@@ -71,6 +71,7 @@ export function useUpdateTruck() {
       truck_type?: string;
       is_active?: boolean;
       is_persistent_spare?: boolean;
+      is_oos?: boolean;
       scheduled_off_days?: number[];
     }) => {
       const { truck_number, ...patch } = args;

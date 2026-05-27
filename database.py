@@ -9,7 +9,11 @@ class Settings(BaseSettings):
     )
     secret_key: str = "change-me-to-a-long-random-string"
     algorithm: str = "HS256"
-    access_token_expire_minutes: int = 60
+    # 30 days — matches session_expiry_days. The frontend stores the JWT in
+    # localStorage and any 401 boots the user back to the login screen, so
+    # keeping the token alive as long as the cookie session avoids surprise
+    # logouts on tablets/phones.
+    access_token_expire_minutes: int = 60 * 24 * 30
     session_expiry_days: int = 30
     cors_origins: str = "*"
     timezone: str = "America/New_York"

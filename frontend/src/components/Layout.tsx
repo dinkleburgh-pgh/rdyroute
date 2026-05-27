@@ -8,7 +8,7 @@ import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
 import { OfflineIndicator } from "./OfflineIndicator";
 import type { AuthRole, TruckStatus, TruckWithState } from "../types";
-import { buildRouteStatusCounts } from "../utils/truckStatus";
+import { buildRouteStatusCounts, effectiveStatus } from "../utils/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 
 const STATUS_LABEL: Record<TruckStatus, string> = {
@@ -121,34 +121,85 @@ export default function Layout() {
     [board, loadDayNum, holidayLoad],
   );
 
-  // Scheduled trucks for each direction (excludes off-day and spare-type trucks).
-  const scheduledForLoad = useMemo(
+  // Load progress mirrors the Day Overview: denominator = route trucks scheduled
+  // for load; a route counts as done when the route truck is loaded OR its covering spare is.
+  const loadTrucksForProgress = useMemo(
     () =>
       (board ?? []).filter(
-        (t) => t.truck_type !== "Spare" && (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+        (t) =>
+          (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+          (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
       ),
     [board, loadDay, holidayLoad],
   );
-  const scheduledForUnload = useMemo(
+  const loadedSpareRoutes = useMemo(
+    () =>
+      new Set(
+        loadTrucksForProgress
+          .filter(
+            (t) =>
+              t.truck_type === "Spare" &&
+              t.route_swap_route != null &&
+              effectiveStatus(t, loadDayNum, holidayLoad) === "loaded",
+          )
+          .map((t) => t.route_swap_route as number),
+      ),
+    [loadTrucksForProgress, loadDayNum, holidayLoad],
+  );
+  const loadRouteTrucks = useMemo(
+    () => loadTrucksForProgress.filter((t) => t.truck_type !== "Spare"),
+    [loadTrucksForProgress],
+  );
+  const totalScheduledLoad = loadRouteTrucks.length;
+  const loadedScheduled = loadRouteTrucks.filter(
+    (t) =>
+      effectiveStatus(t, loadDayNum, holidayLoad) === "loaded" ||
+      loadedSpareRoutes.has(t.truck_number),
+  ).length;
+
+  // Unload progress mirrors the Day Overview exactly.
+  const unloadTrucksForProgress = useMemo(
     () =>
       (board ?? []).filter(
-        (t) => t.truck_type !== "Spare" && (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
+        (t) =>
+          (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+          (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
       ),
     [board, unloadsDay, holidayUnload],
   );
-  const loadedScheduled = scheduledForLoad.filter((t) => t.state?.status === "loaded").length;
-  const unloadedScheduled = scheduledForUnload.filter((t) =>
-    ["unloaded", "in_progress", "loaded"].includes(t.state?.status ?? "dirty"),
+  const unloadedSpareRoutes = useMemo(
+    () =>
+      new Set(
+        unloadTrucksForProgress
+          .filter(
+            (t) =>
+              t.truck_type === "Spare" &&
+              t.route_swap_route != null &&
+              ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)),
+          )
+          .map((t) => t.route_swap_route as number),
+      ),
+    [unloadTrucksForProgress, unloadsDay, holidayUnload],
+  );
+  const unloadRouteTrucks = useMemo(
+    () => unloadTrucksForProgress.filter((t) => t.truck_type !== "Spare"),
+    [unloadTrucksForProgress],
+  );
+  const unloadedScheduled = unloadRouteTrucks.filter(
+    (t) =>
+      ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)) ||
+      unloadedSpareRoutes.has(t.truck_number),
   ).length;
+
   const loadedPct =
-    scheduledForLoad.length > 0
-      ? Math.round((loadedScheduled / scheduledForLoad.length) * 100)
+    totalScheduledLoad > 0
+      ? Math.round((loadedScheduled / totalScheduledLoad) * 100)
       : 0;
 
   const inProgressTruck = (board ?? []).find((t) => t.state?.status === "in_progress");
   const unloadedPct =
-    scheduledForUnload.length > 0
-      ? Math.round((unloadedScheduled / scheduledForUnload.length) * 100)
+    unloadRouteTrucks.length > 0
+      ? Math.round((unloadedScheduled / unloadRouteTrucks.length) * 100)
       : 0;
 
   const roleLabel = user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
@@ -286,11 +337,11 @@ export default function Layout() {
             <p className="text-center text-xs font-semibold uppercase tracking-wide text-emerald-300">
               Load/Unload Progress
             </p>
-            <ProgressRow label="Load" current={loadedScheduled} total={scheduledForLoad.length} pct={loadedPct} />
+            <ProgressRow label="Load" current={loadedScheduled} total={totalScheduledLoad} pct={loadedPct} />
             <ProgressRow
               label="Unload"
               current={unloadedScheduled}
-              total={scheduledForUnload.length}
+              total={unloadRouteTrucks.length}
               pct={unloadedPct}
             />
           </div>
@@ -346,22 +397,34 @@ export default function Layout() {
 
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
-        {/* Mobile top bar */}
-        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-800 bg-slate-900 px-3 py-2 md:hidden">
+        {/* App top bar — mobile shows hamburger + brand, all sizes show clock/shift/day badges */}
+        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-800 bg-slate-900 px-3 py-2">
           <button
             type="button"
             aria-label="Open menu"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100"
+            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100 md:hidden"
           >
             {/* Hamburger */}
             <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h18M3 18h18" />
             </svg>
           </button>
-          <span className="text-sm font-semibold text-slate-200">ReadyRoute V2</span>
-          <div className="ml-auto flex items-center gap-3 text-xs text-slate-400">
+          <span className="text-sm font-semibold text-slate-200 md:hidden">ReadyRoute V2</span>
+          <div className="ml-auto flex items-center gap-2 text-xs">
             <span className="font-mono"><Clock compact /></span>
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 font-semibold text-slate-300">
+              <span className="text-[10px] uppercase tracking-wider text-slate-500">Shift</span>
+              {currentShift().name}
+            </span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-blue-800/60 bg-blue-950/50 px-2 py-1 font-semibold text-blue-300">
+              <span className="text-[10px] uppercase tracking-wider text-blue-400/70">Load</span>
+              Day {loadDay}{holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}
+            </span>
+            <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-emerald-800/60 bg-emerald-950/50 px-2 py-1 font-semibold text-emerald-300">
+              <span className="text-[10px] uppercase tracking-wider text-emerald-400/70">Unload</span>
+              Day {unloadsDay}{holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}
+            </span>
           </div>
         </header>
 

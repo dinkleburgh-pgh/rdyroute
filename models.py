@@ -99,6 +99,7 @@ class Truck(Base):
     )
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_persistent_spare: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_oos: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     scheduled_off_days: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
