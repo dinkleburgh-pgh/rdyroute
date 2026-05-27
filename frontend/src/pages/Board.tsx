@@ -17,6 +17,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import type { SpareAssignment, TruckStatus, TruckWithState } from "../types";
+import { effectiveStatus } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 
@@ -86,19 +87,6 @@ const STATUS_OPTIONS: TruckStatus[] = [
 const FLEET_STATUS_OPTIONS: TruckStatus[] = ["dirty", "shop", "unloaded", "loaded", "oos"];
 // All statuses shown in the fleet filter rail (ordered for display).
 const FLEET_RAIL_STATUSES: TruckStatus[] = ["dirty", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare"];
-
-/** V1 parity: trucks scheduled off for the load day show as "off" unless actively in a workflow state. Spares are never auto-off. When holiday_load is on, the scheduled-off check is skipped. */
-function effectiveStatus(t: TruckWithState, loadDayNum: number, holidayLoad = false): TruckStatus {
-  const raw = (t.state?.status ?? "dirty") as TruckStatus;
-  if (
-    !holidayLoad &&
-    t.truck_type !== "Spare" &&
-    t.scheduled_off_days.includes(loadDayNum) &&
-    (raw === "dirty" || raw === "unloaded")
-  )
-    return "off";
-  return raw;
-}
 
 // ---------------------------------------------------------------------------
 // Route Card panel (fleet mode only)
