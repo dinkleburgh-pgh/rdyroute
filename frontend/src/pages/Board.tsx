@@ -388,17 +388,6 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         return true;
       }
 
-      // Covered OOS routes should appear in the workflow tab matching the covering truck.
-      if (
-        (filter === "dirty" || filter === "unloaded") &&
-        (t.state?.status ?? "dirty") === "oos"
-      ) {
-        const spareTruck = coveringSpareByRoute.get(t.truck_number);
-        if (spareTruck == null) return false;
-        const spareStatus = truckStatusByNumber.get(spareTruck) ?? "dirty";
-        return spareStatus === filter;
-      }
-
       return false;
     });
   }, [data, filter, fleetMode, fleetFilters, runDayNum, holidayMode, coveringSpareByRoute, truckStatusByNumber]);
