@@ -1093,7 +1093,7 @@ function UsersPanel() {
   const deleteUser = useDeleteUser();
   const changePassword = useChangePassword();
 
-  const [createForm, setCreateForm] = useState({ username: "", password: "", role: "loader" as AuthRole });
+  const [createForm, setCreateForm] = useState({ username: "", password: "", role: "loader" as AuthRole, display_name: "" });
   const [editingUser, setEditingUser] = useState<string | null>(null);
   const [editRole, setEditRole] = useState<AuthRole>("loader");
   const [editEnabled, setEditEnabled] = useState(true);
@@ -1277,8 +1277,8 @@ function UsersPanel() {
           className="btn-primary"
           disabled={!createForm.username || !createForm.password || createUser.isPending}
           onClick={() => {
-            createUser.mutate({ ...createForm, display_name: createForm.username });
-            setCreateForm({ username: "", password: "", role: "loader" });
+            createUser.mutate({ ...createForm, display_name: createForm.display_name || createForm.username });
+            setCreateForm({ username: "", password: "", role: "loader", display_name: "" });
           }}
         >
           {createUser.isPending ? "Creating…" : "Create user"}

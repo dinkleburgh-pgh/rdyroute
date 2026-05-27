@@ -66,6 +66,7 @@ export default function Load() {
   const dustsLeft = dustsLeftTrucks.length;
   const uniformsLeft = uniformsLeftTrucks.length;
   const sparesLeft = 0;
+  const sparesLeftTrucks: typeof dustsLeftTrucks = [];
   const totalLeft = dustsLeft + uniformsLeft + sparesLeft;
   const totalLeftTrucks = useMemo(
     () => [...dustsLeftTrucks, ...uniformsLeftTrucks].sort((a, b) => a.truck_number - b.truck_number),
@@ -197,7 +198,7 @@ export default function Load() {
               {statFilter === "dust" ? "Dusts" : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
             </p>
             <div className="flex flex-wrap gap-2">
-              {trucks.map((t) => {
+              {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
                 const st = t.state?.status ?? "dirty";
                 return (
                   <span key={t.truck_number} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-2.5 py-1 text-sm font-semibold">
