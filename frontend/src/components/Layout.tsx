@@ -260,6 +260,26 @@ export default function Layout() {
             Live status
           </p>
           <div className="space-y-2">
+            <NavLink
+              to="/"
+              end
+              className={({ isActive }) =>
+                clsx(
+                  "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  isActive
+                    ? "border-cyan-500 bg-cyan-950/60 text-cyan-300"
+                    : "border-slate-700 bg-slate-800 hover:bg-slate-700",
+                )
+              }
+            >
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-cyan-400" />
+                Day Overview
+              </span>
+              <span className="rounded bg-cyan-800/60 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
+                Today
+              </span>
+            </NavLink>
             {STATUS_ORDER.map((s) => (
               <button
                 key={s}
