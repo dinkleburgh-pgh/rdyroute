@@ -446,28 +446,24 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       if (fleetMode && t.truck_type === "Spare" && t.state?.status !== "oos") {
         c.spare = (c.spare ?? 0) + 1;
       } else if (!fleetMode && t.truck_type === "Spare") {
-        // In non-fleet mode, spares are counted below via the OOS-coverage loop
-        // only when they are actually covering an OOS route. Counting them here
-        // too inflates the lifecycle buckets (e.g. a loaded spare covering a
-        // non-OOS route adds a phantom loaded count).
+        // In non-fleet mode, a spare counts in lifecycle buckets only when it
+        // is actively covering an OOS route — same predicate as `filtered`
+        // below. This keeps the filter dropdown count and the rendered card
+        // list in lockstep (was previously divergent for route-swap spares,
+        // which made the page look like it "wasn't updating").
+        const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+        if (coveredRoute != null && truckStatusByNumber.get(coveredRoute) === "oos") {
+          const s = effectiveStatus(t, runDayNum, holidayLoad);
+          c[s] = (c[s] ?? 0) + 1;
+        }
       } else {
         const s = effectiveStatus(t, runDayNum, holidayLoad);
         c[s] = (c[s] ?? 0) + 1;
       }
     });
 
-    // A spare covering an OOS route represents that route in the workflow tabs.
-    // Count it under whichever lifecycle status the spare is in.
-    if (!fleetMode) {
-      coveringSpareByRoute.forEach((spareTruck, routeTruck) => {
-        if (truckStatusByNumber.get(routeTruck) !== "oos") return;
-        const spareStatus = truckStatusByNumber.get(spareTruck) ?? "dirty";
-        c[spareStatus] = (c[spareStatus] ?? 0) + 1;
-      });
-    }
-
     return c;
-  }, [data, runDayNum, holidayLoad, fleetMode, coveringSpareByRoute, truckStatusByNumber]);
+  }, [data, runDayNum, holidayLoad, fleetMode, truckStatusByNumber]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
