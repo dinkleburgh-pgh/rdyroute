@@ -106,26 +106,28 @@ function BatchCard({
         )}
       </div>
 
-      {/* Wearers + Assign */}
-      <div className="flex items-center gap-1.5 border-t border-slate-800 pt-2 md:pt-3">
-        <input
-          className="input min-w-0 flex-1"
-          type="text"
-          inputMode="numeric"
-          pattern="[0-9]*"
-          autoComplete="off"
-          placeholder="wearers"
-          value={wearers}
-          onChange={(e) => setWearers(e.target.value.replace(/\D/g, ""))}
-        />
-        <button
-          className="btn-primary shrink-0 px-2 py-1.5 text-xs md:px-5 md:py-2 md:text-sm"
-          disabled={assign.isPending || !truckNumber}
-          onClick={handleAssign}
-        >
-          {assign.isPending ? "…" : "Assign"}
-        </button>
-      </div>
+      {/* Wearers + Assign — only shown when a truck is selected */}
+      {truckNumber && (
+        <div className="flex items-center gap-1.5 border-t border-slate-800 pt-2 md:pt-3">
+          <input
+            className="input min-w-0 flex-1"
+            type="text"
+            inputMode="numeric"
+            pattern="[0-9]*"
+            autoComplete="off"
+            placeholder="wearers"
+            value={wearers}
+            onChange={(e) => setWearers(e.target.value.replace(/\D/g, ""))}
+          />
+          <button
+            className="btn-primary shrink-0 px-2 py-1.5 text-xs md:px-5 md:py-2 md:text-sm"
+            disabled={assign.isPending}
+            onClick={handleAssign}
+          >
+            {assign.isPending ? "…" : "Assign"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }
