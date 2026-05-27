@@ -335,15 +335,28 @@ export default function Load() {
           Loaded today ({loaded.length})
         </h3>
         <div className="flex flex-wrap gap-2">
-          {loaded.map((t) => (
+          {loaded.map((t) => {
+            const coverRoute = t.state?.oos_spare_route ?? null;
+            return (
             <div key={t.truck_number} className="group relative">
               <button
                 type="button"
                 disabled
-                className="flex h-16 w-16 items-center justify-center rounded-xl border-b-4 border-blue-900 bg-blue-800 text-2xl font-black text-white/80 shadow select-none opacity-80"
+                className={clsx(
+                  "flex items-center justify-center rounded-xl border-b-4 border-blue-900 bg-blue-800 font-black text-white/80 shadow select-none opacity-80",
+                  coverRoute != null ? "h-16 w-24 flex-col gap-0 px-1" : "h-16 w-16 text-2xl",
+                )}
                 style={{ WebkitTextStroke: "0.75px rgba(0,0,0,0.9)" }}
               >
-                {t.truck_number}
+                {coverRoute != null ? (
+                  <>
+                    <span className="text-xs font-semibold leading-none text-blue-200">Rt {coverRoute}</span>
+                    <span className="text-[10px] leading-none text-blue-300/70">→</span>
+                    <span className="text-base font-black leading-none">#{t.truck_number}</span>
+                  </>
+                ) : (
+                  t.truck_number
+                )}
                 {t.state?.has_dust_garment && (
                   <span className="absolute -right-1 -top-1 rounded-full border border-amber-500/60 bg-amber-950 p-0.5">
                     <DustGarmentIcon className="h-2.5 w-2.5 text-amber-300" />
@@ -362,7 +375,8 @@ export default function Load() {
                 </div>
               )}
             </div>
-          ))}
+            );
+          })}
           {loaded.length === 0 && (
             <p className="text-sm text-slate-500">Nothing loaded yet.</p>
           )}
