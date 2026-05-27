@@ -226,9 +226,9 @@ export default function Layout() {
             <p className="mt-1 font-semibold text-slate-300">Shift</p>
             <p className="text-slate-200">{currentShift().label} · {currentShift().hours}</p>
             <p className="mt-1 font-semibold text-slate-300">Load</p>
-            <p className="text-slate-200">Day {loadDay}</p>
+            <p className="text-slate-200">Day {loadDay}{holidayLoad ? ` + ${loadDay === 5 ? 1 : loadDay + 1}` : ""}</p>
             <p className="mt-1 font-semibold text-slate-300">Unloads</p>
-            <p className="text-slate-200">Day {unloadsDay}</p>
+            <p className="text-slate-200">Day {unloadsDay}{holidayUnload ? ` + ${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}</p>
           </div>
 
           {/* Clock */}
