@@ -638,11 +638,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <div className="flex w-full items-start justify-between min-h-[3.75rem]">
                   {!fleetMode && t.state?.oos_spare_route != null ? (
                     <div className="flex flex-col leading-none gap-0.5">
-                      <span className="text-3xl font-extrabold tabular-nums tracking-tight text-sky-300">
-                        {t.state.oos_spare_route}
+                      <span className={clsx(
+                        "font-extrabold tracking-tight tabular-nums leading-none",
+                        filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                        filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300",
+                      )}>
+                        {t.truck_number}
                       </span>
-                      <span className="text-xl font-bold tabular-nums text-slate-400">
-                        → {t.truck_number}
+                      <span className="text-sm font-bold tabular-nums text-sky-400">
+                        cov. #{t.state.oos_spare_route}
                       </span>
                     </div>
                   ) : (
