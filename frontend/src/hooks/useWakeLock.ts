@@ -11,15 +11,13 @@ export default function useWakeLock(enabled = true) {
   useEffect(() => {
     if (!enabled) return;
     if (typeof navigator === "undefined") return;
-    // @ts-expect-error wakeLock isn't in older lib.dom typings
-    if (!navigator.wakeLock) return;
+    if (!("wakeLock" in navigator)) return;
 
     let cancelled = false;
 
     const request = async () => {
       try {
-        // @ts-expect-error wakeLock isn't in older lib.dom typings
-        const sentinel: WakeLockSentinel = await navigator.wakeLock.request("screen");
+        const sentinel: WakeLockSentinel = await (navigator as Navigator & { wakeLock: { request(type: string): Promise<WakeLockSentinel> } }).wakeLock.request("screen");
         if (cancelled) {
           sentinel.release().catch(() => {});
           return;
