@@ -674,7 +674,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       fleetMode ? "text-3xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
                       fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
                     )}>
-                      #{t.truck_number}
+                      Rt {t.truck_number}
                     </span>
                   )}
                   <span className="flex h-9 flex-col items-end justify-start gap-0.5">
