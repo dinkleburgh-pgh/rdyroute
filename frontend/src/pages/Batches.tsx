@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
-import { useAssignBatch, useBatchSummary } from "../api/hooks";
+import { useAssignBatch, useBatchSummary, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import type { BatchSummary } from "../types";
 
@@ -139,6 +139,9 @@ export default function Batches() {
   const [truck, setTruck] = useState(params.get("truck") ?? "");
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
+  const source = params.get("source");
+  const navigate = useNavigate();
+  const upsert = useUpsertTruckState();
 
   useEffect(() => {
     const mq = window.matchMedia("(min-width: 768px)");
@@ -218,7 +221,20 @@ export default function Batches() {
                   ? (selectedBatch === b.batch_number ? truck : "")
                   : truck
               }
-              onAssigned={() => setTruck("")}
+              onAssigned={async () => {
+                if (source === "unload" && truck) {
+                  await upsert.mutateAsync({
+                    truck_number: Number(truck),
+                    run_date: runDate,
+                    status: "unloaded",
+                    wearers: 0,
+                  });
+                  navigate("/unload");
+                } else {
+                  setTruck("");
+                  setSelectedBatch(null);
+                }
+              }}
               selected={selectedBatch === b.batch_number}
               onSelect={() => setSelectedBatch(b.batch_number)}
             />

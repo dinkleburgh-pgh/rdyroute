@@ -166,7 +166,7 @@ export default function Unload() {
                   {/* Desktop: navigate to full batching page */}
                   <button
                     className="btn-primary hidden w-full bg-emerald-600 text-sm hover:bg-emerald-500 md:block"
-                    onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}`)}
+                    onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}&source=unload`)}
                   >
                     {t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign Batch"}
                   </button>
