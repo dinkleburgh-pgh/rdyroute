@@ -9,6 +9,7 @@ import {
 } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
+import { effectiveStatus } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 
 /**
@@ -53,16 +54,47 @@ export default function Load() {
     [board],
   );
 
-  // V1 parity: the Load summary counts all non-spare route trucks that are not loaded yet.
-  const scheduledBoard = useMemo(() => board, [board]);
-  const dustsLeftTrucks = useMemo(
-    () => scheduledBoard.filter((t) => t.truck_type === "Dust" && t.state?.status !== "loaded"),
-    [scheduledBoard],
+  // Route-aware "not yet loaded" computation — mirrors Board/Sidebar logic.
+  // Covering spares (route_swap_route set) stand in for their OOS route truck.
+  const coveringSpareByRoute = useMemo(
+    () =>
+      new Map(
+        board
+          .filter((t) => t.truck_type === "Spare" && t.route_swap_route != null)
+          .map((t) => [t.route_swap_route as number, t]),
+      ),
+    [board],
   );
-  const uniformsLeftTrucks = useMemo(
-    () => scheduledBoard.filter((t) => t.truck_type === "Uniform" && t.state?.status !== "loaded"),
-    [scheduledBoard],
-  );
+  const dustsLeftTrucks = useMemo(() => {
+    const result: TruckWithState[] = [];
+    for (const t of board) {
+      if (t.truck_type !== "Dust") continue;
+      const eff = effectiveStatus(t, loadDay);
+      if (eff === "loaded" || eff === "off") continue;
+      if (eff === "oos") {
+        const spare = coveringSpareByRoute.get(t.truck_number);
+        if (spare && effectiveStatus(spare, loadDay) !== "loaded") result.push(spare);
+        continue;
+      }
+      result.push(t);
+    }
+    return result;
+  }, [board, loadDay, coveringSpareByRoute]);
+  const uniformsLeftTrucks = useMemo(() => {
+    const result: TruckWithState[] = [];
+    for (const t of board) {
+      if (t.truck_type !== "Uniform") continue;
+      const eff = effectiveStatus(t, loadDay);
+      if (eff === "loaded" || eff === "off") continue;
+      if (eff === "oos") {
+        const spare = coveringSpareByRoute.get(t.truck_number);
+        if (spare && effectiveStatus(spare, loadDay) !== "loaded") result.push(spare);
+        continue;
+      }
+      result.push(t);
+    }
+    return result;
+  }, [board, loadDay, coveringSpareByRoute]);
   const dustsLeft = dustsLeftTrucks.length;
   const uniformsLeft = uniformsLeftTrucks.length;
   const sparesLeft = 0;
