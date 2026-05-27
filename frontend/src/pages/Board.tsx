@@ -659,13 +659,24 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             >
               <div className="flex w-full flex-col gap-1">
                 <div className="flex w-full items-start justify-between">
-                  <span className={clsx(
-                    "font-extrabold tracking-tight tabular-nums leading-none",
-                    fleetMode ? "text-3xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                    fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
-                  )}>
-                    #{t.truck_number}
-                  </span>
+                  {!fleetMode && t.state?.oos_spare_route != null ? (
+                    <div className="flex flex-col leading-none gap-0.5">
+                      <span className="text-3xl font-extrabold tabular-nums tracking-tight text-sky-300">
+                        Rt {t.state.oos_spare_route}
+                      </span>
+                      <span className="text-xl font-bold tabular-nums text-slate-400">
+                        → #{t.truck_number}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className={clsx(
+                      "font-extrabold tracking-tight tabular-nums leading-none",
+                      fleetMode ? "text-3xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                      fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
+                    )}>
+                      #{t.truck_number}
+                    </span>
+                  )}
                   <span className="flex h-9 flex-col items-end justify-start gap-0.5">
                     {fleetMode && status === "off" && (t.state?.status === "dirty" || t.state?.status === "unloaded") && (
                       <span className={clsx("badge", STATUS_BG[t.state.status as TruckStatus], STATUS_BADGE_TEXT[t.state.status as TruckStatus])}>
@@ -705,11 +716,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               {t.state?.batch_id != null && !fleetMode && filter !== "unloaded" && (
                 <div className="text-xs text-slate-400">Batch {t.state.batch_id}</div>
               )}
-              {!fleetMode && t.state?.oos_spare_route != null && (
-                <div className="text-xs font-semibold text-sky-300">
-                  Rt {t.state.oos_spare_route} → #{t.truck_number}
-                </div>
-              )}
+
               {fleetMode && (
                 <div className="text-xs text-slate-400">
                   {t.truck_type}
