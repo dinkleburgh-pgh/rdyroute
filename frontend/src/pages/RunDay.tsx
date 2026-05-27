@@ -20,6 +20,7 @@ import {
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckStatus, TruckWithState } from "../types";
+import { effectiveStatus } from "../utils/truckStatus";
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
@@ -60,22 +61,6 @@ const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
 const LOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unloaded: 1, shop: 2, in_progress: 3, loaded: 4, oos: 5, off: 6,
 };
-
-function effectiveStatus(
-  t: TruckWithState,
-  dayNum: number,
-  holidayMode: boolean,
-): TruckStatus {
-  const raw = (t.state?.status ?? "dirty") as TruckStatus;
-  if (
-    !holidayMode &&
-    t.truck_type !== "Spare" &&
-    t.scheduled_off_days.includes(dayNum) &&
-    (raw === "dirty" || raw === "unloaded")
-  )
-    return "off";
-  return raw;
-}
 
 function isUnloadDone(s: TruckStatus) {
   return s === "unloaded" || s === "loaded";

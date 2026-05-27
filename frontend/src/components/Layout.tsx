@@ -7,7 +7,8 @@ import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
 import { OfflineIndicator } from "./OfflineIndicator";
-import type { AuthRole, TruckStatus } from "../types";
+import type { AuthRole, TruckStatus, TruckWithState } from "../types";
+import { buildRouteStatusCounts } from "../utils/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 
 const STATUS_LABEL: Record<TruckStatus, string> = {
@@ -115,52 +116,10 @@ export default function Layout() {
   const { loadDay, unloadsDay } = workdayNumbers();
   const loadDayNum = loadDay;
 
-  const counts = useMemo(() => {
-    const out: Record<TruckStatus, number> = {
-      dirty: 0,
-      shop: 0,
-      in_progress: 0,
-      unloaded: 0,
-      loaded: 0,
-      off: 0,
-      oos: 0,
-      spare: 0,
-    };
-    // Routes covered by a spare with route_swap_route — used to attribute the
-    // spare's lifecycle status (in_progress/loaded) to the route it's covering
-    // instead of double-counting against the spare bucket.
-    const swapByRoute = new Map<number, TruckStatus>();
-    (board ?? []).forEach((t) => {
-      if (t.truck_type === "Spare" && t.route_swap_route != null) {
-        swapByRoute.set(t.route_swap_route, (t.state?.status ?? "dirty") as TruckStatus);
-      }
-    });
-    (board ?? []).forEach((t) => {
-      const raw = (t.state?.status ?? "dirty") as TruckStatus;
-      // Spares: count once in the "spare" bucket regardless of status. Their
-      // operational state is attributed to the covered route below.
-      if (t.truck_type === "Spare") {
-        out.spare = (out.spare ?? 0) + 1;
-        return;
-      }
-      // Auto-off is decided by the NEXT load operation (will it be loaded tonight?).
-      // Skip when holiday_load is on, since holiday loads run every route.
-      let s: TruckStatus =
-        !holidayLoad &&
-        t.scheduled_off_days.includes(loadDayNum) &&
-        (raw === "dirty" || raw === "unloaded")
-          ? "off"
-          : raw;
-      // If this truck's route is being covered by a spare and the spare is
-      // further along the lifecycle (in_progress/loaded), attribute the route
-      // to that more-advanced status so the sidebar reflects route progress.
-      const spareStatus = swapByRoute.get(t.truck_number);
-      if (spareStatus === "loaded") s = "loaded";
-      else if (spareStatus === "in_progress" && s !== "loaded") s = "in_progress";
-      out[s] = (out[s] ?? 0) + 1;
-    });
-    return out;
-  }, [board, loadDayNum, holidayLoad]);
+  const counts = useMemo(
+    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad),
+    [board, loadDayNum, holidayLoad],
+  );
 
   // Scheduled trucks for each direction (excludes off-day and spare-type trucks).
   const scheduledForLoad = useMemo(
