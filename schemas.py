@@ -37,6 +37,7 @@ class TruckUpdate(BaseModel):
     truck_type: TruckType | None = None
     is_active: bool | None = None
     is_persistent_spare: bool | None = None
+    is_oos: bool | None = None
     scheduled_off_days: list[int] | None = None
 
 
@@ -46,6 +47,7 @@ class TruckOut(_OrmBase):
     truck_type: TruckType
     is_active: bool
     is_persistent_spare: bool
+    is_oos: bool
     scheduled_off_days: list[int]
     created_at: datetime
 
@@ -109,6 +111,7 @@ class TruckWithState(_OrmBase):
     truck_type: TruckType
     is_active: bool
     is_persistent_spare: bool
+    is_oos: bool = False
     scheduled_off_days: list[int] = Field(default_factory=list)
     state: TruckStateOut | None = None
     route_swap_route: int | None = None  # set when this truck is the load_on_truck in a route swap

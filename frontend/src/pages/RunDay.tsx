@@ -156,9 +156,9 @@ export default function RunDay() {
   const unloadSpareCount = unloadTrucks.length - unloadRouteTrucks.length;
 
   // On holiday, two days' worth of routes are loaded/unloaded in one shift.
-  // The "second" day is the next ship day (Fri → Mon).
-  const loadDay2 = loadDay === 5 ? 1 : loadDay + 1;
-  const unloadsDay2 = unloadsDay === 5 ? 1 : unloadsDay + 1;
+  // The "second" day is the PREVIOUS ship day (Mon → Fri wraps back).
+  const loadDay2 = loadDay === 1 ? 5 : loadDay - 1;
+  const unloadsDay2 = unloadsDay === 1 ? 5 : unloadsDay - 1;
 
   // Load progress counts ROUTES, not trucks. A spare covering an OOS truck's
   // route fills the same slot — it must not double-count against the total,
@@ -216,7 +216,7 @@ export default function RunDay() {
       <section>
         <div className="mb-3 flex items-baseline gap-3">
           <h2 className="text-lg font-semibold text-slate-200">
-            Unload &mdash; Day {unloadsDay}{holidayUnload ? ` + ${unloadsDay2}` : ""}
+            Unload &mdash; Day {holidayUnload ? `${unloadsDay2} + ` : ""}{unloadsDay}
           </h2>
           <span className="text-sm text-slate-400">
             {unloadDone} / {unloadTotal} done
@@ -233,7 +233,7 @@ export default function RunDay() {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
             // Covering spares are absorbed into their OOS route truck's card.
             .filter((t) => !(t.truck_type === "Spare" && t.route_swap_route != null))
@@ -249,6 +249,9 @@ export default function RunDay() {
               // to "Loaded" (start of the load lifecycle), keep displaying it
               // as Unloaded here so the unload board doesn't flip its badge.
               const status: TruckStatus = raw === "loaded" ? "unloaded" : raw;
+              const truckUnloadDay = holidayUnload
+                ? (t.scheduled_off_days ?? []).includes(unloadsDay) ? unloadsDay2 : unloadsDay
+                : undefined;
               return (
                 <TruckCard
                   key={t.truck_number}
@@ -256,6 +259,8 @@ export default function RunDay() {
                   status={status}
                   done={isUnloadDone(raw)}
                   coveringSpare={coveringSpare}
+                  dayNum={truckUnloadDay}
+                  isExtraDay={truckUnloadDay === unloadsDay2}
                 />
               );
             })}
@@ -265,7 +270,7 @@ export default function RunDay() {
       <section>
         <div className="mb-3 flex items-baseline gap-3">
           <h2 className="text-lg font-semibold text-slate-200">
-            Load &mdash; Day {loadDay}{holidayLoad ? ` + ${loadDay2}` : ""}
+            Load &mdash; Day {holidayLoad ? `${loadDay2} + ` : ""}{loadDay}
           </h2>
           <span className="text-sm text-slate-400">
             {loadDone} / {loadTotal} done
@@ -282,7 +287,7 @@ export default function RunDay() {
             </div>
           )}
         </div>
-        <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {loadTrucks
             // Covering spares are absorbed into their OOS route truck's card.
             .filter((t) => !(t.truck_type === "Spare" && t.route_swap_route != null))
@@ -293,6 +298,9 @@ export default function RunDay() {
               const status = coveringSpare
                 ? effectiveStatus(coveringSpare, loadDay, holidayLoad)
                 : effectiveStatus(t, loadDay, holidayLoad);
+              const truckLoadDay = holidayLoad
+                ? (t.scheduled_off_days ?? []).includes(loadDay) ? loadDay2 : loadDay
+                : undefined;
               return (
                 <TruckCard
                   key={t.truck_number}
@@ -300,6 +308,8 @@ export default function RunDay() {
                   status={status}
                   done={isLoadDone(status)}
                   coveringSpare={coveringSpare}
+                  dayNum={truckLoadDay}
+                  isExtraDay={truckLoadDay === loadDay2}
                 />
               );
             })}
@@ -315,22 +325,26 @@ function TruckCard({
   status,
   done,
   coveringSpare,
+  dayNum,
+  isExtraDay,
 }: {
   t: TruckWithState;
   status: TruckStatus;
   done: boolean;
   coveringSpare?: TruckWithState;
+  dayNum?: number;
+  isExtraDay?: boolean;
 }) {
   return (
     <div
       className={clsx(
-        "card flex flex-col items-center gap-1 p-2 text-center transition-opacity",
+        "card flex flex-col items-center gap-1.5 p-3 text-center transition-opacity",
         done && "opacity-40",
       )}
     >
       <span
         className={clsx(
-          "text-3xl font-extrabold tabular-nums leading-none",
+          "text-4xl font-extrabold tabular-nums leading-none",
           STATUS_TEXT[status],
         )}
       >
@@ -338,18 +352,30 @@ function TruckCard({
       </span>
       <span
         className={clsx(
-          "rounded px-1 py-0.5 text-[10px] font-semibold text-white",
+          "rounded px-1.5 py-0.5 text-xs font-semibold text-white",
           STATUS_BG[status],
         )}
       >
         {STATUS_LABELS[status]}
       </span>
-      <span className="text-[10px] text-slate-500">
+      <span className="text-xs text-slate-500">
         {t.truck_type}
         {coveringSpare && (
           <span className="text-sky-400"> · #{coveringSpare.truck_number}</span>
         )}
       </span>
+      {dayNum != null && (
+        <span
+          className={clsx(
+            "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+            isExtraDay
+              ? "bg-amber-900/60 text-amber-300"
+              : "bg-blue-900/60 text-blue-300",
+          )}
+        >
+          Day {dayNum}
+        </span>
+      )}
     </div>
   );
 }
@@ -735,17 +761,43 @@ function RunDayWizard({
                       onChange={(e) => { setSwapLoadOn(e.target.value); setSwapError(null); }}
                     >
                       <option value="">— truck —</option>
-                      {board
-                        .sort((a, b) => a.truck_number - b.truck_number)
-                        .map((t) => {
-                          const raw = t.state?.status ?? "dirty";
-                          const isOff = !holidayLoad && t.truck_type !== "Spare" && (t.scheduled_off_days ?? []).includes(loadDay) && (raw === "dirty" || raw === "unloaded");
-                          return (
-                            <option key={t.truck_number} value={t.truck_number}>
-                              #{t.truck_number}{t.truck_type === "Spare" ? " (Spare)" : isOff ? " (Off)" : ""}
-                            </option>
-                          );
-                        })}
+                      {(() => {
+                        const sorted = [...board].sort((a, b) => a.truck_number - b.truck_number);
+                        const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
+                        const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off");
+                        const otherTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
+                        return (
+                          <>
+                            {spareTrucks.length > 0 && (
+                              <optgroup label="Spare Trucks">
+                                {spareTrucks.map((t) => (
+                                  <option key={t.truck_number} value={t.truck_number}>
+                                    #{t.truck_number} — Spare
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {offTrucks.length > 0 && (
+                              <optgroup label={`Off — Day ${loadDay}`}>
+                                {offTrucks.map((t) => (
+                                  <option key={t.truck_number} value={t.truck_number}>
+                                    #{t.truck_number} — Off
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {otherTrucks.length > 0 && (
+                              <optgroup label="Other">
+                                {otherTrucks.map((t) => (
+                                  <option key={t.truck_number} value={t.truck_number}>
+                                    #{t.truck_number} ({t.state?.status ?? "dirty"})
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </>
+                        );
+                      })()}
                     </select>
                   </div>
                 </div>

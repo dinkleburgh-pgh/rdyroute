@@ -5,8 +5,12 @@ import {
   useAssignSpare,
   useBoard,
   useBulkUpdateStatus,
+  useCreateRouteSwap,
+  useDeleteRouteSwap,
   useHolidayLoad,
+  useHolidayUnload,
   useReturnSpare,
+  useRouteSwaps,
   useSettings,
   useShortages,
   useSpareAssignments,
@@ -16,7 +20,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
-import type { SpareAssignment, TruckStatus, TruckWithState } from "../types";
+import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
 import { effectiveStatus } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
@@ -62,7 +66,7 @@ function _needsDarkText(hex: string): boolean {
   const b = parseInt(hex.slice(5, 7), 16) / 255;
   const lin = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
   const L = 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-  return L > 0.179; // equal-contrast threshold between black and white text
+  return L > 0.35; // only force dark text on genuinely light colors (pastels/amber); reds/purples/blues keep white
 }
 const _STATUS_COLORS: Record<TruckStatus, string> = {
   dirty: "#dc2626", shop: "#7400ff", in_progress: "#f59e0b",
@@ -98,8 +102,17 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
   const [selectedSpare, setSelectedSpare] = useState<number | "">("");
 
   const { data: assignments = [] } = useSpareAssignments(runDate, false);
+  const { data: swaps = [] } = useRouteSwaps(runDate);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const assignSpare = useAssignSpare();
   const returnSpare = useReturnSpare();
+  const createSwap = useCreateRouteSwap();
+  const deleteSwap = useDeleteRouteSwap();
+
+  const loadDayNum = useMemo(() => {
+    const [y, m, d] = runDate.split("-").map(Number);
+    return workdayNumbers(new Date(y, m - 1, d)).loadDay;
+  }, [runDate]);
 
   const oosRoutes = useMemo(
     () => data.filter((t) => (t.state?.status ?? "dirty") === "oos"),
@@ -111,22 +124,43 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
     [assignments],
   );
 
-  const availableSpares = useMemo(
-    () => data.filter((t) => t.truck_type === "Spare" && (t.state?.status ?? "dirty") !== "spare"),
+  // Route swaps from the Setup Day wizard also count as coverage
+  const swapByRoute = useMemo(
+    () => new Map<number, RouteSwap>(swaps.map((s) => [s.route_truck, s])),
+    [swaps],
+  );
+
+  const spareByNumber = useMemo(
+    () => new Map(data.filter((t) => t.truck_type === "Spare").map((t) => [t.truck_number, t])),
     [data],
   );
 
-  const unassignedCount = oosRoutes.filter((t) => !assignmentByRoute.has(t.truck_number)).length;
+  const unassignedCount = oosRoutes.filter(
+    (t) => !assignmentByRoute.has(t.truck_number) && !swapByRoute.has(t.truck_number),
+  ).length;
 
   if (oosRoutes.length === 0) return null;
 
   async function handleAssign() {
     if (selectedRoute == null || selectedSpare === "") return;
-    await assignSpare.mutateAsync({
-      run_date: runDate,
-      spare_truck_number: Number(selectedSpare),
-      covering_route_truck: selectedRoute,
-    });
+    const pickedNum = Number(selectedSpare);
+    const picked = data.find((t) => t.truck_number === pickedNum);
+    // Spares use the SpareAssignment system (preserves return workflow);
+    // off / other trucks use route_swap, matching the RunDay wizard.
+    if (picked?.truck_type === "Spare") {
+      await assignSpare.mutateAsync({
+        run_date: runDate,
+        spare_truck_number: pickedNum,
+        covering_route_truck: selectedRoute,
+      });
+    } else {
+      await createSwap.mutateAsync({
+        run_date: runDate,
+        route_truck: selectedRoute,
+        load_on_truck: pickedNum,
+        two_way: false,
+      });
+    }
     setSelectedRoute(null);
     setSelectedSpare("");
   }
@@ -158,35 +192,54 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
           <div className="mt-3 space-y-2">
             {oosRoutes.map((t) => {
               const assignment = assignmentByRoute.get(t.truck_number);
+              const swap = !assignment ? swapByRoute.get(t.truck_number) : undefined;
+              const coveringTruckNum = assignment?.spare_truck_number ?? swap?.load_on_truck;
+              const spareTruck = coveringTruckNum != null ? spareByNumber.get(coveringTruckNum) : undefined;
+              const spareStatus = spareTruck?.state?.status as TruckStatus | undefined;
+              const spareActive = spareStatus === "loaded" || spareStatus === "in_progress";
+              const isCovered = assignment != null || swap != null;
               return (
                 <div
                   key={t.truck_number}
                   className={clsx(
                     "rounded-lg bg-slate-800 px-3 py-2",
-                    selectedRoute === t.truck_number && "ring-2 ring-blue-500",
+                    !spareStatus && selectedRoute === t.truck_number && "ring-2 ring-blue-500",
+                    spareStatus === "loaded" && "ring-2 ring-blue-600",
+                    spareStatus === "in_progress" && "ring-2 ring-amber-500",
+                    spareStatus === "unloaded" && "ring-2 ring-green-600",
                   )}
                 >
                   <div className="flex items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
                       <span className="font-semibold text-sm">#{t.truck_number}</span>
                       <span className={clsx("badge", STATUS_BG["oos"])}>OOS</span>
-                      {assignment ? (
-                        <span className="text-xs font-medium text-green-400">
-                          Spare #{assignment.spare_truck_number}
-                        </span>
+                      {isCovered ? (
+                        <>
+                          <span className="text-xs font-medium text-green-400">
+                            Spare #{coveringTruckNum}
+                          </span>
+                          {spareStatus && (
+                            <span className={clsx("badge", STATUS_BG[spareStatus], STATUS_BADGE_TEXT[spareStatus])}>
+                              {STATUS_LABELS[spareStatus]}
+                            </span>
+                          )}
+                        </>
                       ) : (
                         <span className="text-xs text-amber-400">Needs assignment</span>
                       )}
                     </div>
-                    {assignment ? (
+                    {isCovered && !spareActive ? (
                       <button
                         className="rounded px-2 py-1 text-xs text-red-400 hover:text-red-300"
-                        disabled={returnSpare.isPending}
-                        onClick={() => returnSpare.mutate(assignment.id)}
+                        disabled={returnSpare.isPending || deleteSwap.isPending}
+                        onClick={() => {
+                          if (assignment) returnSpare.mutate(assignment.id);
+                          else if (swap) deleteSwap.mutate({ id: swap.id, runDate });
+                        }}
                       >
                         Unassign
                       </button>
-                    ) : (
+                    ) : !isCovered ? (
                       <button
                         className="rounded bg-blue-700 px-2 py-1 text-xs font-medium hover:bg-blue-600"
                         onClick={() => {
@@ -196,31 +249,67 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
                       >
                         {selectedRoute === t.truck_number ? "Close" : "Assign"}
                       </button>
-                    )}
+                    ) : null}
                   </div>
 
-                  {!assignment && selectedRoute === t.truck_number && (
+                  {!isCovered && selectedRoute === t.truck_number && (
                     <div className="mt-2 border-t border-slate-700 pt-2">
-                      <label className="label">Pick spare truck</label>
+                      <label className="label">Pick truck</label>
                       <div className="flex gap-2">
                         <select
                           className="input flex-1"
                           value={selectedSpare}
                           onChange={(e) => setSelectedSpare(e.target.value === "" ? "" : Number(e.target.value))}
                         >
-                          <option value="">Select spare</option>
-                          {availableSpares.map((s) => (
-                            <option key={s.truck_number} value={s.truck_number}>
-                              Truck #{s.truck_number}
-                            </option>
-                          ))}
+                          <option value="">— truck —</option>
+                          {(() => {
+                            const sorted = [...data].sort((a, b) => a.truck_number - b.truck_number);
+                            const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
+                            const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDayNum, holidayLoad) === "off");
+                            const otherTrucks = sorted.filter((t) => {
+                              if (t.truck_type === "Spare") return false;
+                              const s = effectiveStatus(t, loadDayNum, holidayLoad);
+                              return s !== "off" && s !== "oos";
+                            });
+                            return (
+                              <>
+                                {spareTrucks.length > 0 && (
+                                  <optgroup label="Spare Trucks">
+                                    {spareTrucks.map((t) => (
+                                      <option key={t.truck_number} value={t.truck_number}>
+                                        #{t.truck_number} — Spare
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                                {offTrucks.length > 0 && (
+                                  <optgroup label={`Off — Day ${loadDayNum}`}>
+                                    {offTrucks.map((t) => (
+                                      <option key={t.truck_number} value={t.truck_number}>
+                                        #{t.truck_number} — Off
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                                {otherTrucks.length > 0 && (
+                                  <optgroup label="Other">
+                                    {otherTrucks.map((t) => (
+                                      <option key={t.truck_number} value={t.truck_number}>
+                                        #{t.truck_number} ({t.state?.status ?? "dirty"})
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )}
+                              </>
+                            );
+                          })()}
                         </select>
                         <button
                           className="rounded-lg bg-green-700 px-3 py-2 text-xs font-semibold disabled:opacity-50"
-                          disabled={selectedSpare === "" || assignSpare.isPending}
+                          disabled={selectedSpare === "" || assignSpare.isPending || createSwap.isPending}
                           onClick={handleAssign}
                         >
-                          {assignSpare.isPending ? "Assigning..." : "Assign"}
+                          {assignSpare.isPending || createSwap.isPending ? "Assigning..." : "Assign"}
                         </button>
                       </div>
                     </div>
@@ -248,6 +337,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [multiSelect, setMultiSelect] = useState(false);
   const [selectedTrucks, setSelectedTrucks] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<TruckStatus>("dirty");
+  const [pendingOosTruck, setPendingOosTruck] = useState<TruckWithState | null>(null);
   const isArchive = runDate < todayIso();
   const isFuture  = runDate > todayIso();
   const isReadOnly = runDate !== todayIso();
@@ -255,25 +345,27 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const { data: spareAssignments = [] } = useSpareAssignments(runDate, false);
   const { data: settings } = useSettings();
   const upsert = useUpsertTruckState();
+  const updateTruck = useUpdateTruck();
   const bulkUpdate = useBulkUpdateStatus();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor";
   const navigate = useNavigate();
 
-  const runDayNum = useMemo(() => {
+  const { runDayNum, runUnloadsDay } = useMemo(() => {
     const [y, m, d] = runDate.split("-").map(Number);
-    return workdayNumbers(new Date(y, m - 1, d)).loadDay;
+    const wd = workdayNumbers(new Date(y, m - 1, d));
+    return { runDayNum: wd.loadDay, runUnloadsDay: wd.unloadsDay };
   }, [runDate]);
 
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
+  const { data: holidayUnload = false } = useHolidayUnload(runDate);
+
+  // Holiday "extra" day is the previous ship day (Mon=1 wraps to Fri=5)
+  const loadDay2 = runDayNum === 1 ? 5 : runDayNum - 1;
+  const unloadsDay2 = runUnloadsDay === 1 ? 5 : runUnloadsDay - 1;
 
   const batchingDisabled = useMemo(
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
-    [settings],
-  );
-
-  const skipBatchingDisabled = useMemo(
-    () => (settings ?? []).find((s) => s.key === "skip_batching_disabled")?.value === true,
     [settings],
   );
 
@@ -584,8 +676,20 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       )}>
         {filtered.map((t) => {
           const status = effectiveStatus(t, runDayNum, holidayLoad);
+          // Day chips — only visible during holiday mode, only for load/unload views
+          const isUnloadView = filter === "dirty" || filter === "unloaded";
+          const isLoadView = filter === "loaded";
+          let chipDay: number | undefined;
+          let chipIsExtra = false;
+          if (isUnloadView && holidayUnload) {
+            chipDay = (t.scheduled_off_days ?? []).includes(runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
+            chipIsExtra = chipDay === unloadsDay2;
+          } else if (isLoadView && holidayLoad) {
+            chipDay = (t.scheduled_off_days ?? []).includes(runDayNum) ? loadDay2 : runDayNum;
+            chipIsExtra = chipDay === loadDay2;
+          }
           return (
-            <div key={t.truck_number} className={clsx("card space-y-2 cursor-pointer", fleetMode ? "p-3" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4", fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-3 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {
@@ -632,7 +736,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   ) : (
                     <span className={clsx(
                       "font-extrabold tracking-tight tabular-nums leading-none",
-                      fleetMode ? "text-3xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                      fleetMode ? "text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
                       fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
                     )}>
                       {t.truck_number}
@@ -649,6 +753,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     </span>
                   </span>
                 </div>
+                {fleetMode && (
+                  <div className="text-xs text-slate-400">
+                    {t.truck_type}
+                    {t.state?.oos_spare_route != null ? ` · Covering #${t.state.oos_spare_route}` : ""}
+                    {t.route_swap_route != null ? ` · Swap Route #${t.route_swap_route}` : ""}
+                    {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                  </div>
+                )}
                 {!fleetMode && filter === "dirty" && t.state?.status !== "oos" && (
                   <span className="flex w-full items-center justify-center gap-1 rounded bg-blue-600/20 px-2 py-1 text-xs font-semibold text-blue-300">
                     {batchingDisabled ? "Mark Unloaded" : "Assign to Batch →"}
@@ -656,60 +768,57 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 )}
               </div>
               {!fleetMode && filter === "unloaded" && (
-                <>
-                  {!batchingDisabled && !skipBatchingDisabled && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setConfirmTruck(t);
-                      }}
-                      className="flex w-full items-center justify-center gap-1 rounded bg-amber-600/20 px-2 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-600/30"
-                    >
-                      Skip Batching →
-                    </button>
-                  )}
-                  <div className="text-xs text-slate-400">
-                    {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
-                  </div>
-                </>
+                <div className="text-xs text-slate-400">
+                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                </div>
               )}
               {t.state?.batch_id != null && !fleetMode && filter !== "unloaded" && (
                 <div className="text-xs text-slate-400">Batch {t.state.batch_id}</div>
               )}
 
+              {chipDay != null && (
+                <span className={clsx(
+                  "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                  chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
+                )}>
+                  Day {chipDay}
+                </span>
+              )}
+
               {fleetMode && (
-                <div className="text-xs text-slate-400">
-                  {t.truck_type}
-                  {t.state?.oos_spare_route != null ? ` · Covering #${t.state.oos_spare_route}` : ""}
-                  {t.route_swap_route != null ? ` · Swap Route #${t.route_swap_route}` : ""}
-                  {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                <div className="mt-auto flex flex-col gap-2">
+                  {!multiSelect && !isReadOnly && status !== "oos" && (
+                    <select
+                      className="input text-xs"
+                      value={status}
+                      disabled={upsert.isPending}
+                      onClick={(e) => e.stopPropagation()}
+                      onChange={(e) => {
+                        const next = e.target.value as TruckStatus;
+                        if (next === "oos") {
+                          setPendingOosTruck(t);
+                          e.currentTarget.value = status; // revert visual selection
+                        } else {
+                          upsert.mutate({
+                            truck_number: t.truck_number,
+                            run_date: runDate,
+                            status: next,
+                            wearers: t.state?.wearers ?? 0,
+                          });
+                        }
+                      }}
+                    >
+                      {FLEET_STATUS_OPTIONS.map((s) => (
+                        <option key={s} value={s}>
+                          {STATUS_LABELS[s]}
+                        </option>
+                      ))}
+                    </select>
+                  )}
+                  {status === "oos" && (
+                    <p className="text-xs text-slate-500 italic">Tap to remove OOS</p>
+                  )}
                 </div>
-              )}
-              {fleetMode && !multiSelect && !isReadOnly && status !== "oos" && t.truck_type === "Spare" && (
-                <select
-                  className="input text-xs"
-                  value={status}
-                  disabled={upsert.isPending}
-                  onClick={(e) => e.stopPropagation()}
-                  onChange={(e) =>
-                    upsert.mutate({
-                      truck_number: t.truck_number,
-                      run_date: runDate,
-                      status: e.target.value as TruckStatus,
-                      wearers: t.state?.wearers ?? 0,
-                    })
-                  }
-                >
-                  {FLEET_STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {STATUS_LABELS[s]}
-                    </option>
-                  ))}
-                </select>
-              )}
-              {fleetMode && status === "oos" && (
-                <p className="text-xs text-slate-500 italic">Tap to remove OOS</p>
               )}
             </div>
           );
@@ -718,6 +827,50 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           <p className="col-span-full text-slate-500">No trucks match this filter.</p>
         )}
       </div>
+      )}
+
+      {pendingOosTruck && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setPendingOosTruck(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-base font-semibold">Mark Truck #{pendingOosTruck.truck_number} as OOS?</h3>
+            <p className="mb-4 text-sm text-slate-400">
+              Out of Service means this truck is unavailable for today's run and needs coverage.
+              This is not a routine status change.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                className="btn-ghost"
+                onClick={() => setPendingOosTruck(null)}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-red-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-red-600 transition-colors"
+                onClick={() => {
+                  updateTruck.mutate({
+                    truck_number: pendingOosTruck.truck_number,
+                    is_oos: true,
+                  });
+                  upsert.mutate({
+                    truck_number: pendingOosTruck.truck_number,
+                    run_date: runDate,
+                    status: "oos",
+                    wearers: pendingOosTruck.state?.wearers ?? 0,
+                  });
+                  setPendingOosTruck(null);
+                }}
+              >
+                Confirm OOS
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {detailTruck && fleetMode && (
@@ -1006,7 +1159,8 @@ function TruckDetailModal({
   const truckAudits = (audits ?? []).filter(
     (a) => a.truck_number === truck.truck_number,
   );
-  const status = (truck.state?.status ?? "dirty") as TruckStatus;
+  // is_oos flag takes priority — ensures OOS is reflected even on dates with no state row
+  const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
 
   return (
     <div
@@ -1136,9 +1290,13 @@ function FleetTruckEditor({ truck, runDate }: { truck: TruckWithState; runDate: 
   const offDays: number[] = truck.scheduled_off_days ?? [];
   const [editingOffDays, setEditingOffDays] = useState(false);
   const [pendingOffDays, setPendingOffDays] = useState<number[]>([]);
-  const isOos = (truck.state?.status ?? "dirty") === "oos";
+  const isOos = truck.is_oos || (truck.state?.status ?? "dirty") === "oos";
 
   function toggleOos(checked: boolean) {
+    update.mutate({
+      truck_number: truck.truck_number,
+      is_oos: checked,
+    });
     upsertState.mutate({
       truck_number: truck.truck_number,
       run_date: runDate,
@@ -1341,9 +1499,9 @@ function StatusEditor({
           {STATUS_LABELS[status]}
         </span>
         <select
-          className="input flex-1"
+          className="input flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
           value={status}
-          disabled={upsert.isPending}
+          disabled={upsert.isPending || status === "oos"}
           onChange={(e) =>
             upsert.mutate({
               truck_number: truck.truck_number,
@@ -1361,7 +1519,9 @@ function StatusEditor({
         </select>
       </div>
       <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-        Manual override — workflow pages drive normal transitions.
+        {status === "oos"
+          ? "Disable OOS above to change status."
+          : "Manual override — workflow pages drive normal transitions."}
       </p>
     </section>
   );

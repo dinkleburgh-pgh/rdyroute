@@ -14,7 +14,7 @@ import uuid
 from datetime import datetime, timezone
 
 import bcrypt
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy import select
@@ -137,8 +137,64 @@ def token_form(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(response: Response):
+def logout(
+    response: Response,
+    db: Session = Depends(get_db),
+    readyroutev2_sid: str | None = Cookie(default=None),
+):
+    # Best-effort cleanup of the server-side session row so it can't be reused.
+    if readyroutev2_sid:
+        sess = db.get(SessionModel, readyroutev2_sid)
+        if sess is not None:
+            db.delete(sess)
+            db.commit()
     response.delete_cookie(SESSION_COOKIE)
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(
+    response: Response,
+    db: Session = Depends(get_db),
+    readyroutev2_sid: str | None = Cookie(default=None),
+):
+    """
+    Mint a fresh JWT using the long-lived server-side session cookie.
+
+    The frontend stores the JWT in localStorage; when it expires, an axios
+    interceptor calls this endpoint to silently re-up the token instead of
+    forcing the user back to the login screen.  The cookie itself is
+    httponly + lax samesite and lasts `session_expiry_days` (30d default).
+    """
+    if not readyroutev2_sid:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie")
+
+    sess = db.get(SessionModel, readyroutev2_sid)
+    now_ts = datetime.now(timezone.utc).timestamp()
+    if sess is None or sess.expires_ts <= now_ts:
+        response.delete_cookie(SESSION_COOKIE)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session expired")
+
+    user = db.scalars(select(User).where(User.username == sess.username)).first()
+    if user is None or not user.is_enabled:
+        # Stale session pointing at a disabled / deleted account — drop it.
+        db.delete(sess)
+        db.commit()
+        response.delete_cookie(SESSION_COOKIE)
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User disabled")
+
+    # Slide the cookie expiry forward so active users stay remembered indefinitely.
+    sess.expires_ts = now_ts + settings.session_expiry_days * 86400
+    db.commit()
+    response.set_cookie(
+        SESSION_COOKIE,
+        readyroutev2_sid,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.session_expiry_days * 86400,
+    )
+
+    token = _create_access_token(user.username, user.role.value)
+    return TokenResponse(access_token=token, role=user.role, username=user.username)
 
 
 # ---------------------------------------------------------------------------
