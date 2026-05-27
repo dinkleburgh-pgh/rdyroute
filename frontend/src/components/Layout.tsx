@@ -126,21 +126,37 @@ export default function Layout() {
       oos: 0,
       spare: 0,
     };
+    // Routes covered by a spare with route_swap_route — used to attribute the
+    // spare's lifecycle status (in_progress/loaded) to the route it's covering
+    // instead of double-counting against the spare bucket.
+    const swapByRoute = new Map<number, TruckStatus>();
+    (board ?? []).forEach((t) => {
+      if (t.truck_type === "Spare" && t.route_swap_route != null) {
+        swapByRoute.set(t.route_swap_route, (t.state?.status ?? "dirty") as TruckStatus);
+      }
+    });
     (board ?? []).forEach((t) => {
       const raw = (t.state?.status ?? "dirty") as TruckStatus;
+      // Spares: count once in the "spare" bucket regardless of status. Their
+      // operational state is attributed to the covered route below.
+      if (t.truck_type === "Spare") {
+        out.spare = (out.spare ?? 0) + 1;
+        return;
+      }
       // Auto-off is decided by the NEXT load operation (will it be loaded tonight?).
       // Skip when holiday_load is on, since holiday loads run every route.
-      const s: TruckStatus =
+      let s: TruckStatus =
         !holidayLoad &&
-        t.truck_type !== "Spare" &&
         t.scheduled_off_days.includes(loadDayNum) &&
         (raw === "dirty" || raw === "unloaded")
           ? "off"
           : raw;
-      if (s === "unloaded" && t.truck_type === "Spare") {
-        out.spare = (out.spare ?? 0) + 1;
-        return;
-      }
+      // If this truck's route is being covered by a spare and the spare is
+      // further along the lifecycle (in_progress/loaded), attribute the route
+      // to that more-advanced status so the sidebar reflects route progress.
+      const spareStatus = swapByRoute.get(t.truck_number);
+      if (spareStatus === "loaded") s = "loaded";
+      else if (spareStatus === "in_progress" && s !== "loaded") s = "in_progress";
       out[s] = (out[s] ?? 0) + 1;
     });
     return out;
