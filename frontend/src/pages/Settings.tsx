@@ -7,8 +7,7 @@ import {
   useBoard,
   useBulkUpdateStatus,
   useCensorWords,
-  useHolidayMode,
-  useSetHolidayMode,
+
   useChangePassword,
   useCreateNotice,
   useCreateUser,
@@ -54,7 +53,6 @@ type Category =
   | "advanced"
   | "recovery"
   | "resets"
-  | "run_day"
   | "requests"
   | "notices"
   | "items"
@@ -132,7 +130,6 @@ const CARD_GROUPS: CardGroup[] = [
     desc: "Force-finish loads, bulk status changes, and workday resets",
     accent: "border-orange-500",
     tabs: [
-      { id: "run_day",  label: "Run Day" },
       { id: "recovery", label: "Recovery" },
       { id: "resets",   label: "Resets" },
     ],
@@ -284,7 +281,6 @@ export default function Management() {
       case "notices":        return <NoticesPanel disabled={!isAdmin} />;
       case "items":          return <ItemsPanel disabled={!isAdmin} />;
       case "roles":          return <RoleAccessPanel />;
-      case "run_day":        return <RunDayPanel />;
       case "recovery":       return <RecoveryPanel />;
       case "resets":         return <ResetsPanel />;
       case "fleet_mgmt":     return <FleetManagementPanel />;
@@ -1487,66 +1483,6 @@ function RecoveryPanel() {
             Trucks: {candidates.map((t) => `#${t.truck_number}`).join(", ")}
           </p>
         )}
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Run Day
-// ---------------------------------------------------------------------------
-
-function RunDayPanel() {
-  const { user } = useAuth();
-  const [runDate, setRunDate] = useState(todayIso());
-  const { data: holidayMode = false } = useHolidayMode(runDate);
-  const setHolidayMode = useSetHolidayMode();
-
-  const isPrivileged =
-    user?.role === "admin" ||
-    user?.role === "fleet" ||
-    user?.role === "atl" ||
-    user?.role === "supervisor" ||
-    user?.role === "lead";
-
-  return (
-    <div className="space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <p className="text-xs text-slate-400">Configure run mode for the selected date.</p>
-        <div>
-          <label className="label">Run date</label>
-          <input
-            className="input"
-            type="date"
-            value={runDate}
-            onChange={(e) => setRunDate(e.target.value)}
-          />
-        </div>
-      </div>
-
-      <div className="card">
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            <p className="text-sm font-medium text-slate-200">Run mode</p>
-            <p className="text-xs text-slate-500">
-              {holidayMode
-                ? "Holiday — scheduled days off are ignored, all non-spare routes run."
-                : "Normal — trucks with scheduled days off are marked Off automatically."}
-            </p>
-          </div>
-          <button
-            className={clsx(
-              "shrink-0 rounded border px-3 py-1.5 text-sm font-semibold transition-colors disabled:opacity-50",
-              holidayMode
-                ? "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700"
-                : "border-amber-600/60 bg-amber-950/20 text-amber-300 hover:bg-amber-950/40",
-            )}
-            disabled={!isPrivileged || setHolidayMode.isPending}
-            onClick={() => setHolidayMode.mutate({ runDate, holiday: !holidayMode })}
-          >
-            {holidayMode ? "Switch to Normal" : "Switch to Holiday"}
-          </button>
-        </div>
       </div>
     </div>
   );
