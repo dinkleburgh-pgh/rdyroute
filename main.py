@@ -9,6 +9,7 @@ Interactive API docs: http://localhost:8000/docs
 """
 
 from contextlib import asynccontextmanager
+import asyncio
 import logging
 import time
 from collections import defaultdict
@@ -19,6 +20,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from database import Base, SessionLocal, engine, settings
 from routers import audit, auth, batches, communications, exports, fleet, load_durations, notices, route_swaps, settings as settings_router, shorts, spares, trucks, ws as ws_router
 from seed import run_startup_seed
+from backups import backup_loop
 
 log = logging.getLogger("readyroutev2.startup")
 _http_log = logging.getLogger("uvicorn.error")
@@ -88,7 +90,15 @@ async def lifespan(app: FastAPI):
     print(f"  Load  : {load_ms:.1f} ms")
     print(f"{'='*58}\n")
 
-    yield
+    backup_task = asyncio.create_task(backup_loop())
+    try:
+        yield
+    finally:
+        backup_task.cancel()
+        try:
+            await backup_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 # ---------------------------------------------------------------------------
@@ -134,7 +144,13 @@ _req_log = logging.getLogger("uvicorn.error")
 @app.middleware("http")
 async def _log_requests(request: Request, call_next) -> Response:
     t0 = time.monotonic()
-    response: Response = await call_next(request)
+    try:
+        response: Response = await call_next(request)
+    except Exception as exc:  # noqa: BLE001 - convert to 500, never crash worker
+        key = f"{request.method}:{request.url.path}:exception"
+        if _should_log_error(key):
+            _req_log.exception("Unhandled error on %s %s: %s", request.method, request.url.path, exc)
+        return Response(content="Internal Server Error", status_code=500, media_type="text/plain")
     ms = (time.monotonic() - t0) * 1000
     status = response.status_code
     path = request.url.path

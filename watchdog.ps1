@@ -57,6 +57,19 @@ function Restart-LocalStack {
     powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "run.ps1") -Restart -NoBrowser | Out-Null
 }
 
+function Ensure-KeepAwakeProcess {
+    $keepAwake = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+        $_.Name -ieq "powershell.exe" -and $_.CommandLine -match "keep-awake.ps1"
+    }
+    if ($keepAwake) { return }
+
+    $keepAwakeScript = Join-Path $PSScriptRoot "keep-awake.ps1"
+    if (-not (Test-Path $keepAwakeScript)) { return }
+
+    Write-Status "keep-awake process missing; restarting it..."
+    Start-Process -FilePath "powershell.exe" -WindowStyle Hidden -ArgumentList "-NoProfile", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-File", $keepAwakeScript, "-KeepDisplayOn", "-Silent"
+}
+
 function Get-EffectiveMode {
     if ($Mode -ne "auto") { return $Mode }
 
@@ -101,6 +114,8 @@ function Get-HealthUrls([string]$EffectiveMode) {
 Write-Status "Watchdog started in '$Mode' mode."
 
 while ($true) {
+    Ensure-KeepAwakeProcess
+
     $effectiveMode = Get-EffectiveMode
 
     if ($effectiveMode -ne $currentMode) {
