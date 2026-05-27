@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Watchdog that keeps the Vite dev server alive — auto-restarts on crash.
     Launched by run.ps1 via dot-source after setting required variables:
@@ -75,7 +75,8 @@ while (Test-Path $SentinelFile) {
 
     if (-not $exited) {
         # Healthy — reset rapid-failure counter once vite has been up ≥ 30s.
-        if ((Get-Date) - $state.StartedAt -gt [TimeSpan]::FromSeconds(30) -and $rapidFailures -gt 0) {
+        $aliveSeconds = ((Get-Date) - $state.StartedAt).TotalSeconds
+        if ($aliveSeconds -gt 30 -and $rapidFailures -gt 0) {
             Write-Log "Vite stable for 30s — resetting rapid-failure counter."
             $rapidFailures = 0
             $backoffSeconds = 3
