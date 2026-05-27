@@ -261,6 +261,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [selectedTrucks, setSelectedTrucks] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<TruckStatus>("dirty");
   const isArchive = runDate < todayIso();
+  const isFuture  = runDate > todayIso();
+  const isReadOnly = runDate !== todayIso();
   const { data, isLoading, error } = useBoard(runDate);
   const { data: spareAssignments = [] } = useSpareAssignments(runDate, false);
   const { data: settings } = useSettings();
@@ -424,7 +426,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               value={runDate}
               onChange={(e) => setRunDate(e.target.value)}
             />
-            {!isArchive && (
+            {!isReadOnly && (
               <button
                 type="button"
                 onClick={() => {
@@ -441,6 +443,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             )}
             {isArchive && (
               <p className="shrink-0 text-xs font-semibold text-amber-400 md:mt-1 md:text-center">Archive</p>
+            )}
+            {isFuture && (
+              <p className="shrink-0 text-xs font-semibold text-sky-400 md:mt-1 md:text-center">Future</p>
             )}
           </div>
           {/* Filter pills — horizontal scroll on mobile, vertical list on desktop */}
@@ -538,6 +543,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               <input
                 className="input"
                 type="date"
+                max={todayIso()}
                 value={runDate}
                 onChange={(e) => setRunDate(e.target.value)}
               />
@@ -561,7 +567,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               </select>
             </div>
           )}
-          {!fleetMode && isAdmin && !isArchive && (
+          {!fleetMode && isAdmin && !isReadOnly && (
             <button
               type="button"
               onClick={() => {
@@ -707,7 +713,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                 </div>
               )}
-              {fleetMode && !multiSelect && !isArchive && status !== "oos" && (
+              {fleetMode && !multiSelect && !isReadOnly && status !== "oos" && (
                 <select
                   className="input text-xs"
                   value={status}
@@ -746,7 +752,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           truck={detailTruck}
           runDate={runDate}
           fleetMode={fleetMode}
-          readOnly={isArchive}
+          readOnly={isReadOnly}
           onClose={() => setDetailNum(null)}
         />
       )}

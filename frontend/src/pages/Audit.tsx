@@ -96,6 +96,7 @@ export default function Audit() {
         <input
           className="input"
           type="date"
+          max={todayIso()}
           value={runDate}
           onChange={(e) => { setRunDate(e.target.value); setSelectedTruck(null); }}
         />
