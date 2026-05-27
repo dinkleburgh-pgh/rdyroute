@@ -74,7 +74,8 @@ const STATUS_BADGE_TEXT: Partial<Record<TruckStatus, string>> = Object.fromEntri
     .map(([s]) => [s, "!text-black"]),
 );
 
-// 'spare' is a truck *type* and 'off' is set elsewhere — neither is offered as a status.
+// 'spare' is a truck *type* set via the truck detail panel — not offered as a status here.
+// 'off' is schedule-managed; 'in_progress' is managed by load workflow.
 const STATUS_OPTIONS: TruckStatus[] = [
   "dirty",
   "shop",
@@ -82,8 +83,7 @@ const STATUS_OPTIONS: TruckStatus[] = [
   "loaded",
   "oos",
 ];
-// Fleet dropdown: 'off' is schedule-managed; 'in_progress' is managed by load workflow.
-const FLEET_STATUS_OPTIONS: TruckStatus[] = ["dirty", "shop", "unloaded", "loaded", "oos", "spare"];
+const FLEET_STATUS_OPTIONS: TruckStatus[] = ["dirty", "shop", "unloaded", "loaded", "oos"];
 // All statuses shown in the fleet filter rail (ordered for display).
 const FLEET_RAIL_STATUSES: TruckStatus[] = ["dirty", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare"];
 
