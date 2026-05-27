@@ -87,7 +87,8 @@ function isLoadDone(s: TruckStatus) {
 export default function RunDay() {
   const runDate = todayIso();
   const { data: board = [] } = useBoard(runDate);
-  const { data: holidayMode = false } = useHolidayMode(runDate);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
+  const { data: holidayUnload = false } = useHolidayUnload(runDate);
   const { loadDay, unloadsDay } = workdayNumbers();
 
   const [wizardOpen, setWizardOpen] = useState(false);
@@ -105,17 +106,17 @@ export default function RunDay() {
         .filter(
           (t) =>
             t.truck_type !== "Spare" &&
-            !t.scheduled_off_days.includes(unloadsDay),
+            (holidayUnload || !t.scheduled_off_days.includes(unloadsDay)),
         )
         .sort((a, b) => {
-          const sa = effectiveStatus(a, unloadsDay, holidayMode);
-          const sb = effectiveStatus(b, unloadsDay, holidayMode);
+          const sa = effectiveStatus(a, unloadsDay, holidayUnload);
+          const sb = effectiveStatus(b, unloadsDay, holidayUnload);
           const oa = UNLOAD_SORT[sa] ?? 9;
           const ob = UNLOAD_SORT[sb] ?? 9;
           if (oa !== ob) return oa - ob;
           return a.truck_number - b.truck_number;
         }),
-    [board, unloadsDay, holidayMode],
+    [board, unloadsDay, holidayUnload],
   );
 
   const loadTrucks = useMemo(
@@ -124,24 +125,24 @@ export default function RunDay() {
         .filter(
           (t) =>
             (t.truck_type !== "Spare" || t.route_swap_route != null) &&
-            !t.scheduled_off_days.includes(loadDay),
+            (holidayLoad || !t.scheduled_off_days.includes(loadDay)),
         )
         .sort((a, b) => {
-          const sa = effectiveStatus(a, loadDay, holidayMode);
-          const sb = effectiveStatus(b, loadDay, holidayMode);
+          const sa = effectiveStatus(a, loadDay, holidayLoad);
+          const sb = effectiveStatus(b, loadDay, holidayLoad);
           const oa = LOAD_SORT[sa] ?? 9;
           const ob = LOAD_SORT[sb] ?? 9;
           if (oa !== ob) return oa - ob;
           return a.truck_number - b.truck_number;
         }),
-    [board, loadDay, holidayMode],
+    [board, loadDay, holidayLoad],
   );
 
   const unloadDone = unloadTrucks.filter((t) =>
-    isUnloadDone(effectiveStatus(t, unloadsDay, holidayMode)),
+    isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)),
   ).length;
   const loadDone = loadTrucks.filter((t) =>
-    isLoadDone(effectiveStatus(t, loadDay, holidayMode)),
+    isLoadDone(effectiveStatus(t, loadDay, holidayLoad)),
   ).length;
 
   return (
@@ -151,6 +152,7 @@ export default function RunDay() {
           runDate={runDate}
           board={board}
           loadDay={loadDay}
+          unloadsDay={unloadsDay}
           onClose={() => setWizardOpen(false)}
         />
       )}
@@ -174,7 +176,7 @@ export default function RunDay() {
         </div>
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
           {unloadTrucks.map((t) => {
-            const status = effectiveStatus(t, unloadsDay, holidayMode);
+            const status = effectiveStatus(t, unloadsDay, holidayUnload);
             return (
               <TruckCard key={t.truck_number} t={t} status={status} done={isUnloadDone(status)} />
             );
@@ -201,7 +203,7 @@ export default function RunDay() {
         </div>
         <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
           {loadTrucks.map((t) => {
-            const status = effectiveStatus(t, loadDay, holidayMode);
+            const status = effectiveStatus(t, loadDay, holidayLoad);
             return (
               <TruckCard key={t.truck_number} t={t} status={status} done={isLoadDone(status)} />
             );
@@ -257,11 +259,13 @@ function RunDayWizard({
   runDate,
   board,
   loadDay,
+  unloadsDay,
   onClose,
 }: {
   runDate: string;
   board: TruckWithState[];
   loadDay: number;
+  unloadsDay: number;
   onClose: () => void;
 }) {
   const [step, setStep] = useState(1);
@@ -274,7 +278,23 @@ function RunDayWizard({
   const usedSpares = board.filter(
     (t) => t.truck_type === "Spare" && (t.state?.status === "unloaded" || t.state?.oos_spare_route != null),
   );
-  const HOLIDAY_ROUTES = 38;
+
+  // Counts per side, derived from the actual fleet roster.
+  // Base = trucks scheduled to run that ship day normally.
+  // Extra = trucks normally off for that ship day (added by holiday).
+  const loadBase = board.filter(
+    (t) => t.truck_type !== "Spare" && !(t.scheduled_off_days ?? []).includes(loadDay),
+  ).length;
+  const loadExtra = board.filter(
+    (t) => t.truck_type !== "Spare" && (t.scheduled_off_days ?? []).includes(loadDay),
+  ).length;
+  const unloadBase = board.filter(
+    (t) => t.truck_type !== "Spare" && !(t.scheduled_off_days ?? []).includes(unloadsDay),
+  ).length;
+  const unloadExtra = board.filter(
+    (t) => t.truck_type !== "Spare" && (t.scheduled_off_days ?? []).includes(unloadsDay),
+  ).length;
+  const DAY_NAMES = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
   const upsert = useUpsertTruckState();
   const { data: dailyNotes = "" } = useDailyNotes(runDate);
   const [notesText, setNotesText] = useState<string | null>(null);
@@ -394,81 +414,127 @@ function RunDayWizard({
           {/* Step 1: Run Mode */}
           {step === 1 && (
             <div className="space-y-4">
-              <p className="text-center text-xl font-extrabold text-slate-100">Choose today's run mode.</p>
+              <p className="text-center text-xl font-extrabold text-slate-100">Set today's run mode.</p>
               <p className="text-center text-xs text-slate-400">
-                Normal keeps scheduled days off. Holiday runs all non-spare routes.
+                Load and Unload can run independently on holiday. Load is for tomorrow's ship,
+                Unload is for today's ship returning.
               </p>
-              <div className="space-y-2">
+
+              {/* Master shortcut: Normal / Holiday (sets both sides at once) */}
+              <div className="grid grid-cols-2 gap-2">
                 <button
                   className={clsx(
-                    "w-full rounded-lg border px-4 py-3 text-base font-bold transition-colors",
-                    !holidayMode
+                    "rounded-lg border px-3 py-2 text-sm font-bold transition-colors",
+                    !holidayMode && !holidayLoad && !holidayUnload
                       ? "border-blue-500 bg-blue-900/40 text-blue-200"
                       : "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700",
                   )}
                   onClick={async () => {
-                    if (holidayMode) {
-                      await setHolidayMode.mutateAsync({ runDate, holiday: false });
-                      await setHolidayLoad.mutateAsync({ runDate, value: false });
-                      await setHolidayUnload.mutateAsync({ runDate, value: false });
-                    }
-                    setStep(2);
+                    await Promise.all([
+                      setHolidayMode.mutateAsync({ runDate, holiday: false }),
+                      setHolidayLoad.mutateAsync({ runDate, value: false }),
+                      setHolidayUnload.mutateAsync({ runDate, value: false }),
+                    ]);
                   }}
-                  disabled={setHolidayMode.isPending}
+                  disabled={setHolidayMode.isPending || setHolidayLoad.isPending || setHolidayUnload.isPending}
                 >
-                  Normal {!holidayMode && "✓"}
+                  All Normal
                 </button>
                 <button
                   className={clsx(
-                    "w-full rounded-lg border px-4 py-3 text-base font-bold transition-colors",
-                    holidayMode
+                    "rounded-lg border px-3 py-2 text-sm font-bold transition-colors",
+                    holidayMode && holidayLoad && holidayUnload
                       ? "border-amber-500 bg-amber-900/40 text-amber-200"
                       : "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700",
                   )}
                   onClick={async () => {
-                    if (!holidayMode) {
-                      await setHolidayMode.mutateAsync({ runDate, holiday: true });
-                      await setHolidayLoad.mutateAsync({ runDate, value: true });
-                      await setHolidayUnload.mutateAsync({ runDate, value: true });
-                    }
+                    await Promise.all([
+                      setHolidayMode.mutateAsync({ runDate, holiday: true }),
+                      setHolidayLoad.mutateAsync({ runDate, value: true }),
+                      setHolidayUnload.mutateAsync({ runDate, value: true }),
+                    ]);
                   }}
                   disabled={setHolidayMode.isPending || setHolidayLoad.isPending || setHolidayUnload.isPending}
                 >
-                  Holiday {holidayMode && "✓"}
+                  All Holiday
                 </button>
-                {holidayMode && (
-                  <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 p-3 space-y-2">
-                    <p className="text-xs font-semibold text-amber-300 uppercase tracking-wide">Which operations run holiday?</p>
-                    <div className="grid grid-cols-2 gap-2">
-                      <button
-                        className={clsx(
-                          "rounded-lg border px-3 py-3 text-sm font-bold transition-colors",
-                          holidayLoad ? "border-blue-500 bg-blue-900/40 text-blue-200" : "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700",
-                        )}
-                        onClick={() => setHolidayLoad.mutateAsync({ runDate, value: !holidayLoad })}
-                        disabled={setHolidayLoad.isPending}
-                      >
-                        <div className="text-base">{holidayLoad ? "✓" : "+"} Load</div>
-                        <div className="mt-1 text-[11px] font-normal opacity-70">{HOLIDAY_ROUTES} routes</div>
-                      </button>
-                      <button
-                        className={clsx(
-                          "rounded-lg border px-3 py-3 text-sm font-bold transition-colors",
-                          holidayUnload ? "border-emerald-500 bg-emerald-900/40 text-emerald-200" : "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700",
-                        )}
-                        onClick={() => setHolidayUnload.mutateAsync({ runDate, value: !holidayUnload })}
-                        disabled={setHolidayUnload.isPending}
-                      >
-                        <div className="text-base">{holidayUnload ? "✓" : "+"} Unload</div>
-                        <div className="mt-1 text-[11px] font-normal opacity-70">
-                          {HOLIDAY_ROUTES}{usedSpares.length > 0 && ` + ${usedSpares.length} spare${usedSpares.length !== 1 ? "s" : ""}`}
-                          {" = "}{HOLIDAY_ROUTES + usedSpares.length} total
-                        </div>
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {/* Per-side independent toggles */}
+              <div className="space-y-2">
+                <button
+                  className={clsx(
+                    "w-full rounded-lg border px-4 py-3 text-left transition-colors",
+                    holidayLoad
+                      ? "border-amber-500 bg-amber-950/30"
+                      : "border-slate-600 bg-slate-800 hover:bg-slate-700",
+                  )}
+                  onClick={async () => {
+                    const next = !holidayLoad;
+                    await setHolidayLoad.mutateAsync({ runDate, value: next });
+                    // Keep master flag in sync (true if either side is holiday)
+                    await setHolidayMode.mutateAsync({ runDate, holiday: next || holidayUnload });
+                  }}
+                  disabled={setHolidayLoad.isPending}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-bold text-slate-100">
+                      Load &mdash; for {DAY_NAMES[loadDay] ?? `Day ${loadDay}`}'s ship
+                    </span>
+                    <span className={clsx(
+                      "rounded px-2 py-0.5 text-xs font-bold",
+                      holidayLoad ? "bg-amber-500/80 text-amber-50" : "bg-slate-600 text-slate-200",
+                    )}>
+                      {holidayLoad ? "HOLIDAY" : "NORMAL"}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {holidayLoad
+                      ? <>Loading <span className="font-bold text-amber-200">{loadBase + loadExtra}</span> routes ({loadBase} scheduled + <span className="font-bold text-amber-300">{loadExtra} extra</span>)</>
+                      : <>Loading <span className="font-bold text-slate-200">{loadBase}</span> scheduled routes ({loadExtra} off)</>}
+                  </div>
+                </button>
+
+                <button
+                  className={clsx(
+                    "w-full rounded-lg border px-4 py-3 text-left transition-colors",
+                    holidayUnload
+                      ? "border-amber-500 bg-amber-950/30"
+                      : "border-slate-600 bg-slate-800 hover:bg-slate-700",
+                  )}
+                  onClick={async () => {
+                    const next = !holidayUnload;
+                    await setHolidayUnload.mutateAsync({ runDate, value: next });
+                    await setHolidayMode.mutateAsync({ runDate, holiday: next || holidayLoad });
+                  }}
+                  disabled={setHolidayUnload.isPending}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-base font-bold text-slate-100">
+                      Unload &mdash; from {DAY_NAMES[unloadsDay] ?? `Day ${unloadsDay}`}'s ship
+                    </span>
+                    <span className={clsx(
+                      "rounded px-2 py-0.5 text-xs font-bold",
+                      holidayUnload ? "bg-amber-500/80 text-amber-50" : "bg-slate-600 text-slate-200",
+                    )}>
+                      {holidayUnload ? "HOLIDAY" : "NORMAL"}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-xs text-slate-400">
+                    {holidayUnload
+                      ? <>Unloading <span className="font-bold text-amber-200">{unloadBase + unloadExtra}</span> routes ({unloadBase} scheduled + <span className="font-bold text-amber-300">{unloadExtra} extra</span>){usedSpares.length > 0 && <> + {usedSpares.length} spare{usedSpares.length !== 1 ? "s" : ""}</>}</>
+                      : <>Unloading <span className="font-bold text-slate-200">{unloadBase}</span> scheduled routes{usedSpares.length > 0 && <> + {usedSpares.length} spare{usedSpares.length !== 1 ? "s" : ""}</>}</>}
+                  </div>
+                </button>
+              </div>
+
+              {holidayLoad !== holidayUnload && (
+                <div className="rounded-md border border-blue-700/40 bg-blue-950/20 px-3 py-2 text-xs text-blue-200">
+                  <span className="font-bold">Asymmetric day:</span> only one side is on holiday.
+                  This happens entering/leaving a holiday week (e.g.&nbsp;Fri load=holiday, Mon unload=holiday).
+                </div>
+              )}
+
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={onClose}>Close</button>
                 <button className="flex-1 btn-primary text-sm" onClick={() => setStep(2)}>Continue</button>
@@ -571,7 +637,7 @@ function RunDayWizard({
                         .sort((a, b) => a.truck_number - b.truck_number)
                         .map((t) => {
                           const raw = t.state?.status ?? "dirty";
-                          const isOff = !holidayMode && t.truck_type !== "Spare" && (t.scheduled_off_days ?? []).includes(loadDay) && (raw === "dirty" || raw === "unloaded");
+                          const isOff = !holidayLoad && t.truck_type !== "Spare" && (t.scheduled_off_days ?? []).includes(loadDay) && (raw === "dirty" || raw === "unloaded");
                           return (
                             <option key={t.truck_number} value={t.truck_number}>
                               #{t.truck_number}{t.truck_type === "Spare" ? " (Spare)" : isOff ? " (Off)" : ""}
