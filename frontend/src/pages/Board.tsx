@@ -349,20 +349,24 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       // manually set OOS — those go into the oos bucket.
       if (fleetMode && t.truck_type === "Spare" && t.state?.status !== "oos") {
         c.spare = (c.spare ?? 0) + 1;
+      } else if (!fleetMode && t.truck_type === "Spare") {
+        // In non-fleet mode, spares are counted below via the OOS-coverage loop
+        // only when they are actually covering an OOS route. Counting them here
+        // too inflates the lifecycle buckets (e.g. a loaded spare covering a
+        // non-OOS route adds a phantom loaded count).
       } else {
         const s = effectiveStatus(t, runDayNum, holidayLoad);
         c[s] = (c[s] ?? 0) + 1;
       }
     });
 
-    // Covered OOS routes appear in workflow tabs based on the covering truck state.
+    // A spare covering an OOS route represents that route in the workflow tabs.
+    // Count it under whichever lifecycle status the spare is in.
     if (!fleetMode) {
       coveringSpareByRoute.forEach((spareTruck, routeTruck) => {
         if (truckStatusByNumber.get(routeTruck) !== "oos") return;
         const spareStatus = truckStatusByNumber.get(spareTruck) ?? "dirty";
-        if (spareStatus === "dirty" || spareStatus === "unloaded") {
-          c[spareStatus] = (c[spareStatus] ?? 0) + 1;
-        }
+        c[spareStatus] = (c[spareStatus] ?? 0) + 1;
       });
     }
 
@@ -383,12 +387,17 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     }
     if (filter === "all") return data;
     return data.filter((t) => {
-      if (effectiveStatus(t, runDayNum, holidayLoad) === filter) {
-        if (filter === "unloaded" && t.truck_type === "Spare" && !t.state?.oos_spare_route && !t.route_swap_route) return false;
-        return true;
+      if (effectiveStatus(t, runDayNum, holidayLoad) !== filter) return false;
+      if (t.truck_type === "Spare") {
+        // Show a spare card in a lifecycle-status filter only when it is
+        // actively covering an OOS route (the spare represents that route).
+        // Idle spares and spares assigned to non-OOS routes are hidden — the
+        // route truck's own card already represents the route.
+        const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+        if (coveredRoute == null) return false;
+        return truckStatusByNumber.get(coveredRoute) === "oos";
       }
-
-      return false;
+      return true;
     });
   }, [data, filter, fleetMode, fleetFilters, runDayNum, holidayLoad, coveringSpareByRoute, truckStatusByNumber]);
 
