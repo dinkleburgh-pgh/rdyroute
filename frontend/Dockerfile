@@ -7,6 +7,10 @@
 FROM node:20-alpine AS build
 WORKDIR /app
 
+# Build-time metadata — passed from CI or docker build --build-arg
+ARG GIT_COMMIT=unknown
+ARG BUILD_DATE
+
 # Install deps with cache-friendly layer.
 COPY package.json package-lock.json* npm-shrinkwrap.json* ./
 RUN if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then \
@@ -16,7 +20,22 @@ RUN if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then \
     fi
 
 COPY . .
-RUN npm run build
+
+# Expose build args to Vite via VITE_ env vars, then build.
+RUN VITE_GIT_COMMIT="$GIT_COMMIT" \
+    VITE_BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
+    npm run build
+
+# Write a machine-readable build-info.json so the startup script can log it.
+RUN node -e "
+  const pkg  = require('./package.json');
+  const info = {
+    version : pkg.version,
+    commit  : process.env.GIT_COMMIT  || 'unknown',
+    date    : process.env.BUILD_DATE  || new Date().toISOString(),
+  };
+  require('fs').writeFileSync('dist/build-info.json', JSON.stringify(info));
+" GIT_COMMIT="$GIT_COMMIT" BUILD_DATE="${BUILD_DATE:-}"
 
 # ---------------------------------------------------------------------------
 FROM nginx:1.27-alpine AS runtime

@@ -6,6 +6,8 @@ import { readFileSync } from "fs";
 import { resolve } from "path";
 
 function getGitCommit(): string {
+  // Prefer env var injected by Docker build arg, fall back to live git
+  if (process.env.VITE_GIT_COMMIT) return process.env.VITE_GIT_COMMIT;
   try {
     return execSync("git rev-parse --short HEAD", { stdio: ["pipe", "pipe", "ignore"] })
       .toString()
@@ -71,7 +73,7 @@ export default defineConfig({
   ],
   define: {
     __APP_VERSION__: JSON.stringify(pkg.version),
-    __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+    __BUILD_DATE__: JSON.stringify(process.env.VITE_BUILD_DATE ?? new Date().toISOString()),
     __GIT_COMMIT__: JSON.stringify(getGitCommit()),
   },
   server: {

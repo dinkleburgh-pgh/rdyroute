@@ -26,6 +26,18 @@ MAX_WAIT="${BACKEND_WAIT_SECONDS:-90}"
 HOST_PORT="${HOST_PORT:-5180}"
 
 # ---------------------------------------------------------------------------
+# Read build metadata (written by Dockerfile at image build time)
+# ---------------------------------------------------------------------------
+BUILD_INFO_FILE="/usr/share/nginx/html/build-info.json"
+BUILD_VERSION=""; BUILD_COMMIT=""; BUILD_DATE_RAW=""
+if [ -f "$BUILD_INFO_FILE" ]; then
+  BUILD_VERSION=$(sed -n 's/.*"version":"\([^"]*\)".*/\1/p' "$BUILD_INFO_FILE")
+  BUILD_COMMIT=$(sed -n 's/.*"commit":"\([^"]*\)".*/\1/p' "$BUILD_INFO_FILE")
+  BUILD_DATE_RAW=$(sed -n 's/.*"date":"\([^"]*\)".*/\1/p' "$BUILD_INFO_FILE")
+fi
+BUILD_LABEL="v${BUILD_VERSION:-?}  ${BUILD_COMMIT:-unknown}  ${BUILD_DATE_RAW:-}"
+
+# ---------------------------------------------------------------------------
 # Banner
 # ---------------------------------------------------------------------------
 printf "\n"
@@ -120,6 +132,7 @@ printf "  ${C_GREEN}${C_BOLD}║        ReadyRoute V2  —  Ready  ✓          
 printf "  ${C_GREEN}${C_BOLD}╠═══════════════════════════════════════════════╣${C_RESET}\n"
 printf "  ${C_GREEN}${C_BOLD}║${C_RESET}  ${C_BOLD}%-44s${C_GREEN}${C_BOLD}║${C_RESET}\n" "Access URL   :  ${DISPLAY_URL}"
 printf "  ${C_GREEN}${C_BOLD}║${C_RESET}  ${C_DIM}%-44s${C_GREEN}${C_BOLD}║${C_RESET}\n" "Container    :  http://${CONTAINER_IP}:80"
+printf "  ${C_GREEN}${C_BOLD}║${C_RESET}  ${C_DIM}%-44s${C_GREEN}${C_BOLD}║${C_RESET}\n" "Build        :  ${BUILD_LABEL}"
 printf "  ${C_GREEN}${C_BOLD}╚═══════════════════════════════════════════════╝${C_RESET}\n"
 printf "\n"
 
