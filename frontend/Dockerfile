@@ -21,21 +21,13 @@ RUN if [ -f package-lock.json ] || [ -f npm-shrinkwrap.json ]; then \
 
 COPY . .
 
-# Expose build args to Vite via VITE_ env vars, then build.
-RUN VITE_GIT_COMMIT="$GIT_COMMIT" \
-    VITE_BUILD_DATE="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}" \
-    npm run build
-
-# Write a machine-readable build-info.json so the startup script can log it.
-RUN node -e "
-  const pkg  = require('./package.json');
-  const info = {
-    version : pkg.version,
-    commit  : process.env.GIT_COMMIT  || 'unknown',
-    date    : process.env.BUILD_DATE  || new Date().toISOString(),
-  };
-  require('fs').writeFileSync('dist/build-info.json', JSON.stringify(info));
-" GIT_COMMIT="$GIT_COMMIT" BUILD_DATE="${BUILD_DATE:-}"
+# Expose build args to Vite via VITE_ env vars, build, then write build-info.json.
+RUN set -eu; \
+    BUILD_DATE_FINAL="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; \
+    VITE_GIT_COMMIT="$GIT_COMMIT" VITE_BUILD_DATE="$BUILD_DATE_FINAL" npm run build; \
+    VERSION="$(node -p "require('./package.json').version")"; \
+    printf '{"version":"%s","commit":"%s","date":"%s"}\n' \
+      "$VERSION" "$GIT_COMMIT" "$BUILD_DATE_FINAL" > dist/build-info.json
 
 # ---------------------------------------------------------------------------
 FROM nginx:1.27-alpine AS runtime
