@@ -21,6 +21,12 @@
 .PARAMETER NoBrowser
     Skip auto-opening the browser.
 
+    Before starting, run.ps1 auto-frees the backend (8000) and frontend (5180)
+    ports: stops any Docker container publishing them and kills orphaned
+    uvicorn/node processes still bound to them. This prevents the duplicate-
+    backend class of bugs (PUTs and GETs hitting different processes with
+    stale ORM caches).
+
 .EXAMPLE
     .\run.ps1
     .\run.ps1 -Restart
@@ -81,6 +87,129 @@ function Stop-Tracked {
         Write-Info "$Label not running."
     }
     if (Test-Path $PidFile) { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
+}
+
+function Get-PortListeners {
+    param([int]$Port)
+    $results = @()
+    $lines = netstat -ano 2>$null | Select-String ":${Port}\s+" | Where-Object { $_ -match 'LISTENING' }
+    $seen = @{}
+    foreach ($line in $lines) {
+        $pidStr = ($line.Line.Trim() -split '\s+')[-1]
+        if ($pidStr -notmatch '^\d+$') { continue }
+        $procId = [int]$pidStr
+        if ($seen.ContainsKey($procId)) { continue }
+        $seen[$procId] = $true
+        $proc = Get-Process -Id $procId -ErrorAction SilentlyContinue
+        $cim  = Get-CimInstance Win32_Process -Filter "ProcessId=$procId" -ErrorAction SilentlyContinue
+        $cmd  = if ($cim) { $cim.CommandLine } else { '' }
+        $name = if ($proc) { $proc.ProcessName } else { 'unknown' }
+        $isDocker = ($name -match 'com\.docker|wslrelay|wsl|dockerd|vpnkit') -or ($cmd -match 'docker')
+        $results += [pscustomobject]@{
+            Pid         = $procId
+            ProcessName = $name
+            CommandLine = $cmd
+            IsDocker    = $isDocker
+        }
+    }
+    return $results
+}
+
+function Clear-Port {
+    # Free $Port by stopping any unrelated process listening on it.
+    # Docker port-forwards are auto-stopped via 'docker stop'.
+    param(
+        [string]$Label,
+        [int]$Port,
+        [int]$AllowedPid = 0
+    )
+    $owners = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
+    if (-not $owners) { return }
+
+    Write-Warn2 "Port $Port ($Label) is in use by $($owners.Count) process(es); cleaning up..."
+    foreach ($o in $owners) {
+        $tag = if ($o.IsDocker) { ' [Docker]' } else { '' }
+        Write-Warn2 "  PID $($o.Pid) $($o.ProcessName)$tag"
+    }
+
+    # Stop any docker containers publishing this port first
+    $dockerOwners = $owners | Where-Object { $_.IsDocker }
+    if ($dockerOwners) {
+        $docker = Get-Command docker -ErrorAction SilentlyContinue
+        if ($docker) {
+            $containers = & $docker.Source ps --filter "publish=$Port" --format '{{.ID}}' 2>$null
+            foreach ($cid in $containers) {
+                if ($cid) {
+                    Write-Info "Stopping Docker container $cid (publishing port $Port)..."
+                    & $docker.Source stop $cid | Out-Null
+                }
+            }
+        } else {
+            Write-Warn2 "Docker proxy holds port $Port but 'docker' CLI not in PATH; will try direct kill."
+        }
+    }
+
+    # Kill any remaining listeners (including stale uvicorn/node workers).
+    # Use 'taskkill /F /T' so we tear down the whole process tree (uvicorn
+    # --reload spawns a worker child that re-acquires the socket if the
+    # parent alone is killed).
+    $owners = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
+    foreach ($o in $owners) {
+        Write-Info "Killing stale $Label listener tree PID $($o.Pid) ($($o.ProcessName))..."
+        & taskkill.exe /F /T /PID $o.Pid 2>&1 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            try { Stop-Process -Id $o.Pid -Force -ErrorAction Stop } catch { Write-Warn2 "Could not kill PID $($o.Pid): $_" }
+        }
+    }
+
+    # Also walk parent chain — uvicorn worker's parent (the reload watcher)
+    # may itself hold a duplicate handle / spawn a replacement.
+    foreach ($o in $owners) {
+        $cim = Get-CimInstance Win32_Process -Filter "ProcessId=$($o.Pid)" -ErrorAction SilentlyContinue
+        if ($cim -and $cim.ParentProcessId -and $cim.ParentProcessId -ne 0) {
+            $parent = Get-Process -Id $cim.ParentProcessId -ErrorAction SilentlyContinue
+            if ($parent -and $parent.ProcessName -match 'python|node') {
+                Write-Info "Killing parent reload watcher PID $($parent.Id) ($($parent.ProcessName))..."
+                & taskkill.exe /F /T /PID $parent.Id 2>&1 | Out-Null
+            }
+        }
+    }
+
+    Start-Sleep -Milliseconds 1500
+    $still = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
+    if ($still) {
+        # One more aggressive sweep: kill ANY python.exe/node.exe still on the port
+        foreach ($o in $still) {
+            Write-Warn2 "Forcing kill on PID $($o.Pid) ($($o.ProcessName))..."
+            & taskkill.exe /F /T /PID $o.Pid 2>&1 | Out-Null
+        }
+        Start-Sleep -Milliseconds 1000
+        $still = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
+    }
+    if ($still) {
+        # netstat sometimes reports a ghost PID after the parent died but a
+        # multiprocessing-spawn child inherited the listening socket. Sweep
+        # WMI for any python/node process whose cmdline matches our stack.
+        Write-Warn2 "Listener PID is unresolvable; sweeping orphaned uvicorn/vite processes via WMI..."
+        $orphans = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+            $_.Name -match '^(python|node)\.exe$' -and (
+                $_.CommandLine -match 'uvicorn|main:app|multiprocessing-fork|spawn_main' -or
+                $_.CommandLine -match 'vite|esbuild'
+            )
+        }
+        foreach ($p in $orphans) {
+            Write-Info "Killing orphan $($p.Name) PID $($p.ProcessId)..."
+            & taskkill.exe /F /T /PID $p.ProcessId 2>&1 | Out-Null
+        }
+        Start-Sleep -Milliseconds 1500
+        $still = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
+    }
+    if ($still) {
+        Write-Err "Port $Port still in use after cleanup. Remaining PIDs: $($still.Pid -join ', ')"
+        Write-Err "These processes may be running under a different user/elevation. Run PowerShell as Administrator and retry."
+        exit 1
+    }
+    Write-Info "Port $Port is now free."
 }
 
 function Resolve-Python {
@@ -162,6 +291,7 @@ $existing = Test-Pid -PidFile $BackendPid
 if ($existing) {
     Write-Info "Backend already running (PID $($existing.Id)) — http://${BackendHost}:${BackendPort}"
 } else {
+    Clear-Port -Label 'backend (uvicorn)' -Port ([int]$BackendPort)
     Write-Info "Starting FastAPI backend on http://${BackendHost}:${BackendPort}..."
     $backendArgs = @('-m', 'uvicorn', 'main:app', '--host', $BackendHost, '--port', $BackendPort, '--reload')
     $proc = Start-Process -FilePath $VenvPy -ArgumentList $backendArgs `
@@ -199,6 +329,7 @@ if (-not (Test-Path $FrontendDir)) {
         if ($existingFE) {
             Write-Info "Frontend already running (PID $($existingFE.Id)) — http://localhost:${FrontendPort}"
         } else {
+            Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
             Write-Info "Starting Vite dev server (with watchdog) on http://localhost:${FrontendPort}..."
             $npmCmd = Join-Path (Split-Path $npm.Source -Parent) 'npm.cmd'
             if (-not (Test-Path $npmCmd)) { $npmCmd = $npm.Source }

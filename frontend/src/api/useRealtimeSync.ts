@@ -47,6 +47,9 @@ export function useRealtimeSync() {
         }
 
         if (event.type === "truck_state_updated") {
+          // Skip board refetch while a state mutation is in-flight — the
+          // onSuccess handler will do the final invalidation once committed.
+          if (qc.isMutating({ mutationKey: ["upsertTruckState"] }) > 0) return;
           if (event.run_date) {
             qc.invalidateQueries({ queryKey: ["board", event.run_date] });
           } else {

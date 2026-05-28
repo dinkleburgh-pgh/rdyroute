@@ -833,7 +833,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         }
                       }}
                     >
-                      {FLEET_STATUS_OPTIONS.map((s) => (
+                      {status === "off" && (
+                        <option value="off" disabled>
+                          Off (scheduled)
+                        </option>
+                      )}
+                      {FLEET_STATUS_OPTIONS.filter(
+                        (s) => status !== "off" || (s !== "dirty" && s !== "unloaded"),
+                      ).map((s) => (
                         <option key={s} value={s}>
                           {STATUS_LABELS[s]}
                         </option>
