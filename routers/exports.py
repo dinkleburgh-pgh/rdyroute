@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AuditEntry, Batch, BatchHistory, LoadDuration, Shortage, TruckState
+from models import AuditEntry, Batch, BatchHistory, LoadDuration, Shortage, Truck, TruckState
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
@@ -167,6 +167,26 @@ def download_backup(db: Session = Depends(get_db)) -> StreamingResponse:
     buf = io.BytesIO()
 
     with zipfile.ZipFile(buf, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+
+        # Fleet configuration (trucks)
+        fleet_rows = db.scalars(select(Truck).order_by(Truck.truck_number)).all()
+        zf.writestr(
+            "fleet.json",
+            json.dumps(
+                [
+                    {
+                        "truck_number": t.truck_number,
+                        "truck_type": t.truck_type.value if hasattr(t.truck_type, "value") else str(t.truck_type),
+                        "is_active": t.is_active,
+                        "is_persistent_spare": t.is_persistent_spare,
+                        "is_oos": t.is_oos,
+                        "scheduled_off_days": t.scheduled_off_days,
+                    }
+                    for t in fleet_rows
+                ],
+                indent=2,
+            ),
+        )
 
         # Load durations
         ld_rows = db.scalars(
@@ -383,6 +403,39 @@ async def import_backup(
                 continue
         db.flush()
         summary["audit_entries"] = imported
+
+    # Fleet (upsert — create if new, update fields if already present)
+    if "fleet.json" in zf.namelist():
+        from models import TruckType
+        rows_data = json.loads(zf.read("fleet.json"))
+        imported = skipped = 0
+        for item in rows_data:
+            try:
+                truck_number = int(item["truck_number"])
+                existing = db.get(Truck, truck_number)
+                truck_type = TruckType(item["truck_type"]) if item.get("truck_type") else TruckType.uniform
+                if existing is None:
+                    db.add(Truck(
+                        truck_number=truck_number,
+                        truck_type=truck_type,
+                        is_active=bool(item.get("is_active", True)),
+                        is_persistent_spare=bool(item.get("is_persistent_spare", False)),
+                        is_oos=bool(item.get("is_oos", False)),
+                        scheduled_off_days=item.get("scheduled_off_days") or [],
+                    ))
+                    imported += 1
+                else:
+                    existing.truck_type = truck_type
+                    existing.is_active = bool(item.get("is_active", existing.is_active))
+                    existing.is_persistent_spare = bool(item.get("is_persistent_spare", existing.is_persistent_spare))
+                    existing.is_oos = bool(item.get("is_oos", existing.is_oos))
+                    existing.scheduled_off_days = item.get("scheduled_off_days") or existing.scheduled_off_days
+                    skipped += 1
+            except (KeyError, ValueError):
+                continue
+        db.flush()
+        summary["fleet_imported"] = imported
+        summary["fleet_updated"] = skipped
 
     db.commit()
     return summary
