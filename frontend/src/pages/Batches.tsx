@@ -1,13 +1,14 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
-import { useAssignBatch, useBatchSummary, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBatchSummary, useSettings, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import type { BatchSummary } from "../types";
 
 const BATCH_CAP = 400;
 
-function capacityColor(total: number) {
+function capacityColor(total: number, noCap: boolean) {
+  if (noCap) return { bar: "bg-violet-500", text: "text-violet-400" };
   if (total >= BATCH_CAP * 0.95) return { bar: "bg-red-500",    text: "text-red-400"    };
   if (total >= BATCH_CAP * 0.70) return { bar: "bg-amber-500",  text: "text-amber-400"  };
   return                                { bar: "bg-emerald-500", text: "text-emerald-400" };
@@ -20,6 +21,8 @@ function BatchCard({
   onAssigned,
   selected,
   onSelect,
+  noCap,
+  shouldFocus,
 }: {
   batch: BatchSummary;
   runDate: string;
@@ -27,15 +30,26 @@ function BatchCard({
   onAssigned: () => void;
   selected: boolean;
   onSelect: () => void;
+  noCap: boolean;
+  shouldFocus: boolean;
 }) {
   const assign = useAssignBatch();
   const [wearers, setWearers] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (shouldFocus && truckNumber) {
+      // slight delay so the element is visible before focus
+      const id = window.setTimeout(() => inputRef.current?.focus(), 50);
+      return () => window.clearTimeout(id);
+    }
+  }, [shouldFocus, truckNumber]);
 
   const previewWearers = Number(wearers || 0);
   const previewTotal = batch.total_wearers + (truckNumber ? previewWearers : 0);
   const displayTotal = truckNumber ? previewTotal : batch.total_wearers;
-  const { bar, text } = capacityColor(displayTotal);
-  const pct = Math.min(100, Math.round((displayTotal / BATCH_CAP) * 100));
+  const { bar, text } = capacityColor(displayTotal, noCap);
+  const pct = noCap ? 100 : Math.min(100, Math.round((displayTotal / BATCH_CAP) * 100));
 
   async function handleAssign() {
     if (!truckNumber) return;
@@ -73,7 +87,7 @@ function BatchCard({
             <span className={clsx("text-sm font-extrabold tabular-nums transition-colors md:text-lg", text)}>
               {displayTotal}
             </span>
-            <span className="text-slate-500"> / {BATCH_CAP}</span>
+            <span className="text-slate-500"> / {noCap ? "∞" : BATCH_CAP}</span>
           </span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
@@ -110,6 +124,7 @@ function BatchCard({
       {truckNumber && (
         <div className="flex items-center gap-1.5 border-t border-slate-800 pt-2 md:pt-3">
           <input
+            ref={inputRef}
             className="input min-w-0 flex-1"
             type="text"
             inputMode="numeric"
@@ -136,6 +151,8 @@ export default function Batches() {
   const [params] = useSearchParams();
   const [runDate, setRunDate] = useState(params.get("run_date") ?? todayIso());
   const { data, isLoading } = useBatchSummary(runDate);
+  const { data: settings = [] } = useSettings();
+  const noCap = settings.some((s) => s.key === "batch_no_cap" && s.value === true);
   const [truck, setTruck] = useState(params.get("truck") ?? "");
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
@@ -159,17 +176,20 @@ export default function Batches() {
 
   return (
     <div className="space-y-4 p-3 md:p-6">
-      <div className="flex items-end justify-between">
+      <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-2xl font-semibold">Batches</h2>
-        <div>
-          <label className="label">Run date</label>
-          <input
-            className="input"
-            type="date"
-            max={todayIso()}
-            value={runDate}
-            onChange={(e) => setRunDate(e.target.value)}
-          />
+        <div className="flex flex-wrap items-end gap-3">
+
+          <div>
+            <label className="label">Run date</label>
+            <input
+              className="input"
+              type="date"
+              max={todayIso()}
+              value={runDate}
+              onChange={(e) => setRunDate(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
@@ -197,15 +217,20 @@ export default function Batches() {
               onChange={(e) => setTruck(e.target.value)}
             />
           )}
-          {truck && (
-            <p className="text-xs text-slate-600">
-              {isDesktop
-                ? "Select a batch card, then enter wearers and click Assign"
-                : "Enter wearers on a batch card and click Assign"}
-            </p>
-          )}
         </div>
       </div>
+
+      {/* Centered hint — visible when truck entered but no batch selected yet */}
+      {truck && selectedBatch === null && (
+        <div className="flex items-center justify-center">
+          <div className="flex animate-pulse items-center gap-2 rounded-full border border-blue-500/40 bg-blue-950/50 px-5 py-2.5 shadow-lg shadow-blue-900/20">
+            <svg className="h-4 w-4 shrink-0 text-blue-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" />
+            </svg>
+            <span className="text-sm font-semibold text-blue-300">Tap a batch card to assign</span>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <p className="text-sm text-slate-400">Loading…</p>
@@ -221,6 +246,7 @@ export default function Batches() {
                   ? (selectedBatch === b.batch_number ? truck : "")
                   : truck
               }
+              noCap={noCap}
               onAssigned={async () => {
                 if (source === "unload" && truck) {
                   await upsert.mutateAsync({
@@ -237,6 +263,7 @@ export default function Batches() {
               }}
               selected={selectedBatch === b.batch_number}
               onSelect={() => setSelectedBatch(b.batch_number)}
+              shouldFocus={selectedBatch === b.batch_number}
             />
           ))}
         </div>

@@ -139,6 +139,21 @@ export interface SpareAssignment {
   returned_at: string | null;
 }
 
+export type NoteType = "constant" | "workday" | "one_off";
+
+export interface TruckNote {
+  id: number;
+  truck_number: number;
+  note_type: NoteType;
+  body: string;
+  workday_num: number | null;
+  expires_on: string | null;
+  is_active: boolean;
+  created_by: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface RouteSwap {
   id: number;
   run_date: string;

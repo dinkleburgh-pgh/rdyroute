@@ -18,7 +18,7 @@ Business logic preserved from V1:
 from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -207,6 +207,121 @@ def update_truck_state(
         {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},
     )
     return row
+
+
+# ---------------------------------------------------------------------------
+# Full workday reset — wipes all per-date operational state in one transaction
+# ---------------------------------------------------------------------------
+
+@router.post("/reset-workday")
+def reset_workday(
+    background_tasks: BackgroundTasks,
+    run_date: date = Query(...),
+    db: Session = Depends(get_db),
+):
+    """
+    Full workday reset for *run_date*:
+
+    1. Deletes all TruckState rows for the date (status, times, notes, garments, etc.)
+    2. Deletes all RouteSwap rows for the date
+    3. Deletes all Batch rows for the date
+    4. Deletes per-date AppSetting keys:
+         wizard_completed_<date>
+         holiday_mode_<date>
+         holiday_load_<date>
+         holiday_unload_<date>
+    """
+    from models import AppSetting, Batch  # local import avoids circular
+
+    date_str = str(run_date)
+
+    # 1. Truck states
+    deleted_states = db.execute(
+        delete(TruckState).where(TruckState.run_date == run_date)
+    ).rowcount
+
+    # 2. Route swaps
+    db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date))
+
+    # 3. Batch assignments
+    db.execute(delete(Batch).where(Batch.run_date == run_date))
+
+    # 4. Per-date settings
+    setting_keys = [
+        f"wizard_completed_{date_str}",
+        f"holiday_mode_{date_str}",
+        f"holiday_load_{date_str}",
+        f"holiday_unload_{date_str}",
+    ]
+    for key in setting_keys:
+        setting = db.get(AppSetting, key)
+        if setting:
+            db.delete(setting)
+
+    db.commit()
+
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "truck_state_updated", "run_date": date_str},
+    )
+
+    return {"reset": True, "run_date": date_str, "states_cleared": deleted_states}
+
+
+@router.post("/selective-reset")
+def selective_reset(
+    background_tasks: BackgroundTasks,
+    run_date: date = Query(...),
+    truck_states: bool = Query(False),
+    batches: bool = Query(False),
+    route_swaps: bool = Query(False),
+    day_flags: bool = Query(False),
+    db: Session = Depends(get_db),
+):
+    """
+    Selective workday reset — clears only the requested components for *run_date*.
+    """
+    from models import AppSetting, Batch  # local import avoids circular
+
+    date_str = str(run_date)
+    result: dict = {"run_date": date_str, "cleared": []}
+
+    if truck_states:
+        deleted = db.execute(
+            delete(TruckState).where(TruckState.run_date == run_date)
+        ).rowcount
+        result["states_cleared"] = deleted
+        result["cleared"].append("truck_states")
+
+    if batches:
+        db.execute(delete(Batch).where(Batch.run_date == run_date))
+        result["cleared"].append("batches")
+
+    if route_swaps:
+        db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date))
+        result["cleared"].append("route_swaps")
+
+    if day_flags:
+        for key in [
+            f"wizard_completed_{date_str}",
+            f"holiday_mode_{date_str}",
+            f"holiday_load_{date_str}",
+            f"holiday_unload_{date_str}",
+        ]:
+            setting = db.get(AppSetting, key)
+            if setting:
+                db.delete(setting)
+        result["cleared"].append("day_flags")
+
+    db.commit()
+
+    if truck_states or batches or route_swaps:
+        background_tasks.add_task(
+            manager.broadcast,
+            {"type": "truck_state_updated", "run_date": date_str},
+        )
+
+    return result
 
 
 # ---------------------------------------------------------------------------

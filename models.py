@@ -78,6 +78,12 @@ class AuthRequestStatus(str, enum.Enum):
     denied = "denied"
 
 
+class NoteType(str, enum.Enum):
+    constant = "constant"    # shown every shift
+    workday  = "workday"     # shown only when workday_num matches the current load/unload day
+    one_off  = "one_off"     # shown until expires_on date, then archived
+
+
 class AuditSource(str, enum.Enum):
     workflow = "workflow"
     manual = "manual"
@@ -444,6 +450,41 @@ class Notice(Base):
 # ---------------------------------------------------------------------------
 # App Settings
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# Truck Notes
+# ---------------------------------------------------------------------------
+
+class TruckNote(Base):
+    """
+    Persistent note attached to a truck.  Three varieties:
+      constant  — shown every operational day.
+      workday   — shown only when ``workday_num`` matches the current load or unload day (1-5).
+      one_off   — shown until ``expires_on`` passes; auto-archived afterwards.
+    """
+    __tablename__ = "truck_notes"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    truck_number: Mapped[int] = mapped_column(
+        Integer, ForeignKey("trucks.truck_number", ondelete="CASCADE"), nullable=False, index=True
+    )
+    note_type: Mapped[str] = mapped_column(
+        SAEnum(NoteType, name="note_type_enum"), nullable=False, default=NoteType.constant
+    )
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Day number (1-5 Mon-Fri) — only meaningful for note_type = workday
+    workday_num: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Expiry date — only meaningful for note_type = one_off; note is hidden after this date
+    expires_on: Mapped[date | None] = mapped_column(Date, nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_by: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
 
 class AppSetting(Base):
     """

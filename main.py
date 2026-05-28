@@ -18,7 +18,7 @@ from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 
 from database import Base, SessionLocal, engine, settings
-from routers import audit, auth, batches, communications, exports, fleet, load_durations, notices, route_swaps, settings as settings_router, shorts, spares, trucks, ws as ws_router
+from routers import audit, auth, batches, communications, exports, fleet, load_durations, notes as notes_router, notices, route_swaps, settings as settings_router, shorts, spares, trucks, ws as ws_router
 from seed import run_startup_seed
 from backups import backup_loop
 
@@ -203,6 +203,7 @@ app.include_router(spares.router)
 app.include_router(route_swaps.router)
 app.include_router(communications.router)
 app.include_router(notices.router)
+app.include_router(notes_router.router)
 app.include_router(auth.router)
 app.include_router(settings_router.router)
 app.include_router(ws_router.router)

@@ -27,9 +27,9 @@ router = APIRouter(prefix="/shorts", tags=["shorts"])
 # ---------------------------------------------------------------------------
 
 SHORTS_BUTTON_MAP: dict = {
-    "3x10": ["Black", "Onyx", "Copper", "Indigo", "Blue", "Brown"],
-    "3x5": ["Black", "Onyx", "Copper", "Indigo", "Blue", "Brown"],
-    "4x6": ["Logo", "Black", "Onyx", "Copper", "Indigo", "Blue", "Brown", "2x3"],
+    "3x10": ["Black", "Onyx", "Copper", "Indigo"],
+    "3x5": ["Black", "Onyx", "Copper", "Indigo"],
+    "4x6": ["Black", "Onyx", "Copper", "Indigo"],
     "Paper": [
         "C-PULL", "DRC (AIRLAID)", "BROWN HW", "SIG HW",
         "SIG Z-FOLD", "SIG DUAL TP", "JRT", "B&V TP", "B&V Z-FOLD",

@@ -18,6 +18,7 @@ import Trends from "./pages/Trends";
 import Management from "./pages/Settings";
 import Communications from "./pages/Communications";
 import Supervisor from "./pages/Supervisor";
+import NotesBoard from "./pages/Notes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -53,6 +54,7 @@ export default function App() {
               <Route path="trends" element={<Trends />} />
               <Route path="management" element={<Management />} />
               <Route path="communications" element={<Communications />} />
+              <Route path="notes" element={<NotesBoard />} />
               <Route path="management" element={<Management />} />
               <Route path="supervisor" element={<Navigate to="/management" replace />} />
               <Route path="settings" element={<Navigate to="/management" replace />} />

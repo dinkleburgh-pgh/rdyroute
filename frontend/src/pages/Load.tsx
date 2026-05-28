@@ -4,6 +4,8 @@ import {
   useBoard,
   useHolidayLoad,
   useHolidayUnload,
+  useLoadDayOverride,
+  useUnloadsDayOverride,
   usePaceAverage,
   useRecordLoadDuration,
   useUpsertTruckState,
@@ -28,12 +30,15 @@ export default function Load() {
   const recordDuration = useRecordLoadDuration();
   const { data: pace } = usePaceAverage(30);
   const [busy, setBusy] = useState<number | null>(null);
-  const [dustOpen, setDustOpen] = useState(false);
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
 
   const board = data ?? [];
-  const { loadDay, unloadsDay } = workdayNumbers();
+  const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
+  const { data: loadDayOverride }    = useLoadDayOverride(runDate);
+  const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
+  const loadDay    = loadDayOverride    ?? computedLoadDay;
+  const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
 
@@ -65,10 +70,20 @@ export default function Load() {
   const loadedSorted = useMemo(() => {
     const arr = [...loaded];
     if (loadedSort === "order") {
+      // Sort by when the truck was actually finished loading.
+      // Prefer load_finish_time (set by the V2 workflow); fall back to updated_at
+      // (a proxy for when the status was last changed) for trucks that were
+      // set to "loaded" without going through the timed workflow.
+      const toEpoch = (t: TruckWithState): number => {
+        const ft = t.state?.load_finish_time;
+        if (ft != null) return ft;
+        const ua = t.state?.updated_at;
+        if (ua) return new Date(ua).getTime() / 1000;
+        return Number.POSITIVE_INFINITY;
+      };
       arr.sort((a, b) => {
-        const af = a.state?.load_finish_time ?? Number.POSITIVE_INFINITY;
-        const bf = b.state?.load_finish_time ?? Number.POSITIVE_INFINITY;
-        if (af !== bf) return af - bf;
+        const diff = toEpoch(a) - toEpoch(b);
+        if (diff !== 0) return diff;
         return a.truck_number - b.truck_number;
       });
     } else {
@@ -262,12 +277,64 @@ export default function Load() {
     }
   }
 
+  // Dust trucks scheduled for loading and their garment status
+  const dustGarmentTrucks = board
+    .filter(
+      (t) =>
+        t.truck_type === "Dust" &&
+        !(["off", "oos"] as string[]).includes(effectiveStatus(t, loadDay, holidayLoad)) &&
+        (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+    )
+    .sort((a, b) => a.truck_number - b.truck_number);
+
   return (
-    <div className="space-y-5 p-3 md:p-6">
+    <div className="p-3 md:p-6 space-y-5">
       <div className="flex items-end justify-between gap-4">
         <h2 className="text-2xl font-semibold">Load</h2>
         <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
       </div>
+
+      {/* Dust Garments — read-only, set from Setup Day */}
+      <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 px-4 py-3">
+        <div className="mb-2 flex items-center gap-2">
+          <DustGarmentIcon className="h-4 w-4 text-amber-400" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
+          <span className="ml-auto text-xs text-slate-500">Set from Setup Day</span>
+        </div>
+        {dustGarmentTrucks.length === 0 ? (
+          <p className="text-xs text-slate-600">No dust trucks scheduled.</p>
+        ) : (
+          <div className="flex flex-wrap gap-2">
+            {dustGarmentTrucks.map((t) => (
+              <span
+                key={t.truck_number}
+                className={clsx(
+                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold",
+                  t.state?.has_dust_garment
+                    ? "border-amber-600/60 bg-amber-950/50 text-amber-300"
+                    : "border-slate-700 bg-slate-800/60 text-slate-500",
+                )}
+              >
+                #{t.truck_number}
+                {t.state?.has_dust_garment && <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* In-progress truck — top of page */}
+      {inProgress && (
+        <InProgressPanel
+          truck={inProgress}
+          paceAvgSeconds={pace?.avg_seconds ?? null}
+          busy={busy === inProgress.truck_number}
+          loadDay={loadDay}
+          nextUp={ready[0]}
+          onFinish={() => finishLoad(inProgress)}
+          onCancel={() => cancelLoad(inProgress)}
+        />
+      )}
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -308,69 +375,6 @@ export default function Load() {
         <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} color="bg-blue-500" />
         <ProgressRow label="Unload" done={unloadDone} total={unloadRouteTrucks.length} pct={unloadPct} color="bg-emerald-500" />
       </div>
-
-      {/* Set Dust Clothes */}
-      <div className="card">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between text-sm font-semibold"
-          onClick={() => setDustOpen((o) => !o)}
-        >
-          <span>Set Dust Clothes</span>
-          <span className="text-slate-500">{dustOpen ? "-" : "+"}</span>
-        </button>
-        {dustOpen && (
-          <div className="mt-3 grid grid-cols-2 gap-2 border-t border-slate-800 pt-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
-            {board
-              .filter(
-                (t) =>
-                  t.truck_type === "Dust" &&
-                  !["off", "oos"].includes(t.state?.status ?? "dirty"),
-              )
-              .sort((a, b) => a.truck_number - b.truck_number)
-              .map((t) => {
-                const hasDust = t.state?.has_dust_garment ?? false;
-                return (
-                  <button
-                    key={t.truck_number}
-                    type="button"
-                    className={clsx(
-                      "rounded-md border px-3 py-2 text-center text-sm font-semibold transition-colors",
-                      hasDust
-                        ? "border-amber-600/60 bg-amber-950/40 text-amber-300"
-                        : "border-slate-700 bg-slate-800 text-slate-400",
-                    )}
-                    onClick={() =>
-                      upsert.mutate({
-                        truck_number: t.truck_number,
-                        run_date: runDate,
-                        status: t.state?.status ?? "dirty",
-                        wearers: t.state?.wearers ?? 0,
-                        has_dust_garment: !hasDust,
-                      })
-                    }
-                  >
-                    <span className="inline-flex items-center gap-1.5">
-                      <span>#{t.truck_number}</span>
-                      {hasDust && <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />}
-                    </span>
-                  </button>
-                );
-              })}
-          </div>
-        )}
-      </div>
-
-      {/* In-progress truck */}
-      {inProgress && (
-        <InProgressPanel
-          truck={inProgress}
-          paceAvgSeconds={pace?.avg_seconds ?? null}
-          busy={busy === inProgress.truck_number}
-          onFinish={() => finishLoad(inProgress)}
-          onCancel={() => cancelLoad(inProgress)}
-        />
-      )}
 
       {/* Ready to load */}
       <section>
@@ -570,16 +574,28 @@ function PaceBadge({ avgSeconds }: { avgSeconds: number | null }) {
   );
 }
 
+const LOAD_DAY_NAMES: Record<number, string> = {
+  1: "Monday",
+  2: "Tuesday",
+  3: "Wednesday",
+  4: "Thursday",
+  5: "Friday",
+};
+
 function InProgressPanel({
   truck,
   paceAvgSeconds,
   busy,
+  loadDay,
+  nextUp,
   onFinish,
   onCancel,
 }: {
   truck: TruckWithState;
   paceAvgSeconds: number | null;
   busy: boolean;
+  loadDay: number;
+  nextUp?: TruckWithState;
   onFinish: () => void;
   onCancel: () => void;
 }) {
@@ -601,30 +617,65 @@ function InProgressPanel({
 
   return (
     <section className="card border-2 border-amber-500/60 bg-amber-950/30">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="text-xs uppercase tracking-wide text-amber-400">Loading in progress</div>
-          <div className="text-3xl font-bold">Truck #{truck.truck_number}</div>
+      {/* Top: Current Truck + Next Up side by side */}
+      <div className="flex items-start gap-4">
+        {/* Current Truck */}
+        <div className="flex-1 text-center">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Current Truck</div>
+          <div className="font-black tabular-nums text-amber-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
+            #{truck.truck_number}
+          </div>
+          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-600/60 bg-emerald-950/40 px-3 py-0.5 text-xs font-semibold text-emerald-300">
+            <span className="text-emerald-500/70 font-normal uppercase tracking-wider text-[9px]">Load Day</span>
+            Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` (${LOAD_DAY_NAMES[loadDay]})` : ""}
+          </div>
           {truck.state?.has_dust_garment && (
-            <div className="inline-flex items-center gap-1.5 text-xs text-amber-400">
+            <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-400">
               <DustGarmentIcon className="h-3.5 w-3.5" />
               Dust garment
             </div>
           )}
           {truck.state?.wearers ? (
-            <div className="text-xs text-slate-400">{truck.state.wearers} wearers</div>
+            <div className="mt-0.5 text-xs text-slate-400">{truck.state.wearers} wearers</div>
           ) : null}
         </div>
-        <div className="text-right">
-          <div className="font-mono text-3xl tabular-nums">{formatDuration(elapsed)}</div>
-          {paceAvgSeconds != null && (
-            <div className={`text-xs ${onPace ? "text-emerald-400" : "text-red-400"}`}>
-              {onPace ? "on pace" : "over pace"} (avg {formatDuration(paceAvgSeconds)})
-            </div>
+
+        {/* Divider */}
+        <div className="w-px self-stretch bg-slate-700/60" />
+
+        {/* Next Up */}
+        <div className="flex-1 text-center">
+          <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Next Up</div>
+          {nextUp ? (
+            <>
+              <div className="font-black tabular-nums text-sky-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
+                #{nextUp.truck_number}
+              </div>
+              <div className="mt-1.5 text-xs text-slate-400">
+                Avg for next up:{" "}
+                <span className="text-slate-300">
+                  {paceAvgSeconds != null ? formatDuration(paceAvgSeconds) : "N/A"}
+                </span>
+              </div>
+            </>
+          ) : (
+            <div className="mt-3 text-sm text-slate-500">None</div>
           )}
         </div>
       </div>
-      <div className="mt-4 flex flex-wrap items-center gap-2">
+
+      {/* Timer + pace */}
+      <div className="mt-4 flex items-center justify-center gap-3 border-t border-slate-700/50 pt-3">
+        <span className="font-mono text-3xl tabular-nums">{formatDuration(elapsed)}</span>
+        {paceAvgSeconds != null && (
+          <span className={`text-xs ${onPace ? "text-emerald-400" : "text-red-400"}`}>
+            {onPace ? "on pace" : "over pace"} (avg {formatDuration(paceAvgSeconds)})
+          </span>
+        )}
+      </div>
+
+      {/* Actions */}
+      <div className="mt-3 flex flex-wrap items-center gap-2">
         <button className="btn-primary" disabled={busy} onClick={onFinish}>
           Finish Loading
         </button>

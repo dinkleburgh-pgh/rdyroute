@@ -289,8 +289,24 @@ if (Test-Path 'requirements.txt') {
 # ---------------------------------------------------------------------------
 $existing = Test-Pid -PidFile $BackendPid
 if ($existing) {
-    Write-Info "Backend already running (PID $($existing.Id)) — http://${BackendHost}:${BackendPort}"
-} else {
+    # Confirm the process is actually serving — a stale PID (e.g. leftover from
+    # a previous session while Docker now owns the port) would otherwise skip
+    # port cleanup and leave the backend unreachable.
+    $healthy = $false
+    try {
+        $null = Invoke-RestMethod "http://${BackendHost}:${BackendPort}/health" -TimeoutSec 2 -ErrorAction Stop
+        $healthy = $true
+    } catch { }
+
+    if ($healthy) {
+        Write-Info "Backend already running (PID $($existing.Id)) — http://${BackendHost}:${BackendPort}"
+    } else {
+        Write-Warn2 "Backend PID $($existing.Id) alive but not responding — restarting..."
+        Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
+        $existing = $null
+    }
+}
+if (-not $existing) {
     Clear-Port -Label 'backend (uvicorn)' -Port ([int]$BackendPort)
     Write-Info "Starting FastAPI backend on http://${BackendHost}:${BackendPort}..."
     $backendArgs = @('-m', 'uvicorn', 'main:app', '--host', $BackendHost, '--port', $BackendPort, '--reload')
@@ -327,8 +343,23 @@ if (-not (Test-Path $FrontendDir)) {
 
         $existingFE = Test-Pid -PidFile $FrontendPidF
         if ($existingFE) {
-            Write-Info "Frontend already running (PID $($existingFE.Id)) — http://localhost:${FrontendPort}"
-        } else {
+            # Verify Vite is actually listening; a stale watchdog PID could prevent
+            # port cleanup if Docker owns port 5180.
+            $feHealthy = $false
+            try {
+                $null = Invoke-WebRequest "http://localhost:${FrontendPort}" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+                $feHealthy = $true
+            } catch { }
+
+            if ($feHealthy) {
+                Write-Info "Frontend already running (PID $($existingFE.Id)) — http://localhost:${FrontendPort}"
+            } else {
+                Write-Warn2 "Frontend watchdog PID $($existingFE.Id) alive but port $FrontendPort not responding — restarting..."
+                Stop-Frontend
+                $existingFE = $null
+            }
+        }
+        if (-not $existingFE) {
             Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
             Write-Info "Starting Vite dev server (with watchdog) on http://localhost:${FrontendPort}..."
             $npmCmd = Join-Path (Split-Path $npm.Source -Parent) 'npm.cmd'
@@ -382,5 +413,13 @@ Write-Info "Logs in    : $LogDir\"
 Write-Info "Stop with  : .\run.ps1 -Stop"
 
 if (-not $NoBrowser) {
-    try { Start-Process $frontendUrl | Out-Null } catch { }
+    # Open in VS Code Simple Browser if the 'code' CLI is available; otherwise
+    # fall back to the system default browser.
+    $code = Get-Command code -ErrorAction SilentlyContinue
+    if ($code) {
+        $encodedUrl = [Uri]::EscapeDataString($frontendUrl)
+        try { & $code.Source --open-url "vscode://vscode.simpleBrowser?url=$encodedUrl" | Out-Null } catch { }
+    } else {
+        try { Start-Process $frontendUrl | Out-Null } catch { }
+    }
 }

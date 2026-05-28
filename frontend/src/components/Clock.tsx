@@ -22,13 +22,8 @@ export default function Clock({ compact = false }: { compact?: boolean }) {
   const shift = currentShift(now);
   if (compact) {
     return (
-      <span className="flex items-center gap-1.5">
-        <span className="text-sm font-semibold tabular-nums text-blue-400">
-          {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-        </span>
-        <span className="rounded px-1 py-0.5 text-[10px] font-bold bg-slate-700 text-slate-300">
-          {shift.name}
-        </span>
+      <span className="text-sm font-semibold tabular-nums text-blue-400">
+        {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
       </span>
     );
   }

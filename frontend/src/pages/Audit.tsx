@@ -1,4 +1,10 @@
-import { useState, useMemo, type FormEvent } from "react";
+/**
+ * Audit — fast per-truck item logging workflow.
+ *
+ * Phase 1: TruckPicker — tap a truck tile to begin auditing.
+ * Phase 2: ItemLogger  — hierarchical category → sub → item selection.
+ */
+import { useState, useMemo, useRef, type FormEvent } from "react";
 import clsx from "clsx";
 import {
   auditPhotoFileUrl,
@@ -7,335 +13,667 @@ import {
   useAuditPhotos,
   useBoard,
   useCreateAuditEntry,
+  useDeleteAuditEntry,
   useDeleteAuditPhoto,
-  useTrackedItems,
   useUploadAuditPhoto,
+  useTrackedItems,
+  type TrackedItem,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
-import type { TruckWithState } from "../types";
+import type { AuditEntry, TruckWithState } from "../types";
 
-export default function Audit() {
-  const [runDate, setRunDate] = useState(todayIso());
-  const { data: board } = useBoard(runDate);
-  const { data: entries } = useAuditEntries(runDate);
-  const { data: trackedItems } = useTrackedItems();
-  const { data: topItems } = useAuditByRoute(7);
-  const create = useCreateAuditEntry();
+// ---------------------------------------------------------------------------
+// TruckPicker
+// ---------------------------------------------------------------------------
 
-  // Group tracked items by category for display
-  const groupedItems = useMemo(() => {
-    const cats = new Map<string, typeof trackedItems>();
-    for (const item of trackedItems ?? []) {
-      const cat = item.category ?? "General";
-      if (!cats.has(cat)) cats.set(cat, []);
-      cats.get(cat)!.push(item);
-    }
-    return [...cats.entries()];
-  }, [trackedItems]);
+function TruckPicker({
+  runDate,
+  board,
+  entriesByTruck,
+  topItems,
+  onSelect,
+}: {
+  runDate: string;
+  board: TruckWithState[];
+  entriesByTruck: Map<number, AuditEntry[]>;
+  topItems: Array<{ route: number; item_label: string; total_qty: number }>;
+  onSelect: (t: TruckWithState) => void;
+}) {
+  const trucks = board
+    .filter((t) => t.truck_type !== "Spare")
+    .sort((a, b) => a.truck_number - b.truck_number);
 
-  const [selectedTruck, setSelectedTruck] = useState<TruckWithState | null>(null);
-  const [note, setNote] = useState("");
-  const [warnNext, setWarnNext] = useState(false);
-  const [routeOverride, setRouteOverride] = useState("");
-  const [lastAdded, setLastAdded] = useState<string | null>(null);
+  const notAudited = trucks.filter((t) => !entriesByTruck.has(t.truck_number));
+  const audited    = trucks.filter((t) =>  entriesByTruck.has(t.truck_number));
 
-  // Build a set of truck numbers that have at least one entry today
-  const trucksWithEntries = new Set((entries ?? []).map((e) => e.truck_number));
+  const topSummary = [...topItems]
+    .sort((a, b) => b.total_qty - a.total_qty)
+    .slice(0, 8);
 
-  // Active trucks from board, excluding OOS/spare/off
-  const activeStatuses = new Set(["dirty", "in_progress", "unloaded", "loaded"]);
-  const activeTrucks = (board ?? []).filter(
-    (t) => t.state && activeStatuses.has(t.state.status),
+  const totalItems = [...entriesByTruck.values()].reduce((s, e) => s + e.length, 0);
+
+  return (
+    <div className="space-y-5 p-3 md:p-6">
+      {/* Stats bar */}
+      {trucks.length > 0 && (
+        <div className="flex flex-wrap gap-3 text-sm">
+          <span className="rounded-full bg-green-900/50 px-3 py-1 font-semibold text-green-300">
+            {audited.length} / {trucks.length} audited
+          </span>
+          {totalItems > 0 && (
+            <span className="rounded-full bg-slate-800 px-3 py-1 font-semibold text-slate-300">
+              {totalItems} items logged
+            </span>
+          )}
+        </div>
+      )}
+
+      {/* Not yet audited */}
+      {notAudited.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">
+            Needs Audit
+          </h3>
+          <div className="flex flex-wrap gap-3">
+            {notAudited.map((t) => (
+              <button
+                key={t.truck_number}
+                type="button"
+                onClick={() => onSelect(t)}
+                className="flex h-20 w-20 flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
+              >
+                <span className="text-2xl font-black leading-none">{t.truck_number}</span>
+                <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                  {t.truck_type}
+                </span>
+              </button>
+            ))}
+          </div>
+        </section>
+      )}
+
+      {/* Already audited */}
+      {audited.length > 0 && (
+        <section className="space-y-3">
+          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">
+            Audited
+          </h3>
+          <div className="flex flex-wrap gap-2">
+            {audited.map((t) => {
+              const count = entriesByTruck.get(t.truck_number)?.length ?? 0;
+              return (
+                <button
+                  key={t.truck_number}
+                  type="button"
+                  onClick={() => onSelect(t)}
+                  className="flex h-16 w-16 flex-col items-center justify-center rounded-xl bg-emerald-900/70 text-white shadow ring-1 ring-emerald-700/60 transition active:scale-95 hover:bg-emerald-800/70"
+                >
+                  <span className="text-xl font-black leading-none text-emerald-200">{t.truck_number}</span>
+                  <span className="mt-0.5 text-[10px] font-semibold text-emerald-400">
+                    {count} item{count !== 1 ? "s" : ""}
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
+      {trucks.length === 0 && (
+        <p className="text-sm text-slate-500">No trucks found for this date.</p>
+      )}
+
+      {/* Top items */}
+      {topSummary.length > 0 && (
+        <section className="card space-y-2 self-start">
+          <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
+            Top Removed · Last 7 days
+          </p>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-4">
+            {topSummary.map((row, i) => (
+              <div key={`${row.route}-${row.item_label}`} className="flex items-center gap-2">
+                <span className="w-5 shrink-0 text-center text-xs font-bold text-slate-600">
+                  {i + 1}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-semibold text-slate-200">{row.item_label}</p>
+                  <p className="text-[10px] text-slate-500">Route {row.route} · x{row.total_qty}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Hierarchy helpers + defaults
+// ---------------------------------------------------------------------------
+
+const MAT_SIZES = new Set(["3x10", "3x5", "4x6"]);
+
+function topCatOf(item: TrackedItem): string {
+  const cat = item.category ?? "";
+  const idx = cat.indexOf(">");
+  return (idx >= 0 ? cat.slice(0, idx) : cat).trim() || "General";
+}
+
+function subCatOf(item: TrackedItem): string | null {
+  const cat = item.category ?? "";
+  const idx = cat.indexOf(">");
+  return idx >= 0 ? cat.slice(idx + 1).trim() : null;
+}
+
+const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
+  ...["3x10", "3x5", "4x6"].flatMap((size) =>
+    ["Black", "Onyx", "Indigo", "Copper"].map((color) => ({
+      label: color, qty_default: 1, category: size,
+    }))
+  ),
+  ...["C-PULL", "DRC (AIRLAID)", "BROWN HW", "SIG HW", "SIG Z-FOLD", "SIG DUAL TP", "JRT", "B&V TP", "B&V Z-FOLD"].map((l) => ({
+    label: l, qty_default: 1, category: "Paper",
+  })),
+  ...["White", "Black", "Red", "Green", "Blue", "Denim"].map((l) => ({
+    label: l, qty_default: 1, category: "Bulk > Aprons",
+  })),
+  ...['WET MOP', '24"', '36"', '46"', '60"'].map((l) => ({
+    label: l, qty_default: 1, category: "Bulk > Dust Mops",
+  })),
+  ...["Grid/Terry", "Glass", "Regular", "Premium", "Small Ink", "Large Ink", "Napkins", "Red Shop", "White Shop", "Fender Covers"].map((l) => ({
+    label: l, qty_default: 1, category: "Bulk > Towels",
+  })),
+];
+
+// ---------------------------------------------------------------------------
+// HierarchyPicker — 1–3 step selection inside ItemLogger
+// ---------------------------------------------------------------------------
+
+function HierarchyPicker({
+  items,
+  onLog,
+  isPending,
+}: {
+  items: TrackedItem[];
+  onLog: (label: string, qty: number) => void;
+  isPending: boolean;
+}) {
+  const [topCat, setTopCat]       = useState<string | null>(null);
+  const [bulkSub, setBulkSub]     = useState<string | null>(null);
+  const [pendingItem, setPending] = useState<string | null>(null);
+  const [qtyInput, setQtyInput]   = useState("");
+  const qtyRef = useRef<HTMLInputElement>(null);
+
+  const topCats = useMemo(() => [...new Set(items.map(topCatOf))], [items]);
+
+  function reset()    { setTopCat(null); setBulkSub(null); setPending(null); setQtyInput(""); }
+  function resetSub() { setBulkSub(null); setPending(null); setQtyInput(""); }
+
+  function selectItem(label: string) {
+    setPending(label);
+    setQtyInput("");
+    setTimeout(() => qtyRef.current?.focus(), 50);
+  }
+
+  function confirmLog() {
+    if (!pendingItem) return;
+    const qty = Math.max(1, parseInt(qtyInput, 10) || 1);
+    onLog(pendingItem, qty);
+    setPending(null);
+    setQtyInput("");
+  }
+
+  function subCatsFor(tc: string) {
+    return [...new Set(
+      items.filter(i => topCatOf(i) === tc && subCatOf(i) !== null).map(i => subCatOf(i)!)
+    )];
+  }
+
+  function flatItemsFor(tc: string) {
+    return items.filter(i => topCatOf(i) === tc && subCatOf(i) === null);
+  }
+
+  function subItemsFor(tc: string, sc: string) {
+    return items.filter(i => topCatOf(i) === tc && subCatOf(i) === sc);
+  }
+
+  // --- Qty prompt (shown after selecting any final item) ---
+  if (pendingItem !== null) {
+    return (
+      <div className="space-y-4">
+        <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
+          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Selected item</p>
+          <p className="mb-4 text-xl font-black text-white">{pendingItem}</p>
+          <label className="block">
+            <span className="mb-1 block text-xs font-semibold text-slate-400">Quantity</span>
+            <input
+              ref={qtyRef}
+              type="number"
+              inputMode="numeric"
+              min={1}
+              className="input w-full text-2xl font-black"
+              placeholder="1"
+              value={qtyInput}
+              onChange={(e) => setQtyInput(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") confirmLog(); }}
+            />
+          </label>
+          <div className="mt-4 flex gap-3">
+            <button
+              type="button"
+              onClick={confirmLog}
+              disabled={isPending}
+              className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-base font-black text-white shadow hover:bg-emerald-500 active:scale-95 transition disabled:opacity-50"
+            >
+              Log
+            </button>
+            <button
+              type="button"
+              onClick={() => { setPending(null); setQtyInput(""); }}
+              className="rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  function ItemGrid({ gridItems, btnClass, logLabel, displayLabel }: {
+    gridItems: TrackedItem[];
+    btnClass: string;
+    logLabel: (item: TrackedItem) => string;
+    displayLabel?: (item: TrackedItem) => string;
+  }) {
+    return (
+      <div className="flex flex-wrap gap-2">
+        {gridItems.map((item) => {
+          const disp = displayLabel ? displayLabel(item) : item.label;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              disabled={isPending}
+              onClick={() => selectItem(logLabel(item))}
+              className={clsx(
+                "rounded-xl px-5 py-3.5 text-sm font-bold text-white shadow transition-all active:scale-95 disabled:opacity-50",
+                MAT_COLOR_PALETTE[disp] ?? btnClass,
+              )}
+            >
+              {disp}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // --- Step 1: top-level categories ---
+  if (topCat === null) {
+    return (
+      <div className="space-y-2">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
+        <div className="flex flex-wrap gap-3">
+          {topCats.map((cat) => (
+            <button
+              key={cat}
+              type="button"
+              onClick={() => setTopCat(cat)}
+              className={clsx(
+                "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+              )}
+            >
+              {cat}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  const subs      = subCatsFor(topCat);
+  const flatItems = flatItemsFor(topCat);
+
+  // --- Step 2a: flat items (mat colors, paper types, etc.) ---
+  if (subs.length === 0) {
+    const tc = topCat;
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={reset}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
+            ← {topCat}
+          </button>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            {MAT_SIZES.has(topCat) ? "Color" : "Item"}
+          </p>
+        </div>
+<ItemGrid
+          gridItems={flatItems}
+          btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+          logLabel={(item) => item.label}
+          displayLabel={MAT_SIZES.has(tc)
+            ? (item) => item.label.startsWith(tc + " ") ? item.label.slice(tc.length + 1) : item.label
+            : undefined}
+        />
+      </div>
+    );
+  }
+
+  // --- Step 2b: sub-categories ---
+  if (bulkSub === null) {
+    return (
+      <div className="space-y-3">
+        <div className="flex items-center gap-3">
+          <button type="button" onClick={reset}
+            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
+            ← {topCat}
+          </button>
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Subcategory</p>
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {subs.map((sub) => (
+            <button
+              key={sub}
+              type="button"
+              onClick={() => setBulkSub(sub)}
+              className={clsx(
+                "rounded-2xl px-6 py-4 text-base font-black text-white shadow-lg transition-all active:scale-95",
+                SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+              )}
+            >
+              {sub}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // --- Step 3: sub items ---
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center gap-3">
+        <button type="button" onClick={resetSub}
+          className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
+          ← {bulkSub}
+        </button>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Item</p>
+      </div>
+      <ItemGrid
+        gridItems={subItemsFor(topCat, bulkSub)}
+        btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+        logLabel={(item) => item.label}
+      />
+    </div>
+  );
+}
+
+const TOP_PALETTE: Record<string, string> = {
+  "3x10":  "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",
+  "3x5":   "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
+  "4x6":   "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800",
+  "Paper": "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
+  "Bulk":  "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
+};
+const SUB_PALETTE: Record<string, string> = {
+  Aprons:      "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
+  "Dust Mops": "bg-gradient-to-b from-teal-600 to-teal-900 ring-1 ring-teal-400/20 hover:from-teal-500 hover:to-teal-800",
+  Towels:      "bg-gradient-to-b from-amber-700 to-amber-950 ring-1 ring-amber-500/20 hover:from-amber-600 hover:to-amber-900",
+};
+const MAT_COLOR_PALETTE: Record<string, string> = {
+  "Black":  "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
+  "Onyx":   "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",
+  "Copper": "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",
+  "Indigo": "bg-indigo-700 ring-1 ring-indigo-400/20 hover:bg-indigo-600",
+};
+
+// ---------------------------------------------------------------------------
+// ItemLogger
+// ---------------------------------------------------------------------------
+
+function ItemLogger({
+  truck,
+  entries,
+  runDate,
+  onBack,
+}: {
+  truck: TruckWithState;
+  entries: AuditEntry[];
+  runDate: string;
+  onBack: () => void;
+}) {
+  const create      = useCreateAuditEntry();
+  const deleteEntry = useDeleteAuditEntry();
+  const { data: trackedRaw = [] } = useTrackedItems();
+  const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
+
+  const [photosOpen, setPhotosOpen] = useState(false);
+  const [note, setNote]           = useState("");
+  const [warn, setWarn]           = useState(false);
+  const [showExtra, setShowExtra] = useState(false);
+  const [routeOverride, setRouteOverride] = useState(
+    truck.state?.oos_spare_route?.toString() ?? "",
   );
 
-  // When a truck is selected, its entries for today
-  const truckEntries = selectedTruck
-    ? (entries ?? []).filter((e) => e.truck_number === selectedTruck.truck_number)
-    : [];
-
-  // Top 5 items by total qty across all routes last 7 days
-  const topSummary = [...(topItems ?? [])]
-    .sort((a, b) => b.total_qty - a.total_qty)
-    .slice(0, 5);
-
-  async function logItem(label: string, qtyDefault: number) {
-    if (!selectedTruck) return;
+  async function logItem(label: string, qty: number) {
+    if (create.isPending) return;
     await create.mutateAsync({
-      truck_number: selectedTruck.truck_number,
+      truck_number: truck.truck_number,
       run_date: runDate,
       item_label: label,
-      quantity: qtyDefault,
-      note,
-      warn_on_next_load: warnNext,
+      quantity: qty,
+      note: note.trim() || undefined,
+      warn_on_next_load: warn || undefined,
       ...(routeOverride ? { route_override: Number(routeOverride) } : {}),
     });
-    setLastAdded(label);
     setNote("");
-    setWarnNext(false);
-  }
-
-  function selectTruck(t: TruckWithState) {
-    setSelectedTruck(t);
-    setRouteOverride(t.state?.oos_spare_route?.toString() ?? "");
-    setNote("");
-    setWarnNext(false);
-    setLastAdded(null);
-  }
-
-  function goBack() {
-    setSelectedTruck(null);
-    setLastAdded(null);
+    setWarn(false);
   }
 
   return (
-    <div className="p-3 md:p-6 space-y-4">
-      {/* Header */}
-      <div className="flex flex-wrap items-center gap-3">
-        <h2 className="text-2xl font-semibold">Audit</h2>
+    <div className="flex min-h-0 flex-col">
+      {/* Sticky header */}
+      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-3 py-2.5 backdrop-blur-sm md:px-6">
+        <button
+          type="button"
+          onClick={onBack}
+          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
+        >
+          back
+        </button>
+        <span className="text-3xl font-black text-white">#{truck.truck_number}</span>
+        <div className="flex items-center gap-2">
+          {entries.length > 0 && (
+            <span className="rounded-full bg-emerald-900/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+              {entries.length} logged
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="space-y-5 p-3 md:p-6">
+        {/* Modifier bar */}
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setWarn((w) => !w)}
+            className={clsx(
+              "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              warn
+                ? "border-amber-600 bg-amber-900/50 text-amber-300"
+                : "border-slate-700 bg-slate-800 text-slate-500 hover:bg-slate-700",
+            )}
+          >
+            warn on next load
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowExtra((x) => !x)}
+            className="rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-500 hover:bg-slate-700 transition"
+          >
+            {showExtra ? "- less" : "+ note / route"}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setPhotosOpen((o) => !o)}
+            className={clsx(
+              "rounded-full border px-3 py-1.5 text-xs font-semibold transition",
+              photosOpen
+                ? "border-blue-600 bg-blue-900/50 text-blue-300"
+                : "border-slate-700 bg-slate-800 text-slate-500 hover:bg-slate-700",
+            )}
+          >
+            photos
+          </button>
+        </div>
+
+        {/* Photos panel */}
+        {photosOpen && (
+          <div className="rounded-xl border border-slate-700 bg-slate-900/60 p-3">
+            <PhotosPanel runDate={runDate} selectedTruck={truck.truck_number} />
+          </div>
+        )}
+
+        {/* Extra options */}
+        {showExtra && (
+          <div className="grid gap-3 rounded-xl border border-slate-700 bg-slate-900/60 p-3 sm:grid-cols-2">
+            <label className="text-sm">
+              <span className="mb-1 block text-xs font-semibold text-slate-400">Note (applies to next tap)</span>
+              <input
+                className="input w-full"
+                value={note}
+                onChange={(e) => setNote(e.target.value)}
+                placeholder="Optional note..."
+              />
+            </label>
+            <label className="text-sm">
+              <span className="mb-1 block text-xs font-semibold text-slate-400">Route override</span>
+              <input
+                className="input w-full"
+                type="number"
+                placeholder={`${truck.truck_number}`}
+                value={routeOverride}
+                onChange={(e) => setRouteOverride(e.target.value)}
+              />
+            </label>
+          </div>
+        )}
+
+        {/* Hierarchical item picker */}
+        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} />
+
+        {/* Logged entries */}
+        {entries.length > 0 && (
+          <section className="space-y-2">
+            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+              Logged this session
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {[...entries].reverse().map((e) => (
+                <div
+                  key={e.id}
+                  className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs"
+                >
+                  <span className="font-semibold text-slate-200">{e.item_label}</span>
+                  {e.quantity > 1 && (
+                    <span className="font-bold text-slate-400">x{e.quantity}</span>
+                  )}
+                  {e.warn_on_next_load && (
+                    <span className="text-amber-400" title="Warn on next load">!</span>
+                  )}
+                  {e.note && (
+                    <span className="max-w-[8rem] truncate italic text-slate-500" title={e.note}>
+                      "{e.note}"
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    onClick={() => deleteEntry.mutate(e.id)}
+                    className="ml-0.5 text-slate-600 hover:text-red-400 transition"
+                    title="Remove entry"
+                  >
+                    x
+                  </button>
+                </div>
+              ))}
+            </div>
+          </section>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Root page
+// ---------------------------------------------------------------------------
+
+export default function Audit() {
+  const [runDate, setRunDate]        = useState(todayIso());
+  const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
+
+  const { data: board        = [] } = useBoard(runDate);
+  const { data: entries      = [] } = useAuditEntries(runDate);
+  const { data: topItems     = [] } = useAuditByRoute(7);
+
+  const entriesByTruck = useMemo(() => {
+    const map = new Map<number, AuditEntry[]>();
+    for (const e of entries) {
+      if (!map.has(e.truck_number)) map.set(e.truck_number, []);
+      map.get(e.truck_number)!.push(e);
+    }
+    return map;
+  }, [entries]);
+
+  const truckEntries = selectedTruck
+    ? (entriesByTruck.get(selectedTruck.truck_number) ?? [])
+    : [];
+
+  return (
+    <div className="flex min-h-0 flex-col">
+      {/* Page header */}
+      <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-3 md:px-6">
+        <h2 className="text-xl font-semibold text-slate-100">Audit</h2>
         <input
           className="input"
           type="date"
           max={todayIso()}
           value={runDate}
-          onChange={(e) => { setRunDate(e.target.value); setSelectedTruck(null); }}
+          onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[220px_1fr]">
-        {/* Sidebar: Top Removed Items */}
-        <aside className="card space-y-2 self-start">
-          <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Top Removed Items
-          </p>
-          <p className="text-[11px] text-slate-500">Last 7 days</p>
-          {topSummary.length === 0 && (
-            <p className="text-xs text-slate-500">No data.</p>
-          )}
-          {topSummary.map((row, i) => (
-            <div key={`${row.route}-${row.item_label}`} className="flex items-start gap-2 text-sm">
-              <span className="mt-0.5 text-[11px] font-semibold text-slate-500 w-4 shrink-0">
-                #{i + 1}
-              </span>
-              <div className="flex-1 min-w-0">
-                <p className="font-medium text-slate-200 truncate">{row.item_label}</p>
-                <p className="text-[11px] text-slate-500">Route: {row.route}</p>
-              </div>
-              <span className="shrink-0 text-xs font-semibold text-slate-300">
-                Qty {row.total_qty}
-              </span>
-            </div>
-          ))}
-        </aside>
-
-        {/* Main area */}
-        <div className="space-y-4">
-          {selectedTruck === null ? (
-            /* Truck Grid */
-            <div className="card space-y-3">
-              <p className="text-sm font-semibold text-slate-300">
-                Select a truck to log items
-              </p>
-              {activeTrucks.length === 0 && (
-                <p className="text-sm text-slate-500">No active trucks for this date.</p>
-              )}
-              <div className="flex flex-wrap gap-2">
-                {activeTrucks.map((t) => {
-                  const hasEntries = trucksWithEntries.has(t.truck_number);
-                  return (
-                    <button
-                      key={t.truck_number}
-                      type="button"
-                      onClick={() => selectTruck(t)}
-                      className={clsx(
-                        "flex h-14 w-16 flex-col items-center justify-center rounded-lg text-sm font-bold transition",
-                        hasEntries
-                          ? "bg-green-700 text-white hover:bg-green-600"
-                          : "bg-slate-700 text-slate-200 hover:bg-slate-600",
-                      )}
-                    >
-                      <span className="text-base">{t.truck_number}</span>
-                      {hasEntries && (
-                        <span className="text-[10px] font-normal opacity-80">
-                          {(entries ?? []).filter((e) => e.truck_number === t.truck_number).length}×
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-              <p className="text-[11px] text-slate-500">
-                Green = has entries today · Grey = no entries yet
-              </p>
-            </div>
-          ) : (
-            /* Truck Detail */
-            <div className="card space-y-4">
-              <div className="flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={goBack}
-                  className="rounded px-2 py-1 text-xs font-medium bg-slate-700 text-slate-300 hover:bg-slate-600 transition"
-                >
-                  ← Back
-                </button>
-                <h3 className="text-lg font-semibold">Truck #{selectedTruck.truck_number}</h3>
-                {lastAdded && (
-                  <span className="rounded-full bg-green-800/60 px-2 py-0.5 text-xs text-green-300">
-                    ✓ {lastAdded} logged
-                  </span>
-                )}
-              </div>
-
-              {/* Item buttons — grouped by category */}
-              <div className="space-y-3">
-                <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                  Select item to log
-                </p>
-                {groupedItems.length === 0 && (
-                  <p className="text-sm text-slate-500">No tracked items configured.</p>
-                )}
-                {groupedItems.map(([cat, items]) => (
-                  <div key={cat}>
-                    {groupedItems.length > 1 && (
-                      <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-slate-500">
-                        {cat}
-                      </p>
-                    )}
-                    <div className="flex flex-wrap gap-2">
-                      {(items ?? []).map((item) => (
-                        <button
-                          key={item.label}
-                          type="button"
-                          disabled={create.isPending}
-                          onClick={() => logItem(item.label, item.qty_default)}
-                          className="rounded-lg bg-indigo-700 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-600 active:scale-95 disabled:opacity-50 transition"
-                        >
-                          {item.label}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Entry options */}
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                <label className="text-sm">
-                  <span className="label">Route override</span>
-                  <input
-                    className="input w-full"
-                    type="number"
-                    placeholder={`${selectedTruck.truck_number}`}
-                    value={routeOverride}
-                    onChange={(e) => setRouteOverride(e.target.value)}
-                  />
-                </label>
-                <label className="text-sm sm:col-span-2">
-                  <span className="label">Note (optional)</span>
-                  <input
-                    className="input w-full"
-                    value={note}
-                    onChange={(e) => setNote(e.target.value)}
-                    placeholder="Applies to next logged item"
-                  />
-                </label>
-              </div>
-              <label className="inline-flex items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={warnNext}
-                  onChange={(e) => setWarnNext(e.target.checked)}
-                />
-                Warn on next load
-              </label>
-
-              {/* Today's entries for this truck */}
-              {truckEntries.length > 0 && (
-                <div>
-                  <p className="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                    Today's entries — Truck #{selectedTruck.truck_number}
-                  </p>
-                  <div className="divide-y divide-slate-800 rounded border border-slate-700">
-                    {truckEntries.map((e) => (
-                      <div key={e.id} className="flex items-center gap-2 px-3 py-2 text-sm">
-                        <span className="font-medium text-slate-200">{e.item_label}</span>
-                        <span className="text-slate-500">×{e.quantity}</span>
-                        {e.route_override && (
-                          <span className="text-xs text-slate-500">route {e.route_override}</span>
-                        )}
-                        {e.warn_on_next_load && (
-                          <span className="rounded-full bg-amber-700/50 px-1.5 py-0.5 text-[10px] text-amber-300">
-                            warn
-                          </span>
-                        )}
-                        {e.note && (
-                          <span className="text-xs text-slate-500 italic truncate">{e.note}</span>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* All entries table for the day */}
-          <div className="card overflow-x-auto p-0">
-            <div className="px-3 py-2 border-b border-slate-800">
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-                All entries · {runDate}
-              </p>
-            </div>
-            <table className="w-full text-sm">
-              <thead className="bg-slate-800 text-left text-xs uppercase text-slate-400">
-                <tr>
-                  <th className="px-3 py-2">Truck</th>
-                  <th className="px-3 py-2">Item</th>
-                  <th className="px-3 py-2">Qty</th>
-                  <th className="px-3 py-2">Route</th>
-                  <th className="px-3 py-2">Note</th>
-                  <th className="px-3 py-2">Warn</th>
-                  <th className="px-3 py-2">Time</th>
-                </tr>
-              </thead>
-              <tbody>
-                {(entries ?? []).length === 0 && (
-                  <tr>
-                    <td className="px-3 py-3 text-slate-500" colSpan={7}>
-                      No entries for this date.
-                    </td>
-                  </tr>
-                )}
-                {(entries ?? []).map((e) => (
-                  <tr key={e.id} className="border-t border-slate-800">
-                    <td className="px-3 py-2 font-semibold">#{e.truck_number}</td>
-                    <td className="px-3 py-2">{e.item_label}</td>
-                    <td className="px-3 py-2">{e.quantity}</td>
-                    <td className="px-3 py-2 text-slate-400">{e.route_override ?? "—"}</td>
-                    <td className="px-3 py-2 text-slate-400">{e.note || "—"}</td>
-                    <td className="px-3 py-2">
-                      {e.warn_on_next_load ? (
-                        <span className="badge bg-amber-600">warn</span>
-                      ) : (
-                        "—"
-                      )}
-                    </td>
-                    <td className="px-3 py-2 text-slate-400">
-                      {new Date(e.recorded_at).toLocaleTimeString()}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      </div>
-
-      <PhotosPanel runDate={runDate} selectedTruck={selectedTruck?.truck_number} />
+      {/* Main content */}
+      {selectedTruck === null ? (
+        <TruckPicker
+          runDate={runDate}
+          board={board}
+          entriesByTruck={entriesByTruck}
+          topItems={topItems}
+          onSelect={(t) => { setSelected(t); }}
+        />
+      ) : (
+        <ItemLogger
+          truck={selectedTruck}
+          entries={truckEntries}
+          runDate={runDate}
+          onBack={() => setSelected(null)}
+        />
+      )}
     </div>
   );
 }
+
+// ---------------------------------------------------------------------------
+// Photos panel
+// ---------------------------------------------------------------------------
 
 function PhotosPanel({
   runDate,
@@ -344,25 +682,21 @@ function PhotosPanel({
   runDate: string;
   selectedTruck?: number;
 }) {
-  const { user } = useAuth();
+  const { user }                    = useAuth();
   const { data: photos, isLoading } = useAuditPhotos(runDate);
-  const upload = useUploadAuditPhoto();
-  const del = useDeleteAuditPhoto();
-  const [truck, setTruck] = useState("");
-  const [caption, setCaption] = useState("");
-  const [file, setFile] = useState<File | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const upload                      = useUploadAuditPhoto();
+  const del                         = useDeleteAuditPhoto();
+  const [truck, setTruck]           = useState("");
+  const [caption, setCaption]       = useState("");
+  const [file, setFile]             = useState<File | null>(null);
+  const [error, setError]           = useState<string | null>(null);
 
-  // Pre-fill truck from the selected truck in the main view
   const effectiveTruck = truck || (selectedTruck?.toString() ?? "");
 
   async function onUpload(e: FormEvent) {
     e.preventDefault();
     setError(null);
-    if (!effectiveTruck || !file) {
-      setError("Truck # and file are required.");
-      return;
-    }
+    if (!effectiveTruck || !file) { setError(selectedTruck ? "File is required." : "Truck # and file are required."); return; }
     try {
       await upload.mutateAsync({
         truck_number: Number(effectiveTruck),
@@ -373,86 +707,55 @@ function PhotosPanel({
       });
       setFile(null);
       setCaption("");
-      (document.getElementById("audit-photo-file") as HTMLInputElement | null)?.value &&
-        ((document.getElementById("audit-photo-file") as HTMLInputElement).value = "");
+      const el = document.getElementById("audit-photo-file") as HTMLInputElement | null;
+      if (el) el.value = "";
     } catch (err: unknown) {
       const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ??
-        "Upload failed.";
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Upload failed.";
       setError(msg);
     }
   }
 
   return (
-    <div className="card space-y-3">
-      <h3 className="text-sm font-semibold text-slate-300">Audit photos · {runDate}</h3>
+    <div className="space-y-3">
       <form onSubmit={onUpload} className="flex flex-wrap items-end gap-3">
-        <label className="text-sm">
-          <span className="label">Truck #</span>
-          <input
-            type="number"
-            className="input w-20"
-            value={truck}
-            placeholder={selectedTruck?.toString() ?? ""}
-            onChange={(e) => setTruck(e.target.value)}
-          />
-        </label>
-        <label className="text-sm flex-1 min-w-[12rem]">
+        {!selectedTruck && (
+          <label className="text-sm">
+            <span className="label">Truck #</span>
+            <input type="number" className="input w-20" value={truck}
+              placeholder="" onChange={(e) => setTruck(e.target.value)} />
+          </label>
+        )}
+        <label className="flex-1 min-w-[12rem] text-sm">
           <span className="label">Caption</span>
-          <input
-            className="input w-full"
-            value={caption}
-            onChange={(e) => setCaption(e.target.value)}
-            placeholder="optional"
-          />
+          <input className="input w-full" value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="optional" />
         </label>
         <label className="text-sm">
-          <span className="label">File (≤10MB)</span>
-          <input
-            id="audit-photo-file"
-            type="file"
-            accept="image/*"
-            className="input"
-            onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-          />
+          <span className="label">File (10 MB max)</span>
+          <input id="audit-photo-file" type="file" accept="image/*" className="input"
+            onChange={(e) => setFile(e.target.files?.[0] ?? null)} />
         </label>
-        <button className="btn-primary" disabled={upload.isPending}>
-          Upload
-        </button>
+        <button className="btn-primary" disabled={upload.isPending}>Upload</button>
       </form>
       {error && <p className="text-xs text-red-400">{error}</p>}
-
-      {isLoading && <p className="text-xs text-slate-500">Loading photos…</p>}
+      {isLoading && <p className="text-xs text-slate-500">Loading photos...</p>}
       {!isLoading && (photos ?? []).length === 0 && (
         <p className="text-xs text-slate-500">No photos for this day.</p>
       )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {(photos ?? []).map((p) => (
-          <figure
-            key={p.id}
-            className="overflow-hidden rounded border border-slate-800 bg-slate-950"
-          >
+          <figure key={p.id} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
             <a href={auditPhotoFileUrl(p.id)} target="_blank" rel="noreferrer">
-              <img
-                src={auditPhotoFileUrl(p.id)}
-                alt={p.caption || p.file_name}
-                loading="lazy"
-                className="h-32 w-full object-cover"
-              />
+              <img src={auditPhotoFileUrl(p.id)} alt={p.caption || p.file_name}
+                loading="lazy" className="h-32 w-full object-cover" />
             </a>
             <figcaption className="space-y-1 p-2 text-[11px] text-slate-400">
               <p className="font-semibold text-slate-200">
-                #{p.truck_number}
-                {p.uploaded_by ? ` · ${p.uploaded_by}` : ""}
+                #{p.truck_number}{p.uploaded_by ? ` by ${p.uploaded_by}` : ""}
               </p>
               {p.caption && <p className="line-clamp-2">{p.caption}</p>}
-              <button
-                type="button"
-                className="text-red-400 hover:text-red-300"
-                onClick={() => {
-                  if (confirm("Delete this photo?")) del.mutate(p.id);
-                }}
-              >
+              <button type="button" className="text-red-400 hover:text-red-300 transition"
+                onClick={() => { if (confirm("Delete this photo?")) del.mutate(p.id); }}>
                 Delete
               </button>
             </figcaption>
@@ -462,4 +765,3 @@ function PhotosPanel({
     </div>
   );
 }
-
