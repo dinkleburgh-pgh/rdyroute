@@ -42,6 +42,10 @@ services:
     environment:
       PUBLIC_URL: ${PUBLIC_URL:-}
       BACKEND_HEALTH_URL: ${BACKEND_HEALTH_URL:-http://backend:8000/health}
+      # HOST_PORT lets the startup script display the correct external port.
+      # HOST_IP can be set in .env to override auto-detection (e.g. HOST_IP=192.168.1.132).
+      HOST_PORT: ${FRONTEND_PORT:-5180}
+      HOST_IP: ${HOST_IP:-}
     ports:
       - "${FRONTEND_PORT:-5180}:80"
 
