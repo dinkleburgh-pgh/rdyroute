@@ -91,3 +91,8 @@ services:
 
 volumes:
   backend_data:
+
+networks:
+  default:
+    driver: bridge
+    enable_ipv6: false
