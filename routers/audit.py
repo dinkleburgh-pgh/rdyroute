@@ -31,8 +31,15 @@ from schemas import AuditEntryCreate, AuditEntryOut, AuditEntryUpdate, AuditPhot
 router = APIRouter(prefix="/audit", tags=["audit"])
 
 # Photos are written to disk so the SQLite row stays small.
-# Override with AUDIT_PHOTOS_DIR env var if needed (e.g., in production).
-_PHOTO_ROOT = Path(os.environ.get("AUDIT_PHOTOS_DIR", "./audit_photos")).resolve()
+# In production the backend data volume is mounted at /app/.data — photos live
+# there so they survive repulls.  In local dev (no /app/.data) falls back to
+# ./audit_photos relative to cwd.  Override any time with AUDIT_PHOTOS_DIR.
+_PHOTO_ROOT = Path(
+    os.environ.get(
+        "AUDIT_PHOTOS_DIR",
+        "/app/.data/audit_photos" if Path("/app/.data").exists() else "./audit_photos",
+    )
+).resolve()
 _MAX_PHOTO_BYTES = 10 * 1024 * 1024  # 10 MB
 _ALLOWED_PHOTO_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/heic"}
 
