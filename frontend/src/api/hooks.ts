@@ -112,6 +112,7 @@ export function useBoard(runDate: string = todayIso()) {
 export function useUpsertTruckState() {
   const qc = useQueryClient();
   return useMutation({
+    mutationKey: ["upsertTruckState"],
     mutationFn: async (args: {
       truck_number: number;
       run_date: string;
@@ -148,6 +149,53 @@ export function useUpsertTruckState() {
           return data;
         }
         throw err;
+      }
+    },
+    onMutate: async (vars) => {
+      // Cancel in-flight refetches so they don't stomp the optimistic update
+      await qc.cancelQueries({ queryKey: ["board", vars.run_date] });
+      const previous = qc.getQueryData(["board", vars.run_date]);
+      // Immediately reflect the change so the dropdown doesn't snap back
+      qc.setQueryData<import("../types").TruckWithState[]>(
+        ["board", vars.run_date],
+        (old) => {
+          if (!old) return old;
+          return old.map((t) => {
+            if (t.truck_number !== vars.truck_number) return t;
+            const base = t.state ?? {
+              id: 0,
+              truck_number: vars.truck_number,
+              run_date: vars.run_date,
+              status: "dirty" as import("../types").TruckStatus,
+              wearers: 0,
+              batch_id: null,
+              load_day_num: null,
+              load_start_time: null,
+              load_finish_time: null,
+              load_duration_seconds: null,
+              off_note: "",
+              shop_note: "",
+              oos_spare_route: null,
+              has_dust_garment: false,
+              updated_at: new Date().toISOString(),
+            };
+            return {
+              ...t,
+              state: {
+                ...base,
+                ...(vars.status !== undefined && { status: vars.status }),
+                ...(vars.wearers !== undefined && { wearers: vars.wearers }),
+              },
+            };
+          });
+        },
+      );
+      return { previous };
+    },
+    onError: (_err, vars, context) => {
+      const ctx = context as { previous?: unknown } | undefined;
+      if (ctx?.previous !== undefined) {
+        qc.setQueryData(["board", vars.run_date], ctx.previous);
       }
     },
     onSuccess: (_data, vars) => {
