@@ -96,9 +96,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => { cancelled = true; };
   }, [token]);
 
+  // TODO: remove override once role-based access is properly defined
+  const effectiveUser = user ? { ...user, role: "admin" as AuthRole } : null;
   const value = useMemo(
-    () => ({ token, user, setSession, logout }),
-    [token, user, setSession, logout],
+    () => ({ token, user: effectiveUser, setSession, logout }),
+    [token, effectiveUser, setSession, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

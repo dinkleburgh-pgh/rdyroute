@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
 import clsx from "clsx";
 import {
   useAddTruck,
@@ -184,6 +184,7 @@ export default function Fleet() {
                 "relative flex h-16 items-center justify-center rounded-lg border-b-4 text-2xl font-black text-white shadow transition active:translate-y-px",
                 STATUS_TILE[status],
                 isSelected && "ring-4 ring-yellow-300",
+                status === "in_progress" && "animate-pulse ring-2 ring-amber-400",
               )}
               title={`${STATUS_LABELS[status]}${t.state?.wearers ? ` · ${t.state.wearers}w` : ""}`}
             >
@@ -279,6 +280,10 @@ function TruckActionPanel({
   );
   const dustEligible = isDustGarmentEligible(truck.truck_number);
   const [hasDust, setHasDust] = useState<boolean>(truck.state?.has_dust_garment ?? false);
+
+  // Sync local state when server data refreshes (e.g. wearers updated via Batches)
+  useEffect(() => { setWearers(truck.state?.wearers ?? 0); }, [truck.state?.wearers]);
+  useEffect(() => { setHasDust(truck.state?.has_dust_garment ?? false); }, [truck.state?.has_dust_garment]);
 
   const offDays: number[] = truck.scheduled_off_days ?? [];
   const [editingOffDays, setEditingOffDays] = useState(false);

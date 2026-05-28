@@ -53,6 +53,7 @@ const PRIMARY_NAV = [
 
 const SECONDARY_NAV = [
   { to: "/shorts", label: "Short sheet" },
+  { to: "/notes", label: "Notes" },
   { to: "/trends", label: "Trends" },
   { to: "/audit", label: "Audit" },
   { to: "/management", label: "Management" },
@@ -60,11 +61,11 @@ const SECONDARY_NAV = [
 
 // Mirrors V1 ROLE_SCREEN_ACCESS — which nav links each role can see.
 const ROLE_NAV_ACCESS: Record<AuthRole, Set<string>> = {
-  admin: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/trends", "/audit", "/management"]),
-  fleet: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/trends", "/audit", "/management"]),
-  atl: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/trends", "/audit", "/management"]),
-  supervisor: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/trends", "/audit", "/management"]),
-  lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/trends", "/audit", "/management"]),
+  admin: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
+  fleet: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
+  atl: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
+  supervisor: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
+  lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
   loader: new Set(["/load", "/communications", "/audit"]),
   unloader: new Set(["/unload", "/communications"]),
   guest: new Set<string>(),
@@ -127,7 +128,7 @@ export default function Layout() {
     () =>
       (board ?? []).filter(
         (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
           (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
       ),
     [board, loadDay, holidayLoad],
@@ -139,10 +140,10 @@ export default function Layout() {
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
-              t.route_swap_route != null &&
+              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
               effectiveStatus(t, loadDayNum, holidayLoad) === "loaded",
           )
-          .map((t) => t.route_swap_route as number),
+          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
     [loadTrucksForProgress, loadDayNum, holidayLoad],
   );
@@ -162,7 +163,7 @@ export default function Layout() {
     () =>
       (board ?? []).filter(
         (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
           (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
       ),
     [board, unloadsDay, holidayUnload],
@@ -174,10 +175,10 @@ export default function Layout() {
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
-              t.route_swap_route != null &&
+              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
               ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)),
           )
-          .map((t) => t.route_swap_route as number),
+          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
     [unloadTrucksForProgress, unloadsDay, holidayUnload],
   );
@@ -304,7 +305,7 @@ export default function Layout() {
                 Day Overview
               </span>
               <span className="rounded bg-cyan-800/60 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
-                Today
+                {(holidayLoad || holidayUnload) ? "Holiday" : `Day ${unloadsDay}`}
               </span>
             </NavLink>
             {STATUS_ORDER.map((s) => (
@@ -413,8 +414,8 @@ export default function Layout() {
           <span className="text-sm font-semibold text-slate-200 md:hidden">ReadyRoute V2</span>
           <div className="ml-auto flex items-center gap-2 text-xs">
             <span className="font-mono"><Clock compact /></span>
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-800 px-2 py-1 font-semibold text-slate-300">
-              <span className="text-[10px] uppercase tracking-wider text-slate-500">Shift</span>
+            <span className="inline-flex items-center gap-1 rounded-md border border-violet-800/60 bg-violet-950/50 px-2 py-1 font-semibold text-violet-300">
+              <span className="text-[10px] uppercase tracking-wider text-violet-400/70">Shift</span>
               {currentShift().name}
             </span>
             <span className="inline-flex items-center gap-1 rounded-md border border-blue-800/60 bg-blue-950/50 px-2 py-1 font-semibold text-blue-300">

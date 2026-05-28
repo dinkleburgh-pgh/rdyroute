@@ -9,9 +9,10 @@ import {
   useRecordLoadDuration,
   useSetNextUp,
   useShortageCategories,
+  useTruckNotes,
   useUpsertTruckState,
 } from "../api/hooks";
-import type { TruckWithState } from "../types";
+import type { TruckNote, TruckWithState } from "../types";
 
 /**
  * Live "In Progress" page (V1 parity):
@@ -76,6 +77,70 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
         unloaded={unloaded}
       />
       <ShortagesPanel truck={inProgress} runDate={runDate} />
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Truck notes floating popup — shows applicable notes for the current truck
+// ---------------------------------------------------------------------------
+
+const NOTE_TYPE_CHIP: Record<TruckNote["note_type"], string> = {
+  constant: "bg-blue-900/60 text-blue-300 border border-blue-700/40",
+  workday:  "bg-violet-900/60 text-violet-300 border border-violet-700/40",
+  one_off:  "bg-amber-900/60 text-amber-300 border border-amber-700/40",
+};
+const NOTE_TYPE_LABEL: Record<TruckNote["note_type"], string> = {
+  constant: "Constant",
+  workday:  "Workday",
+  one_off:  "One-off",
+};
+
+function TruckNotesPopup({ truckNumber, loadDayNum }: { truckNumber: number; loadDayNum: number | null }) {
+  const { data: notes = [] } = useTruckNotes({ truckNumber, activeOnly: true });
+  const [dismissed, setDismissed] = useState(false);
+
+  const applicable = notes.filter((n) => {
+    if (n.note_type === "constant") return true;
+    if (n.note_type === "workday") return n.workday_num === loadDayNum;
+    if (n.note_type === "one_off") return n.expires_on == null || n.expires_on >= new Date().toISOString().slice(0, 10);
+    return false;
+  });
+
+  if (applicable.length === 0 || dismissed) return null;
+
+  return (
+    <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/25 p-3 shadow-lg ring-1 ring-amber-400/15">
+      <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <svg className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+          </svg>
+          <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
+            Notes · {applicable.length}
+          </span>
+        </div>
+        <button
+          type="button"
+          onClick={() => setDismissed(true)}
+          className="rounded p-0.5 text-slate-500 hover:text-slate-300"
+          aria-label="Dismiss notes"
+        >
+          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      <div className="space-y-2">
+        {applicable.map((n) => (
+          <div key={n.id} className="flex items-start gap-2">
+            <span className={clsx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", NOTE_TYPE_CHIP[n.note_type])}>
+              {NOTE_TYPE_LABEL[n.note_type]}
+            </span>
+            <span className="text-sm leading-snug text-slate-200">{n.body}</span>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
@@ -163,6 +228,9 @@ function CurrentLoadPanel({
           paceAvgSeconds={paceAvgSeconds}
         />
       </div>
+
+      {/* Notes for this truck */}
+      <TruckNotesPopup truckNumber={truck.truck_number} loadDayNum={dayNum} />
 
       {pickerOpen && (
         <div className="mt-4 border-t border-slate-800 pt-4">

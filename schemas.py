@@ -10,7 +10,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from models import AuditSource, AuthRequestStatus, AuthRole, TruckStatus, TruckType
+from models import AuditSource, AuthRequestStatus, AuthRole, NoteType, TruckStatus, TruckType
 
 
 # ---------------------------------------------------------------------------
@@ -447,6 +447,46 @@ class NoticeOut(_OrmBase):
     created_by: str
     created_at: datetime
     expires_at: datetime | None
+
+
+# ---------------------------------------------------------------------------
+# Truck Notes
+# ---------------------------------------------------------------------------
+
+class NoteCreate(BaseModel):
+    truck_number: int = Field(..., ge=1, le=999)
+    note_type: NoteType = NoteType.constant
+    body: str = Field(..., min_length=1, max_length=2000)
+    workday_num: int | None = Field(default=None, ge=1, le=5)
+    expires_on: date | None = None
+
+    @field_validator("workday_num")
+    @classmethod
+    def _workday_required_for_workday_type(cls, v: int | None, info: Any) -> int | None:
+        if hasattr(info, "data") and info.data.get("note_type") == NoteType.workday and v is None:
+            raise ValueError("workday_num is required for workday notes")
+        return v
+
+
+class NoteUpdate(BaseModel):
+    note_type: NoteType | None = None
+    body: str | None = Field(default=None, min_length=1, max_length=2000)
+    workday_num: int | None = Field(default=None, ge=1, le=5)
+    expires_on: date | None = None
+    is_active: bool | None = None
+
+
+class NoteOut(_OrmBase):
+    id: int
+    truck_number: int
+    note_type: NoteType
+    body: str
+    workday_num: int | None
+    expires_on: date | None
+    is_active: bool
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
 
 
 # ---------------------------------------------------------------------------

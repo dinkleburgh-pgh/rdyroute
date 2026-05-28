@@ -6,7 +6,13 @@ import {
   useAuthRequests,
   useBoard,
   useBulkUpdateStatus,
+  useResetWorkday,
+  useSelectiveReset,
   useCensorWords,
+  useLoadDayOverride,
+  useSetLoadDayOverride,
+  useUnloadsDayOverride,
+  useSetUnloadsDayOverride,
 
   useChangePassword,
   useCreateNotice,
@@ -33,6 +39,7 @@ import {
 } from "../api/hooks";
 import type { TrackedItem } from "../api/hooks";
 import { todayIso } from "../api/client";
+import { workdayNumbers } from "../components/Clock";
 import { useAuth } from "../contexts/AuthContext";
 import type { AppSetting, AuthRole, NoticeSeverity, Truck, TruckStatus, TruckType, TruckWithState } from "../types";
 
@@ -51,6 +58,7 @@ type Category =
   | "users"
   | "fleet_mgmt"
   | "advanced"
+  | "development"
   | "recovery"
   | "resets"
   | "requests"
@@ -140,7 +148,10 @@ const CARD_GROUPS: CardGroup[] = [
     desc: "Raw key/value settings editor",
     accent: "border-red-500",
     adminOnly: true,
-    tabs: [{ id: "advanced", label: "Advanced" }],
+    tabs: [
+      { id: "advanced",    label: "Advanced" },
+      { id: "development", label: "Development" },
+    ],
   },
   {
     id: "data",
@@ -273,6 +284,7 @@ export default function Management() {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
+      case "development":    return <DevelopmentPanel />;
       case "communications": return <CommunicationsPanel />;
       case "users":          return <UsersPanel />;
       case "requests":       return <RequestsPanel disabled={!isAdmin} />;
@@ -808,6 +820,7 @@ function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
     () => ({
       batching_disabled: asBool(map.get("batching_disabled"), false),
       skip_batching_disabled: asBool(map.get("skip_batching_disabled"), false),
+      batch_no_cap: asBool(map.get("batch_no_cap"), false),
     }),
     [map],
   );
@@ -853,6 +866,19 @@ function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             }
           />
           Require batch
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="No wearer cap"
+        hint="Remove the 400-wearer batch capacity limit. Useful for holiday or overflow loads."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.batch_no_cap}
+            onChange={(e) => setForm({ ...form, batch_no_cap: e.target.checked })}
+          />
+          No limit
         </label>
       </FieldRow>
       <SaveButton
@@ -957,6 +983,145 @@ function AdvancedPanel({ settings }: { settings: AppSetting[] }) {
         <p className="px-3 py-2 text-xs text-slate-500">
           Dimmed rows are managed by the other tabs.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Development tools (holiday day-number override)
+// ---------------------------------------------------------------------------
+
+const DAY_NAMES: Record<number, string> = { 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri" };
+
+function DevelopmentPanel() {
+  const [runDate, setRunDate] = useState(todayIso());
+
+  const { data: loadOverride = null }    = useLoadDayOverride(runDate);
+  const { data: unloadsOverride = null } = useUnloadsDayOverride(runDate);
+  const setLoadOverride    = useSetLoadDayOverride();
+  const setUnloadsOverride = useSetUnloadsDayOverride();
+
+  const [draftLoad, setDraftLoad]       = useState("");
+  const [draftUnloads, setDraftUnloads] = useState("");
+
+  // Sync drafts when fetched data or runDate changes
+  useEffect(() => {
+    setDraftLoad(loadOverride    != null ? String(loadOverride)    : "");
+    setDraftUnloads(unloadsOverride != null ? String(unloadsOverride) : "");
+  }, [loadOverride, unloadsOverride, runDate]);
+
+  // Compute what the system would normally calculate for this date (midday avoids DST edge)
+  const [yr, mo, dy] = runDate.split("-").map(Number);
+  const computedNums = workdayNumbers(new Date(yr, mo - 1, dy, 12));
+
+  const isPending = setLoadOverride.isPending || setUnloadsOverride.isPending;
+
+  function apply() {
+    const ld = parseInt(draftLoad,   10);
+    const ud = parseInt(draftUnloads, 10);
+    if (draftLoad    !== "" && ld >= 1 && ld <= 5) setLoadOverride.mutate({    runDate, value: ld });
+    if (draftUnloads !== "" && ud >= 1 && ud <= 5) setUnloadsOverride.mutate({ runDate, value: ud });
+  }
+
+  function clearAll() {
+    setLoadOverride.mutate({    runDate, value: null });
+    setUnloadsOverride.mutate({ runDate, value: null });
+    setDraftLoad("");
+    setDraftUnloads("");
+  }
+
+  const hasActive = loadOverride != null || unloadsOverride != null;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-amber-600 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
+        ⚠ These tools override the route-day logic used by Run Day, Load, and Unload pages.
+        Only apply overrides during holiday runs when the system is computing the wrong day.
+        Clear them once the holiday run is complete.
+      </div>
+
+      <div className="card space-y-4">
+        <h3 className="text-sm font-semibold text-slate-300">Day Number Override</h3>
+        <p className="text-xs text-slate-500">
+          Overrides the load-day and unloads-day numbers used to filter which trucks appear on the
+          Run Day, Load, and Unload pages.
+        </p>
+
+        <FieldRow label="Run date">
+          <input
+            type="date"
+            className="input"
+            value={runDate}
+            onChange={(e) => setRunDate(e.target.value)}
+          />
+        </FieldRow>
+
+        <div className="grid grid-cols-2 gap-4 rounded-lg bg-slate-800/50 p-3 text-sm">
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Computed load day</p>
+            <p className="font-semibold text-white">
+              {DAY_NAMES[computedNums.loadDay]} ({computedNums.loadDay})
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Computed unloads day</p>
+            <p className="font-semibold text-white">
+              {DAY_NAMES[computedNums.unloadsDay]} ({computedNums.unloadsDay})
+            </p>
+          </div>
+        </div>
+
+        {hasActive && (
+          <div className="rounded-lg border border-amber-700 bg-amber-900/30 px-3 py-2 text-xs text-amber-300">
+            Overrides active for {runDate}
+            {loadOverride    != null && ` · Load → ${DAY_NAMES[loadOverride]} (${loadOverride})`}
+            {unloadsOverride != null && ` · Unloads → ${DAY_NAMES[unloadsOverride]} (${unloadsOverride})`}
+          </div>
+        )}
+
+        <FieldRow label="Override load day">
+          <select
+            className="input"
+            value={draftLoad}
+            onChange={(e) => setDraftLoad(e.target.value)}
+          >
+            <option value="">— no override —</option>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>{DAY_NAMES[n]} ({n})</option>
+            ))}
+          </select>
+        </FieldRow>
+
+        <FieldRow label="Override unloads day">
+          <select
+            className="input"
+            value={draftUnloads}
+            onChange={(e) => setDraftUnloads(e.target.value)}
+          >
+            <option value="">— no override —</option>
+            {[1, 2, 3, 4, 5].map((n) => (
+              <option key={n} value={n}>{DAY_NAMES[n]} ({n})</option>
+            ))}
+          </select>
+        </FieldRow>
+
+        <div className="flex gap-2">
+          <button
+            className="btn-primary"
+            disabled={isPending || (draftLoad === "" && draftUnloads === "")}
+            onClick={apply}
+          >
+            {isPending ? "Saving…" : "Apply overrides"}
+          </button>
+          <button
+            className="btn-ghost"
+            disabled={isPending || !hasActive}
+            onClick={clearAll}
+          >
+            Clear overrides
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1458,13 +1623,87 @@ function RecoveryPanel() {
 // Resets
 // ---------------------------------------------------------------------------
 
+const SELECTIVE_ITEMS = [
+  { key: "truck_states", label: "Truck states", desc: "Clears status, load times, wearers and garments for all trucks" },
+  { key: "batches",      label: "Batch assignments", desc: "Removes all truck → batch assignments" },
+  { key: "route_swaps",  label: "Route swaps", desc: "Deletes all route swap records" },
+  { key: "day_flags",    label: "Day flags", desc: "Resets wizard, holiday load/unload, and holiday mode flags" },
+] as const;
+type SelectiveKey = typeof SELECTIVE_ITEMS[number]["key"];
+
+function SelectiveResetCard({ runDate, isPrivileged }: { runDate: string; isPrivileged: boolean }) {
+  const selective = useSelectiveReset();
+  const [checked, setChecked] = useState<Set<SelectiveKey>>(new Set());
+  const [result, setResult] = useState<string | null>(null);
+
+  function toggle(key: SelectiveKey) {
+    setChecked((prev) => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+    setResult(null);
+  }
+
+  async function run() {
+    if (checked.size === 0) return;
+    const labels = SELECTIVE_ITEMS.filter((i) => checked.has(i.key)).map((i) => i.label).join(", ");
+    if (!confirm(`Selectively reset [${labels}] for ${runDate}? This cannot be undone.`)) return;
+    const args: Parameters<ReturnType<typeof useSelectiveReset>["mutateAsync"]>[0] = { runDate };
+    for (const key of checked) (args as Record<string, unknown>)[key] = true;
+    const r = await selective.mutateAsync(args);
+    const cleared = (r.cleared as string[]).map((c: string) => c.replace(/_/g, " ")).join(", ");
+    setResult(`Done — cleared: ${cleared || "nothing"}.`);
+    setChecked(new Set());
+  }
+
+  return (
+    <div className="border-t border-slate-800 pt-4 space-y-3">
+      <p className="text-sm font-medium text-slate-200">Selective reset</p>
+      <p className="text-xs text-slate-500">Choose exactly which components to clear for the selected date.</p>
+      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {SELECTIVE_ITEMS.map((item) => (
+          <label
+            key={item.key}
+            className={clsx(
+              "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
+              checked.has(item.key)
+                ? "border-red-600/60 bg-red-950/30"
+                : "border-slate-700 bg-slate-900 hover:border-slate-600",
+            )}
+          >
+            <input
+              type="checkbox"
+              className="mt-0.5 accent-red-500"
+              checked={checked.has(item.key)}
+              onChange={() => toggle(item.key)}
+            />
+            <div>
+              <p className="text-xs font-semibold text-slate-200">{item.label}</p>
+              <p className="text-[11px] text-slate-500">{item.desc}</p>
+            </div>
+          </label>
+        ))}
+      </div>
+      {result && <p className="text-xs text-emerald-400">{result}</p>}
+      <button
+        className="rounded bg-red-900 px-3 py-1.5 text-sm text-red-200 hover:bg-red-800 disabled:opacity-50"
+        disabled={!isPrivileged || checked.size === 0 || selective.isPending}
+        onClick={run}
+      >
+        {selective.isPending ? "Resetting…" : `Reset selected (${checked.size})`}
+      </button>
+    </div>
+  );
+}
+
 function ResetsPanel() {
   const { user } = useAuth();
   const [runDate, setRunDate] = useState(todayIso());
-  const { data: board } = useBoard(runDate);
-  const bulk = useBulkUpdateStatus();
+  const reset = useResetWorkday();
   const purge = usePurgeAbnormalDurations();
   const [purgeResult, setPurgeResult] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<string | null>(null);
 
   const isPrivileged =
     user?.role === "admin" ||
@@ -1519,22 +1758,28 @@ function ResetsPanel() {
           <div>
             <p className="text-sm font-medium text-slate-200">Reset workday</p>
             <p className="text-xs text-slate-500">
-              Sets every truck back to Dirty for the selected run date. Cannot be undone.
+              Clears all truck states, batch assignments, route swaps, and day flags
+              (holiday, wizard) for the selected date. Cannot be undone.
             </p>
+            {resetResult && <p className="mt-1 text-xs text-emerald-400">{resetResult}</p>}
           </div>
           <button
             className="shrink-0 rounded bg-red-900 px-3 py-1.5 text-sm text-red-200 hover:bg-red-800 disabled:opacity-50"
-            disabled={!isPrivileged || bulk.isPending || !board?.length}
+            disabled={!isPrivileged || reset.isPending}
             onClick={() => {
-              if (!confirm(`Reset ALL trucks to Dirty for ${runDate}? This cannot be undone.`))
+              if (!confirm(`Full reset for ${runDate}? This clears all truck states, batches, route swaps, and day flags. Cannot be undone.`))
                 return;
-              const all = (board ?? []).map((t) => t.truck_number);
-              bulk.mutate({ run_date: runDate, truck_numbers: all, new_status: "dirty" });
+              reset.mutate(runDate, {
+                onSuccess: (r) =>
+                  setResetResult(`Reset complete — ${r.states_cleared} truck state(s) cleared.`),
+              });
             }}
           >
-            {bulk.isPending ? "Resetting…" : "Reset workday"}
+            {reset.isPending ? "Resetting…" : "Reset workday"}
           </button>
         </div>
+
+        <SelectiveResetCard runDate={runDate} isPrivileged={isPrivileged} />
       </div>
     </div>
   );
@@ -1936,6 +2181,7 @@ function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [newLabel, setNewLabel] = useState("");
   const [newQty, setNewQty] = useState("1");
   const [newCategory, setNewCategory] = useState("");
+  const [newCategoryIsNew, setNewCategoryIsNew] = useState(false);
   const [filterCategory, setFilterCategory] = useState<string>("__all__");
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
@@ -1967,6 +2213,8 @@ function ItemsPanel({ disabled }: { disabled: boolean }) {
     ]);
     setNewLabel("");
     setNewQty("1");
+    setNewCategory("");
+    setNewCategoryIsNew(false);
   }
 
   function updateRow(idx: number, patch: Partial<TrackedItem>) {
@@ -2061,6 +2309,7 @@ function ItemsPanel({ disabled }: { disabled: boolean }) {
                     <td className="px-3 py-2">
                       <input
                         className="input"
+                        list="category-datalist"
                         placeholder="None"
                         value={it.category ?? ""}
                         disabled={disabled}
@@ -2097,6 +2346,11 @@ function ItemsPanel({ disabled }: { disabled: boolean }) {
           </div>
         )}
 
+        {/* datalist for existing-row category inputs */}
+        <datalist id="category-datalist">
+          {categories.map((c) => <option key={c} value={c} />)}
+        </datalist>
+
         {/* Add new item row */}
         <div className="mt-3 flex flex-wrap gap-2">
           <input
@@ -2107,13 +2361,37 @@ function ItemsPanel({ disabled }: { disabled: boolean }) {
             onChange={(e) => setNewLabel(e.target.value)}
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); addItem(); } }}
           />
-          <input
-            className="input w-36"
-            placeholder="Category (optional)"
-            value={newCategory}
-            disabled={disabled}
-            onChange={(e) => setNewCategory(e.target.value)}
-          />
+          {newCategoryIsNew ? (
+            <input
+              className="input w-36"
+              placeholder="New category name"
+              autoFocus
+              value={newCategory}
+              disabled={disabled}
+              onChange={(e) => setNewCategory(e.target.value)}
+              onBlur={() => { if (!newCategory.trim()) setNewCategoryIsNew(false); }}
+            />
+          ) : (
+            <select
+              className="input w-36"
+              value={newCategory}
+              disabled={disabled}
+              onChange={(e) => {
+                if (e.target.value === "__new__") {
+                  setNewCategory("");
+                  setNewCategoryIsNew(true);
+                } else {
+                  setNewCategory(e.target.value);
+                }
+              }}
+            >
+              <option value="">— none —</option>
+              {categories.map((c) => (
+                <option key={c} value={c}>{c}</option>
+              ))}
+              <option value="__new__">+ New category…</option>
+            </select>
+          )}
           <input
             type="number"
             min={1}

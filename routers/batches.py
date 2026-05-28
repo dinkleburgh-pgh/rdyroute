@@ -12,13 +12,14 @@ V1 mapping:
 
 from datetime import date
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select, delete, func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Batch, BatchHistory
+from models import AppSetting, Batch, BatchHistory, TruckState, TruckStatus
 from schemas import BatchAssign, BatchHistoryCreate, BatchHistoryOut, BatchOut, BatchSummary, BatchTruck
+from ws_manager import manager
 
 router = APIRouter(prefix="/batches", tags=["batches"])
 
@@ -77,7 +78,7 @@ def get_batch(
 
 
 @router.post("/assign", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
-def assign_truck_to_batch(payload: BatchAssign, db: Session = Depends(get_db)):
+def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """
     Assign a truck to a batch for a run-date.
     If the truck is already assigned to another batch on the same date, it is
@@ -94,21 +95,24 @@ def assign_truck_to_batch(payload: BatchAssign, db: Session = Depends(get_db)):
         )
     )
 
-    # Enforce wearer cap (existing wearers in the target batch + new assignment)
-    current_total = db.scalar(
-        select(func.coalesce(func.sum(Batch.wearers), 0)).where(
-            Batch.run_date == payload.run_date,
-            Batch.batch_number == payload.batch_number,
-        )
-    ) or 0
-    if current_total + payload.wearers > _BATCH_WEARER_CAP:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=(
-                f"Batch {payload.batch_number} cap of {_BATCH_WEARER_CAP} wearers exceeded "
-                f"(current {current_total} + new {payload.wearers})."
-            ),
-        )
+    # Enforce wearer cap unless batch_no_cap setting is enabled
+    no_cap_setting = db.get(AppSetting, "batch_no_cap")
+    no_cap = no_cap_setting is not None and no_cap_setting.value is True
+    if not no_cap:
+        current_total = db.scalar(
+            select(func.coalesce(func.sum(Batch.wearers), 0)).where(
+                Batch.run_date == payload.run_date,
+                Batch.batch_number == payload.batch_number,
+            )
+        ) or 0
+        if current_total + payload.wearers > _BATCH_WEARER_CAP:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=(
+                    f"Batch {payload.batch_number} cap of {_BATCH_WEARER_CAP} wearers exceeded "
+                    f"(current {current_total} + new {payload.wearers})."
+                ),
+            )
 
     row = Batch(
         run_date=payload.run_date,
@@ -117,8 +121,37 @@ def assign_truck_to_batch(payload: BatchAssign, db: Session = Depends(get_db)):
         wearers=payload.wearers,
     )
     db.add(row)
+
+    # Also upsert the truck's state: mark dirty trucks as unloaded and sync
+    # batch_id + wearers. Trucks already past dirty (loaded, in_progress, etc.)
+    # keep their current status — only batch_id and wearers are updated.
+    state = db.scalars(
+        select(TruckState).where(
+            TruckState.truck_number == payload.truck_number,
+            TruckState.run_date == payload.run_date,
+        )
+    ).first()
+    if state is None:
+        state = TruckState(
+            truck_number=payload.truck_number,
+            run_date=payload.run_date,
+            status=TruckStatus.unloaded,
+            wearers=payload.wearers,
+            batch_id=payload.batch_number,
+        )
+        db.add(state)
+    else:
+        if state.status == TruckStatus.dirty:
+            state.status = TruckStatus.unloaded
+        state.wearers = payload.wearers
+        state.batch_id = payload.batch_number
+
     db.commit()
     db.refresh(row)
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "truck_state_updated", "run_date": str(payload.run_date), "truck_number": payload.truck_number},
+    )
     return row
 
 

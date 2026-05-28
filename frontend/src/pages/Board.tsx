@@ -379,6 +379,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   // Holiday "extra" day is the previous ship day (Mon=1 wraps to Fri=5)
   const loadDay2 = runDayNum === 1 ? 5 : runDayNum - 1;
   const unloadsDay2 = runUnloadsDay === 1 ? 5 : runUnloadsDay - 1;
+  // Trucks off on loadDay OR the day after are both in the Day-minus-1 catch-up batch.
+  const loadNextDay = runDayNum === 5 ? 1 : runDayNum + 1;
 
   const batchingDisabled = useMemo(
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
@@ -619,34 +621,33 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
       {/* ── Main content ── */}
       <div className={fleetMode ? "flex-1 min-w-0 space-y-4 overflow-y-auto p-3" : "space-y-4 p-3 md:p-6"}>
-      <div className="flex items-end justify-between gap-4">
-        <div>
-          <h2 className="text-2xl font-semibold">{fleetMode ? "Fleet" : "Truck Board"}</h2>
-          <p className="text-sm text-slate-400">
-            {counts.total ?? 0} trucks tracked for {runDate}
-          </p>
-        </div>
-        <div className="flex items-end gap-3">
-          {!fleetMode && (
-            <div>
-              <label className="label">Filter</label>
-              <select
-                className="input"
-                value={filter}
-                onChange={(e) => setFilter(e.target.value as TruckStatus | "all")}
-              >
-                <option value="all">All statuses</option>
-                {STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>
-                    {STATUS_LABELS[s]} ({counts[s] ?? 0})
-                  </option>
-                ))}
-                <option value="off">Off ({counts["off"] ?? 0})</option>
-              </select>
-            </div>
-          )}
-        </div>
-      </div>
+      {/* ── Page header ── */}
+      {(() => {
+        type HeaderCfg = { label: string; accent: string; sub: string };
+        const fleet: HeaderCfg   = { label: "Fleet",       accent: "text-sky-400",       sub: "bg-sky-400/10 border-sky-400/20" };
+        const headers: Record<string, HeaderCfg> = {
+          all:         { label: "Truck Board",  accent: "text-slate-300",     sub: "bg-slate-700/20 border-slate-600/20" },
+          dirty:       { label: "Dirty",        accent: "text-red-400",       sub: "bg-red-400/10 border-red-400/20" },
+          shop:        { label: "Shop",         accent: "text-violet-400",    sub: "bg-violet-400/10 border-violet-400/20" },
+          in_progress: { label: "In Progress",  accent: "text-amber-400",     sub: "bg-amber-400/10 border-amber-400/20" },
+          unloaded:    { label: "Unloaded",     accent: "text-emerald-400",   sub: "bg-emerald-400/10 border-emerald-400/20" },
+          loaded:      { label: "Loaded",       accent: "text-blue-400",      sub: "bg-blue-400/10 border-blue-400/20" },
+          off:         { label: "Off",          accent: "text-slate-400",     sub: "bg-slate-400/10 border-slate-400/20" },
+          oos:         { label: "Out of Service", accent: "text-slate-400",   sub: "bg-slate-400/10 border-slate-400/20" },
+          spare:       { label: "Spare",        accent: "text-cyan-400",      sub: "bg-cyan-400/10 border-cyan-400/20" },
+        };
+        const cfg = fleetMode ? fleet : (headers[filter] ?? headers.all);
+        return (
+          <div className="mb-2 text-center">
+            <h2 className={clsx("text-3xl font-black tracking-tight", cfg.accent)}>
+              {cfg.label}
+            </h2>
+            <p className={clsx("mx-auto mt-1.5 inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-xs font-semibold text-slate-300", cfg.sub)}>
+              {counts.total ?? 0} trucks · {runDate}
+            </p>
+          </div>
+        );
+      })()}
 
       {isLoading && <p className="text-slate-400">Loading…</p>}
       {error && (
@@ -681,7 +682,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       <div className={clsx(
         "grid gap-3",
         fleetMode
-          ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(9rem,1fr))]"
+          ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]"
           : filter === "off" || filter === "dirty" || filter === "unloaded"
           ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
           : "grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
@@ -697,11 +698,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             chipDay = (t.scheduled_off_days ?? []).includes(runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
             chipIsExtra = chipDay === unloadsDay2;
           } else if (isLoadView && holidayLoad) {
-            chipDay = (t.scheduled_off_days ?? []).includes(runDayNum) ? loadDay2 : runDayNum;
+            const offDaysLoad = t.scheduled_off_days ?? [];
+            chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
             chipIsExtra = chipDay === loadDay2;
           }
           return (
-            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-3 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {
@@ -731,7 +733,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               }}
             >
               <div className="flex w-full flex-col gap-1">
-                <div className="flex w-full items-start justify-between min-h-[3.75rem]">
+                <div className="flex w-full items-start justify-between gap-2">
                   {!fleetMode && t.state?.oos_spare_route != null ? (
                     <div className="flex items-baseline gap-2">
                       <span className={clsx(
@@ -754,7 +756,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       {t.truck_number}
                     </span>
                   )}
-                  <span className="flex h-9 flex-col items-end justify-start gap-0.5">
+                  <span className="flex min-h-[2.25rem] flex-col items-end justify-start gap-0.5">
                     {fleetMode && status === "off" && (t.state?.status === "dirty" || t.state?.status === "unloaded") && (
                       <span className={clsx("badge", STATUS_BG[t.state.status as TruckStatus], STATUS_BADGE_TEXT[t.state.status as TruckStatus])}>
                         {STATUS_LABELS[t.state.status as TruckStatus]}
@@ -763,6 +765,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
                       {STATUS_LABELS[status]}
                     </span>
+                    {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+                      <span
+                        className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
+                        title="Garments assigned"
+                      >
+                        <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+                      </span>
+                    )}
                   </span>
                 </div>
                 {fleetMode && (
@@ -788,25 +798,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <div className="text-xs text-slate-400">Batch {t.state.batch_id}</div>
               )}
 
-              {(chipDay != null || (t.truck_type === "Dust" && t.state?.has_dust_garment)) && (
+              {chipDay != null && (
                 <div className="flex flex-wrap items-center gap-1.5">
-                  {chipDay != null && (
-                    <span className={clsx(
-                      "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                      chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
-                    )}>
-                      Day {chipDay}
-                    </span>
-                  )}
-                  {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                    <span
-                      className="ml-auto inline-flex items-center gap-1 rounded-full border border-amber-500/60 bg-amber-950/70 px-2 py-0.5 text-[10px] font-semibold text-amber-300"
-                      title="Garments assigned"
-                    >
-                      <DustGarmentIcon className="h-3 w-3" />
-                      Garments
-                    </span>
-                  )}
+                  <span className={clsx(
+                    "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                    chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
+                  )}>
+                    Day {chipDay}
+                  </span>
                 </div>
               )}
 
