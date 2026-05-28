@@ -905,6 +905,10 @@ function RunDayWizard({
                         const sorted = [...board].sort((a, b) => a.truck_number - b.truck_number);
                         const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
                         const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off");
+                        // OOS trucks whose route is already covered are routeless and available
+                        const swappedRouteSet = new Set(swaps.map((s) => s.route_truck));
+                        const oosRouteless = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(t.truck_number));
+                        const oosUncovered = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swappedRouteSet.has(t.truck_number));
                         const otherTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
                         return (
                           <>
@@ -922,6 +926,24 @@ function RunDayWizard({
                                 {offTrucks.map((t) => (
                                   <option key={t.truck_number} value={t.truck_number}>
                                     #{t.truck_number} — Off
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {oosRouteless.length > 0 && (
+                              <optgroup label="OOS — route covered (available)">
+                                {oosRouteless.map((t) => (
+                                  <option key={t.truck_number} value={t.truck_number}>
+                                    #{t.truck_number} — OOS / route covered
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                            {oosUncovered.length > 0 && (
+                              <optgroup label="OOS — route uncovered">
+                                {oosUncovered.map((t) => (
+                                  <option key={t.truck_number} value={t.truck_number}>
+                                    #{t.truck_number} — OOS
                                   </option>
                                 ))}
                               </optgroup>

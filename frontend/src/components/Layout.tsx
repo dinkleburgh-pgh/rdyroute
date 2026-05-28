@@ -3,6 +3,7 @@ import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { useAuth } from "../contexts/AuthContext";
 import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
+import RouteSwapModal from "./RouteSwapModal";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
@@ -102,6 +103,9 @@ export default function Layout() {
   const { data: holidayUnload = false } = useHolidayUnload(todayIso());
   const { data: wizardDone = false } = useWizardCompleted(todayIso());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [swapModalOpen, setSwapModalOpen] = useState(false);
+
+  const canManageSwaps = ["admin", "fleet", "supervisor", "atl"].includes(user?.role ?? "");
 
   // Real-time sync: invalidates React Query caches on server-push events
   const { isWsConnected } = useRealtimeSync();
@@ -245,6 +249,15 @@ export default function Layout() {
           >
             {wizardDone ? "Setup Day" : "Setup Day — needs to run!"}
           </button>
+
+          {canManageSwaps && (
+            <button
+              onClick={() => setSwapModalOpen(true)}
+              className="block w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-center text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700"
+            >
+              Route Swaps
+            </button>
+          )}
 
           {/* Workday context */}
           <div className="rounded-md bg-slate-950/60 px-3 py-2 text-center text-xs leading-tight">
@@ -433,6 +446,8 @@ export default function Layout() {
           <Outlet />
         </main>
       </div>
+
+      {swapModalOpen && <RouteSwapModal onClose={() => setSwapModalOpen(false)} />}
     </div>
   );
 }
