@@ -16,11 +16,28 @@ import {
   useSetHolidayUnload,
   useSetWizardCompleted,
   useUpsertTruckState,
+  useLoadDayOverride,
+  useUnloadsDayOverride,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckStatus, TruckWithState } from "../types";
 import { effectiveStatus } from "../utils/truckStatus";
+
+// Filled t-shirt silhouette — matches Board/Load pages.
+function DustGarmentIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      viewBox="0 0 32 32"
+      aria-hidden="true"
+      className={className}
+      fill="currentColor"
+      stroke="none"
+    >
+      <path d="M11 4c.4 1.7 2.2 3 5 3s4.6-1.3 5-3l5.5 2.5a1 1 0 0 1 .5 1.3l-2 5a1 1 0 0 1-1.3.5L21 11.6V27a1 1 0 0 1-1 1H12a1 1 0 0 1-1-1V11.6l-2.7 1.7a1 1 0 0 1-1.3-.5l-2-5a1 1 0 0 1 .5-1.3L11 4z" />
+    </svg>
+  );
+}
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
@@ -74,9 +91,19 @@ export default function RunDay() {
   const { data: board = [] } = useBoard(runDate);
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
-  const { loadDay, unloadsDay } = workdayNumbers();
+  const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
+  const { data: loadDayOverride }    = useLoadDayOverride(runDate);
+  const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
+  const loadDay    = loadDayOverride    ?? computedLoadDay;
+  const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
 
   const [wizardOpen, setWizardOpen] = useState(false);
+  const [unloadCollapsed, setUnloadCollapsed] = useState(
+    () => localStorage.getItem("runday:unloadCollapsed") === "1",
+  );
+  const [loadCollapsed, setLoadCollapsed] = useState(
+    () => localStorage.getItem("runday:loadCollapsed") === "1",
+  );
   const [searchParams, setSearchParams] = useSearchParams();
   useEffect(() => {
     if (searchParams.get("setup") === "1") {
@@ -90,7 +117,7 @@ export default function RunDay() {
       board
         .filter(
           (t) =>
-            (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+            (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
             (holidayUnload || !t.scheduled_off_days.includes(unloadsDay)),
         )
         .sort((a, b) => {
@@ -113,7 +140,7 @@ export default function RunDay() {
       board
         .filter(
           (t) =>
-            (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+            (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
             (holidayLoad || !t.scheduled_off_days.includes(loadDay)),
         )
         .sort((a, b) => {
@@ -140,10 +167,10 @@ export default function RunDay() {
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
-              t.route_swap_route != null &&
+              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
               isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)),
           )
-          .map((t) => t.route_swap_route as number),
+          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
     [unloadTrucks, unloadsDay, holidayUnload],
   );
@@ -159,6 +186,9 @@ export default function RunDay() {
   // The "second" day is the PREVIOUS ship day (Mon → Fri wraps back).
   const loadDay2 = loadDay === 1 ? 5 : loadDay - 1;
   const unloadsDay2 = unloadsDay === 1 ? 5 : unloadsDay - 1;
+  // Trucks off on loadDay (the normal load day) OR the day after (the holiday-affected next day)
+  // are both treated as the Day 3 catch-up batch in holiday load mode.
+  const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
 
   // Load progress counts ROUTES, not trucks. A spare covering an OOS truck's
   // route fills the same slot — it must not double-count against the total,
@@ -174,10 +204,10 @@ export default function RunDay() {
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
-              t.route_swap_route != null &&
+              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
               isLoadDone(effectiveStatus(t, loadDay, holidayLoad)),
           )
-          .map((t) => t.route_swap_route as number),
+          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
     [loadTrucks, loadDay, holidayLoad],
   );
@@ -195,8 +225,8 @@ export default function RunDay() {
     () =>
       new Map<number, TruckWithState>(
         board
-          .filter((t) => t.truck_type === "Spare" && t.route_swap_route != null)
-          .map((t) => [t.route_swap_route as number, t]),
+          .filter((t) => t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null))
+          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
       ),
     [board],
   );
@@ -213,12 +243,29 @@ export default function RunDay() {
         />
       )}
       <div className="space-y-6 p-4 md:p-6">
+      {/* Page header */}
+      <div className="text-center">
+        <h2 className="text-3xl font-black tracking-tight text-indigo-400">Day Overview</h2>
+        <p className="mx-auto mt-1.5 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-0.5 text-xs font-semibold text-slate-300">
+          {runDate}
+        </p>
+      </div>
       <section>
-        <div className="mb-3 flex items-baseline gap-3">
-          <h2 className="text-lg font-semibold text-slate-200">
+        <button
+          type="button"
+          onClick={() => setUnloadCollapsed((c) => { const next = !c; localStorage.setItem("runday:unloadCollapsed", next ? "1" : "0"); return next; })}
+          className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
+        >
+          <svg
+            className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", unloadCollapsed && "-rotate-90")}
+            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+          <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
             Unload &mdash; Day {holidayUnload ? `${unloadsDay2} + ` : ""}{unloadsDay}
           </h2>
-          <span className="text-sm text-slate-400">
+          <span className="w-24 shrink-0 text-sm text-slate-400">
             {unloadDone} / {unloadTotal} done
             {unloadSpareCount > 0 && (
               <span className="ml-1 text-slate-500">· {unloadSpareCount} spare{unloadSpareCount === 1 ? "" : "s"}</span>
@@ -232,11 +279,19 @@ export default function RunDay() {
               />
             </div>
           )}
-        </div>
+        </button>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateRows: unloadCollapsed ? "0fr" : "1fr",
+            transition: "grid-template-rows 220ms ease",
+          }}
+        >
+        <div style={{ overflow: "hidden" }}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
             // Covering spares are absorbed into their OOS route truck's card.
-            .filter((t) => !(t.truck_type === "Spare" && t.route_swap_route != null))
+            .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
             .map((t) => {
               const coveringSpare =
                 t.state?.status === "oos" ? coveringSpareMap.get(t.truck_number) : undefined;
@@ -265,17 +320,29 @@ export default function RunDay() {
               );
             })}
         </div>
+        </div>
+        </div>
       </section>
 
       <section>
-        <div className="mb-3 flex items-baseline gap-3">
-          <h2 className="text-lg font-semibold text-slate-200">
+        <button
+          type="button"
+          onClick={() => setLoadCollapsed((c) => { const next = !c; localStorage.setItem("runday:loadCollapsed", next ? "1" : "0"); return next; })}
+          className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
+        >
+          <svg
+            className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", loadCollapsed && "-rotate-90")}
+            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+          <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
             Load &mdash; Day {holidayLoad ? `${loadDay2} + ` : ""}{loadDay}
           </h2>
-          <span className="text-sm text-slate-400">
+          <span className="w-24 shrink-0 text-sm text-slate-400">
             {loadDone} / {loadTotal} done
             {loadSpareCount > 0 && (
-              <span className="ml-1 text-slate-500">· {loadSpareCount} spare{loadSpareCount === 1 ? "" : "s"}</span>
+              <span className="ml-1 text-slate-500">&middot; {loadSpareCount} spare{loadSpareCount === 1 ? "" : "s"}</span>
             )}
           </span>
           {loadTotal > 0 && (
@@ -286,11 +353,19 @@ export default function RunDay() {
               />
             </div>
           )}
-        </div>
+        </button>
+        <div
+          style={{
+            display: "grid",
+            gridTemplateRows: loadCollapsed ? "0fr" : "1fr",
+            transition: "grid-template-rows 220ms ease",
+          }}
+        >
+        <div style={{ overflow: "hidden" }}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {loadTrucks
             // Covering spares are absorbed into their OOS route truck's card.
-            .filter((t) => !(t.truck_type === "Spare" && t.route_swap_route != null))
+            .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
             .map((t) => {
               const coveringSpare =
                 t.state?.status === "oos" ? coveringSpareMap.get(t.truck_number) : undefined;
@@ -298,8 +373,9 @@ export default function RunDay() {
               const status = coveringSpare
                 ? effectiveStatus(coveringSpare, loadDay, holidayLoad)
                 : effectiveStatus(t, loadDay, holidayLoad);
+              const offDaysLoad = t.scheduled_off_days ?? [];
               const truckLoadDay = holidayLoad
-                ? (t.scheduled_off_days ?? []).includes(loadDay) ? loadDay2 : loadDay
+                ? (offDaysLoad.includes(loadDay) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : loadDay
                 : undefined;
               return (
                 <TruckCard
@@ -313,6 +389,8 @@ export default function RunDay() {
                 />
               );
             })}
+        </div>
+        </div>
         </div>
       </section>
       </div>
@@ -338,10 +416,19 @@ function TruckCard({
   return (
     <div
       className={clsx(
-        "card flex flex-col items-center gap-1.5 p-3 text-center transition-opacity",
+        "card relative flex flex-col items-center gap-1.5 p-3 text-center transition-opacity",
         done && "opacity-40",
+        status === "in_progress" && "animate-pulse ring-2 ring-amber-400",
       )}
     >
+      {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+        <span
+          className="absolute right-2 top-2 inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
+          title="Garments assigned"
+        >
+          <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+        </span>
+      )}
       <span
         className={clsx(
           "text-4xl font-extrabold tabular-nums leading-none",
@@ -440,6 +527,8 @@ function RunDayWizard({
   const [swapRoute, setSwapRoute] = useState<string>("");
   const [swapLoadOn, setSwapLoadOn] = useState<string>("");
   const [swapError, setSwapError] = useState<string | null>(null);
+  // Per-OOS-truck "load on" selections (auto-saved when set)
+  const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   const { loadDay: todayLoad } = workdayNumbers();
   const prevDay = todayLoad === 1 ? 5 : todayLoad - 1;
@@ -499,6 +588,16 @@ function RunDayWizard({
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
       setSwapError(e?.response?.data?.detail ?? "Failed to save swap.");
+    }
+  }
+
+  async function addOosSwap(routeTruck: number, loadOnTruck: number) {
+    try {
+      await createSwap.mutateAsync({ run_date: runDate, route_truck: routeTruck, load_on_truck: loadOnTruck, two_way: false });
+      setOosLoadOns((prev) => { const n = { ...prev }; delete n[routeTruck]; return n; });
+    } catch (err: unknown) {
+      // leave selection in place so user can retry or adjust
+      console.error("OOS swap save failed", err);
     }
   }
 
@@ -704,10 +803,51 @@ function RunDayWizard({
           )}
 
           {/* Step 3: Route Swaps */}
-          {step === 3 && (
+          {step === 3 && (() => {
+            // OOS trucks that don't yet have a swap assigned
+            const swappedRoutes = new Set(swaps.map((s) => s.route_truck));
+            const unswappedOos = board.filter(
+              (t) => t.truck_type !== "Spare" && t.state?.status === "oos" && !swappedRoutes.has(t.truck_number),
+            ).sort((a, b) => a.truck_number - b.truck_number);
+            const sortedSpares = board.filter((t) => t.truck_type === "Spare").sort((a, b) => a.truck_number - b.truck_number);
+            return (
             <div className="space-y-3 max-h-[70vh] overflow-y-auto">
               <p className="text-center text-xl font-extrabold text-slate-100">Set any route swaps.</p>
               <p className="text-center text-xs text-slate-400">Route swaps: one truck loads another's route today.</p>
+
+              {/* OOS trucks needing a covering truck */}
+              {unswappedOos.length > 0 && (
+                <div className="space-y-1">
+                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+                    OOS — Select covering truck
+                  </p>
+                  {unswappedOos.map((t) => (
+                    <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 px-3 py-2">
+                      <span className="text-sm font-bold text-amber-300 whitespace-nowrap">
+                        #{t.truck_number} <span className="text-[10px] font-semibold text-amber-500">OOS</span>
+                      </span>
+                      <span className="text-slate-500 text-sm">→</span>
+                      <select
+                        className="input flex-1 text-sm"
+                        value={oosLoadOns[t.truck_number] ?? ""}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setOosLoadOns((prev) => ({ ...prev, [t.truck_number]: val }));
+                          if (val) addOosSwap(t.truck_number, parseInt(val));
+                        }}
+                      >
+                        <option value="">— Load on —</option>
+                        {sortedSpares.map((s) => (
+                          <option key={s.truck_number} value={s.truck_number}>
+                            #{s.truck_number} — Spare
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+              )}
+
               {swaps.length > 0 && (
                 <div className="space-y-1">
                   <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Current Assignments</p>
@@ -815,7 +955,8 @@ function RunDayWizard({
                 <button className="flex-1 btn-primary text-sm" onClick={() => setStep(4)}>Continue</button>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Step 4: Trucks Not Here */}
           {step === 4 && (
