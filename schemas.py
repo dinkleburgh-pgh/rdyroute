@@ -280,6 +280,7 @@ class BatchHistoryOut(_OrmBase):
 class UserCreate(BaseModel):
     username: str = Field(..., min_length=2, max_length=80)
     password: str = Field(..., min_length=5)
+    role: AuthRole = AuthRole.loader
     display_name: str = Field(default="", max_length=120)
 
 
