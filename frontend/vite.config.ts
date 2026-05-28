@@ -1,6 +1,21 @@
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import { VitePWA } from "vite-plugin-pwa";
+import { execSync } from "child_process";
+import { readFileSync } from "fs";
+import { resolve } from "path";
+
+function getGitCommit(): string {
+  try {
+    return execSync("git rev-parse --short HEAD", { stdio: ["pipe", "pipe", "ignore"] })
+      .toString()
+      .trim();
+  } catch {
+    return "unknown";
+  }
+}
+
+const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")) as { version: string };
 
 export default defineConfig({
   plugins: [
@@ -47,17 +62,28 @@ export default defineConfig({
         ],
       },
       devOptions: {
-        // Enable PWA in dev so the service worker can be tested locally
-        enabled: true,
-        type: "module",
+        // Keep disabled in dev — the module-type service worker interferes with
+        // Vite's HMR module graph and causes blank pages (especially on mobile).
+        // Test PWA behaviour against the production build instead.
+        enabled: false,
       },
     }),
   ],
+  define: {
+    __APP_VERSION__: JSON.stringify(pkg.version),
+    __BUILD_DATE__: JSON.stringify(new Date().toISOString()),
+    __GIT_COMMIT__: JSON.stringify(getGitCommit()),
+  },
   server: {
     host: true,
     allowedHosts: true,
     port: 5180,
     strictPort: true,
+    hmr: {
+      host: "localhost",
+      port: 5180,
+      protocol: "ws",
+    },
     proxy: {
       "/api": {
         target: "http://127.0.0.1:8000",
