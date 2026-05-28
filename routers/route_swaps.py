@@ -16,7 +16,7 @@ from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import RouteSwap
+from models import RouteSwap, TruckState, TruckStatus
 from schemas import RouteSwapCreate, RouteSwapOut
 
 router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
@@ -116,6 +116,27 @@ def create_swap(payload: RouteSwapCreate, db: Session = Depends(get_db)):
     db.commit()
     for row in created:
         db.refresh(row)
+
+    # Activate covering trucks: if a load_on_truck is still in "spare" (idle)
+    # status, move it to "dirty" so it appears in the unload workflow.
+    load_on_trucks = {row.load_on_truck for row in created}
+    for truck_num in load_on_trucks:
+        st = db.scalars(
+            select(TruckState).where(
+                TruckState.truck_number == truck_num,
+                TruckState.run_date == payload.run_date,
+            )
+        ).first()
+        if st is None:
+            db.add(TruckState(
+                truck_number=truck_num,
+                run_date=payload.run_date,
+                status=TruckStatus.dirty,
+            ))
+        elif st.status == TruckStatus.spare:
+            st.status = TruckStatus.dirty
+    db.commit()
+
     return created
 
 

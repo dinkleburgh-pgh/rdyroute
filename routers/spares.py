@@ -64,13 +64,16 @@ def assign_spare(payload: SpareAssignCreate, db: Session = Depends(get_db)):
         spare_state = TruckState(
             truck_number=payload.spare_truck_number,
             run_date=payload.run_date,
-            status=TruckStatus.spare,
+            status=TruckStatus.dirty,
             wearers=0,
             oos_spare_route=payload.covering_route_truck,
         )
         db.add(spare_state)
     else:
-        spare_state.status = TruckStatus.spare
+        # Only override status if the spare is still idle — don't step back an
+        # already-active spare that is being re-assigned.
+        if spare_state.status in (TruckStatus.spare, TruckStatus.dirty):
+            spare_state.status = TruckStatus.dirty
         spare_state.oos_spare_route = payload.covering_route_truck
 
     db.commit()

@@ -26,9 +26,16 @@ export default function Unload() {
   // Trucks marked unloaded this session — card stays in dirty section with Undo until navigation.
   const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
 
-  // Spare-type trucks never run routes, so exclude them from both lists.
+  // Spare-type trucks normally sit idle, but a spare covering an OOS route
+  // runs a real route and must appear in the unload workflow.
   const nonSpare = useMemo(
-    () => (data ?? []).filter((t) => t.truck_type !== "Spare"),
+    () =>
+      (data ?? []).filter(
+        (t) =>
+          t.truck_type !== "Spare" ||
+          t.route_swap_route != null ||
+          t.state?.oos_spare_route != null,
+      ),
     [data],
   );
   // Keep recently-unloaded trucks in the dirty section so the Undo button stays visible.
@@ -103,10 +110,17 @@ export default function Unload() {
           Dirty ({dirty.length})
         </h3>
         <div className="grid grid-cols-2 items-start gap-3 md:grid-cols-3 lg:grid-cols-4">
-          {dirty.map((t) => (
+          {dirty.map((t) => {
+            const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+            return (
             <div key={t.truck_number} className="card space-y-2">
               <div className="flex items-center justify-between">
-                <span className="text-2xl font-bold text-red-400">#{t.truck_number}</span>
+                <div>
+                  <span className="text-2xl font-bold text-red-400">#{t.truck_number}</span>
+                  {coveredRoute != null && (
+                    <div className="text-xs text-sky-400 font-medium">cov. #{coveredRoute}</div>
+                  )}
+                </div>
                 <span className="badge bg-status-dirty">Dirty</span>
               </div>
               {recentlyUnloaded.has(t.truck_number) ? (
@@ -180,7 +194,8 @@ export default function Unload() {
                 </>
               )}
             </div>
-          ))}
+            );
+          })}
           {dirty.length === 0 && (
             <p className="col-span-full text-sm text-slate-500">No dirty trucks.</p>
           )}
