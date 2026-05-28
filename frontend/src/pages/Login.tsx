@@ -53,7 +53,7 @@ export default function Login() {
           {login.isPending ? "Signing in…" : "Sign in"}
         </button>
         <p className="text-center text-xs text-slate-500">
-          Backend: <code>http://127.0.0.1:8000</code>
+          API: <code>{window.location.origin}/api</code>
         </p>
       </form>
     </div>

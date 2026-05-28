@@ -103,7 +103,7 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   // Real-time sync: invalidates React Query caches on server-push events
-  useRealtimeSync();
+  const { isWsConnected } = useRealtimeSync();
 
   // Offline sync: queue + flush + connectivity state
   const offlineState = useOfflineSync();
@@ -212,7 +212,7 @@ export default function Layout() {
 
       {/* Offline / pending-sync indicator */}
       <div className="fixed inset-x-0 top-0 z-50 md:pl-64">
-        <OfflineIndicator {...offlineState} />
+        <OfflineIndicator {...offlineState} isWsConnected={isWsConnected} />
       </div>
 
       {/* Mobile backdrop */}

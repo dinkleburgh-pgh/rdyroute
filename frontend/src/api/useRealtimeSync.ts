@@ -10,19 +10,22 @@
  *   { type: "shortage_updated",    run_date: string }
  *
  * Reconnection: exponential back-off capped at 30 s, resets on success.
+ *
+ * Returns { isWsConnected } so callers can surface connectivity state in the UI.
  */
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 
 const BASE_DELAY_MS = 1_000;
 const MAX_DELAY_MS = 30_000;
 
-export function useRealtimeSync() {
+export function useRealtimeSync(): { isWsConnected: boolean } {
   const qc = useQueryClient();
   const retryDelay = useRef(BASE_DELAY_MS);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const [isWsConnected, setIsWsConnected] = useState(false);
 
   useEffect(() => {
     let unmounted = false;
@@ -36,6 +39,7 @@ export function useRealtimeSync() {
 
       ws.onopen = () => {
         retryDelay.current = BASE_DELAY_MS; // reset back-off on success
+        setIsWsConnected(true);
       };
 
       ws.onmessage = (ev) => {
@@ -61,6 +65,7 @@ export function useRealtimeSync() {
       };
 
       ws.onclose = () => {
+        setIsWsConnected(false);
         if (unmounted) return;
         // Reconnect with exponential back-off
         timeoutRef.current = setTimeout(() => {
@@ -82,4 +87,7 @@ export function useRealtimeSync() {
       wsRef.current?.close();
     };
   }, [qc]);
+
+  return { isWsConnected };
 }
+
