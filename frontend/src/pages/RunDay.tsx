@@ -219,13 +219,15 @@ export default function RunDay() {
   ).length;
   const loadSpareCount = loadTrucks.length - loadRouteTrucks.length;
 
-  // Map from route truck number → the spare that is covering it, for annotating
-  // OOS truck cards without rendering a separate spare card.
-  const coveringSpareMap = useMemo(
+  // Map from route truck number → the truck covering its route today.
+  // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
+  // non-spare trucks assigned via a route swap.  Spares are hidden from the
+  // grid; non-spare covering trucks still render their own card.
+  const coveringTruckMap = useMemo(
     () =>
       new Map<number, TruckWithState>(
         board
-          .filter((t) => t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null))
+          .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
           .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
       ),
     [board],
@@ -290,15 +292,15 @@ export default function RunDay() {
         <div style={{ overflow: "hidden" }}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
-            // Covering spares are absorbed into their OOS route truck's card.
+            // Spare-type covering trucks are absorbed into their OOS route truck's card.
             .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
             .map((t) => {
-              const coveringSpare =
-                t.state?.status === "oos" ? coveringSpareMap.get(t.truck_number) : undefined;
+              const coveringTruck =
+                t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
               const ownRaw = effectiveStatus(t, unloadsDay, holidayUnload);
-              // When OOS and covered, reflect the spare's lifecycle status.
-              const raw = coveringSpare
-                ? effectiveStatus(coveringSpare, unloadsDay, holidayUnload)
+              // When OOS and covered, reflect the covering truck's lifecycle status.
+              const raw = coveringTruck
+                ? effectiveStatus(coveringTruck, unloadsDay, holidayUnload)
                 : ownRaw;
               // The unload lifecycle ends at "Unloaded". Once a truck moves on
               // to "Loaded" (start of the load lifecycle), keep displaying it
@@ -313,7 +315,7 @@ export default function RunDay() {
                   t={t}
                   status={status}
                   done={isUnloadDone(raw)}
-                  coveringSpare={coveringSpare}
+                  coveringSpare={coveringTruck}
                   dayNum={truckUnloadDay}
                   isExtraDay={truckUnloadDay === unloadsDay2}
                 />
@@ -364,14 +366,14 @@ export default function RunDay() {
         <div style={{ overflow: "hidden" }}>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {loadTrucks
-            // Covering spares are absorbed into their OOS route truck's card.
+            // Spare-type covering trucks are absorbed into their OOS route truck's card.
             .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
             .map((t) => {
-              const coveringSpare =
-                t.state?.status === "oos" ? coveringSpareMap.get(t.truck_number) : undefined;
-              // When OOS and covered, reflect the spare's lifecycle status.
-              const status = coveringSpare
-                ? effectiveStatus(coveringSpare, loadDay, holidayLoad)
+              const coveringTruck =
+                t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+              // When OOS and covered, reflect the covering truck's lifecycle status.
+              const status = coveringTruck
+                ? effectiveStatus(coveringTruck, loadDay, holidayLoad)
                 : effectiveStatus(t, loadDay, holidayLoad);
               const offDaysLoad = t.scheduled_off_days ?? [];
               const truckLoadDay = holidayLoad
@@ -383,7 +385,7 @@ export default function RunDay() {
                   t={t}
                   status={status}
                   done={isLoadDone(status)}
-                  coveringSpare={coveringSpare}
+                  coveringSpare={coveringTruck}
                   dayNum={truckLoadDay}
                   isExtraDay={truckLoadDay === loadDay2}
                 />
@@ -448,7 +450,10 @@ function TruckCard({
       <span className="text-xs text-slate-500">
         {t.truck_type}
         {coveringSpare && (
-          <span className="text-sky-400"> · #{coveringSpare.truck_number}</span>
+          <span className="text-sky-400"> · cov #{coveringSpare.truck_number}</span>
+        )}
+        {t.route_swap_route != null && t.truck_type !== "Spare" && (
+          <span className="text-sky-400"> · rt#{t.route_swap_route}</span>
         )}
       </span>
       {dayNum != null && (
