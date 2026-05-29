@@ -64,9 +64,12 @@ Fleet and Supervisor roles have full admin access to Settings and Fleet Manageme
 Trucks progress through statuses each day:
 ```
 dirty → in_progress → unloaded → loaded
+dirty → unfinished → unloaded → loaded
 dirty → shop
 dirty / loaded → off / oos
 ```
+
+`unfinished` is a manual hand-off state from the Unload page — used when a truck couldn't be fully unloaded but should not return to the Dirty queue. It surfaces as a sub-section on the Dirty board and on the Unload page until cleared.
 
 Spare trucks are managed separately and never enter the off-day pooling logic.
 

@@ -17,7 +17,7 @@ from sqlalchemy import select, delete, func
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AppSetting, Batch, BatchHistory, TruckState, TruckStatus
+from models import Batch, BatchHistory, TruckState, TruckStatus
 from schemas import BatchAssign, BatchHistoryCreate, BatchHistoryOut, BatchOut, BatchSummary, BatchTruck
 from ws_manager import manager
 
@@ -95,24 +95,21 @@ def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTask
         )
     )
 
-    # Enforce wearer cap unless batch_no_cap setting is enabled
-    no_cap_setting = db.get(AppSetting, "batch_no_cap")
-    no_cap = no_cap_setting is not None and no_cap_setting.value is True
-    if not no_cap:
-        current_total = db.scalar(
-            select(func.coalesce(func.sum(Batch.wearers), 0)).where(
-                Batch.run_date == payload.run_date,
-                Batch.batch_number == payload.batch_number,
-            )
-        ) or 0
-        if current_total + payload.wearers > _BATCH_WEARER_CAP:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail=(
-                    f"Batch {payload.batch_number} cap of {_BATCH_WEARER_CAP} wearers exceeded "
-                    f"(current {current_total} + new {payload.wearers})."
-                ),
-            )
+    # Enforce wearer cap (existing wearers in the target batch + new assignment)
+    current_total = db.scalar(
+        select(func.coalesce(func.sum(Batch.wearers), 0)).where(
+            Batch.run_date == payload.run_date,
+            Batch.batch_number == payload.batch_number,
+        )
+    ) or 0
+    if current_total + payload.wearers > _BATCH_WEARER_CAP:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Batch {payload.batch_number} cap of {_BATCH_WEARER_CAP} wearers exceeded "
+                f"(current {current_total} + new {payload.wearers})."
+            ),
+        )
 
     row = Batch(
         run_date=payload.run_date,
