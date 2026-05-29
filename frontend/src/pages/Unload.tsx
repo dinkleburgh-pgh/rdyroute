@@ -49,6 +49,10 @@ export default function Unload() {
       ),
     [nonSpare, recentlyUnloaded],
   );
+  const unfinished = useMemo(
+    () => nonSpare.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
+    [nonSpare, recentlyUnloaded],
+  );
   // Exclude recently-unloaded from this section — they're still shown above with Undo.
   const unloaded = useMemo(
     () =>
@@ -66,6 +70,20 @@ export default function Unload() {
       wearers: Number(wearers || 0),
     });
     setBatchOpen(null);
+  }
+
+  async function markUnfinished(t: TruckWithState) {
+    setBusy(t.truck_number);
+    try {
+      await upsert.mutateAsync({
+        truck_number: t.truck_number,
+        run_date: runDate,
+        status: "unfinished",
+        wearers: t.state?.wearers ?? 0,
+      });
+    } finally {
+      setBusy(null);
+    }
   }
 
   async function markUnloaded(t: TruckWithState) {
@@ -135,7 +153,7 @@ export default function Unload() {
                 <>
                   {/* Mobile: inline batch panel */}
                   <button
-                    className="btn-primary w-full bg-emerald-600 text-sm hover:bg-emerald-500 md:hidden"
+                    className="btn-primary w-full text-sm md:hidden"
                     onClick={() => {
                       setBatchNum(String(t.state?.batch_id ?? 1));
                       setWearers(String(t.state?.wearers ?? 0));
@@ -179,17 +197,24 @@ export default function Unload() {
                   )}
                   {/* Desktop: navigate to full batching page */}
                   <button
-                    className="btn-primary hidden w-full bg-emerald-600 text-sm hover:bg-emerald-500 md:block"
+                    className="btn-primary hidden w-full text-sm md:block"
                     onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}&source=unload`)}
                   >
                     {t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign Batch"}
                   </button>
                   <button
-                    className="btn-primary w-full"
+                    className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
                     disabled={busy === t.truck_number}
                     onClick={() => markUnloaded(t)}
                   >
                     Mark Unloaded
+                  </button>
+                  <button
+                    className="w-full rounded-md bg-orange-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-orange-500 disabled:opacity-50"
+                    disabled={busy === t.truck_number}
+                    onClick={() => markUnfinished(t)}
+                  >
+                    Mark Unfinished
                   </button>
                 </>
               )}
@@ -198,6 +223,47 @@ export default function Unload() {
           })}
           {dirty.length === 0 && (
             <p className="col-span-full text-sm text-slate-500">No dirty trucks.</p>
+          )}
+        </div>
+      </section>
+
+      <section>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-orange-400">
+          Unfinished ({unfinished.length})
+        </h3>
+        <div className="grid grid-cols-2 items-start gap-3 md:grid-cols-3 lg:grid-cols-4">
+          {unfinished.map((t) => {
+            const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+            return (
+              <div key={t.truck_number} className="card space-y-2">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <span className="text-2xl font-bold text-orange-400">#{t.truck_number}</span>
+                    {coveredRoute != null && (
+                      <div className="text-xs text-sky-400 font-medium">cov. #{coveredRoute}</div>
+                    )}
+                  </div>
+                  <span className="badge bg-status-unfinished">Unfinished</span>
+                </div>
+                <button
+                  className="w-full rounded-md bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                  disabled={busy === t.truck_number}
+                  onClick={() => markUnloaded(t)}
+                >
+                  Mark Unloaded
+                </button>
+                <button
+                  className="w-full rounded-md px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200 disabled:opacity-50"
+                  disabled={busy === t.truck_number}
+                  onClick={() => upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, status: "dirty" })}
+                >
+                  Back to Dirty
+                </button>
+              </div>
+            );
+          })}
+          {unfinished.length === 0 && (
+            <p className="col-span-full text-sm text-slate-500">No unfinished trucks.</p>
           )}
         </div>
       </section>

@@ -7,7 +7,6 @@
  * Accessible from the sidebar "Route Swap" button.
  */
 import { useState } from "react";
-import clsx from "clsx";
 import { todayIso } from "../api/client";
 import { useBoard, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useHolidayLoad } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
@@ -46,30 +45,24 @@ export default function RouteSwapModal({ onClose }: Props) {
 
   const [routeTruck, setRouteTruck] = useState("");
   const [loadOnTruck, setLoadOnTruck] = useState("");
-  const [twoWay, setTwoWay] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   // Sets for quick lookups
   const swapRouteSet = new Set(swaps.map((s) => s.route_truck));
   const swapLoadOnSet = new Set(swaps.map((s) => s.load_on_truck));
 
-  // Detect two-way pairs (both directions exist)
-  function reciprocal(s: RouteSwap): RouteSwap | undefined {
-    return swaps.find((r) => r.route_truck === s.load_on_truck && r.load_on_truck === s.route_truck);
-  }
+  // OOS trucks with no swap yet — shown as prefill rows
+  const unswappedOos = [...board]
+    .filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swapRouteSet.has(t.truck_number))
+    .sort((a, b) => a.truck_number - b.truck_number);
 
-  // Deduplicate two-way pairs so we only show them once
-  const shownIds = new Set<number>();
-  const swapRows: Array<{ primary: RouteSwap; paired?: RouteSwap }> = [];
-  for (const s of swaps) {
-    if (shownIds.has(s.id)) continue;
-    shownIds.add(s.id);
-    const pair = reciprocal(s);
-    if (pair && !shownIds.has(pair.id)) {
-      shownIds.add(pair.id);
-      swapRows.push({ primary: s, paired: pair });
-    } else {
-      swapRows.push({ primary: s });
+  async function addOosSwap(routeTruckNum: number, loadOnTruckNum: number) {
+    try {
+      await createSwap.mutateAsync({ run_date: runDate, route_truck: routeTruckNum, load_on_truck: loadOnTruckNum, two_way: false });
+      setOosLoadOns((prev) => { const n = { ...prev }; delete n[routeTruckNum]; return n; });
+    } catch (err: unknown) {
+      console.error("OOS swap save failed", err);
     }
   }
 
@@ -94,18 +87,17 @@ export default function RouteSwapModal({ onClose }: Props) {
     if (rt === lo) { setError("Route truck and load-on truck must be different."); return; }
     setError(null);
     try {
-      await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, two_way: twoWay });
+      await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, two_way: false });
       setRouteTruck("");
       setLoadOnTruck("");
-      setTwoWay(false);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
       setError(e?.response?.data?.detail ?? "Failed to save swap.");
     }
   }
 
-  function handleDelete(s: RouteSwap, alsoReciprocal: boolean) {
-    deleteSwap.mutate({ id: s.id, runDate, alsoReciprocal });
+  function handleDelete(s: RouteSwap) {
+    deleteSwap.mutate({ id: s.id, runDate, alsoReciprocal: false });
   }
 
   return (
@@ -140,6 +132,55 @@ export default function RouteSwapModal({ onClose }: Props) {
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Active swaps {swaps.length > 0 && <span className="ml-1 rounded-full bg-blue-800/60 px-2 py-0.5 text-blue-300">{swaps.length}</span>}
             </p>
+
+            {/* OOS prefill rows */}
+            {unswappedOos.length > 0 && (
+              <div className="mb-3 space-y-1">
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
+                  OOS — Select covering truck
+                </p>
+                {unswappedOos.map((t) => (
+                  <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 px-3 py-2">
+                    <span className="whitespace-nowrap text-sm font-bold text-amber-300">
+                      #{t.truck_number} <span className="text-[10px] font-semibold text-amber-500">OOS</span>
+                    </span>
+                    <span className="text-sm text-slate-500">→</span>
+                    <select
+                      className="input flex-1 text-sm"
+                      value={oosLoadOns[t.truck_number] ?? ""}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setOosLoadOns((prev) => ({ ...prev, [t.truck_number]: val }));
+                        if (val) addOosSwap(t.truck_number, parseInt(val));
+                      }}
+                    >
+                      <option value="">— Load on —</option>
+                      {spares.length > 0 && (
+                        <optgroup label="Spare trucks">
+                          {spares.map((s) => (
+                            <option key={s.truck_number} value={s.truck_number}>#{s.truck_number} — Spare</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {offTrucks.length > 0 && (
+                        <optgroup label="Off today">
+                          {offTrucks.map((s) => (
+                            <option key={s.truck_number} value={s.truck_number}>#{s.truck_number} — Off</option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {otherTrucks.length > 0 && (
+                        <optgroup label="Route trucks">
+                          {otherTrucks.map((s) => (
+                            <option key={s.truck_number} value={s.truck_number}>#{s.truck_number}</option>
+                          ))}
+                        </optgroup>
+                      )}
+                    </select>
+                  </div>
+                ))}
+              </div>
+            )}
             {swapsLoading ? (
               <p className="text-sm text-slate-500">Loading…</p>
             ) : swapRows.length === 0 ? (
@@ -148,40 +189,21 @@ export default function RouteSwapModal({ onClose }: Props) {
               </p>
             ) : (
               <div className="space-y-2">
-                {swapRows.map(({ primary, paired }) => (
+                {swaps.map((s) => (
                   <div
-                    key={primary.id}
-                    className={clsx(
-                      "flex items-center justify-between gap-3 rounded-lg border px-4 py-3",
-                      paired
-                        ? "border-purple-700/50 bg-purple-950/20"
-                        : "border-blue-800/40 bg-blue-950/15",
-                    )}
+                    key={s.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3"
                   >
-                    <div className="min-w-0 flex-1">
-                      {paired ? (
-                        // Two-way pair
-                        <div className="flex items-center gap-2 text-sm font-semibold">
-                          <span className="text-purple-200">#{primary.route_truck}</span>
-                          <span className="text-slate-500 text-xs">⇄</span>
-                          <span className="text-purple-200">#{primary.load_on_truck}</span>
-                          <span className="ml-1 rounded-full bg-purple-800/50 px-2 py-0.5 text-[10px] font-bold uppercase text-purple-300">
-                            2-way
-                          </span>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 text-sm">
-                          <span className="font-semibold text-red-400">#{primary.route_truck}</span>
-                          <span className="text-slate-500 text-xs">→</span>
-                          <span className="font-semibold text-blue-300">#{primary.load_on_truck}</span>
-                          <span className="text-xs text-slate-500">loads route</span>
-                        </div>
-                      )}
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="text-xl font-black text-red-400">#{s.route_truck}</span>
+                      <span className="text-base font-bold text-slate-500">→</span>
+                      <span className="text-xl font-black text-blue-300">#{s.load_on_truck}</span>
+                      <span className="text-xs text-slate-500">loads route</span>
                     </div>
                     <button
                       className="rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
                       disabled={deleteSwap.isPending}
-                      onClick={() => handleDelete(primary, !!paired)}
+                      onClick={() => handleDelete(s)}
                     >
                       Remove
                     </button>
@@ -292,28 +314,6 @@ export default function RouteSwapModal({ onClose }: Props) {
                 </select>
               </div>
             </div>
-
-            {/* Two-way toggle */}
-            <label className="flex cursor-pointer items-center gap-2 select-none">
-              <div
-                className={clsx(
-                  "relative h-5 w-9 rounded-full transition-colors",
-                  twoWay ? "bg-purple-600" : "bg-slate-600",
-                )}
-                onClick={() => setTwoWay((v) => !v)}
-              >
-                <span
-                  className={clsx(
-                    "absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-transform",
-                    twoWay ? "translate-x-4" : "translate-x-0.5",
-                  )}
-                />
-              </div>
-              <span className="text-sm text-slate-300">
-                Two-way swap
-                <span className="ml-1 text-xs text-slate-500">(each loads the other's route)</span>
-              </span>
-            </label>
 
             {error && (
               <p className="rounded-md border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">

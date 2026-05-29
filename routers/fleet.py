@@ -12,14 +12,15 @@ from sqlalchemy.orm import Session
 from sqlalchemy.orm.attributes import flag_modified
 
 from database import get_db
-from models import Truck
+from models import Truck, User
+from routers.auth import get_current_user, require_admin
 from schemas import TruckCreate, TruckOut, TruckUpdate
 
 router = APIRouter(prefix="/fleet", tags=["fleet"])
 
 
 @router.get("", response_model=list[TruckOut])
-def list_fleet(include_inactive: bool = False, db: Session = Depends(get_db)):
+def list_fleet(include_inactive: bool = False, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     """Return all fleet trucks. Pass include_inactive=true to see decommissioned trucks."""
     q = select(Truck)
     if not include_inactive:
@@ -28,7 +29,7 @@ def list_fleet(include_inactive: bool = False, db: Session = Depends(get_db)):
 
 
 @router.post("", response_model=TruckOut, status_code=status.HTTP_201_CREATED)
-def add_truck(payload: TruckCreate, db: Session = Depends(get_db)):
+def add_truck(payload: TruckCreate, db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
     existing = db.scalars(select(Truck).where(Truck.truck_number == payload.truck_number)).first()
     if existing:
         if not existing.is_active:
@@ -51,7 +52,7 @@ def add_truck(payload: TruckCreate, db: Session = Depends(get_db)):
 
 
 @router.get("/{truck_number}", response_model=TruckOut)
-def get_truck(truck_number: int, db: Session = Depends(get_db)):
+def get_truck(truck_number: int, db: Session = Depends(get_db), _user: User = Depends(get_current_user)):
     truck = db.scalars(select(Truck).where(Truck.truck_number == truck_number)).first()
     if truck is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Truck not found")
@@ -59,7 +60,7 @@ def get_truck(truck_number: int, db: Session = Depends(get_db)):
 
 
 @router.patch("/{truck_number}", response_model=TruckOut)
-def update_truck(truck_number: int, payload: TruckUpdate, db: Session = Depends(get_db)):
+def update_truck(truck_number: int, payload: TruckUpdate, db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
     truck = db.scalars(select(Truck).where(Truck.truck_number == truck_number)).first()
     if truck is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Truck not found")
@@ -73,7 +74,7 @@ def update_truck(truck_number: int, payload: TruckUpdate, db: Session = Depends(
 
 
 @router.delete("/{truck_number}", status_code=status.HTTP_204_NO_CONTENT)
-def remove_truck(truck_number: int, db: Session = Depends(get_db)):
+def remove_truck(truck_number: int, db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
     """Soft-delete: marks the truck as inactive rather than deleting its history."""
     truck = db.scalars(select(Truck).where(Truck.truck_number == truck_number)).first()
     if truck is None:

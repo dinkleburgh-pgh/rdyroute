@@ -17,6 +17,7 @@ export default {
         // by StatusColorApplier in App.tsx via the status_badge_colors setting.
         status: {
           dirty:      "#dc2626",
+          unfinished: "#ea580c",
           shop:       "#7400ff",
           inprogress: "#f59e0b",
           unloaded:   "#16a34a",

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 
 import { useMessages, useSendMessage, useDeleteMessage } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
 
-const CHANNELS = ["Team", "Fleet", "Loaders", "Supervisors"];
+const CHANNELS = ["Team"];
 
 const ROLE_STYLE: Record<string, string> = {
   admin:      "bg-red-950 text-red-300 ring-1 ring-red-700/50",
@@ -17,12 +17,18 @@ const ROLE_STYLE: Record<string, string> = {
 
 const ADMIN_ROLES = new Set(["admin", "fleet", "atl", "lead", "supervisor"]);
 
-function RoleBadge({ role }: { role?: string | null }) {
+const DISPLAY_OVERRIDE: Record<string, { label: string; cls: string }> = {
+  nate: { label: "lead", cls: "bg-purple-950 text-purple-300 ring-1 ring-purple-700/50" },
+};
+
+function RoleBadge({ role, username }: { role?: string | null; username?: string }) {
   if (!role) return null;
-  const cls = ROLE_STYLE[role] ?? ROLE_STYLE.guest;
+  const override = username ? DISPLAY_OVERRIDE[username] : undefined;
+  const label = override ? override.label : role;
+  const cls = override ? override.cls : ROLE_STYLE[role] ?? ROLE_STYLE.guest;
   return (
     <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cls}`}>
-      {role}
+      {label}
     </span>
   );
 }
@@ -140,39 +146,31 @@ export default function Communications() {
               return (
                 <div
                   key={m.id}
-                  className={`group mb-3 flex items-end gap-2 ${isMe ? "flex-row-reverse" : ""}`}
+                  className={`group mb-3 flex items-start gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}
                   onMouseEnter={() => setHoveredId(m.id)}
                   onMouseLeave={() => setHoveredId(null)}
                 >
-                  {/* Avatar */}
-                  <div
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-bold ${
-                      isMe ? "bg-blue-700 text-white" : "bg-slate-700 text-slate-300"
-                    }`}
-                  >
-                    {m.username.slice(0, 2).toUpperCase()}
+                  {/* Sender identity column */}
+                  <div className={`flex shrink-0 flex-col gap-1 pt-0.5 ${isMe ? "items-end" : "items-start"}`} style={{ minWidth: "4rem" }}>
+                    <span className={`text-base font-bold leading-tight ${
+                      isMe ? "text-blue-300" : "text-slate-200"
+                    }`}>{m.username}</span>
+                    <RoleBadge role={m.sender_role} username={m.username} />
                   </div>
 
-                  {/* Content */}
-                  <div className={`flex max-w-[78%] flex-col gap-1 ${isMe ? "items-end" : "items-start"}`}>
-                    {/* Name + role badge */}
-                    <div className={`flex flex-wrap items-center gap-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
-                      <span className="text-xs font-semibold text-slate-300">{m.username}</span>
-                      <RoleBadge role={m.sender_role} />
-                    </div>
-
-                    {/* Bubble + delete button row */}
-                    <div className={`flex items-center gap-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
-                      <div
-                        className={`relative max-w-full rounded-2xl px-3.5 py-2 text-sm leading-relaxed break-words ${
-                          m.is_deleted
-                            ? "bg-slate-800/50 italic text-slate-500"
-                            : isMe
-                            ? "rounded-br-sm bg-blue-600 text-white"
-                            : "rounded-bl-sm bg-slate-800 text-slate-100"
-                        }`}
-                        style={{ wordBreak: "break-word" }}
-                      >
+                  {/* Bubble + delete button row */}
+                  <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${isMe ? "items-end" : "items-start"}`}>
+                    <div className={`flex items-start gap-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
+                    <div
+                      className={`relative max-w-full rounded-2xl px-3.5 py-2 text-base leading-relaxed break-words ${
+                        m.is_deleted
+                          ? "bg-slate-800/50 italic text-slate-500"
+                          : isMe
+                          ? "rounded-tr-sm bg-blue-600 text-white"
+                          : "rounded-tl-sm bg-slate-800 text-slate-100"
+                      }`}
+                      style={{ wordBreak: "break-word" }}
+                    >
                         {m.is_deleted ? "[deleted]" : m.message}
                       </div>
 
@@ -196,10 +194,12 @@ export default function Communications() {
                         </button>
                       )}
                     </div>
+                    {/* closes inner bubble+delete row */}
 
                     {/* Timestamp */}
                     <span className="text-[10px] text-slate-600">{timeStr(m.sent_at)}</span>
                   </div>
+                  {/* closes bubble column */}
                 </div>
               );
             })}
