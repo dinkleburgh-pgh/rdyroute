@@ -359,6 +359,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const isReadOnly = runDate !== todayIso();
   const { data, isLoading, error } = useBoard(runDate);
   const { data: spareAssignments = [] } = useSpareAssignments(runDate, false);
+  const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: settings } = useSettings();
   const upsert = useUpsertTruckState();
   const updateTruck = useUpdateTruck();
@@ -396,6 +397,29 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     () => new Map<number, number>(spareAssignments.map((a) => [a.covering_route_truck, a.spare_truck_number])),
     [spareAssignments],
   );
+
+  // Unified: OOS route truck number → {truckNumber, status} of the covering truck
+  // Combines spare assignments (SpareAssignment rows) and route swaps.
+  const coveringTruckByRoute = useMemo(() => {
+    const m = new Map<number, { num: number; status: TruckStatus | undefined }>();
+    for (const a of spareAssignments) {
+      const st = (data ?? []).find((t) => t.truck_number === a.spare_truck_number);
+      m.set(a.covering_route_truck, {
+        num: a.spare_truck_number,
+        status: (st?.state?.status as TruckStatus | undefined),
+      });
+    }
+    for (const s of routeSwaps) {
+      if (!m.has(s.route_truck)) {
+        const st = (data ?? []).find((t) => t.truck_number === s.load_on_truck);
+        m.set(s.route_truck, {
+          num: s.load_on_truck,
+          status: st ? effectiveStatus(st, runDayNum, holidayLoad) : undefined,
+        });
+      }
+    }
+    return m;
+  }, [spareAssignments, routeSwaps, data, runDayNum, holidayLoad]);
 
   const truckStatusByNumber = useMemo(
     () => new Map<number, TruckStatus>((data ?? []).map((t) => [t.truck_number, (t.state?.status ?? "dirty") as TruckStatus])),
@@ -734,8 +758,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             >
               <div className="flex w-full flex-col gap-1">
                 <div className="flex w-full items-start justify-between gap-2">
-                  {!fleetMode && t.state?.oos_spare_route != null ? (
-                    <div className="flex items-baseline gap-2">
+                  {/* Non-fleet: spare/swap covering truck shows which route it runs */}
+                  {!fleetMode && (t.state?.oos_spare_route != null || t.route_swap_route != null) ? (
+                    <div className="flex flex-col gap-0.5">
                       <span className={clsx(
                         "font-extrabold tracking-tight tabular-nums leading-none",
                         filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
@@ -743,18 +768,35 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       )}>
                         {t.truck_number}
                       </span>
-                      <span className="text-base font-bold tabular-nums text-sky-400">
-                        → cov. #{t.state.oos_spare_route}
+                      <span className="text-xs font-bold tabular-nums text-sky-400">
+                        rt #{t.state?.oos_spare_route ?? t.route_swap_route}
                       </span>
                     </div>
                   ) : (
-                    <span className={clsx(
-                      "font-extrabold tracking-tight tabular-nums leading-none",
-                      fleetMode ? "text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                      fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
-                    )}>
-                      {t.truck_number}
-                    </span>
+                    <div className="flex flex-col gap-0.5">
+                      <span className={clsx(
+                        "font-extrabold tracking-tight tabular-nums leading-none",
+                        fleetMode ? "text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                        fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
+                      )}>
+                        {t.truck_number}
+                      </span>
+                      {/* Non-fleet OOS truck: show who is covering */}
+                      {!fleetMode && status === "oos" && (() => {
+                        const cov = coveringTruckByRoute.get(t.truck_number);
+                        if (!cov) return <span className="text-[11px] font-semibold text-amber-400">needs coverage</span>;
+                        return (
+                          <span className="flex items-center gap-1">
+                            <span className="text-[11px] font-bold text-sky-400">cov #{cov.num}</span>
+                            {cov.status && (
+                              <span className={clsx("badge text-[10px] py-0", STATUS_BG[cov.status], STATUS_BADGE_TEXT[cov.status])}>
+                                {STATUS_LABELS[cov.status]}
+                              </span>
+                            )}
+                          </span>
+                        );
+                      })()}
+                    </div>
                   )}
                   <span className="flex min-h-[2.25rem] flex-col items-end justify-start gap-0.5">
                     {fleetMode && status === "off" && (t.state?.status === "dirty" || t.state?.status === "unloaded") && (
@@ -776,11 +818,33 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   </span>
                 </div>
                 {fleetMode && (
-                  <div className="text-xs text-slate-400">
-                    {t.truck_type}
-                    {t.state?.oos_spare_route != null ? ` · Covering #${t.state.oos_spare_route}` : ""}
-                    {t.route_swap_route != null ? ` · Swap Route #${t.route_swap_route}` : ""}
-                    {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                  <div className="text-xs text-slate-400 space-y-0.5">
+                    <div>
+                      {t.truck_type}
+                      {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                    </div>
+                    {/* OOS truck: show who is covering */}
+                    {status === "oos" && (() => {
+                      const cov = coveringTruckByRoute.get(t.truck_number);
+                      if (!cov) return <span className="text-amber-400 font-medium">Needs assignment</span>;
+                      return (
+                        <span className="flex items-center gap-1">
+                          <span className="text-sky-400 font-medium">cov #{cov.num}</span>
+                          {cov.status && (
+                            <span className={clsx("badge text-[10px] py-0", STATUS_BG[cov.status], STATUS_BADGE_TEXT[cov.status])}>
+                              {STATUS_LABELS[cov.status]}
+                            </span>
+                          )}
+                        </span>
+                      );
+                    })()}
+                    {/* Covering truck: show which route it is loading */}
+                    {t.route_swap_route != null && t.truck_type !== "Spare" && (
+                      <span className="text-sky-400 font-medium">rt #{t.route_swap_route}</span>
+                    )}
+                    {t.state?.oos_spare_route != null && (
+                      <span className="text-sky-400 font-medium">cov #{t.state.oos_spare_route}</span>
+                    )}
                   </div>
                 )}
                 {!fleetMode && filter === "dirty" && t.state?.status !== "oos" && (
