@@ -18,6 +18,7 @@ function getGitCommit(): string {
 }
 
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")) as { version: string };
+const appVersion = process.env.VITE_APP_VERSION || pkg.version;
 
 export default defineConfig({
   plugins: [
@@ -72,7 +73,7 @@ export default defineConfig({
     }),
   ],
   define: {
-    __APP_VERSION__: JSON.stringify(pkg.version),
+    __APP_VERSION__: JSON.stringify(appVersion),
     __BUILD_DATE__: JSON.stringify(process.env.VITE_BUILD_DATE ?? new Date().toISOString()),
     __GIT_COMMIT__: JSON.stringify(getGitCommit()),
   },

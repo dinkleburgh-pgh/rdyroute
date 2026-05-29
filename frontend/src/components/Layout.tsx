@@ -96,6 +96,35 @@ const ROLE_BADGE: Record<AuthRole, string> = {
   guest:      "bg-slate-800 text-slate-400 ring-1 ring-slate-600/50",
 };
 
+function BuildInfo() {
+  const isDev = import.meta.env.DEV;
+  const version = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+  const commit = typeof __GIT_COMMIT__ !== "undefined" ? __GIT_COMMIT__ : "";
+  const buildDate = typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : "";
+  const shortCommit = commit ? commit.slice(0, 7) : "";
+  const dateLabel = (() => {
+    if (!buildDate) return "";
+    const d = new Date(buildDate);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  })();
+  return (
+    <div className="pt-2 text-center text-[10px] leading-tight text-slate-500">
+      <p>
+        ReadyRoute V2 · v{version}
+        {isDev ? " · dev" : ""}
+      </p>
+      {(shortCommit || dateLabel) && !isDev && (
+        <p className="text-slate-600">
+          {shortCommit}
+          {shortCommit && dateLabel ? " · " : ""}
+          {dateLabel}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function Layout() {
   const { user, logout } = useAuth();
   const nav = useNavigate();
@@ -411,9 +440,7 @@ export default function Layout() {
           >
             Logout
           </button>
-          <p className="pt-2 text-center text-[10px] text-slate-500">
-            ReadyRoute V2 · dev build
-          </p>
+          <BuildInfo />
         </div>
       </aside>
 
