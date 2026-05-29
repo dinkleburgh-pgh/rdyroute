@@ -63,6 +63,23 @@ A truck is treated as **off** when ALL of:
 
 Applied in: `Board.tsx` (effectiveStatus), `Layout.tsx` (sidebar counts), `RunDay.tsx`.
 
+`unfinished` is **not** auto-off-eligible and is **not** in `_PERSISTENT_STATUSES` (does not carry forward to the next day).
+
+### TruckStatus values
+`dirty | unfinished | shop | in_progress | unloaded | loaded | off | oos | spare`
+
+Display order everywhere: **Dirty → Unfinished → Unloaded → In Progress → Loaded → Spare → Off → OOS**.
+
+`unfinished` is intentionally **omitted** from the sidebar `STATUS_ORDER` stack — it surfaces as a sub-section on the non-fleet dirty board (`Board.tsx`) and as its own chip in the fleet rail (`FLEET_RAIL_STATUSES`).
+
+### Tracked items (audit / shorts)
+Stored in the `tracked_items_map` `app_settings` row as `{ label: { qty_default, category } }`.
+
+Top-level categories: `3x10`, `3x5`, `4x6`, `Paper`, `Bulk`.  
+`Bulk` nests via `>` separator: `Bulk > Aprons`, `Bulk > Dust Mops`, `Bulk > Towels`.
+
+`HierarchyPicker` in `Audit.tsx` / `Shorts.tsx` parses categories with `topCatOf` / `subCatOf` (split on first `>`).
+
 ### Fleet page routing
 `/fleet` renders `<Board fleetMode />` (Board.tsx with the fleetMode prop).  
 `Fleet.tsx` is **not** used for the fleet route — do not add fleet logic there.

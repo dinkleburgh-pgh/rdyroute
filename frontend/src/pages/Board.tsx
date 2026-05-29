@@ -775,45 +775,54 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           : "grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
       )}>
         {(() => {
-          // In dirty view, sort so actual dirty trucks come first, unfinished after
-          const rows = (!fleetMode && filter === "dirty")
-            ? [...filtered].sort((a, b) => {
-                const sa = effectiveStatus(a, runDayNum, holidayLoad) === "unfinished" ? 1 : 0;
-                const sb = effectiveStatus(b, runDayNum, holidayLoad) === "unfinished" ? 1 : 0;
-                return sa - sb;
-              })
-            : filtered;
-          let lastSection: TruckStatus | null = null;
-          return rows.map((t) => {
-          const status = effectiveStatus(t, runDayNum, holidayLoad);
-          // Day chips — only visible during holiday mode, only for load/unload views
-          const isUnloadView = filter === "dirty" || filter === "unloaded";
-          const isLoadView = filter === "loaded";
-          let chipDay: number | undefined;
-          let chipIsExtra = false;
-          if (isUnloadView && holidayUnload) {
-            chipDay = (t.scheduled_off_days ?? []).includes(runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
-            chipIsExtra = chipDay === unloadsDay2;
-          } else if (isLoadView && holidayLoad) {
-            const offDaysLoad = t.scheduled_off_days ?? [];
-            chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
-            chipIsExtra = chipDay === loadDay2;
+          type SentinelHeader = { __header: "dirty" | "unfinished"; count: number };
+          type GridRow = TruckWithState | SentinelHeader;
+          const rows: GridRow[] = [];
+          if (!fleetMode && filter === "dirty") {
+            const dirtyRows = filtered.filter((t) => effectiveStatus(t, runDayNum, holidayLoad) === "dirty");
+            const unfinishedRows = filtered.filter((t) => effectiveStatus(t, runDayNum, holidayLoad) === "unfinished");
+            rows.push(
+              { __header: "dirty", count: dirtyRows.length },
+              ...dirtyRows,
+              { __header: "unfinished", count: unfinishedRows.length },
+              ...unfinishedRows,
+            );
+          } else {
+            rows.push(...filtered);
           }
-          // Section header divider when dirty view transitions dirty→unfinished
-          const showSectionHeader = !fleetMode && filter === "dirty" && status !== lastSection && (status === "dirty" || status === "unfinished");
-          if (showSectionHeader) lastSection = status;
-          const sectionHeader = showSectionHeader ? (
-            <div key={`section-${status}`} className="col-span-full mt-1 mb-1 flex items-center gap-2">
-              <span className={clsx("h-2 w-2 shrink-0 rounded-full", status === "unfinished" ? "bg-status-unfinished" : "bg-status-dirty")} />
-              <span className={clsx("text-xs font-semibold uppercase tracking-wide", status === "unfinished" ? "text-orange-400" : "text-red-400")}>
-                {status === "unfinished" ? "Unfinished" : "Dirty"}
-              </span>
-            </div>
-          ) : null;
-          return (
-            <>
-              {sectionHeader}
-            <div className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale",  !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+          return rows.map((row) => {
+            if ("__header" in row) {
+              // Skip the dirty header — the page already has a "Dirty" heading.
+              // Only render the Unfinished sub-section header.
+              if (row.__header !== "unfinished") return null;
+              return (
+                <div key={`header-${row.__header}`} className="col-span-full my-2 flex flex-col items-center justify-center gap-1">
+                  <span className="text-4xl font-black uppercase tracking-widest text-orange-400">
+                    Unfinished
+                  </span>
+                  <span className="text-sm font-medium text-slate-500">
+                    {row.count === 0 ? "none" : `${row.count} truck${row.count !== 1 ? "s" : ""}`}
+                  </span>
+                </div>
+              );
+            }
+            const t = row;
+            const status = effectiveStatus(t, runDayNum, holidayLoad);
+            // Day chips — only visible during holiday mode, only for load/unload views
+            const isUnloadView = filter === "dirty" || filter === "unloaded";
+            const isLoadView = filter === "loaded";
+            let chipDay: number | undefined;
+            let chipIsExtra = false;
+            if (isUnloadView && holidayUnload) {
+              chipDay = (t.scheduled_off_days ?? []).includes(runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
+              chipIsExtra = chipDay === unloadsDay2;
+            } else if (isLoadView && holidayLoad) {
+              const offDaysLoad = t.scheduled_off_days ?? [];
+              chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
+              chipIsExtra = chipDay === loadDay2;
+            }
+            return (
+            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale",  !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {
@@ -1013,7 +1022,6 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 </div>
               )}
             </div>
-            </>
           );
           });
         })()}
