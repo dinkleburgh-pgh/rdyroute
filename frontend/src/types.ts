@@ -2,6 +2,7 @@
 
 export type TruckStatus =
   | "dirty"
+  | "unfinished"
   | "shop"
   | "in_progress"
   | "unloaded"

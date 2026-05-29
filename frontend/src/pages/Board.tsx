@@ -27,6 +27,7 @@ import clsx from "clsx";
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
+  unfinished: "Unfinished",
   shop: "Shop",
   in_progress: "In Progress",
   unloaded: "Unloaded",
@@ -38,6 +39,7 @@ const STATUS_LABELS: Record<TruckStatus, string> = {
 
 const STATUS_BG: Record<TruckStatus, string> = {
   dirty: "bg-status-dirty",
+  unfinished: "bg-status-unfinished",
   shop: "bg-status-shop",
   in_progress: "bg-status-inprogress",
   unloaded: "bg-status-unloaded",
@@ -49,6 +51,7 @@ const STATUS_BG: Record<TruckStatus, string> = {
 
 const STATUS_TEXT: Record<TruckStatus, string> = {
   dirty: "text-status-dirty",
+  unfinished: "text-status-unfinished",
   shop: "text-status-shop",
   in_progress: "text-status-inprogress",
   unloaded: "text-status-unloaded",
@@ -69,7 +72,7 @@ function _needsDarkText(hex: string): boolean {
   return L > 0.35; // only force dark text on genuinely light colors (pastels/amber); reds/purples/blues keep white
 }
 const _STATUS_COLORS: Record<TruckStatus, string> = {
-  dirty: "#dc2626", shop: "#7400ff", in_progress: "#f59e0b",
+  dirty: "#dc2626", unfinished: "#ea580c", shop: "#7400ff", in_progress: "#f59e0b",
   unloaded: "#16a34a", loaded: "#2563eb", off: "#6b7280",
   oos: "#475569", spare: "#0e7490",
 };
@@ -83,14 +86,15 @@ const STATUS_BADGE_TEXT: Partial<Record<TruckStatus, string>> = Object.fromEntri
 // 'off' is schedule-managed; 'in_progress' is managed by load workflow.
 const STATUS_OPTIONS: TruckStatus[] = [
   "dirty",
+  "unfinished",
   "shop",
   "unloaded",
   "loaded",
   "oos",
 ];
-const FLEET_STATUS_OPTIONS: TruckStatus[] = ["dirty", "shop", "unloaded", "loaded", "oos"];
+const FLEET_STATUS_OPTIONS: TruckStatus[] = ["dirty", "unfinished", "shop", "unloaded", "loaded", "oos"];
 // All statuses shown in the fleet filter rail (ordered for display).
-const FLEET_RAIL_STATUSES: TruckStatus[] = ["dirty", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare"];
+const FLEET_RAIL_STATUSES: TruckStatus[] = ["dirty", "unfinished", "unloaded", "in_progress", "loaded", "spare", "off", "oos"];
 
 // Filled t-shirt silhouette used to flag Dust trucks carrying a dust garment.
 // Matches the icon used on the Load page so the visual language stays consistent.
@@ -354,6 +358,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [selectedTrucks, setSelectedTrucks] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<TruckStatus>("dirty");
   const [pendingOosTruck, setPendingOosTruck] = useState<TruckWithState | null>(null);
+  const [pendingOffLoadTruck, setPendingOffLoadTruck] = useState<TruckWithState | null>(null);
+  const [pendingOffLoadRoute, setPendingOffLoadRoute] = useState<string>("");
+  const [pendingOffLoadError, setPendingOffLoadError] = useState<string | null>(null);
   const isArchive = runDate < todayIso();
   const isFuture  = runDate > todayIso();
   const isReadOnly = runDate !== todayIso();
@@ -422,8 +429,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   }, [spareAssignments, routeSwaps, data, runDayNum, holidayLoad]);
 
   const truckStatusByNumber = useMemo(
-    () => new Map<number, TruckStatus>((data ?? []).map((t) => [t.truck_number, (t.state?.status ?? "dirty") as TruckStatus])),
-    [data],
+    () => new Map<number, TruckStatus>((data ?? []).map((t) => [t.truck_number, effectiveStatus(t, runDayNum, holidayLoad)])),
+    [data, runDayNum, holidayLoad],
   );
 
   async function startLoad(t: TruckWithState) {
@@ -436,6 +443,40 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       load_finish_time: null,
       load_duration_seconds: null,
     });
+  }
+
+  async function finalizeOffTruckAsLoaded(mode: "route" | "special") {
+    if (!pendingOffLoadTruck) return;
+    const truck = pendingOffLoadTruck;
+    setPendingOffLoadError(null);
+    try {
+      let note: string;
+      if (mode === "route") {
+        const routeTruck = parseInt(pendingOffLoadRoute, 10);
+        if (!Number.isFinite(routeTruck)) {
+          setPendingOffLoadError("Pick a route truck first.");
+          return;
+        }
+        note = `Ran Special — Rt #${routeTruck}`;
+      } else {
+        note = "Ran Special";
+      }
+      const prev = (truck.state?.off_note ?? "").trim();
+      const nextNote = prev ? `${prev} | ${note}` : note;
+      await upsert.mutateAsync({
+        truck_number: truck.truck_number,
+        run_date: runDate,
+        status: "loaded",
+        wearers: truck.state?.wearers ?? 0,
+        off_note: nextNote,
+      });
+      setPendingOffLoadTruck(null);
+      setPendingOffLoadRoute("");
+      setPendingOffLoadError(null);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } };
+      setPendingOffLoadError(e?.response?.data?.detail ?? "Failed to set loaded status.");
+    }
   }
 
   // Derive filter directly from URL so sidebar nav always takes effect
@@ -467,10 +508,20 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     const c: Record<string, number> = { total: 0 };
     (data ?? []).forEach((t) => {
       c.total += 1;
-      // In fleet mode, spare-type trucks count in the "spare" bucket unless
-      // manually set OOS — those go into the oos bucket.
       if (fleetMode && t.truck_type === "Spare" && t.state?.status !== "oos") {
-        c.spare = (c.spare ?? 0) + 1;
+        // In fleet mode, spares covering an OOS route count in their real
+        // lifecycle bucket (e.g. "unloaded"). Idle spares with no OOS
+        // assignment go in the "spare" bucket so the spare rail shows
+        // available trucks. Active non-OOS spares also use lifecycle bucket.
+        const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+        const isOosCoverage = coveredRoute != null && truckStatusByNumber.get(coveredRoute) === "oos";
+        const s = effectiveStatus(t, runDayNum, holidayLoad);
+        const isIdle = s === "dirty" || s === "off" || s === "unloaded";
+        if (!isOosCoverage && isIdle) {
+          c.spare = (c.spare ?? 0) + 1;
+        } else {
+          c[s] = (c[s] ?? 0) + 1;
+        }
       } else if (!fleetMode && t.truck_type === "Spare") {
         // In non-fleet mode, a spare counts in lifecycle buckets only when it
         // is actively covering an OOS route — same predicate as `filtered`
@@ -496,16 +547,28 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     if (fleetMode) {
       if (fleetFilters.has("all")) return data;
       return data.filter((t) => {
-        // "spare" rail button matches spare-type trucks that are NOT manually OOS
-        if (fleetFilters.has("spare") && t.truck_type === "Spare" && t.state?.status !== "oos") return true;
-        // spare-type trucks that are OOS match by effectiveStatus like regular trucks
-        if (t.truck_type === "Spare" && t.state?.status !== "oos") return false;
+        if (t.truck_type === "Spare" && t.state?.status !== "oos") {
+          const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+          const isOosCoverage = coveredRoute != null && truckStatusByNumber.get(coveredRoute) === "oos";
+          const s = effectiveStatus(t, runDayNum, holidayLoad);
+          if (isOosCoverage) {
+            // This spare is covering an OOS route — it matches its real
+            // lifecycle status (unloaded, loaded, in_progress, etc.)
+            return fleetFilters.has(s);
+          }
+          const isIdle = s === "dirty" || s === "off" || s === "unloaded";
+          // Idle spares match the "spare" filter; active spares match their lifecycle filter
+          return isIdle ? fleetFilters.has("spare") : fleetFilters.has(s);
+        }
         return fleetFilters.has(effectiveStatus(t, runDayNum, holidayLoad));
       });
     }
     if (filter === "all") return data;
     return data.filter((t) => {
-      if (effectiveStatus(t, runDayNum, holidayLoad) !== filter) return false;
+      const s = effectiveStatus(t, runDayNum, holidayLoad);
+      // In dirty view, also include unfinished trucks (rendered as a sub-section)
+      const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
+      if (!matchStatus) return false;
       if (t.truck_type === "Spare") {
         // Show a spare card in a lifecycle-status filter only when it is
         // actively covering an OOS route (the spare represents that route).
@@ -517,7 +580,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       }
       return true;
     });
-  }, [data, filter, fleetMode, fleetFilters, runDayNum, holidayLoad, coveringSpareByRoute, truckStatusByNumber]);
+  }, [data, filter, fleetMode, fleetFilters, runDayNum, holidayLoad, truckStatusByNumber]);
 
   // Live lookup so the open detail modal reflects refreshed board data.
   const detailTruck = useMemo(
@@ -711,7 +774,17 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
           : "grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
       )}>
-        {filtered.map((t) => {
+        {(() => {
+          // In dirty view, sort so actual dirty trucks come first, unfinished after
+          const rows = (!fleetMode && filter === "dirty")
+            ? [...filtered].sort((a, b) => {
+                const sa = effectiveStatus(a, runDayNum, holidayLoad) === "unfinished" ? 1 : 0;
+                const sb = effectiveStatus(b, runDayNum, holidayLoad) === "unfinished" ? 1 : 0;
+                return sa - sb;
+              })
+            : filtered;
+          let lastSection: TruckStatus | null = null;
+          return rows.map((t) => {
           const status = effectiveStatus(t, runDayNum, holidayLoad);
           // Day chips — only visible during holiday mode, only for load/unload views
           const isUnloadView = filter === "dirty" || filter === "unloaded";
@@ -726,8 +799,21 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
             chipIsExtra = chipDay === loadDay2;
           }
+          // Section header divider when dirty view transitions dirty→unfinished
+          const showSectionHeader = !fleetMode && filter === "dirty" && status !== lastSection && (status === "dirty" || status === "unfinished");
+          if (showSectionHeader) lastSection = status;
+          const sectionHeader = showSectionHeader ? (
+            <div key={`section-${status}`} className="col-span-full mt-1 mb-1 flex items-center gap-2">
+              <span className={clsx("h-2 w-2 shrink-0 rounded-full", status === "unfinished" ? "bg-status-unfinished" : "bg-status-dirty")} />
+              <span className={clsx("text-xs font-semibold uppercase tracking-wide", status === "unfinished" ? "text-orange-400" : "text-red-400")}>
+                {status === "unfinished" ? "Unfinished" : "Dirty"}
+              </span>
+            </div>
+          ) : null;
           return (
-            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+            <>
+              {sectionHeader}
+            <div className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale",  !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {
@@ -838,12 +924,18 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         </span>
                       );
                     })()}
-                    {/* Covering truck: show which route it is loading */}
-                    {t.route_swap_route != null && t.truck_type !== "Spare" && (
-                      <span className="text-sky-400 font-medium">rt #{t.route_swap_route}</span>
+                    {/* Covering/swap truck: show which route it is running */}
+                    {t.route_swap_route != null && (
+                      <span className="text-sky-400 font-medium">
+                        rt #{t.route_swap_route}
+                        {t.truck_type === "Spare" && <span className="ml-1 text-slate-500">(swap)</span>}
+                      </span>
                     )}
                     {t.state?.oos_spare_route != null && (
-                      <span className="text-sky-400 font-medium">cov #{t.state.oos_spare_route}</span>
+                      <span className="text-sky-400 font-medium">rt #{t.state.oos_spare_route} <span className="text-slate-500">(cov)</span></span>
+                    )}
+                    {t.state?.off_note?.toLowerCase().includes("ran special") && (
+                      <span className="text-amber-300 font-medium">Ran Special</span>
                     )}
                   </div>
                 )}
@@ -883,6 +975,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
                         const next = e.target.value as TruckStatus;
+                        if (status === "off" && next === "loaded") {
+                          setPendingOffLoadTruck(t);
+                          setPendingOffLoadRoute("");
+                          setPendingOffLoadError(null);
+                          e.currentTarget.value = status;
+                          return;
+                        }
                         if (next === "oos") {
                           setPendingOosTruck(t);
                           e.currentTarget.value = status; // revert visual selection
@@ -901,9 +1000,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           Off (scheduled)
                         </option>
                       )}
-                      {FLEET_STATUS_OPTIONS.filter(
-                        (s) => status !== "off" || (s !== "dirty" && s !== "unloaded"),
-                      ).map((s) => (
+                      {FLEET_STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>
                           {STATUS_LABELS[s]}
                         </option>
@@ -916,8 +1013,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 </div>
               )}
             </div>
+            </>
           );
-        })}
+          });
+        })()}
         {!isLoading && filtered.length === 0 && (
           <p className="col-span-full text-slate-500">No trucks match this filter.</p>
         )}
@@ -962,6 +1061,83 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 }}
               >
                 Confirm OOS
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {pendingOffLoadTruck && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => {
+            setPendingOffLoadTruck(null);
+            setPendingOffLoadRoute("");
+            setPendingOffLoadError(null);
+          }}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-base font-semibold">
+              Truck #{pendingOffLoadTruck.truck_number} is off-schedule
+            </h3>
+            <p className="mb-4 text-sm text-slate-400">
+              This truck is not scheduled today. Select the route it ran, or just mark it
+              as <span className="font-semibold text-amber-300">Ran Special</span> if no specific
+              route applies. Either way the truck will be marked Loaded and the note saved.
+            </p>
+
+            <div className="space-y-3">
+              <div>
+                <label className="label">Route it ran (optional)</label>
+                <select
+                  className="input"
+                  value={pendingOffLoadRoute}
+                  onChange={(e) => setPendingOffLoadRoute(e.target.value)}
+                >
+                  <option value="">- pick route truck -</option>
+                  {(data ?? [])
+                    .filter((x) => x.truck_type !== "Spare" && x.truck_number !== pendingOffLoadTruck.truck_number)
+                    .sort((a, b) => a.truck_number - b.truck_number)
+                    .map((x) => (
+                      <option key={x.truck_number} value={x.truck_number}>
+                        #{x.truck_number} ({effectiveStatus(x, runDayNum, holidayLoad)})
+                      </option>
+                    ))}
+                </select>
+              </div>
+
+              {pendingOffLoadError && (
+                <p className="text-sm text-red-400">{pendingOffLoadError}</p>
+              )}
+            </div>
+
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                className="btn-ghost"
+                onClick={() => {
+                  setPendingOffLoadTruck(null);
+                  setPendingOffLoadRoute("");
+                  setPendingOffLoadError(null);
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-amber-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-amber-600 transition-colors"
+                disabled={upsert.isPending}
+                onClick={() => finalizeOffTruckAsLoaded("special")}
+              >
+                Ran Special (no route)
+              </button>
+              <button
+                className="rounded-md bg-blue-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-blue-600 transition-colors disabled:opacity-60"
+                disabled={upsert.isPending || pendingOffLoadRoute === ""}
+                onClick={() => finalizeOffTruckAsLoaded("route")}
+              >
+                Save with Route
               </button>
             </div>
           </div>
@@ -1621,3 +1797,4 @@ function StatusEditor({
     </section>
   );
 }
+

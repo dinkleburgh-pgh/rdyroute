@@ -46,6 +46,7 @@ from database import Base
 
 class TruckStatus(str, enum.Enum):
     dirty = "dirty"
+    unfinished = "unfinished"
     shop = "shop"
     in_progress = "in_progress"
     unloaded = "unloaded"

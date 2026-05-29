@@ -14,6 +14,7 @@ import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from ".
 
 const STATUS_LABEL: Record<TruckStatus, string> = {
   dirty: "Dirty",
+  unfinished: "Unfinished",
   shop: "Shop",
   in_progress: "In Progress",
   unloaded: "Unloaded",
@@ -25,6 +26,7 @@ const STATUS_LABEL: Record<TruckStatus, string> = {
 
 const STATUS_DOT: Record<TruckStatus, string> = {
   dirty: "bg-status-dirty",
+  unfinished: "bg-status-unfinished",
   shop: "bg-status-shop",
   in_progress: "bg-status-inprogress",
   unloaded: "bg-status-unloaded",
@@ -37,12 +39,12 @@ const STATUS_DOT: Record<TruckStatus, string> = {
 // 'spare' (truck type) and 'off' (set elsewhere) are omitted from the status filter row.
 const STATUS_ORDER: TruckStatus[] = [
   "dirty",
-  "shop",
-  "in_progress",
   "unloaded",
+  "in_progress",
   "loaded",
-  "oos",
+  "spare",
   "off",
+  "oos",
 ];
 
 const PRIMARY_NAV = [
@@ -201,13 +203,21 @@ export default function Layout() {
       ? Math.round((loadedScheduled / totalScheduledLoad) * 100)
       : 0;
 
-  const inProgressTruck = (board ?? []).find((t) => t.state?.status === "in_progress");
+  const inProgressTruck = useMemo(
+    () => (board ?? []).find((t) => t.state?.status === "in_progress"),
+    [board],
+  );
   const unloadedPct =
     unloadRouteTrucks.length > 0
       ? Math.round((unloadedScheduled / unloadRouteTrucks.length) * 100)
       : 0;
 
-  const roleLabel = user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
+  const DISPLAY_ROLE_OVERRIDE: Record<string, { label: string; cls: string }> = {
+    nate: { label: "Lead", cls: ROLE_BADGE.supervisor },
+  };
+  const roleOverride = user?.username ? DISPLAY_ROLE_OVERRIDE[user.username] : undefined;
+  const roleLabel = roleOverride?.label ?? user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
+  const roleBadgeCls = roleOverride?.cls ?? ROLE_BADGE[(user?.role ?? "guest") as AuthRole] ?? ROLE_BADGE.guest;
   const allowed = ROLE_NAV_ACCESS[(user?.role ?? "guest") as AuthRole] ?? new Set<string>();
   const primaryNav = PRIMARY_NAV.filter((i) => allowed.has(i.to));
   const secondaryNav = SECONDARY_NAV.filter((i) => allowed.has(i.to));
@@ -387,9 +397,7 @@ export default function Layout() {
             <p className="text-slate-400">Signed in as:</p>
             <p className="font-semibold text-slate-100">{user?.username}</p>
             <div className="mt-1 flex justify-center">
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${
-                ROLE_BADGE[(user?.role ?? "guest") as AuthRole] ?? ROLE_BADGE.guest
-              }`}>
+              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${roleBadgeCls}`}>
                 {roleLabel}
               </span>
             </div>

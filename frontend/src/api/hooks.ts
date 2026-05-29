@@ -53,6 +53,7 @@ export function useFleet(includeInactive = false) {
     queryKey: ["fleet", includeInactive],
     queryFn: async () =>
       (await api.get<Truck[]>("/fleet", { params: { include_inactive: includeInactive } })).data,
+    staleTime: 60_000,
   });
 }
 
@@ -108,6 +109,7 @@ export function useBoard(runDate: string = todayIso()) {
     queryFn: async () =>
       (await api.get<TruckWithState[]>("/trucks/board", { params: { run_date: runDate } })).data,
     refetchInterval: 5000,
+    staleTime: 4500,
   });
 }
 
@@ -185,8 +187,16 @@ export function useUpsertTruckState() {
               ...t,
               state: {
                 ...base,
-                ...(vars.status !== undefined && { status: vars.status }),
-                ...(vars.wearers !== undefined && { wearers: vars.wearers }),
+                ...(vars.status             !== undefined && { status: vars.status }),
+                ...(vars.wearers            !== undefined && { wearers: vars.wearers }),
+                ...(vars.batch_id           !== undefined && { batch_id: vars.batch_id }),
+                ...(vars.load_start_time    !== undefined && { load_start_time: vars.load_start_time }),
+                ...(vars.load_finish_time   !== undefined && { load_finish_time: vars.load_finish_time }),
+                ...(vars.load_duration_seconds !== undefined && { load_duration_seconds: vars.load_duration_seconds }),
+                ...(vars.off_note           !== undefined && { off_note: vars.off_note ?? "" }),
+                ...(vars.shop_note          !== undefined && { shop_note: vars.shop_note ?? "" }),
+                ...(vars.oos_spare_route    !== undefined && { oos_spare_route: vars.oos_spare_route }),
+                ...(vars.has_dust_garment   !== undefined && { has_dust_garment: vars.has_dust_garment ?? false }),
               },
             };
           });
@@ -216,6 +226,7 @@ export function useBatchSummary(runDate: string = todayIso()) {
     queryFn: async () =>
       (await api.get<BatchSummary[]>("/batches/summary", { params: { run_date: runDate } })).data,
     refetchInterval: 10000,
+    staleTime: 9500,
   });
 }
 
@@ -262,6 +273,7 @@ export function useSpareAssignments(runDate: string = todayIso(), returnedOnly?:
         params: { run_date: runDate, returned: returnedOnly },
       })).data,
     refetchInterval: 10000,
+    staleTime: 9500,
   });
 }
 
@@ -296,7 +308,10 @@ export function useDeleteSpare() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => api.delete(`/spares/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["spares"] }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["spares"] });
+      qc.invalidateQueries({ queryKey: ["board"] });
+    },
   });
 }
 
@@ -310,6 +325,7 @@ export function useRouteSwaps(runDate: string = todayIso()) {
     queryFn: async () =>
       (await api.get<RouteSwap[]>("/route-swaps", { params: { run_date: runDate } })).data,
     refetchInterval: 10000,
+    staleTime: 9500,
   });
 }
 
@@ -366,6 +382,7 @@ export function useShortages(runDate: string = todayIso(), truckNumber?: number)
       (await api.get<Shortage[]>("/shorts", {
         params: { run_date: runDate, truck_number: truckNumber },
       })).data,
+    staleTime: 30_000,
   });
 }
 
@@ -413,6 +430,7 @@ export function useAuditEntries(runDate: string = todayIso()) {
     queryKey: ["audit", runDate],
     queryFn: async () =>
       (await api.get<AuditEntry[]>("/audit/entries", { params: { run_date: runDate } })).data,
+    staleTime: 30_000,
   });
 }
 
@@ -489,6 +507,7 @@ export function useSettings() {
   return useQuery({
     queryKey: ["settings"],
     queryFn: async () => (await api.get<AppSetting[]>("/settings")).data,
+    staleTime: 60_000,
   });
 }
 
@@ -521,6 +540,7 @@ export function useUpdateStatus() {
     queryKey: ["update-status"],
     queryFn: async () => (await api.get<UpdateStatus>("/updates/status")).data,
     refetchInterval: 5000,
+    staleTime: 4500,
   });
 }
 
@@ -558,6 +578,8 @@ export function useHolidayMode(runDate: string) {
         throw err;
       }
     },
+    staleTime: 60_000,
+    retry: false,
   });
 }
 
@@ -591,6 +613,8 @@ function makeHolidayOpHooks(op: "load" | "unload") {
           throw err;
         }
       },
+      staleTime: 60_000,
+      retry: false,
     });
   }
   function useSet() {
@@ -634,6 +658,8 @@ function makeDayOverrideHooks(op: "load_day" | "unloads_day") {
           throw err;
         }
       },
+      staleTime: 60_000,
+      retry: false,
     });
   }
   function useSet() {
@@ -706,6 +732,8 @@ export function useWizardCompleted(runDate: string) {
         throw err;
       }
     },
+    staleTime: 60_000,
+    retry: false,
   });
 }
 

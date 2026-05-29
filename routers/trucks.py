@@ -22,7 +22,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import RouteSwap, Truck, TruckState
+from models import RouteSwap, Truck, TruckState, User
+from routers.auth import get_current_user, require_admin
 from schemas import TruckStateCreate, TruckStateOut, TruckStateUpdate, TruckWithState
 from ws_manager import manager
 
@@ -41,6 +42,7 @@ _PERSISTENT_STATUSES = {"off", "oos", "shop"}
 def get_board(
     run_date: date = Query(..., description="Operational run-date (YYYY-MM-DD)"),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """
     Return all active fleet trucks joined with their state for *run_date*.
@@ -121,6 +123,7 @@ def get_truck_state(
     truck_number: int,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     row = db.scalars(
         select(TruckState).where(
@@ -139,6 +142,7 @@ def create_truck_state(
     payload: TruckStateCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     if payload.truck_number != truck_number:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="truck_number mismatch")
@@ -178,6 +182,7 @@ def update_truck_state(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """
     Partial update — only fields present in the request body are applied.
@@ -218,6 +223,7 @@ def reset_workday(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ):
     """
     Full workday reset for *run_date*:
@@ -277,6 +283,7 @@ def selective_reset(
     route_swaps: bool = Query(False),
     day_flags: bool = Query(False),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ):
     """
     Selective workday reset — clears only the requested components for *run_date*.
@@ -335,6 +342,7 @@ def bulk_update_status(
     truck_numbers: list[int] = Query(...),
     new_status: str = Query(...),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """
     Set all listed trucks to *new_status* for *run_date*.

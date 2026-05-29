@@ -41,6 +41,7 @@ function DustGarmentIcon({ className }: { className?: string }) {
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
+  unfinished: "Unfinished",
   shop: "Shop",
   in_progress: "Loading",
   unloaded: "Unloaded",
@@ -52,6 +53,7 @@ const STATUS_LABELS: Record<TruckStatus, string> = {
 
 const STATUS_BG: Record<TruckStatus, string> = {
   dirty: "bg-status-dirty",
+  unfinished: "bg-status-unfinished",
   shop: "bg-status-shop",
   in_progress: "bg-status-inprogress",
   unloaded: "bg-status-unloaded",
@@ -63,6 +65,7 @@ const STATUS_BG: Record<TruckStatus, string> = {
 
 const STATUS_TEXT: Record<TruckStatus, string> = {
   dirty: "text-status-dirty",
+  unfinished: "text-status-unfinished",
   shop: "text-status-shop",
   in_progress: "text-status-inprogress",
   unloaded: "text-status-unloaded",
@@ -73,10 +76,10 @@ const STATUS_TEXT: Record<TruckStatus, string> = {
 };
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
-  dirty: 0, shop: 1, in_progress: 2, unloaded: 3, loaded: 4, oos: 5, off: 6,
+  dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
 };
 const LOAD_SORT: Partial<Record<TruckStatus, number>> = {
-  dirty: 0, unloaded: 1, shop: 2, in_progress: 3, loaded: 4, oos: 5, off: 6,
+  dirty: 0, unfinished: 1, unloaded: 2, shop: 3, in_progress: 4, loaded: 5, oos: 6, off: 7,
 };
 
 function isUnloadDone(s: TruckStatus) {
