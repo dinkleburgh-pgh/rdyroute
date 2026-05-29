@@ -10,6 +10,7 @@ WORKDIR /app
 # Build-time metadata — passed from CI or docker build --build-arg
 ARG GIT_COMMIT=unknown
 ARG BUILD_DATE
+ARG APP_VERSION
 
 # Install deps with cache-friendly layer.
 COPY package.json package-lock.json* npm-shrinkwrap.json* ./
@@ -24,8 +25,9 @@ COPY . .
 # Expose build args to Vite via VITE_ env vars, build, then write build-info.json.
 RUN set -eu; \
     BUILD_DATE_FINAL="${BUILD_DATE:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"; \
-    VITE_GIT_COMMIT="$GIT_COMMIT" VITE_BUILD_DATE="$BUILD_DATE_FINAL" npm run build; \
-    VERSION="$(node -p "require('./package.json').version")"; \
+    PKG_VERSION="$(node -p "require('./package.json').version")"; \
+    VERSION="${APP_VERSION:-$PKG_VERSION}"; \
+    VITE_APP_VERSION="$VERSION" VITE_GIT_COMMIT="$GIT_COMMIT" VITE_BUILD_DATE="$BUILD_DATE_FINAL" npm run build; \
     printf '{"version":"%s","commit":"%s","date":"%s"}\n' \
       "$VERSION" "$GIT_COMMIT" "$BUILD_DATE_FINAL" > dist/build-info.json
 

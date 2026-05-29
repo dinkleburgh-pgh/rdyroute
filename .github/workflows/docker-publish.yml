@@ -32,6 +32,17 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      # ── Compute auto-bumped frontend version ──────────────────────────
+      # Uses <major>.<minor> from frontend/package.json and the workflow run
+      # number as the patch, so every push to main produces a unique version.
+      - name: Compute APP_VERSION
+        id: appver
+        run: |
+          BASE=$(node -p "require('./frontend/package.json').version.split('.').slice(0,2).join('.')")
+          APP_VERSION="${BASE}.${{ github.run_number }}"
+          echo "app_version=${APP_VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Computed APP_VERSION=${APP_VERSION}"
+
       # ── Backend ────────────────────────────────────────────────────────
       - name: Build & push backend
         uses: docker/build-push-action@v5
@@ -42,6 +53,7 @@ jobs:
           tags: |
             ${{ env.BACKEND_IMAGE }}:latest
             ${{ env.BACKEND_IMAGE }}:${{ github.sha }}
+            ${{ env.BACKEND_IMAGE }}:v${{ steps.appver.outputs.app_version }}
           cache-from: type=gha,scope=backend
           cache-to: type=gha,mode=max,scope=backend
 
@@ -55,8 +67,10 @@ jobs:
           build-args: |
             GIT_COMMIT=${{ github.sha }}
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            APP_VERSION=${{ steps.appver.outputs.app_version }}
           tags: |
             ${{ env.FRONTEND_IMAGE }}:latest
             ${{ env.FRONTEND_IMAGE }}:${{ github.sha }}
+            ${{ env.FRONTEND_IMAGE }}:v${{ steps.appver.outputs.app_version }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
