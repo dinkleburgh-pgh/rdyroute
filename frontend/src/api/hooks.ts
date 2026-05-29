@@ -10,13 +10,11 @@ import type {
   Message,
   Notice,
   NoticeSeverity,
-  NoteType,
   RouteSwap,
   Shortage,
   SpareAssignment,
   TokenResponse,
   Truck,
-  TruckNote,
   TruckStatus,
   TruckWithState,
   User,
@@ -431,14 +429,6 @@ export function useCreateAuditEntry() {
   });
 }
 
-export function useDeleteAuditEntry() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: string) => api.delete(`/audit/entries/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["audit"] }),
-  });
-}
-
 export function useAuditDailyTrend(daysBack = 14) {
   return useQuery({
     queryKey: ["audit-trend", daysBack],
@@ -498,6 +488,39 @@ export function useUpsertSetting() {
     mutationFn: async ({ key, value }: { key: string; value: unknown }) =>
       (await api.put<AppSetting>(`/settings/${encodeURIComponent(key)}`, { value })).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+}
+
+export interface UpdateStatus {
+  enabled: boolean;
+  has_secret: boolean;
+  command: string;
+  running: boolean;
+  last: Record<string, unknown>;
+}
+
+export function useUpdateStatus() {
+  return useQuery({
+    queryKey: ["update-status"],
+    queryFn: async () => (await api.get<UpdateStatus>("/updates/status")).data,
+    refetchInterval: 5000,
+  });
+}
+
+export function useTriggerUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post("/updates/trigger")).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["update-status"] }),
+  });
+}
+
+export function useTriggerPushUpdate() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { ref?: string; head_commit?: { id?: string } }) =>
+      (await api.post("/updates/push", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["update-status"] }),
   });
 }
 
@@ -573,54 +596,6 @@ export const useHolidayLoad = _holidayLoadHooks.useFlag;
 export const useSetHolidayLoad = _holidayLoadHooks.useSet;
 export const useHolidayUnload = _holidayUnloadHooks.useFlag;
 export const useSetHolidayUnload = _holidayUnloadHooks.useSet;
-
-// ---------------------------------------------------------------------------
-// Day-number overrides (holiday run correction)
-// ---------------------------------------------------------------------------
-
-function makeDayOverrideHooks(op: "load_day" | "unloads_day") {
-  const settingKey = `${op}_override`;
-  function useOverride(runDate: string) {
-    return useQuery({
-      queryKey: [settingKey, runDate],
-      queryFn: async (): Promise<number | null> => {
-        try {
-          const { data } = await api.get<AppSetting>(`/settings/${settingKey}_${runDate}`);
-          const v = Number(data.value);
-          return v >= 1 && v <= 5 ? v : null;
-        } catch (err: unknown) {
-          const e = err as { response?: { status?: number } };
-          if (e?.response?.status === 404) return null;
-          throw err;
-        }
-      },
-    });
-  }
-  function useSet() {
-    const qc = useQueryClient();
-    return useMutation({
-      mutationFn: async ({ runDate, value }: { runDate: string; value: number | null }) => {
-        if (value === null) {
-          try { await api.delete(`/settings/${settingKey}_${runDate}`); } catch { /* already absent */ }
-          return null;
-        }
-        return (await api.put<AppSetting>(`/settings/${settingKey}_${runDate}`, { value })).data;
-      },
-      onSuccess: (_data, vars) => {
-        qc.invalidateQueries({ queryKey: [settingKey, vars.runDate] });
-      },
-    });
-  }
-  return { useOverride, useSet };
-}
-
-const _loadDayOverrideHooks   = makeDayOverrideHooks("load_day");
-const _unloadsDayOverrideHooks = makeDayOverrideHooks("unloads_day");
-
-export const useLoadDayOverride    = _loadDayOverrideHooks.useOverride;
-export const useSetLoadDayOverride = _loadDayOverrideHooks.useSet;
-export const useUnloadsDayOverride    = _unloadsDayOverrideHooks.useOverride;
-export const useSetUnloadsDayOverride = _unloadsDayOverrideHooks.useSet;
 
 // ---------------------------------------------------------------------------
 // Daily notes (per run-date)
@@ -966,58 +941,6 @@ export function useRecordLoadDuration() {
   });
 }
 
-// ---------------------------------------------------------------------------
-// Truck Notes
-// ---------------------------------------------------------------------------
-
-export function useTruckNotes(opts?: { truckNumber?: number; loadDay?: number; activeOnly?: boolean }) {
-  const params: Record<string, unknown> = { active_only: opts?.activeOnly ?? true };
-  if (opts?.truckNumber != null) params.truck_number = opts.truckNumber;
-  if (opts?.loadDay != null) params.load_day = opts.loadDay;
-  return useQuery({
-    queryKey: ["truck-notes", params],
-    queryFn: async () => (await api.get<TruckNote[]>("/notes", { params })).data,
-    staleTime: 60_000,
-  });
-}
-
-export function useCreateNote() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: {
-      truck_number: number;
-      note_type: NoteType;
-      body: string;
-      workday_num?: number | null;
-      expires_on?: string | null;
-    }) => (await api.post<TruckNote>("/notes", payload)).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["truck-notes"] }),
-  });
-}
-
-export function useUpdateNote() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async ({ id, ...patch }: {
-      id: number;
-      note_type?: NoteType;
-      body?: string;
-      workday_num?: number | null;
-      expires_on?: string | null;
-      is_active?: boolean;
-    }) => (await api.patch<TruckNote>(`/notes/${id}`, patch)).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["truck-notes"] }),
-  });
-}
-
-export function useDeleteNote() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (id: number) => api.delete(`/notes/${id}`),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["truck-notes"] }),
-  });
-}
-
 export function usePaceAverage(lookbackDays = 30) {
   return useQuery({
     queryKey: ["pace-average", lookbackDays],
@@ -1164,60 +1087,6 @@ export function useUpdateTrackedItems() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tracked-items"] });
-      qc.invalidateQueries({ queryKey: ["settings"] });
-    },
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Full workday reset
-// ---------------------------------------------------------------------------
-
-export function useResetWorkday() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (runDate: string) =>
-      (await api.post(`/trucks/reset-workday?run_date=${runDate}`)).data,
-    onSuccess: (_data, runDate) => {
-      qc.invalidateQueries({ queryKey: ["board"] });
-      qc.invalidateQueries({ queryKey: ["truck-states"] });
-      qc.invalidateQueries({ queryKey: ["batches", runDate] });
-      qc.invalidateQueries({ queryKey: ["route-swaps", runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday-mode", runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_load", runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_unload", runDate] });
-      qc.invalidateQueries({ queryKey: ["wizard-completed", runDate] });
-      qc.invalidateQueries({ queryKey: ["settings"] });
-    },
-  });
-}
-
-export function useSelectiveReset() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (args: {
-      runDate: string;
-      truck_states?: boolean;
-      batches?: boolean;
-      route_swaps?: boolean;
-      day_flags?: boolean;
-    }) => {
-      const p = new URLSearchParams({ run_date: args.runDate });
-      if (args.truck_states) p.set("truck_states", "true");
-      if (args.batches)      p.set("batches", "true");
-      if (args.route_swaps)  p.set("route_swaps", "true");
-      if (args.day_flags)    p.set("day_flags", "true");
-      return (await api.post(`/trucks/selective-reset?${p}`)).data;
-    },
-    onSuccess: (_data, args) => {
-      qc.invalidateQueries({ queryKey: ["board"] });
-      qc.invalidateQueries({ queryKey: ["truck-states"] });
-      qc.invalidateQueries({ queryKey: ["batches", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["route-swaps", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday-mode", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_load", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_unload", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["wizard-completed", args.runDate] });
       qc.invalidateQueries({ queryKey: ["settings"] });
     },
   });

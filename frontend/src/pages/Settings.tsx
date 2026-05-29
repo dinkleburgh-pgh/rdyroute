@@ -33,7 +33,10 @@ import {
   useUpdateTrackedItems,
   useUpdateTruck,
   useUpdateUser,
+  useUpdateStatus,
   useUpsertSetting,
+  useTriggerUpdate,
+  useTriggerPushUpdate,
   useUpsertTruckState,
   useUsers,
 } from "../api/hooks";
@@ -58,6 +61,7 @@ type Category =
   | "users"
   | "fleet_mgmt"
   | "advanced"
+  | "updates"
   | "development"
   | "recovery"
   | "resets"
@@ -150,6 +154,7 @@ const CARD_GROUPS: CardGroup[] = [
     adminOnly: true,
     tabs: [
       { id: "advanced",    label: "Advanced" },
+      { id: "updates",     label: "Update" },
       { id: "development", label: "Development" },
     ],
   },
@@ -284,6 +289,7 @@ export default function Management() {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
+      case "updates":        return <UpdatesPanel map={map} />;
       case "development":    return <DevelopmentPanel />;
       case "communications": return <CommunicationsPanel />;
       case "users":          return <UsersPanel />;
@@ -983,6 +989,157 @@ function AdvancedPanel({ settings }: { settings: AppSetting[] }) {
         <p className="px-3 py-2 text-xs text-slate-500">
           Dimmed rows are managed by the other tabs.
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Update — push-based updater config + controls
+// ---------------------------------------------------------------------------
+
+function UpdatesPanel({ map }: { map: Map<string, unknown> }) {
+  const upsert = useUpsertSetting();
+  const trigger = useTriggerUpdate();
+  const triggerPush = useTriggerPushUpdate();
+  const { data: status, isLoading } = useUpdateStatus();
+
+  const initialEnabled = map.get("update_push_enabled") === true;
+  const initialSecret = String(map.get("update_push_secret") ?? "");
+  const initialCommand = String(map.get("update_deploy_command") ?? "./deploy.ps1");
+
+  const [enabled, setEnabled] = useState(initialEnabled);
+  const [secret, setSecret] = useState(initialSecret);
+  const [command, setCommand] = useState(initialCommand);
+
+  useEffect(() => {
+    setEnabled(initialEnabled);
+    setSecret(initialSecret);
+    setCommand(initialCommand);
+    // Intentionally driven by current settings map snapshot.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [map]);
+
+  const dirty =
+    enabled !== initialEnabled ||
+    secret !== initialSecret ||
+    command !== initialCommand;
+
+  async function save() {
+    await Promise.all([
+      upsert.mutateAsync({ key: "update_push_enabled", value: enabled }),
+      upsert.mutateAsync({ key: "update_push_secret", value: secret.trim() }),
+      upsert.mutateAsync({ key: "update_deploy_command", value: command.trim() || "./deploy.ps1" }),
+    ]);
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-lg border border-blue-700 bg-blue-950/30 px-4 py-3 text-sm text-blue-200">
+        Push-based updates let GitHub (or another sender) call an endpoint when main changes.
+        The backend runs the configured deploy command and records output/status.
+      </div>
+
+      <div className="card space-y-3">
+        <h3 className="text-sm font-semibold text-slate-300">Updater Configuration</h3>
+
+        <FieldRow
+          label="Push updates enabled"
+          hint="When enabled, POST /updates/push accepts a valid secret and starts a deploy run."
+        >
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={enabled}
+              onChange={(e) => setEnabled(e.target.checked)}
+            />
+            Enable push-based updates
+          </label>
+        </FieldRow>
+
+        <FieldRow
+          label="Webhook secret"
+          hint="Send this as X-ReadyRoute-Secret from GitHub Action/webhook caller."
+        >
+          <input
+            className="input"
+            value={secret}
+            onChange={(e) => setSecret(e.target.value)}
+            placeholder="shared secret"
+          />
+        </FieldRow>
+
+        <FieldRow
+          label="Deploy command"
+          hint="Command executed on trigger (ex: ./deploy.ps1 or docker compose ...)."
+        >
+          <input
+            className="input"
+            value={command}
+            onChange={(e) => setCommand(e.target.value)}
+            placeholder="./deploy.ps1"
+          />
+        </FieldRow>
+
+        <SaveButton
+          dirty={dirty}
+          saving={upsert.isPending}
+          onSave={save}
+          onRevert={() => {
+            setEnabled(initialEnabled);
+            setSecret(initialSecret);
+            setCommand(initialCommand);
+          }}
+        />
+      </div>
+
+      <div className="card space-y-3">
+        <h3 className="text-sm font-semibold text-slate-300">Trigger / Status</h3>
+        <p className="text-xs text-slate-500">
+          Endpoint: <span className="font-mono">POST /updates/push</span> with header
+          <span className="font-mono"> X-ReadyRoute-Secret</span> and optional body
+          <span className="font-mono"> {`{ ref, head_commit: { id } }`}</span>.
+        </p>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            className="btn-primary"
+            disabled={trigger.isPending || status?.running === true}
+            onClick={() => trigger.mutate()}
+          >
+            {trigger.isPending ? "Triggering…" : "Run Update Now"}
+          </button>
+          <button
+            className="btn-ghost"
+            disabled={triggerPush.isPending || status?.running === true}
+            onClick={() => triggerPush.mutate({ ref: "refs/heads/main" })}
+          >
+            {triggerPush.isPending ? "Sending…" : "Test Push Event"}
+          </button>
+        </div>
+
+        {isLoading ? (
+          <p className="text-sm text-slate-500">Loading updater status…</p>
+        ) : (
+          <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-xs">
+            <p className="text-slate-300">
+              State: <span className="font-semibold">{status?.running ? "running" : String((status?.last?.state as string | undefined) ?? "idle")}</span>
+            </p>
+            <p className="text-slate-400">Command: <span className="font-mono">{status?.command ?? "./deploy.ps1"}</span></p>
+            {status?.last?.started_at && (
+              <p className="text-slate-400">Started: {String(status.last.started_at)}</p>
+            )}
+            {status?.last?.finished_at && (
+              <p className="text-slate-400">Finished: {String(status.last.finished_at)}</p>
+            )}
+            {status?.last?.exit_code != null && (
+              <p className="text-slate-400">Exit code: {String(status.last.exit_code)}</p>
+            )}
+            {status?.last?.error && (
+              <p className="text-red-400">Error: {String(status.last.error)}</p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
