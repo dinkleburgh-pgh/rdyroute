@@ -9,7 +9,7 @@
 }
 
 @layer utilities {
-  .bg-status-unfinished { background-color: #c026d3; color: #ffffff; }
+  .bg-status-unfinished { background: linear-gradient(to right, #dc2626 50%, #16a34a 50%); color: #ffffff; }
   .text-status-unfinished { color: #dc2626; }
 }
 
