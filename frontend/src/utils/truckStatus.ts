@@ -84,7 +84,9 @@ export function buildRouteStatusCounts(
     }
 
     // Route trucks always count in their effective status (OOS stays OOS).
-    out[effectiveStatus(t, loadDayNum, holidayLoad)] += 1;
+    // Unfinished trucks surface under Dirty in the sidebar.
+    const s = effectiveStatus(t, loadDayNum, holidayLoad);
+    out[s === "unfinished" ? "dirty" : s] += 1;
   }
 
   return out;

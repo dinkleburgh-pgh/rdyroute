@@ -75,13 +75,13 @@ function TruckPicker({
           <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">
             Needs Audit
           </h3>
-          <div className="flex flex-wrap gap-3">
+          <div className="grid gap-2 grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
             {notAudited.map((t) => (
               <button
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
-                className="flex h-20 w-20 flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
+                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
               >
                 <span className="text-2xl font-black leading-none">{t.truck_number}</span>
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
@@ -99,7 +99,7 @@ function TruckPicker({
           <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">
             Audited
           </h3>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2 grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
             {audited.map((t) => {
               const count = entriesByTruck.get(t.truck_number)?.length ?? 0;
               return (
@@ -107,7 +107,7 @@ function TruckPicker({
                   key={t.truck_number}
                   type="button"
                   onClick={() => onSelect(t)}
-                  className="flex h-16 w-16 flex-col items-center justify-center rounded-xl bg-emerald-900/70 text-white shadow ring-1 ring-emerald-700/60 transition active:scale-95 hover:bg-emerald-800/70"
+                  className="flex aspect-square flex-col items-center justify-center rounded-xl bg-emerald-900/70 text-white shadow ring-1 ring-emerald-700/60 transition active:scale-95 hover:bg-emerald-800/70"
                 >
                   <span className="text-xl font-black leading-none text-emerald-200">{t.truck_number}</span>
                   <span className="mt-0.5 text-[10px] font-semibold text-emerald-400">
@@ -188,6 +188,37 @@ const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Colour palette
+// ---------------------------------------------------------------------------
+
+const TOP_PALETTE: Record<string, string> = {
+  "3x10":  "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",
+  "3x5":   "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
+  "4x6":   "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800",
+  "Paper": "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
+  "Bulk":  "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
+};
+const SUB_PALETTE: Record<string, string> = {
+  Aprons:      "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
+  "Dust Mops": "bg-gradient-to-b from-teal-600 to-teal-900 ring-1 ring-teal-400/20 hover:from-teal-500 hover:to-teal-800",
+  Towels:      "bg-gradient-to-b from-amber-700 to-amber-950 ring-1 ring-amber-500/20 hover:from-amber-600 hover:to-amber-900",
+};
+const MAT_COLOR_PALETTE: Record<string, string> = {
+  "Black":      "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
+  "Onyx":       "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",
+  "Copper":     "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",
+  "Indigo":     "bg-indigo-700 ring-1 ring-indigo-400/20 hover:bg-indigo-600",
+  "White":      "bg-white ring-1 ring-slate-300 hover:bg-slate-100",
+  "Red":        "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",
+  "Green":      "bg-green-700 ring-1 ring-green-400/20 hover:bg-green-600",
+  "Blue":       "bg-blue-700 ring-1 ring-blue-400/20 hover:bg-blue-600",
+  "Denim":      "bg-[#1a5fa8] ring-1 ring-blue-400/20 hover:bg-[#1e6dbe]",
+  "Red Shop":   "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",
+  "White Shop": "bg-white ring-1 ring-slate-300 hover:bg-slate-100",
+};
+const LIGHT_BG_ITEMS = new Set(["White", "White Shop"]);
+
+// ---------------------------------------------------------------------------
 // HierarchyPicker — 1–3 step selection inside ItemLogger
 // ---------------------------------------------------------------------------
 
@@ -239,13 +270,95 @@ function HierarchyPicker({
     return items.filter(i => topCatOf(i) === tc && subCatOf(i) === sc);
   }
 
-  // --- Qty prompt (shown after selecting any final item) ---
-  if (pendingItem !== null) {
+  function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {gridItems.map((item) => {
+          const disp = MAT_SIZES.has(cat) && item.label.startsWith(cat + " ")
+            ? item.label.slice(cat.length + 1)
+            : item.label;
+          return (
+            <button
+              key={item.label}
+              type="button"
+              disabled={isPending}
+              onClick={() => selectItem(item.label)}
+              className={clsx(
+                "rounded-2xl px-7 py-5 text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+                LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
+                MAT_COLOR_PALETTE[disp] ?? btnClass,
+              )}
+            >
+              {disp}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Build the selection trail
+  const trail: { label: string; palette: string; onClick: () => void }[] = [];
+  if (topCat !== null) {
+    trail.push({
+      label: topCat,
+      palette: TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      onClick: reset,
+    });
+  }
+  if (bulkSub !== null) {
+    trail.push({
+      label: bulkSub,
+      palette: SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      onClick: resetSub,
+    });
+  }
+  if (pendingItem !== null) {
+    const itemPalette =
+      MAT_COLOR_PALETTE[pendingItem] ??
+      (bulkSub ? (SUB_PALETTE[bulkSub] ?? null) : null) ??
+      (topCat  ? (TOP_PALETTE[topCat]  ?? null) : null) ??
+      "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20";
+    trail.push({
+      label: pendingItem,
+      palette: itemPalette,
+      onClick: () => { setPending(null); setQtyInput(""); },
+    });
+  }
+
+  const subs      = topCat ? subCatsFor(topCat) : [];
+  const flatItems = topCat ? flatItemsFor(topCat) : [];
+
+  return (
+    <div className="space-y-1">
+      {/* Selection trail */}
+      {trail.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pb-1">
+          {trail.map((step, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={step.onClick}
+                title="Tap to go back"
+                className={clsx(
+                  "rounded-xl px-5 py-2.5 text-sm font-black text-white shadow-md opacity-70 ring-1 ring-white/10 transition hover:opacity-100 active:scale-95",
+                  step.palette,
+                )}
+              >
+                {step.label}
+              </button>
+              <div className="flex items-center">
+                <div className="h-px w-3 bg-slate-600" />
+                <div className="h-0 w-0 border-b-[5px] border-l-[6px] border-t-[5px] border-b-transparent border-l-slate-500 border-t-transparent" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Current level choices */}
+      {pendingItem !== null ? (
         <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Selected item</p>
-          <p className="mb-4 text-xl font-black text-white">{pendingItem}</p>
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-slate-400">Quantity</span>
             <input
@@ -278,159 +391,66 @@ function HierarchyPicker({
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  function ItemGrid({ gridItems, btnClass, logLabel, displayLabel }: {
-    gridItems: TrackedItem[];
-    btnClass: string;
-    logLabel: (item: TrackedItem) => string;
-    displayLabel?: (item: TrackedItem) => string;
-  }) {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {gridItems.map((item) => {
-          const disp = displayLabel ? displayLabel(item) : item.label;
-          return (
-            <button
-              key={item.label}
-              type="button"
-              disabled={isPending}
-              onClick={() => selectItem(logLabel(item))}
-              className={clsx(
-                "rounded-xl px-5 py-3.5 text-sm font-bold text-white shadow transition-all active:scale-95 disabled:opacity-50",
-                MAT_COLOR_PALETTE[disp] ?? btnClass,
-              )}
-            >
-              {disp}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // --- Step 1: top-level categories ---
-  if (topCat === null) {
-    return (
-      <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
-        <div className="flex flex-wrap gap-3">
-          {topCats.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setTopCat(cat)}
-              className={clsx(
-                "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
-                TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
-              )}
-            >
-              {cat}
-            </button>
-          ))}
+      ) : topCat === null ? (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
+          <div className="flex flex-wrap gap-3">
+            {topCats.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setTopCat(cat)}
+                className={clsx(
+                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  const subs      = subCatsFor(topCat);
-  const flatItems = flatItemsFor(topCat);
-
-  // --- Step 2a: flat items (mat colors, paper types, etc.) ---
-  if (subs.length === 0) {
-    const tc = topCat;
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={reset}
-            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
-            ← {topCat}
-          </button>
-          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-            {MAT_SIZES.has(topCat) ? "Color" : "Item"}
-          </p>
+      ) : subs.length === 0 ? (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{MAT_SIZES.has(topCat) ? "Color" : "Item"}</p>
+          <ItemGrid
+            gridItems={flatItems}
+            cat={topCat}
+            btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+          />
         </div>
-<ItemGrid
-          gridItems={flatItems}
-          btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
-          logLabel={(item) => item.label}
-          displayLabel={MAT_SIZES.has(tc)
-            ? (item) => item.label.startsWith(tc + " ") ? item.label.slice(tc.length + 1) : item.label
-            : undefined}
-        />
-      </div>
-    );
-  }
-
-  // --- Step 2b: sub-categories ---
-  if (bulkSub === null) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={reset}
-            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
-            ← {topCat}
-          </button>
+      ) : bulkSub === null ? (
+        <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Subcategory</p>
+          <div className="flex flex-wrap gap-3">
+            {subs.map((sub) => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setBulkSub(sub)}
+                className={clsx(
+                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                )}
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {subs.map((sub) => (
-            <button
-              key={sub}
-              type="button"
-              onClick={() => setBulkSub(sub)}
-              className={clsx(
-                "rounded-2xl px-6 py-4 text-base font-black text-white shadow-lg transition-all active:scale-95",
-                SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
-              )}
-            >
-              {sub}
-            </button>
-          ))}
+      ) : (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Item</p>
+          <ItemGrid
+            gridItems={subItemsFor(topCat, bulkSub)}
+            cat={bulkSub}
+            btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+          />
         </div>
-      </div>
-    );
-  }
-
-  // --- Step 3: sub items ---
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={resetSub}
-          className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
-          ← {bulkSub}
-        </button>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Item</p>
-      </div>
-      <ItemGrid
-        gridItems={subItemsFor(topCat, bulkSub)}
-        btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
-        logLabel={(item) => item.label}
-      />
+      )}
     </div>
   );
 }
-
-const TOP_PALETTE: Record<string, string> = {
-  "3x10":  "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",
-  "3x5":   "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
-  "4x6":   "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800",
-  "Paper": "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
-  "Bulk":  "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
-};
-const SUB_PALETTE: Record<string, string> = {
-  Aprons:      "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
-  "Dust Mops": "bg-gradient-to-b from-teal-600 to-teal-900 ring-1 ring-teal-400/20 hover:from-teal-500 hover:to-teal-800",
-  Towels:      "bg-gradient-to-b from-amber-700 to-amber-950 ring-1 ring-amber-500/20 hover:from-amber-600 hover:to-amber-900",
-};
-const MAT_COLOR_PALETTE: Record<string, string> = {
-  "Black":  "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
-  "Onyx":   "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",
-  "Copper": "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",
-  "Indigo": "bg-indigo-700 ring-1 ring-indigo-400/20 hover:bg-indigo-600",
-};
 
 // ---------------------------------------------------------------------------
 // ItemLogger
@@ -579,27 +599,24 @@ function ItemLogger({
               {[...entries].reverse().map((e) => (
                 <div
                   key={e.id}
-                  className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs"
+                  className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3"
                 >
-                  <span className="font-semibold text-slate-200">{e.item_label}</span>
-                  {e.quantity > 1 && (
-                    <span className="font-bold text-slate-400">x{e.quantity}</span>
-                  )}
+                  <span className="text-sm font-semibold text-slate-200">{e.item_label}</span>
+                  <span className="text-xl font-black text-white">×{e.quantity}</span>
                   {e.warn_on_next_load && (
-                    <span className="text-amber-400" title="Warn on next load">!</span>
+                    <span className="text-amber-400 text-sm font-bold" title="Warn on next load">!</span>
                   )}
                   {e.note && (
-                    <span className="max-w-[8rem] truncate italic text-slate-500" title={e.note}>
+                    <span className="max-w-[8rem] truncate italic text-sm text-slate-500" title={e.note}>
                       "{e.note}"
                     </span>
                   )}
                   <button
                     type="button"
                     onClick={() => deleteEntry.mutate(e.id)}
-                    className="ml-0.5 text-slate-600 hover:text-red-400 transition"
-                    title="Remove entry"
+                    className="rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition"
                   >
-                    x
+                    Delete
                   </button>
                 </div>
               ))}

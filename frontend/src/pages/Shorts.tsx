@@ -4,13 +4,16 @@
  * Phase 1: TruckPicker   — tap a truck tile to begin logging.
  * Phase 2: ShortageLogger — hierarchical category → sub → item → qty → log.
  */
-import { useState, useMemo, useRef } from "react";
+import { useState, useMemo, useRef, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import clsx from "clsx";
 import {
   useBoard,
   useTrackedItems,
   useShortages,
   useCreateShortage,
+  useUpdateShortage,
+  useDeleteShortage,
   type TrackedItem,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
@@ -35,11 +38,22 @@ const SUB_PALETTE: Record<string, string> = {
   Towels:      "bg-gradient-to-b from-amber-700 to-amber-950 ring-1 ring-amber-500/20 hover:from-amber-600 hover:to-amber-900",
 };
 const MAT_COLOR_PALETTE: Record<string, string> = {
-  "Black":  "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
-  "Onyx":   "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",
-  "Copper": "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",
-  "Indigo": "bg-indigo-700 ring-1 ring-indigo-400/20 hover:bg-indigo-600",
+  // Mat colors
+  "Black":      "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
+  "Onyx":       "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",
+  "Copper":     "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",
+  "Indigo":     "bg-indigo-700 ring-1 ring-indigo-400/20 hover:bg-indigo-600",
+  // Apron / towel colors
+  "White":      "bg-white ring-1 ring-slate-300 hover:bg-slate-100",
+  "Red":        "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",
+  "Green":      "bg-green-700 ring-1 ring-green-400/20 hover:bg-green-600",
+  "Blue":       "bg-blue-700 ring-1 ring-blue-400/20 hover:bg-blue-600",
+  "Denim":      "bg-[#1a5fa8] ring-1 ring-blue-400/20 hover:bg-[#1e6dbe]",
+  "Red Shop":   "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",
+  "White Shop": "bg-white ring-1 ring-slate-300 hover:bg-slate-100",
 };
+
+const LIGHT_BG_ITEMS = new Set(["White", "White Shop"]);
 
 // ---------------------------------------------------------------------------
 // Hierarchy helpers + defaults
@@ -104,7 +118,7 @@ function TruckPicker({
   }
 
   return (
-    <div className="space-y-5 p-3 md:p-6">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 p-3 md:p-6">
       {/* Stats */}
       {withShorts.length > 0 && (
         <div className="flex flex-wrap gap-3 text-sm">
@@ -116,15 +130,17 @@ function TruckPicker({
 
       {/* Routes without shortages */}
       {withoutShorts.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Routes</h3>
-          <div className="flex flex-wrap gap-3">
+        <section className="flex flex-col gap-2">
+          {withShorts.length > 0 && (
+            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Routes</h3>
+          )}
+          <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-4">
             {withoutShorts.map((t) => (
               <button
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
-                className="flex h-20 w-20 flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
+                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
               >
                 <span className="text-2xl font-black leading-none">{t.truck_number}</span>
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
@@ -138,9 +154,9 @@ function TruckPicker({
 
       {/* Routes with shortages logged */}
       {withShorts.length > 0 && (
-        <section className="space-y-3">
+        <section className="space-y-2">
           <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Logged</h3>
-          <div className="flex flex-wrap gap-2">
+          <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-4">
             {withShorts.map((t) => {
               const count = shortsByTruck.get(t.truck_number)?.length ?? 0;
               return (
@@ -148,7 +164,7 @@ function TruckPicker({
                   key={t.truck_number}
                   type="button"
                   onClick={() => onSelect(t)}
-                  className="flex h-16 w-16 flex-col items-center justify-center rounded-xl bg-amber-900/60 text-white shadow ring-1 ring-amber-700/60 transition active:scale-95 hover:bg-amber-800/60"
+                  className="flex aspect-square flex-col items-center justify-center rounded-xl bg-amber-900/60 text-white shadow ring-1 ring-amber-700/60 transition active:scale-95 hover:bg-amber-800/60"
                 >
                   <span className="text-xl font-black leading-none text-amber-200">{t.truck_number}</span>
                   <span className="mt-0.5 text-[10px] font-semibold text-amber-400">
@@ -216,14 +232,97 @@ function HierarchyPicker({
     return items.filter(i => topCatOf(i) === tc && subCatOf(i) === sc);
   }
 
-  // --- Qty prompt ---
-  if (pending !== null) {
+  function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
     return (
-      <div className="space-y-4">
+      <div className="flex flex-wrap gap-2">
+        {gridItems.map((item) => {
+          const disp = MAT_SIZES_S.has(cat) && item.label.startsWith(cat + " ")
+            ? item.label.slice(cat.length + 1)
+            : item.label;
+          const detail = disp; // for mats: just color; for others: full label
+          return (
+            <button
+              key={item.label}
+              type="button"
+              disabled={isPending}
+              onClick={() => selectItem(cat, detail)}
+              className={clsx(
+                "rounded-2xl px-7 py-5 text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+                LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
+                MAT_COLOR_PALETTE[disp] ?? btnClass,
+              )}
+            >
+              {disp}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
+
+  // Build the selection trail from current state
+  const trail: { label: string; palette: string; onClick: () => void }[] = [];
+  if (topCat !== null) {
+    trail.push({
+      label: topCat,
+      palette: TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      onClick: reset,
+    });
+  }
+  if (bulkSub !== null) {
+    trail.push({
+      label: bulkSub,
+      palette: SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      onClick: resetSub,
+    });
+  }
+  if (pending !== null) {
+    const itemPalette =
+      MAT_COLOR_PALETTE[pending.detail] ??
+      (bulkSub ? (SUB_PALETTE[bulkSub] ?? null) : null) ??
+      (topCat  ? (TOP_PALETTE[topCat]  ?? null) : null) ??
+      "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20";
+    trail.push({
+      label: pending.detail,
+      palette: itemPalette,
+      onClick: () => { setPending(null); setQtyInput(""); },
+    });
+  }
+
+  const subs      = topCat ? subCatsFor(topCat) : [];
+  const flatItems = topCat ? flatItemsFor(topCat) : [];
+
+  return (
+    <div className="space-y-1">
+      {/* Selection trail: chosen buttons in a horizontal row with right-pointing arrows */}
+      {trail.length > 0 && (
+        <div className="flex flex-wrap items-center gap-1.5 pb-1">
+          {trail.map((step, i) => (
+            <div key={i} className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={step.onClick}
+                title="Tap to go back"
+                className={clsx(
+                  "rounded-xl px-5 py-2.5 text-sm font-black text-white shadow-md opacity-70 ring-1 ring-white/10 transition hover:opacity-100 active:scale-95",
+                  step.palette,
+                )}
+              >
+                {step.label}
+              </button>
+              {/* Right-pointing arrow connector */}
+              <div className="flex items-center">
+                <div className="h-px w-3 bg-slate-600" />
+                <div className="h-0 w-0 border-b-[5px] border-l-[6px] border-t-[5px] border-b-transparent border-l-slate-500 border-t-transparent" />
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Current level choices */}
+      {pending !== null ? (
         <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
-          <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Selected item</p>
-          <p className="mb-1 text-base font-semibold text-slate-400">{pending.category}</p>
-          <p className="mb-4 text-xl font-black text-white">{pending.detail}</p>
           <label className="block">
             <span className="mb-1 block text-xs font-semibold text-slate-400">Quantity shorted</span>
             <input
@@ -256,129 +355,63 @@ function HierarchyPicker({
             </button>
           </div>
         </div>
-      </div>
-    );
-  }
-
-  function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
-    return (
-      <div className="flex flex-wrap gap-2">
-        {gridItems.map((item) => {
-          const disp = MAT_SIZES_S.has(cat) && item.label.startsWith(cat + " ")
-            ? item.label.slice(cat.length + 1)
-            : item.label;
-          const detail = disp; // for mats: just color; for others: full label
-          return (
-            <button
-              key={item.label}
-              type="button"
-              disabled={isPending}
-              onClick={() => selectItem(cat, detail)}
-              className={clsx(
-                "rounded-xl px-5 py-3.5 text-sm font-bold text-white shadow transition-all active:scale-95 disabled:opacity-50",
-                MAT_COLOR_PALETTE[disp] ?? btnClass,
-              )}
-            >
-              {disp}
-            </button>
-          );
-        })}
-      </div>
-    );
-  }
-
-  // --- Step 1: top-level categories ---
-  if (topCat === null) {
-    return (
-      <div className="space-y-2">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
-        <div className="flex flex-wrap gap-3">
-          {topCats.map((cat) => (
-            <button
-              key={cat}
-              type="button"
-              onClick={() => setTopCat(cat)}
-              className={clsx(
-                "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
-                TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
-              )}
-            >
-              {cat}
-            </button>
-          ))}
+      ) : topCat === null ? (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
+          <div className="flex flex-wrap gap-3">
+            {topCats.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setTopCat(cat)}
+                className={clsx(
+                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                )}
+              >
+                {cat}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
-    );
-  }
-
-  const subs      = subCatsFor(topCat);
-  const flatItems = flatItemsFor(topCat);
-
-  // --- Step 2a: flat items ---
-  if (subs.length === 0) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={reset}
-            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
-            ← {topCat}
-          </button>
+      ) : subs.length === 0 ? (
+        <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Item</p>
+          <ItemGrid
+            gridItems={flatItems}
+            cat={topCat}
+            btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+          />
         </div>
-        <ItemGrid
-          gridItems={flatItems}
-          cat={topCat}
-          btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
-        />
-      </div>
-    );
-  }
-
-  // --- Step 2b: sub-categories ---
-  if (bulkSub === null) {
-    return (
-      <div className="space-y-3">
-        <div className="flex items-center gap-3">
-          <button type="button" onClick={reset}
-            className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
-            ← {topCat}
-          </button>
+      ) : bulkSub === null ? (
+        <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Subcategory</p>
+          <div className="flex flex-wrap gap-3">
+            {subs.map((sub) => (
+              <button
+                key={sub}
+                type="button"
+                onClick={() => setBulkSub(sub)}
+                className={clsx(
+                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                )}
+              >
+                {sub}
+              </button>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-wrap gap-3">
-          {subs.map((sub) => (
-            <button
-              key={sub}
-              type="button"
-              onClick={() => setBulkSub(sub)}
-              className={clsx(
-                "rounded-2xl px-6 py-4 text-base font-black text-white shadow-lg transition-all active:scale-95",
-                SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
-              )}
-            >
-              {sub}
-            </button>
-          ))}
+      ) : (
+        <div className="space-y-2">
+          <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Item</p>
+          <ItemGrid
+            gridItems={subItemsFor(topCat, bulkSub)}
+            cat={bulkSub}
+            btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+          />
         </div>
-      </div>
-    );
-  }
-
-  // --- Step 3: sub items ---
-  return (
-    <div className="space-y-3">
-      <div className="flex items-center gap-3">
-        <button type="button" onClick={resetSub}
-          className="rounded-lg bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-700 transition">
-          ← {bulkSub}
-        </button>
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Item</p>
-      </div>
-      <ItemGrid
-        gridItems={subItemsFor(topCat, bulkSub)}
-        cat={bulkSub}
-        btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
-      />
+      )}
     </div>
   );
 }
@@ -387,16 +420,102 @@ function HierarchyPicker({
 // ShortageLogger
 // ---------------------------------------------------------------------------
 
-function ShortageLogger({
+function LoggedList({ shorts }: { shorts: Shortage[] }) {
+  const update = useUpdateShortage();
+  const remove = useDeleteShortage();
+  const [editId, setEditId]     = useState<number | null>(null);
+  const [editQty, setEditQty]   = useState("");
+
+  function startEdit(s: Shortage) {
+    setEditId(s.id);
+    setEditQty(String(s.quantity));
+  }
+
+  async function confirmEdit(s: Shortage) {
+    const qty = Math.max(1, parseInt(editQty, 10) || 1);
+    await update.mutateAsync({ id: s.id, quantity: qty });
+    setEditId(null);
+  }
+
+  if (shorts.length === 0) return null;
+
+  return (
+    <section className="space-y-2">
+      <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Logged this session</h4>
+      <div className="flex flex-wrap gap-2">
+        {[...shorts].reverse().map((s) => {
+          const label = s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category;
+          if (editId === s.id) {
+            return (
+              <div key={s.id} className="flex items-center gap-2 rounded-xl border border-amber-700/60 bg-amber-950/40 px-3 py-2">
+                <span className="text-xs font-semibold text-slate-200">{label}</span>
+                <input
+                  type="number"
+                  inputMode="numeric"
+                  min={1}
+                  autoFocus
+                  className="input w-16 text-center text-sm font-black"
+                  value={editQty}
+                  onChange={(e) => setEditQty(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter") confirmEdit(s); if (e.key === "Escape") setEditId(null); }}
+                />
+                <button
+                  type="button"
+                  onClick={() => confirmEdit(s)}
+                  disabled={update.isPending}
+                  className="rounded-lg bg-amber-600 px-2.5 py-1 text-xs font-bold text-white hover:bg-amber-500 transition disabled:opacity-50"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setEditId(null)}
+                  className="rounded-lg bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-600 transition"
+                >
+                  ✕
+                </button>
+              </div>
+            );
+          }
+          return (
+            <div key={s.id} className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3">
+              <span className="text-sm font-semibold text-slate-200">{label}</span>
+              <span className="text-xl font-black text-white">×{s.quantity}</span>
+              <button
+                type="button"
+                onClick={() => startEdit(s)}
+                className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-600 transition"
+              >
+                Edit
+              </button>
+              <button
+                type="button"
+                onClick={() => remove.mutate(s.id)}
+                disabled={remove.isPending}
+                className="rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition disabled:opacity-50"
+              >
+                Delete
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    </section>
+  );
+}
+
+export function ShortageLogger({
   truck,
   shorts,
   runDate,
   onBack,
+  inline = false,
 }: {
   truck: TruckWithState;
   shorts: Shortage[];
   runDate: string;
   onBack: () => void;
+  inline?: boolean;
 }) {
   const { user } = useAuth();
   const create   = useCreateShortage();
@@ -413,6 +532,23 @@ function ShortageLogger({
       quantity: qty,
       initials: user?.username?.slice(0, 3).toUpperCase() ?? "",
     });
+  }
+
+  if (inline) {
+    return (
+      <div className="space-y-5">
+        <div className="flex items-center gap-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Shortages</h3>
+          {shorts.length > 0 && (
+            <span className="rounded-full bg-amber-900/70 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+              {shorts.length} logged
+            </span>
+          )}
+        </div>
+        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} />
+        <LoggedList shorts={shorts} />
+      </div>
+    );
   }
 
   return (
@@ -444,29 +580,7 @@ function ShortageLogger({
           isPending={create.isPending}
         />
 
-        {/* Logged shortages for this truck */}
-        {shorts.length > 0 && (
-          <section className="space-y-2">
-            <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
-              Logged this session
-            </h4>
-            <div className="flex flex-wrap gap-2">
-              {[...shorts].reverse().map((s) => (
-                <div
-                  key={s.id}
-                  className="flex items-center gap-1.5 rounded-full border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs"
-                >
-                  <span className="font-semibold text-slate-200">
-                    {s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category}
-                  </span>
-                  {s.quantity > 1 && (
-                    <span className="font-bold text-slate-400">x{s.quantity}</span>
-                  )}
-                </div>
-              ))}
-            </div>
-          </section>
-        )}
+        <LoggedList shorts={shorts} />
       </div>
     </div>
   );
@@ -479,9 +593,20 @@ function ShortageLogger({
 export default function Shorts() {
   const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
+  const [searchParams]               = useSearchParams();
 
   const { data: board  = [] } = useBoard(runDate);
   const { data: shorts = [] } = useShortages(runDate);
+
+  // Auto-select only when arriving with a ?truck= param (e.g. from in_progress page)
+  useEffect(() => {
+    if (selectedTruck !== null || board.length === 0) return;
+    const truckParam = searchParams.get("truck");
+    if (!truckParam) return;
+    const num = parseInt(truckParam, 10);
+    const match = board.find((t) => t.truck_number === num);
+    if (match) setSelected(match);
+  }, [board, selectedTruck, searchParams]);
 
   const shortsByTruck = useMemo(() => {
     const map = new Map<number, Shortage[]>();
@@ -497,7 +622,7 @@ export default function Shorts() {
     : [];
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <div className="flex h-full flex-col">
       {/* Page header */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-3 md:px-6">
         <h2 className="text-xl font-semibold text-slate-100">Shortages</h2>

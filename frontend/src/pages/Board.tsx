@@ -72,7 +72,7 @@ function _needsDarkText(hex: string): boolean {
   return L > 0.35; // only force dark text on genuinely light colors (pastels/amber); reds/purples/blues keep white
 }
 const _STATUS_COLORS: Record<TruckStatus, string> = {
-  dirty: "#dc2626", unfinished: "#ea580c", shop: "#7400ff", in_progress: "#f59e0b",
+  dirty: "#dc2626", unfinished: "#c026d3", shop: "#7400ff", in_progress: "#f59e0b",
   unloaded: "#16a34a", loaded: "#2563eb", off: "#6b7280",
   oos: "#475569", spare: "#0e7490",
 };
@@ -726,12 +726,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         const cfg = fleetMode ? fleet : (headers[filter] ?? headers.all);
         return (
           <div className="mb-2 text-center">
-            <h2 className={clsx("text-3xl font-black tracking-tight", cfg.accent)}>
+            <h2 className={clsx("text-4xl font-black uppercase tracking-widest", cfg.accent)}>
               {cfg.label}
             </h2>
-            <p className={clsx("mx-auto mt-1.5 inline-flex items-center gap-2 rounded-full border px-3 py-0.5 text-xs font-semibold text-slate-300", cfg.sub)}>
-              {counts.total ?? 0} trucks · {runDate}
-            </p>
           </div>
         );
       })()}
@@ -797,7 +794,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               if (row.__header !== "unfinished") return null;
               return (
                 <div key={`header-${row.__header}`} className="col-span-full my-2 flex flex-col items-center justify-center gap-1">
-                  <span className="text-4xl font-black uppercase tracking-widest text-orange-400">
+                  <span className="text-4xl font-black uppercase tracking-widest text-status-unfinished">
                     Unfinished
                   </span>
                   <span className="text-sm font-medium text-slate-500">

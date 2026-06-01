@@ -9,11 +9,10 @@ class Settings(BaseSettings):
     )
     secret_key: str = "change-me-to-a-long-random-string"
     algorithm: str = "HS256"
-    # 30 days — matches session_expiry_days. The frontend stores the JWT in
-    # localStorage and any 401 boots the user back to the login screen, so
-    # keeping the token alive as long as the cookie session avoids surprise
-    # logouts on tablets/phones.
-    access_token_expire_minutes: int = 60 * 24 * 30
+    # 60 minutes — short-lived JWTs limit exposure if a token is leaked.
+    # The axios interceptor transparently refreshes via the long-lived session
+    # cookie, so users on tablets/phones never see a forced logout.
+    access_token_expire_minutes: int = 60
     session_expiry_days: int = 30
     cors_origins: str = "*"
     timezone: str = "America/New_York"
@@ -22,6 +21,14 @@ class Settings(BaseSettings):
 
 
 settings = Settings()
+
+if settings.secret_key == "change-me-to-a-long-random-string":
+    import warnings
+    warnings.warn(
+        "SECRET_KEY is using the insecure default value. "
+        "Set a strong random secret in your .env file before deploying to production.",
+        stacklevel=1,
+    )
 
 _is_sqlite = settings.database_url.startswith("sqlite")
 

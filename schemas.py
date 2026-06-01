@@ -352,6 +352,8 @@ class SessionOut(_OrmBase):
     role: str
     created_ts: float
     expires_ts: float
+    ip_address: str | None
+    user_agent: str | None
 
 
 # ---------------------------------------------------------------------------

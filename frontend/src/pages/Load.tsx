@@ -8,8 +8,10 @@ import {
   useUnloadsDayOverride,
   usePaceAverage,
   useRecordLoadDuration,
+  useShortages,
   useUpsertTruckState,
 } from "../api/hooks";
+import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { effectiveStatus } from "../utils/truckStatus";
@@ -325,15 +327,18 @@ export default function Load() {
 
       {/* In-progress truck — top of page */}
       {inProgress && (
-        <InProgressPanel
-          truck={inProgress}
-          paceAvgSeconds={pace?.avg_seconds ?? null}
-          busy={busy === inProgress.truck_number}
-          loadDay={loadDay}
-          nextUp={ready[0]}
-          onFinish={() => finishLoad(inProgress)}
-          onCancel={() => cancelLoad(inProgress)}
-        />
+        <>
+          <InProgressPanel
+            truck={inProgress}
+            paceAvgSeconds={pace?.avg_seconds ?? null}
+            busy={busy === inProgress.truck_number}
+            loadDay={loadDay}
+            nextUp={ready[0]}
+            onFinish={() => finishLoad(inProgress)}
+            onCancel={() => cancelLoad(inProgress)}
+          />
+          <InlineShortages truck={inProgress} runDate={runDate} />
+        </>
       )}
 
       {/* Stats grid */}
@@ -581,6 +586,21 @@ const LOAD_DAY_NAMES: Record<number, string> = {
   4: "Thursday",
   5: "Friday",
 };
+
+function InlineShortages({ truck, runDate }: { truck: TruckWithState; runDate: string }) {
+  const { data: shorts = [] } = useShortages(runDate, truck.truck_number);
+  return (
+    <div className="card">
+      <ShortageLogger
+        inline
+        truck={truck}
+        shorts={shorts}
+        runDate={runDate}
+        onBack={() => {}}
+      />
+    </div>
+  );
+}
 
 function InProgressPanel({
   truck,

@@ -8,10 +8,12 @@ import {
   usePaceAverage,
   useRecordLoadDuration,
   useSetNextUp,
-  useShortageCategories,
+  useShortages,
   useTruckNotes,
   useUpsertTruckState,
 } from "../api/hooks";
+import { ShortageLogger } from "../pages/Shorts";
+import { todayIso } from "../api/client";
 import type { TruckNote, TruckWithState } from "../types";
 
 /**
@@ -82,65 +84,57 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Truck notes floating popup — shows applicable notes for the current truck
+// Truck note cards — one card per applicable note
 // ---------------------------------------------------------------------------
 
-const NOTE_TYPE_CHIP: Record<TruckNote["note_type"], string> = {
-  constant: "bg-blue-900/60 text-blue-300 border border-blue-700/40",
-  workday:  "bg-violet-900/60 text-violet-300 border border-violet-700/40",
-  one_off:  "bg-amber-900/60 text-amber-300 border border-amber-700/40",
-};
-const NOTE_TYPE_LABEL: Record<TruckNote["note_type"], string> = {
-  constant: "Constant",
-  workday:  "Workday",
-  one_off:  "One-off",
+const NOTE_CARD: Record<TruckNote["note_type"], { border: string; bg: string; chip: string; label: string }> = {
+  constant: {
+    border: "border-blue-700/40",
+    bg:     "bg-blue-950/30",
+    chip:   "bg-blue-900/60 text-blue-300 border border-blue-700/40",
+    label:  "Constant",
+  },
+  workday: {
+    border: "border-violet-700/40",
+    bg:     "bg-violet-950/30",
+    chip:   "bg-violet-900/60 text-violet-300 border border-violet-700/40",
+    label:  "Workday",
+  },
+  one_off: {
+    border: "border-amber-700/40",
+    bg:     "bg-amber-950/30",
+    chip:   "bg-amber-900/60 text-amber-300 border border-amber-700/40",
+    label:  "One-off",
+  },
 };
 
-function TruckNotesPopup({ truckNumber, loadDayNum }: { truckNumber: number; loadDayNum: number | null }) {
+function TruckNotesPanel({ truckNumber, loadDayNum }: { truckNumber: number; loadDayNum: number | null }) {
   const { data: notes = [] } = useTruckNotes({ truckNumber, activeOnly: true });
-  const [dismissed, setDismissed] = useState(false);
 
   const applicable = notes.filter((n) => {
     if (n.note_type === "constant") return true;
     if (n.note_type === "workday") return n.workday_num === loadDayNum;
-    if (n.note_type === "one_off") return n.expires_on == null || n.expires_on >= new Date().toISOString().slice(0, 10);
+    if (n.note_type === "one_off") return n.expires_on == null || n.expires_on >= todayIso();
     return false;
   });
 
-  if (applicable.length === 0 || dismissed) return null;
+  if (applicable.length === 0) return null;
 
   return (
-    <div className="mt-4 rounded-xl border border-amber-500/30 bg-amber-950/25 p-3 shadow-lg ring-1 ring-amber-400/15">
-      <div className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <svg className="h-4 w-4 text-amber-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <span className="text-xs font-semibold uppercase tracking-wider text-amber-400">
-            Notes · {applicable.length}
-          </span>
-        </div>
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          className="rounded p-0.5 text-slate-500 hover:text-slate-300"
-          aria-label="Dismiss notes"
-        >
-          <svg className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-          </svg>
-        </button>
-      </div>
-      <div className="space-y-2">
-        {applicable.map((n) => (
-          <div key={n.id} className="flex items-start gap-2">
-            <span className={clsx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", NOTE_TYPE_CHIP[n.note_type])}>
-              {NOTE_TYPE_LABEL[n.note_type]}
-            </span>
-            <span className="text-sm leading-snug text-slate-200">{n.body}</span>
+    <div className="mt-4 flex flex-col gap-2">
+      {applicable.map((n) => {
+        const s = NOTE_CARD[n.note_type];
+        return (
+          <div key={n.id} className={clsx("rounded-xl border px-4 py-3", s.border, s.bg)}>
+            <div className="flex items-start gap-3">
+              <span className={clsx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>
+                {s.label}
+              </span>
+              <span className="text-sm leading-snug text-slate-200">{n.body}</span>
+            </div>
           </div>
-        ))}
-      </div>
+        );
+      })}
     </div>
   );
 }
@@ -230,7 +224,7 @@ function CurrentLoadPanel({
       </div>
 
       {/* Notes for this truck */}
-      <TruckNotesPopup truckNumber={truck.truck_number} loadDayNum={dayNum} />
+      <TruckNotesPanel truckNumber={truck.truck_number} loadDayNum={dayNum} />
 
       {pickerOpen && (
         <div className="mt-4 border-t border-slate-800 pt-4">
@@ -317,19 +311,11 @@ function ShortagesPanel({
   truck: TruckWithState;
   runDate: string;
 }) {
-  const { data: categories } = useShortageCategories();
+  const { data: shorts = [] } = useShortages(runDate, truck.truck_number);
   const upsert = useUpsertTruckState();
   const recordDuration = useRecordLoadDuration();
   const navigate = useNavigate();
   const [busy, setBusy] = useState(false);
-
-  // Top-level shortage categories from /shorts/categories (e.g. 3x10, Paper, Bulk).
-  // V1 also offered a "Recents" tab; we render it as a final shortcut into the
-  // Shorts page for this truck.
-  const categoryKeys = useMemo(
-    () => (categories ? Object.keys(categories) : []),
-    [categories],
-  );
 
   async function finishLoading() {
     setBusy(true);
@@ -363,47 +349,15 @@ function ShortagesPanel({
     }
   }
 
-  const shortsHref = (cat?: string) => {
-    const params = new URLSearchParams({
-      truck: String(truck.truck_number),
-      run_date: runDate,
-    });
-    if (cat) params.set("category", cat);
-    return `/shorts?${params.toString()}`;
-  };
-
   return (
     <section className="card space-y-4">
-      <div>
-        <h3 className="text-lg font-bold tracking-wide">Select Shortages</h3>
-        <p className="text-xs text-slate-500">
-          Quick-jump to the Shorts form pre-filled for #{truck.truck_number}.
-        </p>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-        {categoryKeys.length === 0 ? (
-          <p className="col-span-full text-xs text-slate-500">
-            No shortage categories configured.
-          </p>
-        ) : (
-          categoryKeys.map((cat) => (
-            <Link
-              key={cat}
-              to={shortsHref(cat)}
-              className="rounded-md border border-slate-700 bg-slate-800 px-3 py-3 text-center text-sm font-semibold transition-colors hover:bg-slate-700"
-            >
-              {cat}
-            </Link>
-          ))
-        )}
-        <Link
-          to={shortsHref()}
-          className="rounded-md border border-slate-700 bg-slate-900 px-3 py-3 text-center text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800"
-        >
-          Recents
-        </Link>
-      </div>
+      <ShortageLogger
+        inline
+        truck={truck}
+        shorts={shorts}
+        runDate={runDate}
+        onBack={() => {}}
+      />
 
       <Link
         to={`/audit?truck=${truck.truck_number}`}

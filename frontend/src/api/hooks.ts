@@ -421,6 +421,23 @@ export function useCreateShortage() {
   });
 }
 
+export function useUpdateShortage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...payload }: { id: number; quantity?: number; item_category?: string; item_detail?: string }) =>
+      (await api.patch<Shortage>(`/shorts/${id}`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["shorts"] }),
+  });
+}
+
+export function useDeleteShortage() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: number) => { await api.delete(`/shorts/${id}`); },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["shorts"] }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------

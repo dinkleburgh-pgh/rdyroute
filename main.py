@@ -75,6 +75,13 @@ async def lifespan(app: FastAPI):
             db.commit()
         except Exception:  # noqa: BLE001 - column already exists
             db.rollback()
+        # Column migrations: add ip_address and user_agent to sessions table
+        for _col, _typedef in [("ip_address", "VARCHAR(45)"), ("user_agent", "VARCHAR(256)")]:
+            try:
+                db.execute(_sql_text(f"ALTER TABLE sessions ADD COLUMN {_col} {_typedef}"))
+                db.commit()
+            except Exception:  # noqa: BLE001 - column already exists
+                db.rollback()
         result = run_startup_seed(db)
         log.info("Startup seed: %s", result)
     finally:
@@ -112,14 +119,33 @@ async def lifespan(app: FastAPI):
             return
         log.warning("Health-confirm: server did not open port %d within 60 s", _port)
 
-    backup_task = asyncio.create_task(backup_loop())
-    health_task = asyncio.create_task(_confirm_healthy())
+    async def _cleanup_expired_sessions() -> None:
+        """Hourly task to prune expired session rows so the table doesn't grow unboundedly."""
+        from datetime import timezone as _tz
+        from sqlalchemy import text as _t2
+        while True:
+            await asyncio.sleep(3600)
+            _db = SessionLocal()
+            try:
+                from datetime import datetime as _dt
+                _now = _dt.now(_tz.utc).timestamp()
+                _db.execute(_t2("DELETE FROM sessions WHERE expires_ts <= :now"), {"now": _now})
+                _db.commit()
+            except Exception:  # noqa: BLE001
+                pass
+            finally:
+                _db.close()
+
+    backup_task  = asyncio.create_task(backup_loop())
+    health_task  = asyncio.create_task(_confirm_healthy())
+    cleanup_task = asyncio.create_task(_cleanup_expired_sessions())
     try:
         yield
     finally:
         backup_task.cancel()
         health_task.cancel()
-        for _t in (backup_task, health_task):
+        cleanup_task.cancel()
+        for _t in (backup_task, health_task, cleanup_task):
             try:
                 await _t
             except (asyncio.CancelledError, Exception):

@@ -10,11 +10,13 @@ session table mirrors the V1 .truck_sessions.json for clients that prefer
 cookie-based auth.
 """
 
+import time
 import uuid
+from collections import defaultdict
 from datetime import datetime, timezone
 
 import bcrypt
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from sqlalchemy import select
@@ -41,6 +43,27 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
 SESSION_COOKIE = "readyroutev2_sid"
 
 # ---------------------------------------------------------------------------
+# Login rate limiter (in-process; resets on restart — intentional for dev)
+# 10 attempts per 5-minute window, keyed by source IP.
+# ---------------------------------------------------------------------------
+
+_login_attempts: dict[str, list[float]] = defaultdict(list)
+_RATE_LIMIT_WINDOW = 300   # seconds
+_RATE_LIMIT_MAX    = 10    # attempts per window
+
+
+def _check_rate_limit(ip: str) -> None:
+    now = time.monotonic()
+    window = _login_attempts[ip]
+    _login_attempts[ip] = [t for t in window if now - t < _RATE_LIMIT_WINDOW]
+    if len(_login_attempts[ip]) >= _RATE_LIMIT_MAX:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many login attempts. Please wait 5 minutes and try again.",
+        )
+    _login_attempts[ip].append(now)
+
+# ---------------------------------------------------------------------------
 # Password helpers
 # ---------------------------------------------------------------------------
 
@@ -59,13 +82,14 @@ def _verify_password(plain: str, hashed: str) -> bool:
 # JWT helpers
 # ---------------------------------------------------------------------------
 
-def _create_access_token(username: str, role: str) -> str:
+def _create_access_token(username: str, role: str, session_id: str) -> str:
+    now = datetime.now(timezone.utc).timestamp()
     payload = {
         "sub": username,
         "role": role,
-        "iat": datetime.now(timezone.utc).timestamp(),
-        "exp": datetime.now(timezone.utc).timestamp()
-        + settings.access_token_expire_minutes * 60,
+        "sid": session_id,   # ties this JWT to a specific server-side session
+        "iat": now,
+        "exp": now + settings.access_token_expire_minutes * 60,
     }
     return jwt.encode(payload, settings.secret_key, algorithm=settings.algorithm)
 
@@ -91,16 +115,31 @@ def get_current_user(
 ) -> User:
     claims = _decode_token(token)
     username = claims.get("sub")
+    sid = claims.get("sid")
     if not username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject")
     user = db.scalars(select(User).where(User.username == username)).first()
     if user is None or not user.is_enabled:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or disabled")
+    # Validate the server-side session so logout/revoke immediately invalidates tokens.
+    if sid:
+        now_ts = datetime.now(timezone.utc).timestamp()
+        sess = db.get(SessionModel, sid)
+        if sess is None or sess.expires_ts <= now_ts:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Session revoked or expired",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
     return user
 
 
+_ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
-    # TODO: remove bypass once role-based access is properly defined
+    if current_user.role not in _ADMIN_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     return current_user
 
 
@@ -109,15 +148,18 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 # ---------------------------------------------------------------------------
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
+    client_ip = request.client.host if request.client else "unknown"
+    _check_rate_limit(client_ip)
+
     user = db.scalars(select(User).where(User.username == payload.username.lower())).first()
     if user is None or not user.is_enabled or not _verify_password(payload.password, user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
-    token = _create_access_token(user.username, user.role.value)
+    ua = request.headers.get("user-agent", "")[:256]
+    sid = _write_server_session(user.username, user.role.value, db, ip=client_ip, ua=ua)
+    token = _create_access_token(user.username, user.role.value, sid)
 
-    # Also write a server-side session and set a cookie for cookie-based clients
-    sid = _write_server_session(user.username, user.role.value, db)
     response.set_cookie(
         SESSION_COOKIE,
         sid,
@@ -132,7 +174,12 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
 # OAuth2 form-compatible endpoint used by the OpenAPI /docs "Authorize" button
 @router.post("/token", response_model=TokenResponse, include_in_schema=False)
 def token_form(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
-    return login(LoginRequest(username=form.username, password=form.password), Response(), db)
+    user = db.scalars(select(User).where(User.username == form.username.lower())).first()
+    if user is None or not user.is_enabled or not _verify_password(form.password, user.hashed_password):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
+    sid = _write_server_session(user.username, user.role.value, db)
+    token = _create_access_token(user.username, user.role.value, sid)
+    return TokenResponse(access_token=token, role=user.role, username=user.username)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
@@ -152,6 +199,7 @@ def logout(
 
 @router.post("/refresh", response_model=TokenResponse)
 def refresh(
+    request: Request,
     response: Response,
     db: Session = Depends(get_db),
     readyroutev2_sid: str | None = Cookie(default=None),
@@ -159,10 +207,9 @@ def refresh(
     """
     Mint a fresh JWT using the long-lived server-side session cookie.
 
-    The frontend stores the JWT in localStorage; when it expires, an axios
-    interceptor calls this endpoint to silently re-up the token instead of
-    forcing the user back to the login screen.  The cookie itself is
-    httponly + lax samesite and lasts `session_expiry_days` (30d default).
+    Rotates the session ID on every call so a stolen cookie can only be used
+    once before the legitimate client invalidates it.  The old session row is
+    deleted and a new one is created with a fresh UUID.
     """
     if not readyroutev2_sid:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="No session cookie")
@@ -175,24 +222,27 @@ def refresh(
 
     user = db.scalars(select(User).where(User.username == sess.username)).first()
     if user is None or not user.is_enabled:
-        # Stale session pointing at a disabled / deleted account — drop it.
         db.delete(sess)
         db.commit()
         response.delete_cookie(SESSION_COOKIE)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User disabled")
 
-    # Slide the cookie expiry forward so active users stay remembered indefinitely.
-    sess.expires_ts = now_ts + settings.session_expiry_days * 86400
-    db.commit()
+    # Rotate: delete old session and issue a fresh one with a new ID.
+    db.delete(sess)
+    db.flush()  # ensure delete is visible before insert
+    ip = request.client.host if request.client else None
+    ua = request.headers.get("user-agent", "")[:256]
+    new_sid = _write_server_session(user.username, user.role.value, db, ip=ip, ua=ua)
+
     response.set_cookie(
         SESSION_COOKIE,
-        readyroutev2_sid,
+        new_sid,
         httponly=True,
         samesite="lax",
         max_age=settings.session_expiry_days * 86400,
     )
 
-    token = _create_access_token(user.username, user.role.value)
+    token = _create_access_token(user.username, user.role.value, new_sid)
     return TokenResponse(access_token=token, role=user.role, username=user.username)
 
 
@@ -257,7 +307,7 @@ def change_password(
     db: Session = Depends(get_db),
 ):
     # Admins can change anyone's password; non-admins only their own
-    if current_user.role not in (AuthRole.fleet, AuthRole.atl) and current_user.username != username:
+    if current_user.role not in _ADMIN_ROLES and current_user.username != username:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot change another user's password")
     user = _get_user_or_404(username, db)
     user.hashed_password = _hash_password(payload.new_password)
@@ -343,8 +393,24 @@ def resolve_request(
 def list_sessions(_admin: User = Depends(require_admin), db: Session = Depends(get_db)):
     now_ts = datetime.now(timezone.utc).timestamp()
     return db.scalars(
-        select(SessionModel).where(SessionModel.expires_ts > now_ts)
+        select(SessionModel)
+        .where(SessionModel.expires_ts > now_ts)
+        .order_by(SessionModel.created_ts.desc())
     ).all()
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def revoke_session(
+    session_id: str,
+    _admin: User = Depends(require_admin),
+    db: Session = Depends(get_db),
+):
+    """Revoke a specific session by ID, forcing that client to re-authenticate."""
+    sess = db.get(SessionModel, session_id)
+    if sess is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Session not found")
+    db.delete(sess)
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -358,10 +424,25 @@ def _get_user_or_404(username: str, db: Session) -> User:
     return user
 
 
-def _write_server_session(username: str, role: str, db: Session) -> str:
+def _write_server_session(
+    username: str,
+    role: str,
+    db: Session,
+    *,
+    ip: str | None = None,
+    ua: str | None = None,
+) -> str:
     now_ts = datetime.now(timezone.utc).timestamp()
     expires_ts = now_ts + settings.session_expiry_days * 86400
     sid = uuid.uuid4().hex
-    db.add(SessionModel(id=sid, username=username, role=role, created_ts=now_ts, expires_ts=expires_ts))
+    db.add(SessionModel(
+        id=sid,
+        username=username,
+        role=role,
+        created_ts=now_ts,
+        expires_ts=expires_ts,
+        ip_address=ip,
+        user_agent=ua,
+    ))
     db.commit()
     return sid

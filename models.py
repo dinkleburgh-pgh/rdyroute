@@ -350,6 +350,8 @@ class Session(Base):
     role: Mapped[str] = mapped_column(String(40), nullable=False)
     created_ts: Mapped[float] = mapped_column(Float, nullable=False)
     expires_ts: Mapped[float] = mapped_column(Float, nullable=False, index=True)
+    ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
 
 
 # ---------------------------------------------------------------------------

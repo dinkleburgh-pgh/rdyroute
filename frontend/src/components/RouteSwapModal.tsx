@@ -183,7 +183,7 @@ export default function RouteSwapModal({ onClose }: Props) {
             )}
             {swapsLoading ? (
               <p className="text-sm text-slate-500">Loading…</p>
-            ) : swapRows.length === 0 ? (
+            ) : swaps.length === 0 ? (
               <p className="rounded-md border border-slate-700 bg-slate-800/50 px-4 py-3 text-center text-sm text-slate-500">
                 No swaps set for today.
               </p>
