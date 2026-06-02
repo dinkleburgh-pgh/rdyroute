@@ -24,6 +24,9 @@ services:
       TIMEZONE: ${TIMEZONE:-America/New_York}
     volumes:
       - backend_data:/app/.data
+    networks:
+      - default
+      - postgres_net
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     healthcheck:
@@ -98,3 +101,8 @@ networks:
   default:
     driver: bridge
     enable_ipv6: false
+  # External Docker network that the TrueNAS postgres container belongs to.
+  # Set POSTGRES_NETWORK in your stack env vars to match (default: ix-postgres_default).
+  postgres_net:
+    external: true
+    name: ${POSTGRES_NETWORK:-ix-postgres_default}
