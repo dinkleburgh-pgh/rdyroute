@@ -53,6 +53,7 @@ export function buildRouteStatusCounts(
 ): Record<TruckStatus, number> {
   const out: Record<TruckStatus, number> = {
     dirty: 0,
+    unfinished: 0,
     shop: 0,
     in_progress: 0,
     unloaded: 0,

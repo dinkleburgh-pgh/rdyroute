@@ -12,6 +12,7 @@ import { useAuth } from "../contexts/AuthContext";
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
+  unfinished: "Unfinished",
   shop: "Shop",
   in_progress: "In Progress",
   unloaded: "Unloaded",

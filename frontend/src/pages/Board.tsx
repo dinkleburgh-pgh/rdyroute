@@ -417,6 +417,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const upsert = useUpsertTruckState();
   const updateTruck = useUpdateTruck();
   const bulkUpdate = useBulkUpdateStatus();
+  const createSwap = useCreateRouteSwap();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor";
   const navigate = useNavigate();
@@ -1189,7 +1190,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       disabled={upsert.isPending}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
-                        const next = e.target.value as TruckStatus;
+                        const next = e.target.value as TruckStatus | "__outside__";
                         if (status === "off" && next === "loaded") {
                           setPendingOffLoadTruck(t);
                           setPendingOffLoadRoute("");

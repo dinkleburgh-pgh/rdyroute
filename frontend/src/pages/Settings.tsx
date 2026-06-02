@@ -198,11 +198,11 @@ const PAGE_ACCESS: { label: string; roles: Set<AuthRole> }[] = [
 ];
 
 const RECOVERY_STATUS_OPTIONS: TruckStatus[] = [
-  "dirty", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare",
+  "dirty", "unfinished", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare",
 ];
 
 const RECOVERY_STATUS_LABELS: Record<TruckStatus, string> = {
-  dirty: "Dirty", shop: "Shop", in_progress: "In Progress",
+  dirty: "Dirty", unfinished: "Unfinished", shop: "Shop", in_progress: "In Progress",
   unloaded: "Unloaded", loaded: "Loaded", off: "Off", oos: "OOS", spare: "Spare",
 };
 
@@ -215,6 +215,7 @@ function formatRecoveryDuration(seconds: number): string {
 
 const DEFAULT_BADGE_COLORS: Record<TruckStatus, string> = {
   dirty: "#dc2626",
+  unfinished: "#dc2626",
   shop: "#7400ff",
   in_progress: "#f59e0b",
   unloaded: "#16a34a",
@@ -226,6 +227,7 @@ const DEFAULT_BADGE_COLORS: Record<TruckStatus, string> = {
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
+  unfinished: "Unfinished",
   shop: "Shop",
   in_progress: "In Progress",
   unloaded: "Unloaded",
@@ -1132,16 +1134,16 @@ function UpdatesPanel({ map }: { map: Map<string, unknown> }) {
                 {isRunning ? "running" : String(status.last.state ?? "idle")}
               </span>
             </p>
-            {status.last.started_at && <p>Started: {String(status.last.started_at)}</p>}
-            {status.last.finished_at && <p>Finished: {String(status.last.finished_at)}</p>}
+            {Boolean(status.last.started_at) && <p>Started: {String(status.last.started_at)}</p>}
+            {Boolean(status.last.finished_at) && <p>Finished: {String(status.last.finished_at)}</p>}
             {status.last.exit_code != null && <p>Exit code: {String(status.last.exit_code)}</p>}
-            {status.last.error && <p className="text-red-400">Error: {String(status.last.error)}</p>}
-            {status.last.stderr_tail && (
+            {Boolean(status.last.error) && <p className="text-red-400">Error: {String(status.last.error)}</p>}
+            {Boolean(status.last.stderr_tail) && (
               <pre className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-slate-900 p-2 font-mono text-xs text-red-300">
                 {String(status.last.stderr_tail)}
               </pre>
             )}
-            {status.last.stdout_tail && (
+            {Boolean(status.last.stdout_tail) && (
               <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-slate-900 p-2 font-mono text-xs text-slate-300">
                 {String(status.last.stdout_tail)}
               </pre>

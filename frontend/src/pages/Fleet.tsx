@@ -13,6 +13,7 @@ import type { TruckStatus, TruckWithState } from "../types";
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
+  unfinished: "Unfinished",
   shop: "Shop",
   in_progress: "In Progress",
   unloaded: "Unloaded",
@@ -25,6 +26,7 @@ const STATUS_LABELS: Record<TruckStatus, string> = {
 // Solid V1-style status colors for the grid tiles.
 const STATUS_TILE: Record<TruckStatus, string> = {
   dirty: "bg-red-600 hover:bg-red-500 border-red-900",
+  unfinished: "bg-gradient-to-r from-red-600 to-emerald-600 hover:from-red-500 hover:to-emerald-500 border-red-900",
   shop: "bg-purple-700 hover:bg-purple-600 border-purple-900",
   in_progress: "bg-amber-500 hover:bg-amber-400 border-amber-700 text-slate-900",
   unloaded: "bg-emerald-600 hover:bg-emerald-500 border-emerald-800",
@@ -36,6 +38,7 @@ const STATUS_TILE: Record<TruckStatus, string> = {
 
 const STATUS_DOT: Record<TruckStatus, string> = {
   dirty: "bg-red-500",
+  unfinished: "bg-gradient-to-r from-red-500 to-emerald-500",
   shop: "bg-purple-700",
   in_progress: "bg-amber-400",
   unloaded: "bg-emerald-500",
