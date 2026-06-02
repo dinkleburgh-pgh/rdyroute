@@ -115,6 +115,19 @@ frontend/
 - **Local date**: `todayIso()` uses wall-clock local time. Never use `new Date().toISOString().slice(0,10)` — that returns UTC and breaks shifts after midnight UTC.
 - **Fleet page**: `/fleet` renders `<Board fleetMode />`. `Fleet.tsx` is not the fleet route.
 - **WatchFiles**: Creating `.py` files in the project root triggers a uvicorn reload. Write temp scripts outside the root or chain creation + deletion in one command.
+- **Backup DB**: Set `BACKUP_DATABASE_URL` in `.env` / `.env.production` to a comma-separated list of fallback/replica PostgreSQL URLs. The Connections panel in Settings → Advanced shows live latency and pool stats for each URL.
+
+---
+
+## Versioning
+
+Builds are labelled `build.<N>` where `N` is the GitHub Actions run number.  
+The product name already contains "V2" so no major-version prefix is needed.
+
+- **Sidebar**: shows `build.<N>` in production, `dev` during local development.
+- **Docker images**: tagged `latest`, `<git-sha>`, and `build.<N>`.
+- **Backend API**: `/health` returns `{ "status": "ok", "version": "build.<N>" }`.
+- **CI**: `.github/workflows/docker-publish.yml` sets `APP_VERSION` build-arg which the Dockerfiles consume.
 
 ---
 

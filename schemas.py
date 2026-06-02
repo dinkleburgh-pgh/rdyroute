@@ -49,6 +49,7 @@ class TruckOut(_OrmBase):
     is_persistent_spare: bool
     is_oos: bool
     scheduled_off_days: list[int]
+    qr_token: str | None
     created_at: datetime
 
 
@@ -113,6 +114,7 @@ class TruckWithState(_OrmBase):
     is_persistent_spare: bool
     is_oos: bool = False
     scheduled_off_days: list[int] = Field(default_factory=list)
+    qr_token: str | None = None
     state: TruckStateOut | None = None
     route_swap_route: int | None = None  # set when this truck is the load_on_truck in a route swap
 

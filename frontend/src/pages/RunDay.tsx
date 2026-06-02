@@ -18,11 +18,12 @@ import {
   useUpsertTruckState,
   useLoadDayOverride,
   useUnloadsDayOverride,
+  useTruckNotes,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
-import type { TruckStatus, TruckWithState } from "../types";
-import { effectiveStatus } from "../utils/truckStatus";
+import type { TruckNote, TruckStatus, TruckWithState } from "../types";
+import { effectiveStatus, getSwapHistory, recordSwapHistory } from "../utils/truckStatus";
 
 // Filled t-shirt silhouette — matches Board/Load pages.
 function DustGarmentIcon({ className }: { className?: string }) {
@@ -94,6 +95,19 @@ export default function RunDay() {
   const { data: board = [] } = useBoard(runDate);
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
+  const { data: allNotes = [] } = useTruckNotes({ activeOnly: true });
+  const today = todayIso();
+  const notesByTruck = useMemo(() => {
+    const map = new Map<number, TruckNote[]>();
+    for (const n of allNotes) {
+      if (!n.is_active) continue;
+      if (n.note_type === "one_off" && n.expires_on && n.expires_on < today) continue;
+      const arr = map.get(n.truck_number) ?? [];
+      arr.push(n);
+      map.set(n.truck_number, arr);
+    }
+    return map;
+  }, [allNotes, today]);
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
   const { data: loadDayOverride }    = useLoadDayOverride(runDate);
   const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
@@ -321,6 +335,7 @@ export default function RunDay() {
                   coveringSpare={coveringTruck}
                   dayNum={truckUnloadDay}
                   isExtraDay={truckUnloadDay === unloadsDay2}
+                  notes={notesByTruck.get(t.truck_number)}
                 />
               );
             })}
@@ -391,6 +406,7 @@ export default function RunDay() {
                   coveringSpare={coveringTruck}
                   dayNum={truckLoadDay}
                   isExtraDay={truckLoadDay === loadDay2}
+                  notes={notesByTruck.get(t.truck_number)}
                 />
               );
             })}
@@ -410,6 +426,7 @@ function TruckCard({
   coveringSpare,
   dayNum,
   isExtraDay,
+  notes,
 }: {
   t: TruckWithState;
   status: TruckStatus;
@@ -417,13 +434,16 @@ function TruckCard({
   coveringSpare?: TruckWithState;
   dayNum?: number;
   isExtraDay?: boolean;
+  notes?: TruckNote[];
 }) {
+  const showNotes = notes && notes.length > 0 && (status === "in_progress" || status === "unloaded");
   return (
     <div
       className={clsx(
         "card relative flex flex-col items-center gap-1.5 p-3 text-center transition-opacity",
         done && "opacity-40",
         status === "in_progress" && "animate-pulse ring-2 ring-amber-400",
+        showNotes && "ring-1 ring-violet-500/50",
       )}
     >
       {t.truck_type === "Dust" && t.state?.has_dust_garment && (
@@ -470,6 +490,15 @@ function TruckCard({
         >
           Day {dayNum}
         </span>
+      )}
+      {showNotes && (
+        <div className="mt-1 w-full space-y-1 border-t border-slate-700/60 pt-1">
+          {notes!.map((n) => (
+            <p key={n.id} className="text-left text-[10px] leading-snug text-violet-200">
+              {n.body}
+            </p>
+          ))}
+        </div>
       )}
     </div>
   );
@@ -591,6 +620,7 @@ function RunDayWizard({
     setSwapError(null);
     try {
       await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, two_way: false });
+      recordSwapHistory(rt, lo);
       setSwapRoute("");
       setSwapLoadOn("");
     } catch (err: unknown) {
@@ -602,6 +632,7 @@ function RunDayWizard({
   async function addOosSwap(routeTruck: number, loadOnTruck: number) {
     try {
       await createSwap.mutateAsync({ run_date: runDate, route_truck: routeTruck, load_on_truck: loadOnTruck, two_way: false });
+      recordSwapHistory(routeTruck, loadOnTruck);
       setOosLoadOns((prev) => { const n = { ...prev }; delete n[routeTruck]; return n; });
     } catch (err: unknown) {
       // leave selection in place so user can retry or adjust
@@ -817,7 +848,6 @@ function RunDayWizard({
             const unswappedOos = board.filter(
               (t) => t.truck_type !== "Spare" && t.state?.status === "oos" && !swappedRoutes.has(t.truck_number),
             ).sort((a, b) => a.truck_number - b.truck_number);
-            const sortedSpares = board.filter((t) => t.truck_type === "Spare").sort((a, b) => a.truck_number - b.truck_number);
             return (
             <div className="space-y-3 max-h-[70vh] overflow-y-auto">
               <p className="text-center text-xl font-extrabold text-slate-100">Set any route swaps.</p>
@@ -845,11 +875,55 @@ function RunDayWizard({
                         }}
                       >
                         <option value="">— Load on —</option>
-                        {sortedSpares.map((s) => (
-                          <option key={s.truck_number} value={s.truck_number}>
-                            #{s.truck_number} — Spare
-                          </option>
-                        ))}
+                        {(() => {
+                          const sorted = [...board].sort((a, b) => a.truck_number - b.truck_number);
+                          const lastUsedNums = getSwapHistory(t.truck_number);
+                          const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
+                          const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
+                          const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "off");
+                          const swappedRouteSet = new Set(swaps.map((s) => s.route_truck));
+                          const oosRouteless = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(x.truck_number) && x.truck_number !== t.truck_number);
+                          const otherTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) !== "off" && effectiveStatus(x, loadDay, holidayLoad) !== "oos");
+                          return (
+                            <>
+                              {lastUsed.length > 0 && (
+                                <optgroup label="Last Used">
+                                  {lastUsed.map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — {x.truck_type === "Spare" ? "Spare" : (x.state?.status ?? "dirty")}</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {spareTrucks.length > 0 && (
+                                <optgroup label="Spare Trucks">
+                                  {spareTrucks.map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {offTrucks.length > 0 && (
+                                <optgroup label={`Off — Day ${loadDay}`}>
+                                  {offTrucks.map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {oosRouteless.length > 0 && (
+                                <optgroup label="OOS — route covered (available)">
+                                  {oosRouteless.map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — OOS / route covered</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {otherTrucks.length > 0 && (
+                                <optgroup label="Other">
+                                  {otherTrucks.map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} ({x.state?.status ?? "dirty"})</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </>
+                          );
+                        })()}
                       </select>
                     </div>
                   ))}
@@ -911,6 +985,9 @@ function RunDayWizard({
                       <option value="">— truck —</option>
                       {(() => {
                         const sorted = [...board].sort((a, b) => a.truck_number - b.truck_number);
+                        const routeNum = parseInt(swapRoute);
+                        const lastUsedNums = !isNaN(routeNum) ? getSwapHistory(routeNum) : [];
+                        const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                         const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
                         const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off");
                         // OOS trucks whose route is already covered are routeless and available
@@ -920,6 +997,15 @@ function RunDayWizard({
                         const otherTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
                         return (
                           <>
+                            {lastUsed.length > 0 && (
+                              <optgroup label="Last Used">
+                                {lastUsed.map((t) => (
+                                  <option key={t.truck_number} value={t.truck_number}>
+                                    #{t.truck_number} — {t.truck_type === "Spare" ? "Spare" : (t.state?.status ?? "dirty")}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
                             {spareTrucks.length > 0 && (
                               <optgroup label="Spare Trucks">
                                 {spareTrucks.map((t) => (

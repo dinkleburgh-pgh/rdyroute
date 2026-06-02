@@ -284,7 +284,7 @@ function HierarchyPicker({
               disabled={isPending}
               onClick={() => selectItem(item.label)}
               className={clsx(
-                "rounded-2xl px-7 py-5 text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+                "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
                 LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
                 MAT_COLOR_PALETTE[disp] ?? btnClass,
               )}
@@ -401,7 +401,7 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setTopCat(cat)}
                 className={clsx(
-                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
               >
@@ -429,7 +429,7 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
-                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
               >
@@ -516,7 +516,7 @@ function ItemLogger({
         </div>
       </div>
 
-      <div className="space-y-5 p-3 md:p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
         {/* Modifier bar */}
         <div className="flex flex-wrap items-center gap-3">
           <button
@@ -599,12 +599,12 @@ function ItemLogger({
               {[...entries].reverse().map((e) => (
                 <div
                   key={e.id}
-                  className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3"
+                  className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 w-full sm:w-auto"
                 >
-                  <span className="text-sm font-semibold text-slate-200">{e.item_label}</span>
-                  <span className="text-xl font-black text-white">×{e.quantity}</span>
+                  <span className="flex-1 min-w-0 text-sm font-semibold text-slate-200">{e.item_label}</span>
+                  <span className="shrink-0 text-xl font-black text-white">×{e.quantity}</span>
                   {e.warn_on_next_load && (
-                    <span className="text-amber-400 text-sm font-bold" title="Warn on next load">!</span>
+                    <span className="shrink-0 text-amber-400 text-sm font-bold" title="Warn on next load">!</span>
                   )}
                   {e.note && (
                     <span className="max-w-[8rem] truncate italic text-sm text-slate-500" title={e.note}>
@@ -614,7 +614,7 @@ function ItemLogger({
                   <button
                     type="button"
                     onClick={() => deleteEntry.mutate(e.id)}
-                    className="rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition"
+                    className="shrink-0 rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition"
                   >
                     Delete
                   </button>

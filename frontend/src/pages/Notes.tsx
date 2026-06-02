@@ -8,14 +8,16 @@
  */
 import { useState } from "react";
 import clsx from "clsx";
+import { QRCodeSVG } from "qrcode.react";
 import { useBoard } from "../api/hooks";
 import {
   useCreateNote,
   useDeleteNote,
+  useRegenerateQR,
   useTruckNotes,
   useUpdateNote,
 } from "../api/hooks";
-import { todayIso } from "../api/client";
+import { todayIso, publicBase } from "../api/client";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -31,9 +33,9 @@ const DAY_NAMES: Record<number, string> = {
 };
 
 const NOTE_TYPE_LABEL: Record<NoteType, string> = {
-  constant: "Constant",
+  constant: "Always",
   workday:  "Workday",
-  one_off:  "One-off",
+  one_off:  "Set Until...",
 };
 
 const NOTE_TYPE_COLOR: Record<NoteType, string> = {
@@ -71,16 +73,31 @@ function NoteForm({
 
   const [type, setType]    = useState<NoteType>(initial?.note_type ?? "constant");
   const [body, setBody]    = useState(initial?.body ?? "");
-  const [day, setDay]      = useState<string>(String(initial?.workday_num ?? ""));
+  const [days, setDays]    = useState<Set<number>>(
+    initial?.workday_num != null ? new Set([initial.workday_num]) : new Set(),
+  );
   const [exp, setExp]      = useState(initial?.expires_on ?? "");
   const [err, setErr]      = useState("");
 
   const busy = create.isPending || update.isPending;
 
+  function toggleDay(d: number) {
+    if (initial) {
+      // Editing an existing note: single-select only
+      setDays(new Set([d]));
+    } else {
+      setDays((prev) => {
+        const next = new Set(prev);
+        if (next.has(d)) next.delete(d); else next.add(d);
+        return next;
+      });
+    }
+  }
+
   async function submit() {
     setErr("");
     if (!body.trim()) { setErr("Note text is required."); return; }
-    if (type === "workday" && !day) { setErr("Select a workday."); return; }
+    if (type === "workday" && days.size === 0) { setErr("Select at least one workday."); return; }
     if (type === "one_off" && !exp) { setErr("Expiry date is required."); return; }
 
     try {
@@ -89,17 +106,20 @@ function NoteForm({
           id: initial.id,
           note_type: type,
           body: body.trim(),
-          workday_num: type === "workday" ? Number(day) : null,
+          workday_num: type === "workday" ? [...days][0] ?? null : null,
           expires_on:  type === "one_off" ? exp : null,
         });
       } else {
-        await create.mutateAsync({
-          truck_number: truckNumber,
-          note_type: type,
-          body: body.trim(),
-          workday_num: type === "workday" ? Number(day) : null,
-          expires_on:  type === "one_off" ? exp : null,
-        });
+        const dayList = type === "workday" ? [...days].sort() : [null];
+        await Promise.all(dayList.map((d) =>
+          create.mutateAsync({
+            truck_number: truckNumber,
+            note_type: type,
+            body: body.trim(),
+            workday_num: d,
+            expires_on:  type === "one_off" ? exp : null,
+          }),
+        ));
       }
       onClose();
     } catch {
@@ -146,10 +166,10 @@ function NoteForm({
               <button
                 key={d}
                 type="button"
-                onClick={() => setDay(String(d))}
+                onClick={() => toggleDay(d)}
                 className={clsx(
                   "flex-1 rounded-md py-1.5 text-xs font-semibold transition-colors",
-                  day === String(d)
+                  days.has(d)
                     ? "bg-violet-700 text-white"
                     : "bg-slate-800 text-slate-400 hover:bg-slate-700",
                 )}
@@ -158,8 +178,10 @@ function NoteForm({
               </button>
             ))}
           </div>
-          {day && (
-            <p className="mt-1 text-xs text-slate-500">{DAY_NAMES[Number(day)]}</p>
+          {days.size > 0 && (
+            <p className="mt-1 text-xs text-slate-500">
+              {[...days].sort().map((d) => DAY_NAMES[d]).join(", ")}
+            </p>
           )}
         </div>
       )}
@@ -279,6 +301,103 @@ function NoteCard({
 }
 
 // ---------------------------------------------------------------------------
+// QR code modal (admin: view, copy, and regenerate)
+// ---------------------------------------------------------------------------
+
+function TruckQRModal({
+  truckNumber,
+  qrToken,
+  onClose,
+}: {
+  truckNumber: number;
+  qrToken: string | null | undefined;
+  onClose: () => void;
+}) {
+  const regen = useRegenerateQR();
+  const [copied, setCopied] = useState(false);
+
+  const base = publicBase();
+  const url = qrToken ? `${base}/driver/${qrToken}` : null;
+
+  function copy() {
+    if (!url) return;
+    navigator.clipboard.writeText(url).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  }
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-4 flex items-center justify-between">
+          <h3 className="font-semibold">Route #{truckNumber} — Driver QR</h3>
+          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">✕</button>
+        </div>
+
+        {url ? (
+          <>
+            <div className="flex justify-center rounded-lg bg-white p-3">
+              <QRCodeSVG value={url} size={160} />
+            </div>
+
+            {/* Copyable URL */}
+            <div className="mt-3 flex gap-1.5">
+              <input
+                readOnly
+                value={url}
+                className="input min-w-0 flex-1 truncate text-xs"
+              />
+              <button
+                className="shrink-0 rounded-md bg-slate-700 px-3 text-xs font-medium text-slate-200 hover:bg-slate-600"
+                onClick={copy}
+              >
+                {copied ? "Copied!" : "Copy"}
+              </button>
+            </div>
+
+            {/* Preview link */}
+            <a
+              href={url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-2 block text-center text-xs text-blue-400 underline hover:text-blue-300"
+            >
+              Preview driver view ↗
+            </a>
+          </>
+        ) : (
+          <p className="text-center text-sm text-slate-400">No QR token assigned yet.</p>
+        )}
+
+        {/* Regenerate */}
+        <div className="mt-4 border-t border-slate-800 pt-3">
+          <p className="mb-2 text-xs text-slate-500">
+            Regenerate to invalidate the current QR code (e.g. if it was shared with unauthorized people).
+          </p>
+          <button
+            className="w-full rounded-md bg-red-900/60 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900 disabled:opacity-50"
+            disabled={regen.isPending}
+            onClick={() => {
+              if (!confirm(`Regenerate QR code for route #${truckNumber}? The old code will stop working immediately.`)) return;
+              regen.mutate(truckNumber, { onSuccess: onClose });
+            }}
+          >
+            {regen.isPending ? "Regenerating…" : "Regenerate QR Code"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Per-truck note panel
 // ---------------------------------------------------------------------------
 
@@ -295,8 +414,9 @@ function TruckNotePanel({
   isOpen: boolean;
   onOpen: () => void;
 }) {
-  const [adding, setAdding]           = useState(false);
-  const [editing, setEditing]         = useState<TruckNote | null>(null);
+  const [adding, setAdding]     = useState(false);
+  const [editing, setEditing]   = useState<TruckNote | null>(null);
+  const [showQR, setShowQR]     = useState(false);
 
   const visible = notes.filter(
     (n) => showArchived || (n.is_active && !isExpired(n)),
@@ -305,12 +425,12 @@ function TruckNotePanel({
   return (
     <div className="card space-y-3">
       {/* Truck header — tap to open/close */}
-      <button
-        type="button"
-        onClick={onOpen}
-        className="flex w-full items-center justify-between gap-2 text-left"
-      >
-        <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          onClick={onOpen}
+          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+        >
           <span className="text-xl font-black text-slate-100">#{truck.truck_number}</span>
           <span className="text-xs text-slate-500">{truck.truck_type}</span>
           {visible.length > 0 && (
@@ -318,14 +438,36 @@ function TruckNotePanel({
               {visible.length}
             </span>
           )}
-        </div>
-        <svg
-          className={clsx("h-4 w-4 shrink-0 text-slate-500 transition-transform", isOpen && "rotate-180")}
-          fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
-      </button>
+          <svg
+            className={clsx("ml-auto h-4 w-4 shrink-0 text-slate-500 transition-transform", isOpen && "rotate-180")}
+            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+          </svg>
+        </button>
+        {/* QR code button — only for non-spare trucks that have a token */}
+        {truck.truck_type !== "Spare" && (
+          <button
+            type="button"
+            title="View driver QR code"
+            onClick={() => setShowQR(true)}
+            className="shrink-0 rounded p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
+          >
+            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
+              <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM17 17h4M17 14v3M21 14v7M14 17v4"/>
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {showQR && (
+        <TruckQRModal
+          truckNumber={truck.truck_number}
+          qrToken={truck.qr_token}
+          onClose={() => setShowQR(false)}
+        />
+      )}
 
       {/* Expanded content */}
       {isOpen && (
@@ -429,13 +571,13 @@ export default function NotesBoard() {
         <h2 className="text-2xl font-semibold">Truck Notes</h2>
         <div className="flex flex-wrap gap-2 text-xs">
           <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.constant)}>
-            {totalConstant} Constant
+            {totalConstant} Always
           </span>
           <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.workday)}>
             {totalWorkday} Workday
           </span>
           <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.one_off)}>
-            {totalOneOff} One-off
+            {totalOneOff} Set Until...
           </span>
           <span className="rounded-full bg-slate-800 px-2.5 py-0.5 font-semibold text-slate-300">
             {totalActive} Active

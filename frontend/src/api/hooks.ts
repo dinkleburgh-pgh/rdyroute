@@ -99,6 +99,18 @@ export function useRemoveTruck() {
   });
 }
 
+export function useRegenerateQR() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (truck_number: number) =>
+      (await api.post<Truck>(`/fleet/${truck_number}/regenerate-qr`)).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["fleet"] });
+      qc.invalidateQueries({ queryKey: ["board"] });
+    },
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Trucks / Board
 // ---------------------------------------------------------------------------
@@ -575,6 +587,25 @@ export function useTriggerPushUpdate() {
     mutationFn: async (payload: { ref?: string; head_commit?: { id?: string } }) =>
       (await api.post("/updates/push", payload)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["update-status"] }),
+  });
+}
+
+export interface UpdateCheckResult {
+  local_sha: string | null;
+  remote_sha: string | null;
+  remote_message: string | null;
+  remote_date: string | null;
+  update_available: boolean;
+  check_error: string | null;
+}
+
+export function useCheckForUpdate(enabled = true) {
+  return useQuery({
+    queryKey: ["update-check"],
+    queryFn: async () => (await api.get<UpdateCheckResult>("/updates/check")).data,
+    refetchInterval: 5 * 60 * 1000, // poll every 5 minutes
+    staleTime: 4 * 60 * 1000,
+    enabled,
   });
 }
 
@@ -1100,6 +1131,52 @@ export function useDeleteNote() {
   return useMutation({
     mutationFn: async (id: number) => api.delete(`/notes/${id}`),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["truck-notes"] }),
+  });
+}
+
+// Driver-portal hooks (unauthenticated, keyed by QR token)
+export function useDriverTruckInfo(token: string | undefined) {
+  return useQuery({
+    queryKey: ["driver-truck", token],
+    enabled: !!token,
+    queryFn: async () =>
+      (await api.get<{ truck_number: number }>(`/notes/driver/${token}/info`)).data,
+    staleTime: Infinity,
+  });
+}
+
+export function useDriverNotes(token: string | undefined) {
+  return useQuery({
+    queryKey: ["driver-notes", token],
+    enabled: !!token,
+    queryFn: async () =>
+      (await api.get<TruckNote[]>(`/notes/driver/${token}`)).data,
+    staleTime: 30_000,
+  });
+}
+
+interface DriverNotePayload {
+  note_type?: string;
+  body: string;
+  workday_num?: number | null;
+  expires_on?: string | null;
+}
+
+export function useDriverCreateNote(token: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: DriverNotePayload) =>
+      (await api.post<TruckNote>(`/notes/driver/${token}`, payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-notes", token] }),
+  });
+}
+
+export function useDriverDeleteNote(token: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (noteId: number) =>
+      api.delete(`/notes/driver/${token}/${noteId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-notes", token] }),
   });
 }
 

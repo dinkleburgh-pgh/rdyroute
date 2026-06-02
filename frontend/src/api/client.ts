@@ -6,6 +6,16 @@ export const api = axios.create({
   withCredentials: true,
 });
 
+/**
+ * Base URL for public-facing links (e.g. QR codes).
+ * In production this is just window.location.origin (e.g. https://rdyroute.app).
+ * For LAN testing from a phone, set VITE_PUBLIC_URL in frontend/.env.local,
+ * e.g.  VITE_PUBLIC_URL=http://192.168.1.42:5180
+ */
+export function publicBase(): string {
+  return import.meta.env.VITE_PUBLIC_URL || (typeof window !== "undefined" ? window.location.origin : "");
+}
+
 // Attach JWT from localStorage on every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("readyroutev2_token");

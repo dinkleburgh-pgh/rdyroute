@@ -31,6 +31,8 @@ const STATUS_OPTIONS: TruckStatus[] = [
   "oos",
   "spare",
 ];
+// 'off' is not a valid target — off is schedule-managed, not manually set.
+const STATUS_TO_OPTIONS: TruckStatus[] = STATUS_OPTIONS.filter((s) => s !== "off");
 
 function formatDuration(seconds: number): string {
   if (!Number.isFinite(seconds) || seconds < 0) return "—";
@@ -196,7 +198,7 @@ export default function Supervisor() {
               value={toStatus}
               onChange={(e) => setToStatus(e.target.value as TruckStatus)}
             >
-              {STATUS_OPTIONS.map((s) => (
+              {STATUS_TO_OPTIONS.map((s) => (
                 <option key={s} value={s}>
                   {STATUS_LABELS[s]}
                 </option>

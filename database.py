@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     session_expiry_days: int = 30
     cors_origins: str = "*"
     timezone: str = "America/New_York"
+    # Optional backup / replica database URLs (comma-separated for multiple).
+    # Leave empty to skip. Example: postgresql+psycopg://user:pass@backup-host:5432/dbname
+    backup_database_url: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

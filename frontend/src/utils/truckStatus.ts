@@ -49,6 +49,7 @@ export function buildRouteStatusCounts(
   trucks: TruckWithState[],
   loadDayNum: number,
   holidayLoad: boolean,
+  unloadsDayNum?: number,
 ): Record<TruckStatus, number> {
   const out: Record<TruckStatus, number> = {
     dirty: 0,
@@ -61,11 +62,26 @@ export function buildRouteStatusCounts(
     spare: 0,
   };
 
+  // When an unloads day is provided (sidebar), dirty/unloaded trucks that were
+  // auto-off'd by the load day should be re-evaluated against the unloads day.
+  // This ensures trucks that ran today but don't load tomorrow still show as
+  // dirty/unloaded rather than being hidden under "off".
+  function statusFor(t: TruckWithState): TruckStatus {
+    const s = effectiveStatus(t, loadDayNum, holidayLoad);
+    if (unloadsDayNum !== undefined && s === "off") {
+      const raw = (t.state?.status ?? "dirty") as TruckStatus;
+      if (raw === "dirty" || raw === "unloaded") {
+        return effectiveStatus(t, unloadsDayNum, holidayLoad);
+      }
+    }
+    return s;
+  }
+
   // First pass: identify which route numbers are currently OOS so covering
   // spares can be bucketed into their lifecycle status rather than "spare".
   const oosRouteNumbers = new Set<number>();
   for (const t of trucks) {
-    if (t.truck_type !== "Spare" && effectiveStatus(t, loadDayNum, holidayLoad) === "oos") {
+    if (t.truck_type !== "Spare" && statusFor(t) === "oos") {
       oosRouteNumbers.add(t.truck_number);
     }
   }
@@ -76,7 +92,7 @@ export function buildRouteStatusCounts(
       // workflow — count it under its own lifecycle status.
       const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
       if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
-        out[effectiveStatus(t, loadDayNum, holidayLoad)] += 1;
+        out[statusFor(t)] += 1;
       } else {
         out.spare += 1;
       }
@@ -85,9 +101,46 @@ export function buildRouteStatusCounts(
 
     // Route trucks always count in their effective status (OOS stays OOS).
     // Unfinished trucks surface under Dirty in the sidebar.
-    const s = effectiveStatus(t, loadDayNum, holidayLoad);
+    const s = statusFor(t);
     out[s === "unfinished" ? "dirty" : s] += 1;
+    // Also count in "off" if this truck is off for the load day but is being
+    // shown under its unload-context status (dirty/unloaded). Both counts are
+    // independently useful: unloaded = work to do today, off = not loading tomorrow.
+    const loadDayEff = effectiveStatus(t, loadDayNum, holidayLoad);
+    if (loadDayEff === "off" && s !== "off") {
+      out.off += 1;
+    }
   }
 
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// Route-swap "Last Used" history  (localStorage, route-specific)
+// ---------------------------------------------------------------------------
+
+const _SWAP_HISTORY_KEY = "rr_swap_history";
+const _SWAP_HISTORY_MAX = 3;
+
+/** Record that `loadOnTruck` was used to cover `routeTruck`. */
+export function recordSwapHistory(routeTruck: number, loadOnTruck: number): void {
+  try {
+    const raw = localStorage.getItem(_SWAP_HISTORY_KEY);
+    const all: Record<string, number[]> = raw ? JSON.parse(raw) : {};
+    const prev = all[String(routeTruck)] ?? [];
+    // Deduplicate, keep most-recent first, cap at max
+    const next = [loadOnTruck, ...prev.filter((n) => n !== loadOnTruck)].slice(0, _SWAP_HISTORY_MAX);
+    all[String(routeTruck)] = next;
+    localStorage.setItem(_SWAP_HISTORY_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+/** Return the last-used load-on truck numbers for a given route (most-recent first). */
+export function getSwapHistory(routeTruck: number): number[] {
+  try {
+    const raw = localStorage.getItem(_SWAP_HISTORY_KEY);
+    if (!raw) return [];
+    const all: Record<string, number[]> = JSON.parse(raw);
+    return all[String(routeTruck)] ?? [];
+  } catch { return []; }
 }

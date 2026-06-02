@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAuditEntries,
@@ -21,7 +21,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { effectiveStatus } from "../utils/truckStatus";
+import { effectiveStatus, getSwapHistory, recordSwapHistory } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 
@@ -113,6 +113,37 @@ function DustGarmentIcon({ className }: { className?: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// Outside-timer helpers (dev feature — enabled via outside_timer_enabled setting)
+// ---------------------------------------------------------------------------
+
+const _OUTSIDE_LS_KEY = "rr_outside_timers";
+
+function _loadOutsideTimers(runDate: string): Map<number, number> {
+  try {
+    const raw = localStorage.getItem(_OUTSIDE_LS_KEY);
+    if (!raw) return new Map();
+    const all = JSON.parse(raw) as Record<string, Record<string, number>>;
+    return new Map(Object.entries(all[runDate] ?? {}).map(([k, v]) => [Number(k), v]));
+  } catch { return new Map(); }
+}
+
+function _saveOutsideTimers(runDate: string, timers: Map<number, number>): void {
+  try {
+    const raw = localStorage.getItem(_OUTSIDE_LS_KEY);
+    const all: Record<string, Record<string, number>> = raw ? JSON.parse(raw) : {};
+    if (timers.size === 0) delete all[runDate];
+    else all[runDate] = Object.fromEntries([...timers].map(([k, v]) => [String(k), v]));
+    localStorage.setItem(_OUTSIDE_LS_KEY, JSON.stringify(all));
+  } catch {}
+}
+
+function _fmtCountdown(secs: number): string {
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// ---------------------------------------------------------------------------
 // Route Card panel (fleet mode only)
 // ---------------------------------------------------------------------------
 
@@ -135,7 +166,7 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
   }, [runDate]);
 
   const oosRoutes = useMemo(
-    () => data.filter((t) => (t.state?.status ?? "dirty") === "oos"),
+    () => data.filter((t) => t.is_oos || (t.state?.status ?? "dirty") === "oos"),
     [data],
   );
 
@@ -181,6 +212,7 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
         two_way: false,
       });
     }
+    recordSwapHistory(selectedRoute, pickedNum);
     setSelectedRoute(null);
     setSelectedSpare("");
   }
@@ -284,6 +316,8 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
                           <option value="">— truck —</option>
                           {(() => {
                             const sorted = [...data].sort((a, b) => a.truck_number - b.truck_number);
+                            const lastUsedNums = selectedRoute != null ? getSwapHistory(selectedRoute) : [];
+                            const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                             const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
                             const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDayNum, holidayLoad) === "off");
                             const otherTrucks = sorted.filter((t) => {
@@ -293,6 +327,15 @@ function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: st
                             });
                             return (
                               <>
+                                {lastUsed.length > 0 && (
+                                  <optgroup label="Last Used">
+                                    {lastUsed.map((t) => (
+                                      <option key={t.truck_number} value={t.truck_number}>
+                                        #{t.truck_number} — {t.truck_type === "Spare" ? "Spare" : (t.state?.status ?? "dirty")}
+                                      </option>
+                                    ))}
+                                  </optgroup>
+                                )}
                                 {spareTrucks.length > 0 && (
                                   <optgroup label="Spare Trucks">
                                     {spareTrucks.map((t) => (
@@ -361,6 +404,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [pendingOffLoadTruck, setPendingOffLoadTruck] = useState<TruckWithState | null>(null);
   const [pendingOffLoadRoute, setPendingOffLoadRoute] = useState<string>("");
   const [pendingOffLoadError, setPendingOffLoadError] = useState<string | null>(null);
+  const [offCoverageTruck, setOffCoverageTruck] = useState<TruckWithState | null>(null);
+  const [offCoverageLoadOn, setOffCoverageLoadOn] = useState<string>("");
+  const [offCoverageError, setOffCoverageError] = useState<string | null>(null);
   const isArchive = runDate < todayIso();
   const isFuture  = runDate > todayIso();
   const isReadOnly = runDate !== todayIso();
@@ -394,6 +440,96 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
     [settings],
   );
+
+  const outsideTimerEnabled = useMemo(
+    () => (settings ?? []).find((s) => s.key === "outside_timer_enabled")?.value === true,
+    [settings],
+  );
+
+  // --- Outside timer state (truck_number → expiry ms) ---
+  const [outsideTimers, setOutsideTimers] = useState<Map<number, number>>(new Map());
+  const [outsideCountdowns, setOutsideCountdowns] = useState<Map<number, number>>(new Map());
+
+  // Stable refs for use inside the setInterval callback (avoids stale closures)
+  const _outsideTimersRef = useRef<Map<number, number>>(new Map());
+  const _runDateRef = useRef(runDate);
+  const _dataRef = useRef(data);
+  const _upsertRef = useRef(upsert);
+  useEffect(() => { _outsideTimersRef.current = outsideTimers; }, [outsideTimers]);
+  useEffect(() => { _runDateRef.current = runDate; }, [runDate]);
+  useEffect(() => { _dataRef.current = data; }, [data]);
+  useEffect(() => { _upsertRef.current = upsert; }, [upsert]);
+
+  // Load persisted timers when the run-date changes
+  useEffect(() => {
+    const stored = _loadOutsideTimers(runDate);
+    const now = Date.now();
+    const active = new Map([...stored].filter(([, exp]) => exp > now));
+    setOutsideTimers(active);
+    setOutsideCountdowns(new Map([...active].map(([n, e]) => [n, Math.ceil((e - now) / 1000)])));
+  }, [runDate]);
+
+  // 1-second tick — fires auto-unload when a timer expires
+  useEffect(() => {
+    const id = setInterval(() => {
+      const timers = _outsideTimersRef.current;
+      if (timers.size === 0) return;
+      const now = Date.now();
+      const expired: number[] = [];
+      const countdowns = new Map<number, number>();
+      timers.forEach((expiry, truckNum) => {
+        const rem = Math.ceil((expiry - now) / 1000);
+        if (rem <= 0) expired.push(truckNum);
+        else countdowns.set(truckNum, rem);
+      });
+      if (expired.length > 0) {
+        const next = new Map(timers);
+        expired.forEach((num) => {
+          next.delete(num);
+          const t = (_dataRef.current ?? []).find((x) => x.truck_number === num);
+          _upsertRef.current.mutate({
+            truck_number: num,
+            run_date: _runDateRef.current,
+            status: "unloaded",
+            wearers: t?.state?.wearers ?? 0,
+          });
+        });
+        _saveOutsideTimers(_runDateRef.current, next);
+        setOutsideTimers(next);
+      }
+      setOutsideCountdowns(countdowns);
+    }, 1000);
+    return () => clearInterval(id);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  function startOutsideTimer(truckNum: number) {
+    const expiry = Date.now() + 10 * 60 * 1000;
+    setOutsideTimers((prev) => {
+      const next = new Map(prev);
+      next.set(truckNum, expiry);
+      _saveOutsideTimers(runDate, next);
+      return next;
+    });
+    setOutsideCountdowns((prev) => {
+      const next = new Map(prev);
+      next.set(truckNum, 600);
+      return next;
+    });
+  }
+
+  function cancelOutsideTimer(truckNum: number) {
+    setOutsideTimers((prev) => {
+      const next = new Map(prev);
+      next.delete(truckNum);
+      _saveOutsideTimers(runDate, next);
+      return next;
+    });
+    setOutsideCountdowns((prev) => {
+      const next = new Map(prev);
+      next.delete(truckNum);
+      return next;
+    });
+  }
 
   const inProgressTruck = useMemo(
     () => (data ?? []).find((t) => t.state?.status === "in_progress"),
@@ -534,13 +670,28 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           c[s] = (c[s] ?? 0) + 1;
         }
       } else {
-        const s = effectiveStatus(t, runDayNum, holidayLoad);
+        const loadDayEff = effectiveStatus(t, runDayNum, holidayLoad);
+        let s = loadDayEff;
+        // Non-fleet board: re-evaluate auto-off trucks against unloadsDay so
+        // dirty/unloaded trucks that ran today but don't load tomorrow count
+        // in their real status bucket rather than "off".
+        if (!fleetMode && s === "off") {
+          const raw = (t.state?.status ?? "dirty") as TruckStatus;
+          if (raw === "dirty" || raw === "unloaded") {
+            s = effectiveStatus(t, runUnloadsDay, holidayLoad);
+          }
+        }
         c[s] = (c[s] ?? 0) + 1;
+        // Also count in "off" when scheduled off for load day but shown in
+        // an unload-context bucket (off = not loading tomorrow).
+        if (!fleetMode && loadDayEff === "off" && s !== "off") {
+          c.off = (c.off ?? 0) + 1;
+        }
       }
     });
 
     return c;
-  }, [data, runDayNum, holidayLoad, fleetMode, truckStatusByNumber]);
+  }, [data, runDayNum, runUnloadsDay, holidayLoad, fleetMode, truckStatusByNumber]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
@@ -565,7 +716,27 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     }
     if (filter === "all") return data;
     return data.filter((t) => {
-      const s = effectiveStatus(t, runDayNum, holidayLoad);
+      const loadDayEff = effectiveStatus(t, runDayNum, holidayLoad);
+      // For the "off" filter use load-day effectiveStatus directly so trucks
+      // scheduled off tomorrow appear here even if they still need unloading today.
+      if (filter === "off") {
+        if (loadDayEff !== "off") return false;
+        if (t.truck_type === "Spare") {
+          const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+          if (coveredRoute == null) return false;
+          return truckStatusByNumber.get(coveredRoute) === "oos";
+        }
+        return true;
+      }
+      // For all other filters, re-evaluate auto-off trucks against unloadsDay
+      // so they surface under their real workflow status.
+      let s = loadDayEff;
+      if (s === "off") {
+        const raw = (t.state?.status ?? "dirty") as TruckStatus;
+        if (raw === "dirty" || raw === "unloaded") {
+          s = effectiveStatus(t, runUnloadsDay, holidayLoad);
+        }
+      }
       // In dirty view, also include unfinished trucks (rendered as a sub-section)
       const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
       if (!matchStatus) return false;
@@ -662,44 +833,59 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           })}
           </div>
 
-          {multiSelect && selectedTrucks.size > 0 && (
+          {multiSelect && (
             <div className="mt-3 space-y-1.5 border-t border-slate-800 pt-3">
-              <p className="text-xs font-semibold text-slate-400">{selectedTrucks.size} selected</p>
-              <select
-                className="input w-full text-xs"
-                value={bulkStatus}
-                onChange={(e) => setBulkStatus(e.target.value as TruckStatus)}
-              >
-                {FLEET_STATUS_OPTIONS.map((s) => (
-                  <option key={s} value={s}>{STATUS_LABELS[s]}</option>
-                ))}
-              </select>
-              <button
-                type="button"
-                disabled={upsert.isPending}
-                onClick={() => {
-                  selectedTrucks.forEach((num) => {
-                    const truck = data?.find((t) => t.truck_number === num);
-                    upsert.mutate({
-                      truck_number: num,
-                      run_date: runDate,
-                      status: bulkStatus,
-                      wearers: truck?.state?.wearers ?? 0,
-                    });
-                  });
-                  setSelectedTrucks(new Set());
-                }}
-                className="w-full rounded-md bg-blue-600 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
-              >
-                Apply to All
-              </button>
-              <button
-                type="button"
-                onClick={() => setSelectedTrucks(new Set())}
-                className="w-full rounded py-1 text-xs text-slate-500 hover:text-slate-300"
-              >
-                Clear
-              </button>
+              <div className="flex items-center justify-between">
+                <p className="text-xs font-semibold text-slate-400">{selectedTrucks.size} selected</p>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-sky-400 hover:bg-slate-800"
+                    onClick={() => setSelectedTrucks(new Set(filtered.map((t) => t.truck_number)))}
+                  >
+                    All
+                  </button>
+                  <button
+                    type="button"
+                    className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+                    onClick={() => setSelectedTrucks(new Set())}
+                  >
+                    None
+                  </button>
+                </div>
+              </div>
+              {selectedTrucks.size > 0 && (
+                <>
+                  <select
+                    className="input w-full text-xs"
+                    value={bulkStatus}
+                    onChange={(e) => setBulkStatus(e.target.value as TruckStatus)}
+                  >
+                    {FLEET_STATUS_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{STATUS_LABELS[s]}</option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    disabled={upsert.isPending}
+                    onClick={() => {
+                      selectedTrucks.forEach((num) => {
+                        const truck = data?.find((t) => t.truck_number === num);
+                        upsert.mutate({
+                          truck_number: num,
+                          run_date: runDate,
+                          status: bulkStatus,
+                          wearers: truck?.state?.wearers ?? 0,
+                        });
+                      });
+                      setSelectedTrucks(new Set());
+                    }}
+                    className="w-full rounded-md bg-blue-600 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+                  >
+                    Apply to All
+                  </button>
+                </>
+              )}
             </div>
           )}
 
@@ -818,6 +1004,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
               chipIsExtra = chipDay === loadDay2;
             }
+            // Off filter: color the number by the truck's unload-context status (e.g. green
+            // for unloaded, orange for dirty) instead of the muted "off" grey.
+            const numberColor =
+              !fleetMode && status === "off" && (filter === "off" || filter === "unloaded")
+                ? STATUS_TEXT[effectiveStatus(t, runUnloadsDay, holidayLoad)]
+                : fleetMode || filter === "unloaded"
+                ? STATUS_TEXT[status]
+                : "hover:text-blue-300";
+
             return (
             <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale",  !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
@@ -842,7 +1037,21 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}`);
                   }
                 } else if (filter === "unloaded" && !fleetMode) {
-                  setConfirmTruck(t);
+                  // Off+unloaded trucks need coverage assignment before loading.
+                  // Route the click through the off-load modal instead of StartLoadModal.
+                  if (effectiveStatus(t, runDayNum, holidayLoad) === "off") {
+                    // Skip coverage prompt if a swap already exists for this route.
+                    const alreadyCovered = routeSwaps.some((s) => s.route_truck === t.truck_number);
+                    if (alreadyCovered) {
+                      setConfirmTruck(t);
+                    } else {
+                      setOffCoverageTruck(t);
+                      setOffCoverageLoadOn("");
+                      setOffCoverageError(null);
+                    }
+                  } else {
+                    setConfirmTruck(t);
+                  }
                 } else {
                   setDetailNum(detailNum === t.truck_number ? null : t.truck_number);
                 }
@@ -856,7 +1065,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       <span className={clsx(
                         "font-extrabold tracking-tight tabular-nums leading-none",
                         filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                        filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300",
+                        numberColor,
                       )}>
                         {t.truck_number}
                       </span>
@@ -869,7 +1078,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       <span className={clsx(
                         "font-extrabold tracking-tight tabular-nums leading-none",
                         fleetMode ? "text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                        fleetMode ? STATUS_TEXT[status] : (filter === "unloaded" ? "hover:text-green-300" : "hover:text-blue-300"),
+                        numberColor,
                       )}>
                         {t.truck_number}
                       </span>
@@ -891,14 +1100,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     </div>
                   )}
                   <span className="flex min-h-[2.25rem] flex-col items-end justify-start gap-0.5">
-                    {fleetMode && status === "off" && (t.state?.status === "dirty" || t.state?.status === "unloaded") && (
+                    <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
+                      {STATUS_LABELS[status]}
+                    </span>
+                    {(fleetMode || filter === "off" || filter === "unloaded") && status === "off" && (t.state?.status === "dirty" || t.state?.status === "unloaded") && (
                       <span className={clsx("badge", STATUS_BG[t.state.status as TruckStatus], STATUS_BADGE_TEXT[t.state.status as TruckStatus])}>
                         {STATUS_LABELS[t.state.status as TruckStatus]}
                       </span>
                     )}
-                    <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
-                      {STATUS_LABELS[status]}
-                    </span>
                     {t.truck_type === "Dust" && t.state?.has_dust_garment && (
                       <span
                         className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
@@ -988,6 +1197,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           e.currentTarget.value = status;
                           return;
                         }
+                        if (next === "__outside__") {
+                          e.currentTarget.value = status;
+                          startOutsideTimer(t.truck_number);
+                          return;
+                        }
                         if (next === "oos") {
                           setPendingOosTruck(t);
                           e.currentTarget.value = status; // revert visual selection
@@ -1002,9 +1216,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       }}
                     >
                       {status === "off" && (
-                        <option value="off" disabled>
+                        <option value="off" disabled hidden>
                           Off (scheduled)
                         </option>
+                      )}
+                      {outsideTimerEnabled && !outsideTimers.has(t.truck_number) && (
+                        <option value="__outside__">⏱ Outside (10 min)</option>
                       )}
                       {FLEET_STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>
@@ -1016,6 +1233,23 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   {status === "oos" && (
                     <p className="text-xs text-slate-500 italic">Tap to remove OOS</p>
                   )}
+                  {outsideTimerEnabled && outsideTimers.has(t.truck_number) && (
+                    <div
+                      className="flex items-center gap-1.5 rounded-lg border border-orange-700/50 bg-orange-950/70 px-2 py-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-xs font-bold text-orange-300">
+                        ⏱ Outside {_fmtCountdown(outsideCountdowns.get(t.truck_number) ?? 0)}
+                      </span>
+                      <button
+                        type="button"
+                        className="ml-auto text-xs text-orange-500 transition-colors hover:text-orange-300"
+                        onClick={() => cancelOutsideTimer(t.truck_number)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1026,6 +1260,98 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           <p className="col-span-full text-slate-500">No trucks match this filter.</p>
         )}
       </div>
+      )}
+
+      {offCoverageTruck && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => { setOffCoverageTruck(null); setOffCoverageLoadOn(""); setOffCoverageError(null); }}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-base font-semibold">
+              Route #{offCoverageTruck.truck_number} is off tomorrow
+            </h3>
+            <p className="mb-4 text-sm text-slate-400">
+              This route is not scheduled for the next load day. Assign the truck or spare
+              that will cover it so the load can proceed. Coverage is required.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Covering truck (required)</label>
+                <select
+                  className="input"
+                  value={offCoverageLoadOn}
+                  onChange={(e) => setOffCoverageLoadOn(e.target.value)}
+                >
+                  <option value="">— pick covering truck —</option>
+                  <optgroup label="Spares">
+                    {(data ?? [])
+                      .filter((x) => x.truck_type === "Spare")
+                      .sort((a, b) => a.truck_number - b.truck_number)
+                      .map((x) => (
+                        <option key={x.truck_number} value={x.truck_number}>
+                          #{x.truck_number} — Spare
+                        </option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="Route trucks">
+                    {(data ?? [])
+                      .filter((x) => x.truck_type !== "Spare" && x.truck_number !== offCoverageTruck.truck_number)
+                      .sort((a, b) => a.truck_number - b.truck_number)
+                      .map((x) => (
+                        <option key={x.truck_number} value={x.truck_number}>
+                          #{x.truck_number} ({effectiveStatus(x, runDayNum, holidayLoad)})
+                        </option>
+                      ))}
+                  </optgroup>
+                </select>
+              </div>
+              {offCoverageError && (
+                <p className="text-sm text-red-400">{offCoverageError}</p>
+              )}
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                className="btn-ghost"
+                onClick={() => { setOffCoverageTruck(null); setOffCoverageLoadOn(""); setOffCoverageError(null); }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-green-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-60 transition-colors"
+                disabled={createSwap.isPending || offCoverageLoadOn === ""}
+                onClick={async () => {
+                  const loadOnNum = parseInt(offCoverageLoadOn, 10);
+                  if (!Number.isFinite(loadOnNum)) {
+                    setOffCoverageError("Select a covering truck first.");
+                    return;
+                  }
+                  try {
+                    await createSwap.mutateAsync({
+                      run_date: runDate,
+                      route_truck: offCoverageTruck.truck_number,
+                      load_on_truck: loadOnNum,
+                      two_way: false,
+                    });
+                    const t = offCoverageTruck;
+                    setOffCoverageTruck(null);
+                    setOffCoverageLoadOn("");
+                    setOffCoverageError(null);
+                    setConfirmTruck(t);
+                  } catch (err: unknown) {
+                    const e = err as { response?: { data?: { detail?: string } } };
+                    setOffCoverageError(e?.response?.data?.detail ?? "Failed to create coverage.");
+                  }
+                }}
+              >
+                {createSwap.isPending ? "Saving…" : "Assign Coverage & Start Loading"}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {pendingOosTruck && (

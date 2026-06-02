@@ -53,7 +53,7 @@ export default function Load() {
     () =>
       board.filter(
         (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
           (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
       ),
     [board, loadDay, holidayLoad],
@@ -153,16 +153,16 @@ export default function Load() {
   const loadedSpareRoutes = useMemo(
     () =>
       new Set(
-        loadTrucks
+        board
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
-              t.route_swap_route != null &&
+              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
               effectiveStatus(t, loadDay, holidayLoad) === "loaded",
           )
-          .map((t) => t.route_swap_route as number),
+          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
-    [loadTrucks, loadDay, holidayLoad],
+    [board, loadDay, holidayLoad],
   );
   const loadTotal = loadRouteTrucks.length;
   const loadDone = loadRouteTrucks.filter(
@@ -177,7 +177,7 @@ export default function Load() {
     () =>
       board.filter(
         (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null) &&
+          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
           (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
       ),
     [board, unloadsDay, holidayUnload],
@@ -189,16 +189,16 @@ export default function Load() {
   const unloadedSpareRoutes = useMemo(
     () =>
       new Set(
-        unloadTrucks
+        board
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
-              t.route_swap_route != null &&
+              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
               ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)),
           )
-          .map((t) => t.route_swap_route as number),
+          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
-    [unloadTrucks, unloadsDay, holidayUnload],
+    [board, unloadsDay, holidayUnload],
   );
   const unloadDone = unloadRouteTrucks.filter(
     (t) =>
@@ -391,9 +391,12 @@ export default function Load() {
             Finish the in-progress truck before starting another.
           </p>
         )}
-        <div className="flex flex-wrap gap-3">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
           {ready.map((t) => {
             const disabled = anyInProgress || busy === t.truck_number;
+            const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
+            const isOosCover = t.state?.oos_spare_route != null;
+            const isSwap = t.route_swap_route != null && !isOosCover;
             return (
               <button
                 key={t.truck_number}
@@ -401,25 +404,39 @@ export default function Load() {
                 disabled={disabled}
                 onClick={() => startLoad(t)}
                 className={clsx(
-                  "group relative flex h-16 w-16 items-center justify-center rounded-xl text-2xl font-black text-white shadow-md ring-1 transition-all duration-150 select-none",
+                  "card relative p-4 flex flex-col gap-1 text-left transition-all duration-150",
                   disabled
-                    ? "cursor-not-allowed bg-emerald-900/40 ring-emerald-900/50 opacity-50"
-                    : "bg-gradient-to-b from-emerald-500 to-emerald-700 ring-emerald-400/40 shadow-emerald-900/40 hover:from-emerald-400 hover:to-emerald-600 hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow",
+                    ? "cursor-not-allowed opacity-50"
+                    : "hover:ring-2 hover:ring-emerald-500 active:scale-[0.98]",
                 )}
-                style={{ WebkitTextStroke: "0.75px rgba(0,0,0,0.9)" }}
                 title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
               >
-                {t.truck_number}
-                {t.state?.has_dust_garment && (
-                  <span className="absolute -right-1.5 -top-1.5 rounded-full border border-amber-500/70 bg-amber-950 p-1 shadow">
-                    <DustGarmentIcon className="h-3 w-3 text-amber-300" />
+                <div className="flex items-start justify-between gap-1">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-emerald-300">
+                      {t.truck_number}
+                    </span>
+                    {coverRoute != null && (
+                      <span className="text-xs font-bold tabular-nums text-sky-400">
+                        rt #{coverRoute}{isOosCover ? " (cov)" : isSwap ? " (swap)" : ""}
+                      </span>
+                    )}
+                  </div>
+                  <span className="flex flex-col items-end gap-0.5">
+                    <span className="badge bg-emerald-700 text-white">Unloaded</span>
+                    {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5" title="Dust garment">
+                        <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+                      </span>
+                    )}
                   </span>
-                )}
-                {t.route_swap_route != null && (
-                  <span className="absolute -bottom-5 left-1/2 -translate-x-1/2 whitespace-nowrap rounded bg-blue-950/80 px-1.5 py-0.5 text-[9px] font-semibold text-blue-300 ring-1 ring-blue-800/60">
-                    R#{t.route_swap_route}
-                  </span>
-                )}
+                </div>
+                <div className="text-xs text-slate-400">
+                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                </div>
+                {t.state?.wearers ? (
+                  <div className="mt-auto pt-1 text-xs text-slate-500">{t.state.wearers} wearers</div>
+                ) : null}
               </button>
             );
           })}
@@ -466,57 +483,51 @@ export default function Load() {
             </div>
           )}
         </div>
-        <div className="flex flex-wrap gap-3">
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
           {loadedSorted.map((t, idx) => {
-            const coverRoute = t.state?.oos_spare_route ?? null;
+            const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
+            const isOosCover = t.state?.oos_spare_route != null;
+            const isSwap = t.route_swap_route != null && !isOosCover;
             return (
-            <div key={t.truck_number} className="group relative">
-              <button
-                type="button"
-                disabled
-                className={clsx(
-                  "relative flex items-center justify-center rounded-xl font-black text-white shadow-md ring-1 ring-blue-400/30 select-none",
-                  "bg-gradient-to-b from-blue-500 to-blue-800 shadow-blue-950/40",
-                  coverRoute != null ? "h-16 w-24 flex-col gap-0 px-1" : "h-16 w-16 text-2xl",
-                )}
-                style={{ WebkitTextStroke: "0.75px rgba(0,0,0,0.9)" }}
-              >
-                {coverRoute != null ? (
-                  <>
-                    <span className="text-xs font-semibold leading-none text-blue-100">Rt {coverRoute}</span>
-                    <span className="text-[10px] leading-none text-blue-200/80">→</span>
-                    <span className="text-base font-black leading-none">#{t.truck_number}</span>
-                  </>
-                ) : (
-                  t.truck_number
-                )}
+              <div key={t.truck_number} className="card relative p-4 flex flex-col gap-1">
                 {loadedSort === "order" && (
                   <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-900 px-1 text-[10px] font-bold text-blue-300 ring-1 ring-blue-500/60">
                     {idx + 1}
                   </span>
                 )}
-                {t.state?.has_dust_garment && (
-                  <span className="absolute -right-1.5 -top-1.5 rounded-full border border-amber-500/70 bg-amber-950 p-1 shadow">
-                    <DustGarmentIcon className="h-3 w-3 text-amber-300" />
+                <div className="flex items-start justify-between gap-1">
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-sky-300">
+                      {t.truck_number}
+                    </span>
+                    {coverRoute != null && (
+                      <span className="text-xs font-bold tabular-nums text-sky-400">
+                        rt #{coverRoute}{isOosCover ? " (cov)" : isSwap ? " (swap)" : ""}
+                      </span>
+                    )}
+                  </div>
+                  <span className="flex flex-col items-end gap-0.5">
+                    <span className="badge bg-blue-600 text-white">Loaded</span>
+                    {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5" title="Dust garment">
+                        <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+                      </span>
+                    )}
                   </span>
-                )}
-              </button>
-              {(t.state?.load_start_time || t.state?.load_finish_time) && (
-                <div className="pointer-events-none absolute -top-16 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-md bg-slate-800 px-2.5 py-1.5 text-xs font-semibold text-slate-200 opacity-0 shadow-lg ring-1 ring-slate-700 transition-opacity group-hover:opacity-100">
-                  {t.state?.load_start_time && (
-                    <div className="text-slate-400">Start <span className="text-white">{new Date(t.state.load_start_time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span></div>
-                  )}
-                  {t.state?.load_finish_time && (
-                    <div className="text-slate-400">Finish <span className="text-white">{new Date(t.state.load_finish_time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}</span></div>
-                  )}
-                  <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-800" />
                 </div>
-              )}
-            </div>
+                <div className="text-xs text-slate-400">
+                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                </div>
+                {t.state?.load_finish_time && (
+                  <div className="mt-auto pt-1 text-xs text-slate-500">
+                    Done {new Date(t.state.load_finish_time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                  </div>
+                )}
+              </div>
             );
           })}
           {loaded.length === 0 && (
-            <p className="text-sm text-slate-500">Nothing loaded yet.</p>
+            <p className="col-span-full text-sm text-slate-500">Nothing loaded yet.</p>
           )}
         </div>
       </section>

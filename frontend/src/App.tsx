@@ -19,6 +19,7 @@ import Management from "./pages/Settings";
 import Communications from "./pages/Communications";
 import Supervisor from "./pages/Supervisor";
 import NotesBoard from "./pages/Notes";
+import DriverNotes from "./pages/DriverNotes";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -35,6 +36,7 @@ export default function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/login" element={<Login />} />
+            <Route path="/driver/:token" element={<DriverNotes />} />
             <Route
               path="/"
               element={

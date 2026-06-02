@@ -11,8 +11,12 @@ the Management UI can show state/history.
 from __future__ import annotations
 
 from datetime import datetime, timezone
+import json
+import os
+import time
 from threading import Lock
 import subprocess
+import urllib.request
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
@@ -28,9 +32,49 @@ KEY_SECRET = "update_push_secret"
 KEY_COMMAND = "update_deploy_command"
 KEY_LAST = "update_last_status"
 
-DEFAULT_COMMAND = "./deploy.ps1"
+DEFAULT_COMMAND = "bash ./deploy.sh"
 RUN_TIMEOUT_SECONDS = 60 * 20
 _run_lock = Lock()
+
+# ---------------------------------------------------------------------------
+# Git-based update check (GitHub API)
+# ---------------------------------------------------------------------------
+
+_GIT_SHA = os.getenv("GIT_SHA", "").strip()
+_GITHUB_REPO = "dinkleburgh-pgh/rdyroute"
+_gh_cache: dict = {}
+_GH_CACHE_TTL = 300  # seconds
+
+
+def _fetch_remote_info(force: bool = False) -> dict:
+    """Query GitHub API for the latest commit on main. Caches for 5 minutes."""
+    global _gh_cache
+    now = time.time()
+    if not force and _gh_cache.get("fetched_at", 0.0) + _GH_CACHE_TTL > now:
+        return _gh_cache
+    try:
+        req = urllib.request.Request(
+            f"https://api.github.com/repos/{_GITHUB_REPO}/commits/main",
+            headers={"Accept": "application/vnd.github.v3+json", "User-Agent": "ReadyRoute/2"},
+        )
+        with urllib.request.urlopen(req, timeout=10) as resp:  # noqa: S310
+            data = json.loads(resp.read())
+        _gh_cache = {
+            "fetched_at": now,
+            "sha": data.get("sha", ""),
+            "message": (data.get("commit", {}).get("message", "") or "").split("\n")[0][:120],
+            "date": data.get("commit", {}).get("committer", {}).get("date", ""),
+            "error": None,
+        }
+    except Exception as exc:  # noqa: BLE001
+        _gh_cache = {
+            "fetched_at": now,
+            "sha": _gh_cache.get("sha", ""),  # keep last known SHA on error
+            "message": _gh_cache.get("message", ""),
+            "date": _gh_cache.get("date", ""),
+            "error": str(exc),
+        }
+    return _gh_cache
 
 
 def _utc_now() -> str:
@@ -130,6 +174,26 @@ def _run_update(source: str, ref: str | None, commit: str | None) -> None:
     finally:
         _run_lock.release()
         db.close()
+
+
+@router.get("/check")
+def check_for_update(
+    force: bool = False,
+    _admin: User = Depends(require_admin),
+):
+    """Compare the running image's GIT_SHA against the latest commit on GitHub main."""
+    remote = _fetch_remote_info(force=force)
+    remote_sha: str = remote.get("sha") or ""
+    local_sha: str = _GIT_SHA
+    update_available = bool(local_sha and remote_sha and local_sha != remote_sha)
+    return {
+        "local_sha": local_sha or None,
+        "remote_sha": remote_sha or None,
+        "remote_message": remote.get("message") or None,
+        "remote_date": remote.get("date") or None,
+        "update_available": update_available,
+        "check_error": remote.get("error"),
+    }
 
 
 @router.get("/status")

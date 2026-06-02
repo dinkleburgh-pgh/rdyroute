@@ -107,6 +107,7 @@ def get_board(
                 is_persistent_spare=t.is_persistent_spare,
                 is_oos=t.is_oos,
                 scheduled_off_days=t.scheduled_off_days or [],
+                qr_token=t.qr_token,
                 state=TruckStateOut.model_validate(s) if s else None,
                 route_swap_route=swap_by_load_on.get(t.truck_number),
             )

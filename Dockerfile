@@ -11,9 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps: curl for healthchecks, build tools only if a wheel is missing.
+# System deps: curl for healthchecks, postgresql-client for pg_dump backups.
 RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates tini \
+ && apt-get install -y --no-install-recommends curl ca-certificates tini postgresql-client \
  && rm -rf /var/lib/apt/lists/*
 
 # Install Python deps first for better layer caching.
@@ -23,6 +23,12 @@ RUN pip install --upgrade pip setuptools wheel \
 
 # App source.
 COPY . .
+
+# Bake the git commit SHA and build version into the image.
+ARG GIT_SHA=unknown
+ARG APP_VERSION=dev
+ENV GIT_SHA=$GIT_SHA
+ENV APP_VERSION=$APP_VERSION
 
 # Drop the venv / local sqlite if they were copied in by accident.
 RUN rm -rf .venv .data __pycache__

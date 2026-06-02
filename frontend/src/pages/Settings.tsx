@@ -1,4 +1,5 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { QRCodeSVG } from "qrcode.react";
 import clsx from "clsx";
 import {
   useAddTruck,
@@ -25,6 +26,7 @@ import {
   usePurgeAbnormalDurations,
   useRecordLoadDuration,
   useRemoveTruck,
+  useRegenerateQR,
   useResolveAuthRequest,
   useSettings,
   useTrackedItems,
@@ -37,11 +39,12 @@ import {
   useUpsertSetting,
   useTriggerUpdate,
   useTriggerPushUpdate,
+  useCheckForUpdate,
   useUpsertTruckState,
   useUsers,
 } from "../api/hooks";
 import type { TrackedItem } from "../api/hooks";
-import { todayIso } from "../api/client";
+import { api, todayIso, publicBase } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { useAuth } from "../contexts/AuthContext";
 import type { AppSetting, AuthRole, NoticeSeverity, Truck, TruckStatus, TruckType, TruckWithState } from "../types";
@@ -70,7 +73,9 @@ type Category =
   | "items"
   | "roles"
   | "export_import"
-  | "pdf_reports";
+  | "pdf_reports"
+  | "driver_qr"
+  | "connections";
 
 // Two-level navigation: Cards (groups) → Tabs (sub-categories)
 type GroupId = "app" | "users" | "content" | "fleet" | "comms" | "ops" | "advanced" | "data";
@@ -125,7 +130,10 @@ const CARD_GROUPS: CardGroup[] = [
     desc: "Add, remove, and configure trucks in the fleet",
     accent: "border-teal-500",
     adminOnly: true,
-    tabs: [{ id: "fleet_mgmt", label: "Fleet" }],
+    tabs: [
+      { id: "fleet_mgmt", label: "Fleet" },
+      { id: "driver_qr",  label: "Driver QR Codes" },
+    ],
   },
   {
     id: "comms",
@@ -153,9 +161,10 @@ const CARD_GROUPS: CardGroup[] = [
     accent: "border-red-500",
     adminOnly: true,
     tabs: [
-      { id: "advanced",    label: "Advanced" },
-      { id: "updates",     label: "Update" },
-      { id: "development", label: "Development" },
+      { id: "advanced",     label: "Advanced" },
+      { id: "updates",      label: "Update" },
+      { id: "development",  label: "Development" },
+      { id: "connections",  label: "Connections" },
     ],
   },
   {
@@ -291,6 +300,7 @@ export default function Management() {
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
       case "updates":        return <UpdatesPanel map={map} />;
       case "development":    return <DevelopmentPanel />;
+      case "connections":    return <ConnectionsPanel />;
       case "communications": return <CommunicationsPanel />;
       case "users":          return <UsersPanel />;
       case "requests":       return <RequestsPanel disabled={!isAdmin} />;
@@ -300,6 +310,7 @@ export default function Management() {
       case "recovery":       return <RecoveryPanel />;
       case "resets":         return <ResetsPanel />;
       case "fleet_mgmt":     return <FleetManagementPanel />;
+      case "driver_qr":      return <DriverQRPanel />;
       case "export_import":  return <ExportImportPanel />;
       case "pdf_reports":    return <PDFReportsPanel />;
       default:               return null;
@@ -827,6 +838,8 @@ function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       batching_disabled: asBool(map.get("batching_disabled"), false),
       skip_batching_disabled: asBool(map.get("skip_batching_disabled"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
+      outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
+      note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
     }),
     [map],
   );
@@ -885,6 +898,32 @@ function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, batch_no_cap: e.target.checked })}
           />
           No limit
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Outside timer"
+        hint="Dev feature: lets fleet set a truck to 'Outside' — a 10-minute countdown that auto-transitions to Unloaded."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.outside_timer_enabled}
+            onChange={(e) => setForm({ ...form, outside_timer_enabled: e.target.checked })}
+          />
+          Enable Outside
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Note Cards"
+        hint="Dev feature: shows a persistent Note Cards drawer on the fleet board, displaying all active truck notes in compact card rectangles."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.note_cards_enabled}
+            onChange={(e) => setForm({ ...form, note_cards_enabled: e.target.checked })}
+          />
+          Enable Note Cards
         </label>
       </FieldRow>
       <SaveButton
@@ -995,151 +1034,142 @@ function AdvancedPanel({ settings }: { settings: AppSetting[] }) {
 }
 
 // ---------------------------------------------------------------------------
-// Update — push-based updater config + controls
+// Updates — git-based update checker + deploy trigger
 // ---------------------------------------------------------------------------
 
 function UpdatesPanel({ map }: { map: Map<string, unknown> }) {
   const upsert = useUpsertSetting();
   const trigger = useTriggerUpdate();
-  const triggerPush = useTriggerPushUpdate();
-  const { data: status, isLoading } = useUpdateStatus();
+  const { data: status, isLoading: statusLoading } = useUpdateStatus();
+  const { data: check, isFetching: checkFetching, refetch: recheckNow } = useCheckForUpdate();
 
-  const initialEnabled = map.get("update_push_enabled") === true;
-  const initialSecret = String(map.get("update_push_secret") ?? "");
-  const initialCommand = String(map.get("update_deploy_command") ?? "./deploy.ps1");
-
-  const [enabled, setEnabled] = useState(initialEnabled);
-  const [secret, setSecret] = useState(initialSecret);
+  const initialCommand = String(map.get("update_deploy_command") ?? "bash ./deploy.sh");
   const [command, setCommand] = useState(initialCommand);
+  useEffect(() => setCommand(initialCommand), [initialCommand]);
+  const commandDirty = command !== initialCommand;
 
-  useEffect(() => {
-    setEnabled(initialEnabled);
-    setSecret(initialSecret);
-    setCommand(initialCommand);
-    // Intentionally driven by current settings map snapshot.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map]);
+  const isRunning = status?.running === true || trigger.isPending;
 
-  const dirty =
-    enabled !== initialEnabled ||
-    secret !== initialSecret ||
-    command !== initialCommand;
-
-  async function save() {
-    await Promise.all([
-      upsert.mutateAsync({ key: "update_push_enabled", value: enabled }),
-      upsert.mutateAsync({ key: "update_push_secret", value: secret.trim() }),
-      upsert.mutateAsync({ key: "update_deploy_command", value: command.trim() || "./deploy.ps1" }),
-    ]);
+  function shortSha(sha: string | null | undefined) {
+    return sha ? sha.slice(0, 7) : "unknown";
   }
+
+  const updateAvailable = check?.update_available === true;
+  const upToDate = check && !check.update_available && !check.check_error;
 
   return (
     <div className="space-y-4">
-      <div className="rounded-lg border border-blue-700 bg-blue-950/30 px-4 py-3 text-sm text-blue-200">
-        Push-based updates let GitHub (or another sender) call an endpoint when main changes.
-        The backend runs the configured deploy command and records output/status.
+      {/* Update status banner */}
+      <div
+        className={clsx(
+          "flex items-center justify-between gap-3 rounded-lg border px-4 py-3",
+          updateAvailable
+            ? "border-amber-600 bg-amber-950/40 text-amber-200"
+            : upToDate
+              ? "border-emerald-700 bg-emerald-950/40 text-emerald-200"
+              : "border-slate-700 bg-slate-800/50 text-slate-300",
+        )}
+      >
+        <div className="min-w-0">
+          {checkFetching ? (
+            <p className="text-sm">Checking for updates…</p>
+          ) : check?.check_error ? (
+            <p className="text-sm">Check failed: <span className="font-mono text-xs">{check.check_error}</span></p>
+          ) : updateAvailable ? (
+            <div>
+              <p className="font-semibold">Update available</p>
+              {check.remote_message && (
+                <p className="mt-0.5 truncate text-xs opacity-80">{check.remote_message}</p>
+              )}
+              <p className="mt-0.5 font-mono text-xs opacity-70">
+                {shortSha(check.local_sha)} → {shortSha(check.remote_sha)}
+              </p>
+            </div>
+          ) : upToDate ? (
+            <div>
+              <p className="font-semibold">Up to date</p>
+              <p className="mt-0.5 font-mono text-xs opacity-70">{shortSha(check.local_sha)}</p>
+            </div>
+          ) : (
+            <p className="text-sm text-slate-400">Version status unknown — no GIT_SHA in image</p>
+          )}
+        </div>
+        <div className="flex shrink-0 gap-2">
+          <button
+            className="btn-ghost text-xs"
+            disabled={checkFetching}
+            onClick={() => recheckNow()}
+          >
+            {checkFetching ? "Checking…" : "Check Now"}
+          </button>
+          {updateAvailable && (
+            <button
+              className="btn-primary text-sm"
+              disabled={isRunning}
+              onClick={() => trigger.mutate()}
+            >
+              {isRunning ? "Updating…" : "Update"}
+            </button>
+          )}
+        </div>
       </div>
 
+      {/* Last run status */}
+      {!statusLoading && status?.last && Object.keys(status.last).length > 0 && (
+        <div className="card space-y-2">
+          <h3 className="text-sm font-semibold text-slate-300">Last run</h3>
+          <div className="space-y-1 text-xs text-slate-400">
+            <p>
+              State:{" "}
+              <span
+                className={clsx(
+                  "font-semibold",
+                  (status.last.state as string) === "ok" ? "text-emerald-400" :
+                  (status.last.state as string) === "running" ? "text-blue-400" :
+                  (status.last.state as string) === "failed" ? "text-red-400" : "text-slate-300",
+                )}
+              >
+                {isRunning ? "running" : String(status.last.state ?? "idle")}
+              </span>
+            </p>
+            {status.last.started_at && <p>Started: {String(status.last.started_at)}</p>}
+            {status.last.finished_at && <p>Finished: {String(status.last.finished_at)}</p>}
+            {status.last.exit_code != null && <p>Exit code: {String(status.last.exit_code)}</p>}
+            {status.last.error && <p className="text-red-400">Error: {String(status.last.error)}</p>}
+            {status.last.stderr_tail && (
+              <pre className="mt-2 max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-slate-900 p-2 font-mono text-xs text-red-300">
+                {String(status.last.stderr_tail)}
+              </pre>
+            )}
+            {status.last.stdout_tail && (
+              <pre className="mt-1 max-h-32 overflow-y-auto whitespace-pre-wrap rounded bg-slate-900 p-2 font-mono text-xs text-slate-300">
+                {String(status.last.stdout_tail)}
+              </pre>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Deploy command config */}
       <div className="card space-y-3">
-        <h3 className="text-sm font-semibold text-slate-300">Updater Configuration</h3>
-
+        <h3 className="text-sm font-semibold text-slate-300">Deploy command</h3>
         <FieldRow
-          label="Push updates enabled"
-          hint="When enabled, POST /updates/push accepts a valid secret and starts a deploy run."
-        >
-          <label className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={enabled}
-              onChange={(e) => setEnabled(e.target.checked)}
-            />
-            Enable push-based updates
-          </label>
-        </FieldRow>
-
-        <FieldRow
-          label="Webhook secret"
-          hint="Send this as X-ReadyRoute-Secret from GitHub Action/webhook caller."
-        >
-          <input
-            className="input"
-            value={secret}
-            onChange={(e) => setSecret(e.target.value)}
-            placeholder="shared secret"
-          />
-        </FieldRow>
-
-        <FieldRow
-          label="Deploy command"
-          hint="Command executed on trigger (ex: ./deploy.ps1 or docker compose ...)."
+          label="Command"
+          hint="Runs on the server when Update is triggered. Default: bash ./deploy.sh"
         >
           <input
             className="input"
             value={command}
             onChange={(e) => setCommand(e.target.value)}
-            placeholder="./deploy.ps1"
+            placeholder="bash ./deploy.sh"
           />
         </FieldRow>
-
         <SaveButton
-          dirty={dirty}
+          dirty={commandDirty}
           saving={upsert.isPending}
-          onSave={save}
-          onRevert={() => {
-            setEnabled(initialEnabled);
-            setSecret(initialSecret);
-            setCommand(initialCommand);
-          }}
+          onSave={() => upsert.mutateAsync({ key: "update_deploy_command", value: command.trim() || "bash ./deploy.sh" })}
+          onRevert={() => setCommand(initialCommand)}
         />
-      </div>
-
-      <div className="card space-y-3">
-        <h3 className="text-sm font-semibold text-slate-300">Trigger / Status</h3>
-        <p className="text-xs text-slate-500">
-          Endpoint: <span className="font-mono">POST /updates/push</span> with header
-          <span className="font-mono"> X-ReadyRoute-Secret</span> and optional body
-          <span className="font-mono"> {`{ ref, head_commit: { id } }`}</span>.
-        </p>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            className="btn-primary"
-            disabled={trigger.isPending || status?.running === true}
-            onClick={() => trigger.mutate()}
-          >
-            {trigger.isPending ? "Triggering…" : "Run Update Now"}
-          </button>
-          <button
-            className="btn-ghost"
-            disabled={triggerPush.isPending || status?.running === true}
-            onClick={() => triggerPush.mutate({ ref: "refs/heads/main" })}
-          >
-            {triggerPush.isPending ? "Sending…" : "Test Push Event"}
-          </button>
-        </div>
-
-        {isLoading ? (
-          <p className="text-sm text-slate-500">Loading updater status…</p>
-        ) : (
-          <div className="space-y-2 rounded-lg border border-slate-700 bg-slate-800/50 p-3 text-xs">
-            <p className="text-slate-300">
-              State: <span className="font-semibold">{status?.running ? "running" : String((status?.last?.state as string | undefined) ?? "idle")}</span>
-            </p>
-            <p className="text-slate-400">Command: <span className="font-mono">{status?.command ?? "./deploy.ps1"}</span></p>
-            {status?.last?.started_at && (
-              <p className="text-slate-400">Started: {String(status.last.started_at)}</p>
-            )}
-            {status?.last?.finished_at && (
-              <p className="text-slate-400">Finished: {String(status.last.finished_at)}</p>
-            )}
-            {status?.last?.exit_code != null && (
-              <p className="text-slate-400">Exit code: {String(status.last.exit_code)}</p>
-            )}
-            {status?.last?.error && (
-              <p className="text-red-400">Error: {String(status.last.error)}</p>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );
@@ -1280,6 +1310,213 @@ function DevelopmentPanel() {
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Connections
+// ---------------------------------------------------------------------------
+
+interface DbProbe {
+  ok: boolean;
+  type: string;
+  url: string;
+  latency_ms: number | null;
+  error: string | null;
+  pool: { size?: number; checked_out?: number; overflow?: number };
+  label?: string;
+}
+
+interface HealthDetail {
+  status: string;
+  version: string;
+  uptime_seconds: number;
+  python: string;
+  db: DbProbe;
+  extra_dbs: DbProbe[];
+}
+
+function formatUptime(s: number): string {
+  const d = Math.floor(s / 86400);
+  const h = Math.floor((s % 86400) / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const parts = [];
+  if (d) parts.push(`${d}d`);
+  if (h) parts.push(`${h}h`);
+  parts.push(`${m}m`);
+  return parts.join(" ");
+}
+
+function DbCard({ probe, title }: { probe: DbProbe; title: string }) {
+  const color  = probe.ok ? "text-emerald-400" : "text-red-400";
+  const border = probe.ok ? "border-emerald-700/40" : "border-red-700/40";
+  return (
+    <div className={clsx("card space-y-3 border", border)}>
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-slate-200">{title}</h4>
+        <span className={clsx("text-sm font-bold", color)}>
+          ● {probe.ok ? "Connected" : "Error"}
+        </span>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+          <p className="mb-0.5 text-xs text-slate-500">Type</p>
+          <p className="font-semibold capitalize text-slate-200">{probe.type}</p>
+        </div>
+        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+          <p className="mb-0.5 text-xs text-slate-500">Query Latency</p>
+          <p className="font-semibold text-slate-200">
+            {probe.latency_ms != null ? `${probe.latency_ms} ms` : "—"}
+          </p>
+        </div>
+      </div>
+
+      <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+        <p className="mb-0.5 text-xs text-slate-500">Connection URL</p>
+        <p className="break-all font-mono text-xs text-slate-300">{probe.url}</p>
+      </div>
+
+      {probe.error && (
+        <div className="rounded-lg border border-red-700/40 bg-red-950/30 px-3 py-2 text-xs text-red-400">
+          {probe.error}
+        </div>
+      )}
+
+      {Object.keys(probe.pool).length > 0 && (
+        <div className="grid grid-cols-3 gap-2 text-sm">
+          {probe.pool.size != null && (
+            <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-center">
+              <p className="text-xs text-slate-500">Pool Size</p>
+              <p className="font-bold text-slate-200">{probe.pool.size}</p>
+            </div>
+          )}
+          {probe.pool.checked_out != null && (
+            <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-center">
+              <p className="text-xs text-slate-500">In Use</p>
+              <p className="font-bold text-slate-200">{probe.pool.checked_out}</p>
+            </div>
+          )}
+          {probe.pool.overflow != null && (
+            <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-center">
+              <p className="text-xs text-slate-500">Overflow</p>
+              <p className="font-bold text-slate-200">{probe.pool.overflow}</p>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ConnectionsPanel() {
+  const [health, setHealth] = useState<HealthDetail | null>(null);
+  const [apiLatencyMs, setApiLatencyMs] = useState<number | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastChecked, setLastChecked] = useState<Date | null>(null);
+
+  async function check() {
+    setLoading(true);
+    setError(null);
+    try {
+      const t0 = performance.now();
+      const res = await api.get<HealthDetail>("/health/detail");
+      setApiLatencyMs(Math.round(performance.now() - t0));
+      setHealth(res.data);
+      setLastChecked(new Date());
+    } catch (e: unknown) {
+      const msg = e instanceof Error ? e.message : "Request failed";
+      setError(msg);
+      setHealth(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => { void check(); }, []);
+
+  const statusColor = health?.status === "ok"
+    ? "text-emerald-400"
+    : health?.status === "degraded"
+    ? "text-amber-400"
+    : "text-slate-400";
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h3 className="text-sm font-semibold text-slate-300">Backend Connections</h3>
+        <button className="btn-ghost text-xs" onClick={check} disabled={loading}>
+          {loading ? "Checking…" : "Refresh"}
+        </button>
+      </div>
+
+      {lastChecked && (
+        <p className="text-xs text-slate-600">
+          Last checked: {lastChecked.toLocaleTimeString()}
+        </p>
+      )}
+
+      {error && (
+        <div className="rounded-lg border border-red-700/40 bg-red-950/30 px-4 py-3 text-sm text-red-400">
+          {error}
+        </div>
+      )}
+
+      {/* Main Backend */}
+      <div className="card space-y-3">
+        <div className="flex items-center justify-between">
+          <h4 className="text-sm font-semibold text-slate-200">Main Backend</h4>
+          {health && (
+            <span className={clsx("text-sm font-bold capitalize", statusColor)}>
+              ● {health.status}
+            </span>
+          )}
+          {loading && <span className="text-xs text-slate-500">Checking…</span>}
+        </div>
+
+        {health && (
+          <div className="grid grid-cols-2 gap-3 text-sm">
+            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-slate-500">Version</p>
+              <p className="font-mono font-semibold text-slate-200">{health.version}</p>
+            </div>
+            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-slate-500">Uptime</p>
+              <p className="font-semibold text-slate-200">{formatUptime(health.uptime_seconds)}</p>
+            </div>
+            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-slate-500">Python</p>
+              <p className="font-mono font-semibold text-slate-200">{health.python}</p>
+            </div>
+            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-slate-500">API Round-trip</p>
+              <p className="font-semibold text-slate-200">
+                {apiLatencyMs != null ? `${apiLatencyMs} ms` : "—"}
+              </p>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Primary DB */}
+      {health && <DbCard probe={health.db} title="Primary Database" />}
+
+      {/* Extra / backup DBs */}
+      {health?.extra_dbs.map((probe, i) => (
+        <DbCard
+          key={i}
+          probe={probe}
+          title={probe.label ?? `Extra DB ${i + 1}`}
+        />
+      ))}
+
+      {health && health.extra_dbs.length === 0 && (
+        <p className="text-xs text-slate-600">
+          No backup databases configured. Set <span className="font-mono text-slate-400">BACKUP_DATABASE_URL</span> in <span className="font-mono text-slate-400">.env</span> to add one (comma-separate multiple URLs).
+        </p>
+      )}
     </div>
   );
 }
@@ -2926,6 +3163,130 @@ function PDFReportsPanel() {
       <p className="text-[11px] text-slate-600">
         Includes truck states and audit entries for today&apos;s run date.
       </p>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Driver QR Codes
+// ---------------------------------------------------------------------------
+
+function DriverQRPanel() {
+  const { data: trucks, isLoading } = useFleet(true);
+  const regen = useRegenerateQR();
+  const [search, setSearch] = useState("");
+  const [copiedTruck, setCopiedTruck] = useState<number | null>(null);
+
+  const base = publicBase();
+
+  const active = useMemo(
+    () =>
+      (trucks ?? [])
+        .filter((t) => t.is_active && t.truck_type !== "Spare")
+        .filter((t) => search === "" || String(t.truck_number).includes(search))
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [trucks, search],
+  );
+
+  function copyUrl(truckNumber: number, url: string) {
+    navigator.clipboard.writeText(url).then(() => {
+      setCopiedTruck(truckNumber);
+      setTimeout(() => setCopiedTruck(null), 1800);
+    });
+  }
+
+  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
+
+  return (
+    <div className="space-y-4">
+      <div className="card space-y-2">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Driver QR Codes</h3>
+        <p className="text-xs text-slate-500">
+          Each driver scans their route&apos;s QR code to view their notes without logging in.
+          Print or post the code in the truck cab. Use &ldquo;Regenerate&rdquo; if a code is
+          compromised — the old code stops working immediately.
+        </p>
+        <div className="flex flex-wrap gap-2">
+          <input
+            className="input max-w-xs"
+            placeholder="Filter by route #…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <button className="btn-ghost text-sm" onClick={() => window.print()}>
+            Print all visible
+          </button>
+        </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3">
+        {active.map((truck) => {
+          if (!truck.qr_token) return null;
+          const url = `${base}/driver/${truck.qr_token}`;
+          const isCopied = copiedTruck === truck.truck_number;
+          const isRegening = regen.isPending && regen.variables === truck.truck_number;
+          return (
+            <div
+              key={truck.truck_number}
+              className="flex flex-col items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 p-3 print:border-slate-300 print:bg-white"
+            >
+              <p className="text-sm font-semibold text-slate-200 print:text-slate-900">
+                Route #{truck.truck_number}
+              </p>
+
+              {/* QR code */}
+              <div className="rounded bg-white p-1.5">
+                <QRCodeSVG value={url} size={120} />
+              </div>
+
+              {/* Copyable URL */}
+              <div className="flex w-full gap-1 print:hidden">
+                <input
+                  readOnly
+                  value={url}
+                  className="input min-w-0 flex-1 truncate text-[11px]"
+                />
+                <button
+                  className="shrink-0 rounded-md bg-slate-700 px-2 text-[11px] font-medium text-slate-200 hover:bg-slate-600"
+                  onClick={() => copyUrl(truck.truck_number, url)}
+                >
+                  {isCopied ? "✓" : "Copy"}
+                </button>
+              </div>
+
+              {/* Actions */}
+              <div className="flex w-full gap-1.5 print:hidden">
+                <a
+                  href={url}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex-1 rounded-md bg-slate-800 py-1 text-center text-[11px] font-medium text-slate-300 hover:bg-slate-700"
+                >
+                  Preview ↗
+                </a>
+                <button
+                  className="flex-1 rounded-md bg-red-900/50 py-1 text-[11px] font-medium text-red-300 hover:bg-red-900 disabled:opacity-50"
+                  disabled={isRegening}
+                  onClick={() => {
+                    if (!confirm(`Regenerate QR for route #${truck.truck_number}? The old code stops working immediately.`)) return;
+                    regen.mutate(truck.truck_number);
+                  }}
+                >
+                  {isRegening ? "…" : "Regenerate"}
+                </button>
+              </div>
+
+              {/* Print-only short token */}
+              <p className="hidden text-center text-[10px] text-slate-600 print:block">
+                /driver/{truck.qr_token.slice(0, 8)}…
+              </p>
+            </div>
+          );
+        })}
+        {active.length === 0 && (
+          <p className="col-span-full text-sm text-slate-500">No active route trucks found.</p>
+        )}
+      </div>
     </div>
   );
 }

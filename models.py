@@ -18,6 +18,7 @@ Entity map:
 """
 
 import enum
+import uuid
 from datetime import date, datetime
 
 from sqlalchemy import (
@@ -108,6 +109,10 @@ class Truck(Base):
     is_persistent_spare: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_oos: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     scheduled_off_days: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
+    qr_token: Mapped[str | None] = mapped_column(
+        String(36), unique=True, nullable=True, index=True,
+        default=lambda: str(uuid.uuid4()),
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

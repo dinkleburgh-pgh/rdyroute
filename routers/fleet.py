@@ -6,6 +6,8 @@ and active/spare flags). Mirrors the truck_fleet.json + truck type management
 from V1.
 """
 
+import uuid
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -81,3 +83,22 @@ def remove_truck(truck_number: int, db: Session = Depends(get_db), _admin: User 
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Truck not found")
     truck.is_active = False
     db.commit()
+
+
+@router.post("/{truck_number}/regenerate-qr", response_model=TruckOut)
+def regenerate_qr_token(
+    truck_number: int,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """
+    Issue a new QR token for a truck, invalidating the old one.
+    Use this if a QR code is lost or shared with unauthorized people.
+    """
+    truck = db.scalars(select(Truck).where(Truck.truck_number == truck_number)).first()
+    if truck is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Truck not found")
+    truck.qr_token = str(uuid.uuid4())
+    db.commit()
+    db.refresh(truck)
+    return truck

@@ -31,6 +31,7 @@ export interface Truck {
   is_persistent_spare: boolean;
   is_oos: boolean;
   scheduled_off_days: number[];
+  qr_token: string | null;
   created_at: string;
 }
 
@@ -52,7 +53,7 @@ export interface TruckState {
   updated_at: string;
 }
 
-export interface TruckWithState extends Truck {
+export interface TruckWithState extends Truck {  // qr_token inherited from Truck
   state: TruckState | null;
   route_swap_route?: number | null;
 }

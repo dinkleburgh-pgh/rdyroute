@@ -4,6 +4,7 @@ import clsx from "clsx";
 import { useAuth } from "../contexts/AuthContext";
 import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
+import NoteCardsDrawer from "./NoteCardsDrawer";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
@@ -98,7 +99,7 @@ const ROLE_BADGE: Record<AuthRole, string> = {
 
 function BuildInfo() {
   const isDev = import.meta.env.DEV;
-  const version = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "0.0.0";
+  const version = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
   const commit = typeof __GIT_COMMIT__ !== "undefined" ? __GIT_COMMIT__ : "";
   const buildDate = typeof __BUILD_DATE__ !== "undefined" ? __BUILD_DATE__ : "";
   const shortCommit = commit ? commit.slice(0, 7) : "";
@@ -111,8 +112,7 @@ function BuildInfo() {
   return (
     <div className="pt-2 text-center text-[10px] leading-tight text-slate-500">
       <p>
-        ReadyRoute V2 · v{version}
-        {isDev ? " · dev" : ""}
+        ReadyRoute V2 · {isDev ? "dev" : version}
       </p>
       {(shortCommit || dateLabel) && !isDev && (
         <p className="text-slate-600">
@@ -153,8 +153,8 @@ export default function Layout() {
   const loadDayNum = loadDay;
 
   const counts = useMemo(
-    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad),
-    [board, loadDayNum, holidayLoad],
+    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay),
+    [board, loadDayNum, unloadsDay, holidayLoad],
   );
 
   // Load progress mirrors the Day Overview: denominator = route trucks scheduled
@@ -171,7 +171,7 @@ export default function Layout() {
   const loadedSpareRoutes = useMemo(
     () =>
       new Set(
-        loadTrucksForProgress
+        (board ?? [])
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
@@ -180,7 +180,7 @@ export default function Layout() {
           )
           .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
-    [loadTrucksForProgress, loadDayNum, holidayLoad],
+    [board, loadDayNum, holidayLoad],
   );
   const loadRouteTrucks = useMemo(
     () => loadTrucksForProgress.filter((t) => t.truck_type !== "Spare"),
@@ -206,7 +206,7 @@ export default function Layout() {
   const unloadedSpareRoutes = useMemo(
     () =>
       new Set(
-        unloadTrucksForProgress
+        (board ?? [])
           .filter(
             (t) =>
               t.truck_type === "Spare" &&
@@ -215,7 +215,7 @@ export default function Layout() {
           )
           .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
       ),
-    [unloadTrucksForProgress, unloadsDay, holidayUnload],
+    [board, unloadsDay, holidayUnload],
   );
   const unloadRouteTrucks = useMemo(
     () => unloadTrucksForProgress.filter((t) => t.truck_type !== "Spare"),
@@ -483,6 +483,7 @@ export default function Layout() {
       </div>
 
       {swapModalOpen && <RouteSwapModal onClose={() => setSwapModalOpen(false)} />}
+      <NoteCardsDrawer />
     </div>
   );
 }

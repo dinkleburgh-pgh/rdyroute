@@ -247,7 +247,7 @@ function HierarchyPicker({
               disabled={isPending}
               onClick={() => selectItem(cat, detail)}
               className={clsx(
-                "rounded-2xl px-7 py-5 text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+                "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
                 LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
                 MAT_COLOR_PALETTE[disp] ?? btnClass,
               )}
@@ -365,7 +365,7 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setTopCat(cat)}
                 className={clsx(
-                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
               >
@@ -393,7 +393,7 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
-                  "rounded-2xl px-7 py-5 text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
               >
@@ -478,24 +478,26 @@ function LoggedList({ shorts }: { shorts: Shortage[] }) {
             );
           }
           return (
-            <div key={s.id} className="flex items-center gap-3 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3">
-              <span className="text-sm font-semibold text-slate-200">{label}</span>
-              <span className="text-xl font-black text-white">×{s.quantity}</span>
-              <button
-                type="button"
-                onClick={() => startEdit(s)}
-                className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-600 transition"
-              >
-                Edit
-              </button>
-              <button
-                type="button"
-                onClick={() => remove.mutate(s.id)}
-                disabled={remove.isPending}
-                className="rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition disabled:opacity-50"
-              >
-                Delete
-              </button>
+            <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 w-full sm:w-auto">
+              <span className="flex-1 min-w-0 text-sm font-semibold text-slate-200">{label}</span>
+              <span className="shrink-0 text-xl font-black text-white">×{s.quantity}</span>
+              <div className="flex shrink-0 gap-2">
+                <button
+                  type="button"
+                  onClick={() => startEdit(s)}
+                  className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-600 transition"
+                >
+                  Edit
+                </button>
+                <button
+                  type="button"
+                  onClick={() => remove.mutate(s.id)}
+                  disabled={remove.isPending}
+                  className="rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition disabled:opacity-50"
+                >
+                  Delete
+                </button>
+              </div>
             </div>
           );
         })}
@@ -572,7 +574,7 @@ export function ShortageLogger({
         </div>
       </div>
 
-      <div className="space-y-5 p-3 md:p-6">
+      <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
         {/* Category picker */}
         <HierarchyPicker
           items={items}

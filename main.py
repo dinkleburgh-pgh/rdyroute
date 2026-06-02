@@ -82,6 +82,21 @@ async def lifespan(app: FastAPI):
                 db.commit()
             except Exception:  # noqa: BLE001 - column already exists
                 db.rollback()
+        # Column migration: add qr_token to trucks for driver QR code access
+        try:
+            db.execute(_sql_text("ALTER TABLE trucks ADD COLUMN qr_token VARCHAR(36)"))
+            db.commit()
+        except Exception:  # noqa: BLE001 - column already exists
+            db.rollback()
+        # Backfill qr_token for any existing trucks that don't have one yet
+        import uuid as _uuid
+        from sqlalchemy import select as _select
+        from models import Truck as _Truck
+        _trucks_no_token = db.scalars(_select(_Truck).where(_Truck.qr_token.is_(None))).all()
+        for _t in _trucks_no_token:
+            _t.qr_token = str(_uuid.uuid4())
+        if _trucks_no_token:
+            db.commit()
         result = run_startup_seed(db)
         log.info("Startup seed: %s", result)
     finally:
@@ -156,13 +171,16 @@ async def lifespan(app: FastAPI):
 # App factory
 # ---------------------------------------------------------------------------
 
+import os as _os
+_APP_VERSION = _os.environ.get("APP_VERSION", "dev")
+
 app = FastAPI(
     title="ReadyRoute V2 API",
     description=(
         "FastAPI backend for the Load Management System. "
         "Migrated from the V1 Streamlit monolith."
     ),
-    version="2.0.0",
+    version=_APP_VERSION,
     lifespan=lifespan,
 )
 
@@ -241,6 +259,94 @@ app.include_router(exports.router)
 # Health check
 # ---------------------------------------------------------------------------
 
+_start_time = time.time()
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok", "version": app.version}
+
+
+@app.get("/health/detail", tags=["meta"])
+def health_detail():
+    """Detailed health info — DB connectivity, pool stats, uptime."""
+    import platform
+    from sqlalchemy import create_engine as _create_engine, text as _text
+    from database import engine as _engine, settings as _settings
+
+    uptime_s = int(time.time() - _start_time)
+    db_url = _settings.database_url
+    is_sqlite = db_url.startswith("sqlite")
+
+    def _mask_url(url: str) -> str:
+        try:
+            from urllib.parse import urlparse, urlunparse
+            parsed = urlparse(url)
+            masked = urlunparse(parsed._replace(netloc=parsed.hostname or parsed.netloc))
+            return masked
+        except Exception:
+            return "sqlite" if url.startswith("sqlite") else url.split("@")[-1] if "@" in url else url
+
+    def _probe_db(url: str, existing_engine=None):
+        """Returns dict with ok, latency_ms, error, pool, type, masked_url."""
+        is_sq = url.startswith("sqlite")
+        result: dict = {
+            "ok": False,
+            "type": "sqlite" if is_sq else "postgresql",
+            "url": _mask_url(url),
+            "latency_ms": None,
+            "error": None,
+            "pool": {},
+        }
+        eng = existing_engine
+        created = False
+        try:
+            if eng is None:
+                eng = _create_engine(url, pool_pre_ping=True,
+                                     connect_args={"check_same_thread": False} if is_sq else {})
+                created = True
+            t0 = time.perf_counter()
+            with eng.connect() as conn:
+                conn.execute(_text("SELECT 1"))
+            result["latency_ms"] = round((time.perf_counter() - t0) * 1000, 1)
+            result["ok"] = True
+            pool = eng.pool
+            try:
+                result["pool"] = {
+                    "size":        pool.size(),
+                    "checked_out": pool.checkedout(),
+                    "overflow":    pool.overflow(),
+                }
+            except Exception:
+                pass
+        except Exception as exc:
+            result["error"] = str(exc)
+        finally:
+            if created and eng is not None:
+                try:
+                    eng.dispose()
+                except Exception:
+                    pass
+        return result
+
+    # Primary DB (reuse existing engine)
+    primary = _probe_db(db_url, existing_engine=_engine)
+
+    # Backup / extra DBs
+    extras: list[dict] = []
+    raw_backup = (_settings.backup_database_url or "").strip()
+    if raw_backup:
+        for raw_url in [u.strip() for u in raw_backup.split(",") if u.strip()]:
+            probe = _probe_db(raw_url)
+            probe["label"] = "Backup DB"
+            extras.append(probe)
+
+    overall_ok = primary["ok"] and all(e["ok"] for e in extras)
+
+    return {
+        "status": "ok" if overall_ok else "degraded",
+        "version": app.version,
+        "uptime_seconds": uptime_s,
+        "python": platform.python_version(),
+        "db": primary,
+        "extra_dbs": extras,
+    }

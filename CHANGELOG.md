@@ -3,6 +3,27 @@
 All notable changes to ReadyRoute V2 are documented here.  
 Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+> **Versioning**: builds are numbered `build.<N>` where N is the CI run number.  
+> The major version is implicit in the product name (ReadyRoute **V2**).
+
+---
+
+## [Unreleased] — 2026-06-02
+
+### Added
+- **Settings → Advanced → Connections tab** — live health panel showing Main Backend (status, version, uptime, Python, API round-trip) + Primary Database (type, query latency, URL, pool stats) + one card per configured backup DB.
+- **`GET /health/detail`** — detailed backend health endpoint; probes primary DB via existing engine and each `BACKUP_DATABASE_URL` entry via a disposable engine; masks credentials in displayed URLs.
+- **`BACKUP_DATABASE_URL` env var** — comma-separated list of backup/replica DB URLs; populated in `.env.production` with the UltraSeedbox PostgreSQL connection.
+- **Production DB config corrected** — `DATABASE_URL` → TrueNAS local Docker PostgreSQL (`ix-postgres-postgres-1`); `BACKUP_DATABASE_URL` → UltraSeedbox (`blaze-direct.usbx.me:36409`).
+- **Driver notes** — QR-token CRUD page (`/driver/:token`): drivers can add Always / Workday / Set Until… notes for their own route; multi-day workday selection fires one POST per day; delete restricted to driver-authored notes only.
+- **`GET /notes/driver/{token}/info`** — returns `{ truck_number }` so the driver page always shows the correct route number even with no notes.
+- **NoteCardsDrawer filter** — Show All / Today Only pill toggle; "Today Only" hides notes not relevant to the current load day.
+- **LAN QR testing** — Vite `--host` flag exposes frontend on LAN; `VITE_PUBLIC_URL` env var bakes the LAN IP into QR codes; `publicBase()` helper used throughout.
+
+### Changed
+- **Build versioning** — scheme changed from semver (`0.1.<N>`) to `build.<N>`; major version is implicit in the product name. Backend reads `APP_VERSION` env var (injected by CI); sidebar shows `build <N>` in production and `dev` locally.
+- **Note type labels** — "Constant" → "Always", "One-off" → "Set Until…" across Notes.tsx and DriverNotes.tsx.
+
 ---
 
 ## [Unreleased] — 2026-05-29
