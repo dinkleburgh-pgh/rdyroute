@@ -37,8 +37,13 @@ RUN rm -rf .venv .data __pycache__
 RUN mkdir -p /app/.data
 VOLUME ["/app/.data"]
 
+COPY docker-entrypoint.sh docker_resolve.py ./
+RUN chmod +x /app/docker-entrypoint.sh
+
 EXPOSE 8000
 
 # tini reaps zombie processes — important for uvicorn --reload children too.
-ENTRYPOINT ["/usr/bin/tini", "--"]
+# docker-entrypoint.sh auto-resolves the postgres hostname via Docker socket
+# if it isn't reachable via normal DNS (e.g. cross-network on TrueNAS).
+ENTRYPOINT ["/usr/bin/tini", "--", "/app/docker-entrypoint.sh"]
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
