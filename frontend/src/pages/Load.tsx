@@ -100,8 +100,8 @@ export default function Load() {
     () =>
       new Map(
         board
-          .filter((t) => t.truck_type === "Spare" && t.route_swap_route != null)
-          .map((t) => [t.route_swap_route as number, t]),
+          .filter((t) => t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null))
+          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
       ),
     [board],
   );
@@ -113,7 +113,12 @@ export default function Load() {
       if (eff === "loaded" || eff === "off") continue;
       if (eff === "oos") {
         const spare = coveringSpareByRoute.get(t.truck_number);
-        if (spare && effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
+        if (spare) {
+          if (effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
+        } else if (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)) {
+          // OOS with no covering spare but scheduled for this load day — still counts
+          result.push(t);
+        }
         continue;
       }
       result.push(t);
@@ -128,7 +133,12 @@ export default function Load() {
       if (eff === "loaded" || eff === "off") continue;
       if (eff === "oos") {
         const spare = coveringSpareByRoute.get(t.truck_number);
-        if (spare && effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
+        if (spare) {
+          if (effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
+        } else if (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)) {
+          // OOS with no covering spare but scheduled for this load day — still counts
+          result.push(t);
+        }
         continue;
       }
       result.push(t);
