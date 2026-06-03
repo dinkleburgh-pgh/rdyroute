@@ -112,11 +112,9 @@ export default function Load() {
       const eff = effectiveStatus(t, loadDay, holidayLoad);
       if (eff === "loaded" || eff === "off") continue;
       if (eff === "oos") {
-        const spare = coveringSpareByRoute.get(t.truck_number);
-        if (spare) {
-          if (effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
-        } else if (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)) {
-          // OOS with no covering spare but scheduled for this load day — still counts
+        // Covering spare goes to sparesLeftTrucks; uncovered OOS still counts here
+        if (!coveringSpareByRoute.has(t.truck_number) &&
+            (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay))) {
           result.push(t);
         }
         continue;
@@ -132,11 +130,9 @@ export default function Load() {
       const eff = effectiveStatus(t, loadDay, holidayLoad);
       if (eff === "loaded" || eff === "off") continue;
       if (eff === "oos") {
-        const spare = coveringSpareByRoute.get(t.truck_number);
-        if (spare) {
-          if (effectiveStatus(spare, loadDay, holidayLoad) !== "loaded") result.push(spare);
-        } else if (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)) {
-          // OOS with no covering spare but scheduled for this load day — still counts
+        // Covering spare goes to sparesLeftTrucks; uncovered OOS still counts here
+        if (!coveringSpareByRoute.has(t.truck_number) &&
+            (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay))) {
           result.push(t);
         }
         continue;
@@ -145,14 +141,21 @@ export default function Load() {
     }
     return result;
   }, [board, loadDay, holidayLoad, coveringSpareByRoute]);
+  // Covering spares (route swap or OOS assignment) that haven't been loaded yet.
+  const sparesLeftTrucks = useMemo(() => {
+    return board.filter((t) => {
+      if (t.truck_type !== "Spare") return false;
+      if (t.route_swap_route == null && t.state?.oos_spare_route == null) return false;
+      return effectiveStatus(t, loadDay, holidayLoad) !== "loaded";
+    });
+  }, [board, loadDay, holidayLoad]);
   const dustsLeft = dustsLeftTrucks.length;
   const uniformsLeft = uniformsLeftTrucks.length;
-  const sparesLeft = 0;
-  const sparesLeftTrucks: typeof dustsLeftTrucks = [];
+  const sparesLeft = sparesLeftTrucks.length;
   const totalLeft = dustsLeft + uniformsLeft + sparesLeft;
   const totalLeftTrucks = useMemo(
-    () => [...dustsLeftTrucks, ...uniformsLeftTrucks].sort((a, b) => a.truck_number - b.truck_number),
-    [dustsLeftTrucks, uniformsLeftTrucks],
+    () => [...dustsLeftTrucks, ...uniformsLeftTrucks, ...sparesLeftTrucks].sort((a, b) => a.truck_number - b.truck_number),
+    [dustsLeftTrucks, uniformsLeftTrucks, sparesLeftTrucks],
   );
 
   // Load progress mirrors RunDay.tsx exactly.
