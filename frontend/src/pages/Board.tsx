@@ -513,7 +513,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     });
     setOutsideCountdowns((prev) => {
       const next = new Map(prev);
-      next.set(truckNum, 600);
+      next.set(truckNum, 900);
       return next;
     });
   }
@@ -1222,7 +1222,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         </option>
                       )}
                       {outsideTimerEnabled && !outsideTimers.has(t.truck_number) && (
-                        <option value="__outside__">⏱ Outside (10 min)</option>
+                        <option value="__outside__">⏱ Outside (15 min)</option>
                       )}
                       {FLEET_STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>
