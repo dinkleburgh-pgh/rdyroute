@@ -1045,7 +1045,7 @@ function UpdatesPanel({ map }: { map: Map<string, unknown> }) {
   const { data: status, isLoading: statusLoading } = useUpdateStatus();
   const { data: check, isFetching: checkFetching, refetch: recheckNow } = useCheckForUpdate();
 
-  const initialCommand = String(map.get("update_deploy_command") ?? "bash ./deploy.sh");
+  const initialCommand = String(map.get("update_deploy_command") ?? "python3 /app/docker_resolve.py portainer_redeploy");
   const [command, setCommand] = useState(initialCommand);
   useEffect(() => setCommand(initialCommand), [initialCommand]);
   const commandDirty = command !== initialCommand;
@@ -1157,19 +1157,19 @@ function UpdatesPanel({ map }: { map: Map<string, unknown> }) {
         <h3 className="text-sm font-semibold text-slate-300">Deploy command</h3>
         <FieldRow
           label="Command"
-          hint="Runs on the server when Update is triggered. Default: bash ./deploy.sh"
+          hint="Runs inside the backend container when Update is triggered. Uses PORTAINER_URL / PORTAINER_API_KEY / PORTAINER_STACK_ID / PORTAINER_ENDPOINT_ID env vars."
         >
           <input
             className="input"
             value={command}
             onChange={(e) => setCommand(e.target.value)}
-            placeholder="bash ./deploy.sh"
+            placeholder="python3 /app/docker_resolve.py portainer_redeploy"
           />
         </FieldRow>
         <SaveButton
           dirty={commandDirty}
           saving={upsert.isPending}
-          onSave={() => upsert.mutateAsync({ key: "update_deploy_command", value: command.trim() || "bash ./deploy.sh" })}
+          onSave={() => upsert.mutateAsync({ key: "update_deploy_command", value: command.trim() || "python3 /app/docker_resolve.py portainer_redeploy" })}
           onRevert={() => setCommand(initialCommand)}
         />
       </div>

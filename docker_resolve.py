@@ -71,6 +71,66 @@ def cmd_connect(network):
         sys.exit(1)
 
 
+def cmd_portainer_redeploy():
+    """Trigger a Portainer git-stack redeploy via the Portainer HTTP API.
+
+    Required env vars (set in docker-compose.prod.yml or .env.production):
+      PORTAINER_URL         e.g. https://192.168.1.132:31015
+      PORTAINER_API_KEY     Portainer access token (Settings → Users → Access tokens)
+      PORTAINER_STACK_ID    numeric stack id (38 for readyroute)
+      PORTAINER_ENDPOINT_ID numeric endpoint/environment id (3 for local)
+    """
+    import urllib.request
+    import ssl
+
+    url     = os.environ.get("PORTAINER_URL", "").rstrip("/")
+    api_key = os.environ.get("PORTAINER_API_KEY", "")
+    stack   = os.environ.get("PORTAINER_STACK_ID", "")
+    ep      = os.environ.get("PORTAINER_ENDPOINT_ID", "")
+
+    missing = [k for k, v in {
+        "PORTAINER_URL": url,
+        "PORTAINER_API_KEY": api_key,
+        "PORTAINER_STACK_ID": stack,
+        "PORTAINER_ENDPOINT_ID": ep,
+    }.items() if not v]
+    if missing:
+        sys.stderr.write(f"portainer_redeploy: missing env vars: {', '.join(missing)}\n")
+        sys.exit(1)
+
+    endpoint = f"{url}/api/stacks/{stack}/git/redeploy?endpointId={ep}"
+    payload = json.dumps({
+        "prune": False,
+        "pullImage": True,
+        "repositoryAuthentication": False,
+        "repositoryReferenceName": "refs/heads/main",
+        "env": [],
+    }).encode()
+
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # self-signed cert on Portainer
+
+    req = urllib.request.Request(
+        endpoint,
+        data=payload,
+        method="PUT",
+        headers={
+            "Content-Type": "application/json",
+            "X-API-Key": api_key,
+        },
+    )
+    try:
+        with urllib.request.urlopen(req, context=ctx, timeout=60) as resp:  # noqa: S310
+            body = resp.read().decode(errors="replace")
+            sys.stdout.write(f"portainer_redeploy: status={resp.status}\n{body[:500]}\n")
+            if resp.status not in (200, 204):
+                sys.exit(1)
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(f"portainer_redeploy: {exc}\n")
+        sys.exit(1)
+
+
 def main():
     if len(sys.argv) < 2:
         sys.exit(1)
@@ -82,6 +142,8 @@ def main():
         cmd_ip(args[0])
     elif cmd == "connect" and args:
         cmd_connect(args[0])
+    elif cmd == "portainer_redeploy":
+        cmd_portainer_redeploy()
     else:
         sys.exit(1)
 

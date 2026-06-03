@@ -102,6 +102,10 @@ services:
       SESSION_EXPIRY_DAYS: ${SESSION_EXPIRY_DAYS:-30}
       CORS_ORIGINS: ${CORS_ORIGINS:-*}
       TIMEZONE: ${TIMEZONE:-America/New_York}
+      PORTAINER_URL: ${PORTAINER_URL:-}
+      PORTAINER_API_KEY: ${PORTAINER_API_KEY:-}
+      PORTAINER_STACK_ID: ${PORTAINER_STACK_ID:-}
+      PORTAINER_ENDPOINT_ID: ${PORTAINER_ENDPOINT_ID:-}
     volumes:
       - backend_data:/app/.data
       - /var/run/docker.sock:/var/run/docker.sock:ro
