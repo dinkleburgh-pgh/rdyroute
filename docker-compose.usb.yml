@@ -32,7 +32,7 @@ services:
       POSTGRES_DB:          ${DB_NAME:-readyroute}
       PGDATA:               /var/lib/postgresql/data
       PRIMARY_HOST:         ${PRIMARY_HOST:-73.117.168.91}
-      PRIMARY_PORT:         ${PRIMARY_PORT:-5432}
+      PRIMARY_PORT:         ${PRIMARY_PORT:-5433}
       REPLICATION_PASSWORD: ${DB_REPL_PASSWORD}
       REPLICATION_SLOT:     ${REPLICATION_SLOT:-usb_standby}
     volumes:
