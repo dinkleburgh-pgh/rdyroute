@@ -719,11 +719,11 @@ function InProgressPanel({
       </div>
 
       {/* Actions */}
-      <div className="mt-3 flex flex-wrap items-center gap-2">
-        <button className="btn-primary" disabled={busy} onClick={onFinish}>
+      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        <button className="btn-primary w-full py-3 text-base sm:w-auto sm:py-1.5 sm:text-sm" disabled={busy} onClick={onFinish}>
           Finish Loading
         </button>
-        <button className="btn-ghost" disabled={busy || elapsed >= 15} onClick={onCancel}>
+        <button className="btn-ghost w-full sm:w-auto" disabled={busy || elapsed >= 15} onClick={onCancel}>
           Cancel (back to Unloaded)
         </button>
         {elapsed < 15 && (

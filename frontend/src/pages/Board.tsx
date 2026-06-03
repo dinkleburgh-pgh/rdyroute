@@ -1185,7 +1185,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <div className="mt-auto flex flex-col gap-2">
                   {!multiSelect && !isReadOnly && status !== "oos" && (
                     <select
-                      className="input text-xs"
+                      className="input min-h-[2.5rem] text-xs md:min-h-0"
                       value={status}
                       disabled={upsert.isPending}
                       onClick={(e) => e.stopPropagation()}
@@ -1244,7 +1244,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       </span>
                       <button
                         type="button"
-                        className="ml-auto text-xs text-orange-500 transition-colors hover:text-orange-300"
+                        className="ml-auto rounded px-2 py-1 text-xs font-semibold text-orange-500 transition-colors hover:text-orange-300 active:bg-orange-900/40"
                         onClick={() => cancelOutsideTimer(t.truck_number)}
                       >
                         Cancel

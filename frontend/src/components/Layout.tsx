@@ -477,10 +477,30 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto">
+        <main className="flex-1 overflow-auto pb-14 md:pb-0">
           <Outlet />
         </main>
       </div>
+
+      {/* Mobile bottom nav — primary workflow actions, no hamburger required */}
+      {primaryNav.length > 0 && (
+        <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-800 bg-slate-900 md:hidden">
+          {primaryNav.map((item) => (
+            <NavLink
+              key={item.to}
+              to={item.to}
+              className={({ isActive }) =>
+                clsx(
+                  "flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
+                  isActive ? "text-blue-400" : "text-slate-500",
+                )
+              }
+            >
+              {item.label === "Communications" ? "Comms" : item.label}
+            </NavLink>
+          ))}
+        </nav>
+      )}
 
       {swapModalOpen && <RouteSwapModal onClose={() => setSwapModalOpen(false)} />}
       <NoteCardsDrawer />
