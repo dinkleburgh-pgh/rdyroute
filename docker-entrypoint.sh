@@ -47,4 +47,34 @@ if ! getent hosts "$POSTGRES_CONTAINER" > /dev/null 2>&1; then
     fi
 fi
 
+# ---------------------------------------------------------------------------
+# Postgres connection test — if DATABASE_URL targets postgres and it can't
+# be reached, fall back to SQLite automatically and flag it for the health UI.
+# ---------------------------------------------------------------------------
+if [ -n "$DATABASE_URL" ] && echo "$DATABASE_URL" | grep -q "postgresql"; then
+    if python3 -c "
+import sys, os
+from urllib.parse import urlparse
+url = os.environ['DATABASE_URL']
+p = urlparse(url.replace('+psycopg','').replace('+asyncpg',''))
+import psycopg
+c = psycopg.connect(
+    host=p.hostname,
+    port=p.port or 5432,
+    dbname=(p.path or '/').lstrip('/') or 'postgres',
+    user=p.username,
+    password=p.password,
+    connect_timeout=5,
+)
+c.close()
+" 2>/dev/null; then
+        printf '[entrypoint] postgres connection OK — using %s\n' "$DATABASE_URL"
+    else
+        printf '[entrypoint] postgres unreachable — falling back to SQLite\n'
+        DATABASE_URL="sqlite:////app/.data/truckv2_prod.db"
+        export DATABASE_URL
+        export DB_FALLBACK_REASON="postgres unreachable at startup"
+    fi
+fi
+
 exec "$@"

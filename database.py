@@ -4,9 +4,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    database_url: str = (
-        "postgresql+psycopg://coxnas:secure_truck_pass@ix-postgres-postgres-1:5432/coxnas"
-    )
+    database_url: str = "sqlite:////app/.data/truckv2_prod.db"
     secret_key: str = "change-me-to-a-long-random-string"
     algorithm: str = "HS256"
     # 60 minutes — short-lived JWTs limit exposure if a token is leaked.

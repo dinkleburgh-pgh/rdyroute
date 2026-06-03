@@ -342,11 +342,14 @@ def health_detail():
 
     overall_ok = primary["ok"] and all(e["ok"] for e in extras)
 
+    fallback_reason = _os.environ.get("DB_FALLBACK_REASON")
+
     return {
         "status": "ok" if overall_ok else "degraded",
         "version": app.version,
         "uptime_seconds": uptime_s,
         "python": platform.python_version(),
         "db": primary,
+        "db_fallback": fallback_reason,
         "extra_dbs": extras,
     }
