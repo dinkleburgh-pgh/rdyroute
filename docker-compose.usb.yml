@@ -1,0 +1,176 @@
+# ReadyRoute V2 — USB Standby Deployment
+#
+# Full hot-standby stack for UltraSeedbox (blaze.usbx.me).
+# Runs a postgres streaming-replication standby alongside backend + frontend.
+#
+# Prerequisites:
+#   1. Router port-forward:  73.117.168.91:5432 → 192.168.1.132:5432
+#   2. TrueNAS stack deployed with the db + db-setup services (primary ready)
+#   3. Copy .env.usb.example → .env.usb and fill in secrets
+#   4. Clone repo to USB:  git clone https://github.com/dinkleburgh-pgh/rdyroute .
+#   5. Deploy:  docker compose --env-file .env.usb -f docker-compose.usb.yml up -d
+#
+# Cloudflare DNS:
+#   rdyroute.app        A → 73.117.168.91   (primary — auto-updated on failover)
+#   standby.rdyroute.app A → blaze.usbx.me  (standby — always points here)
+#
+# Failover:  automatic (watchdog updates rdyroute.app DNS when TrueNAS is down)
+# Revert:    manual — run: docker exec readyroutev2-usb-failover /cf-failover.sh --revert
+
+services:
+  # ---------------------------------------------------------------------------
+  # Standby PostgreSQL — streams from TrueNAS primary via pg_basebackup on
+  # first boot. Hot-standby mode: read-only until promoted.
+  # ---------------------------------------------------------------------------
+  db:
+    image: postgres:16-alpine
+    container_name: readyroutev2-usb-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:        ${DB_USER:-readyroute}
+      POSTGRES_PASSWORD:    ${DB_PASSWORD}
+      POSTGRES_DB:          ${DB_NAME:-readyroute}
+      PGDATA:               /var/lib/postgresql/data
+      PRIMARY_HOST:         ${PRIMARY_HOST:-73.117.168.91}
+      PRIMARY_PORT:         ${PRIMARY_PORT:-5432}
+      REPLICATION_PASSWORD: ${DB_REPL_PASSWORD}
+      REPLICATION_SLOT:     ${REPLICATION_SLOT:-usb_standby}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./deploy/pg-standby-entrypoint.sh:/usr/local/bin/pg-standby-entrypoint.sh:ro
+    entrypoint: ["/bin/sh", "/usr/local/bin/pg-standby-entrypoint.sh"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-readyroute} -d ${DB_NAME:-readyroute}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
+
+  backend:
+    image: ${BACKEND_IMAGE:-ghcr.io/dinkleburgh-pgh/rdyroute-backend}:${IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: readyroutev2-usb-backend
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Direct internal connection — no network-attach needed on USB
+      DATABASE_URL:                postgresql+psycopg://${DB_USER:-readyroute}:${DB_PASSWORD}@db:5432/${DB_NAME:-readyroute}
+      POSTGRES_CONTAINER:          readyroutev2-usb-db
+      BACKUP_DATABASE_URL:         ${BACKUP_DATABASE_URL:-}
+      AUDIT_PHOTOS_DIR:            ${AUDIT_PHOTOS_DIR:-/app/.data/audit_photos}
+      SECRET_KEY:                  ${SECRET_KEY}
+      ALGORITHM:                   ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-60}
+      SESSION_EXPIRY_DAYS:         ${SESSION_EXPIRY_DAYS:-30}
+      CORS_ORIGINS:                ${CORS_ORIGINS:-*}
+      TIMEZONE:                    ${TIMEZONE:-America/New_York}
+    volumes:
+      - backend_data:/app/.data
+      # Docker socket not needed on USB (no ix-postgres network to attach to)
+    ports:
+      - "${BACKEND_PORT:-8001}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 6
+      start_period: 60s
+
+  frontend:
+    image: ${FRONTEND_IMAGE:-ghcr.io/dinkleburgh-pgh/rdyroute-frontend}:${IMAGE_TAG:-latest}
+    pull_policy: always
+    container_name: readyroutev2-usb-frontend
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    environment:
+      PUBLIC_URL:          ${PUBLIC_URL:-https://standby.rdyroute.app}
+      BACKEND_HEALTH_URL:  ${BACKEND_HEALTH_URL:-http://backend:8000/health}
+      HOST_PORT:           ${FRONTEND_PORT:-8180}
+      HOST_IP:             ${HOST_IP:-blaze.usbx.me}
+    ports:
+      - "${FRONTEND_PORT:-8180}:80"
+
+  # ---------------------------------------------------------------------------
+  # Failover watchdog — monitors primary health, updates Cloudflare DNS, and
+  # promotes the local standby postgres when the primary goes down.
+  # Uses postgres:16-alpine (has psql for pg_promote) + installs curl.
+  # ---------------------------------------------------------------------------
+  failover-watchdog:
+    image: postgres:16-alpine
+    container_name: readyroutev2-usb-failover
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      PRIMARY_HEALTH_URL: ${PRIMARY_HEALTH_URL:-http://73.117.168.91:8000/health}
+      CF_ZONE_ID:         ${CF_ZONE_ID}
+      CF_API_TOKEN:       ${CF_API_TOKEN}
+      DOMAIN:             ${DOMAIN:-rdyroute.app}
+      PRIMARY_IP:         ${PRIMARY_IP:-73.117.168.91}
+      USB_IP:             ${USB_IP}
+      CHECK_INTERVAL:     ${CHECK_INTERVAL:-30}
+      FAIL_THRESHOLD:     ${FAIL_THRESHOLD:-3}
+      PGPASSWORD:         ${DB_PASSWORD}
+      DB_USER:            ${DB_USER:-readyroute}
+      DB_NAME:            ${DB_NAME:-readyroute}
+    volumes:
+      - ./deploy/cf-failover.sh:/cf-failover.sh:ro
+    command:
+      - /bin/sh
+      - -c
+      - "apk add --no-cache curl >/dev/null 2>&1 && sh /cf-failover.sh"
+
+  # Internal watchdog — restarts backend/frontend if they go unhealthy
+  watchdog:
+    image: alpine:3.20
+    container_name: readyroutev2-usb-watchdog
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+      frontend:
+        condition: service_started
+    environment:
+      WATCHDOG_BACKEND_URL:       ${WATCHDOG_BACKEND_URL:-http://backend:8000/health}
+      WATCHDOG_FRONTEND_URL:      ${WATCHDOG_FRONTEND_URL:-http://frontend}
+      WATCHDOG_BACKEND_CONTAINER: ${WATCHDOG_BACKEND_CONTAINER:-readyroutev2-usb-backend}
+      WATCHDOG_FRONTEND_CONTAINER: ${WATCHDOG_FRONTEND_CONTAINER:-readyroutev2-usb-frontend}
+      WATCHDOG_INTERVAL_SECONDS:  ${WATCHDOG_INTERVAL_SECONDS:-20}
+      WATCHDOG_FAILURE_THRESHOLD: ${WATCHDOG_FAILURE_THRESHOLD:-3}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command:
+      - /bin/sh
+      - -c
+      - |-
+          apk add --no-cache curl > /dev/null 2>&1
+          log() { printf '[%s] %s\n' "$$(date '+%Y-%m-%d %H:%M:%S')" "$$1"; }
+          ok()  { curl -sf -m 8 "$$1" > /dev/null 2>&1; }
+          restart_c() {
+            curl -sf -m 10 --unix-socket /var/run/docker.sock \
+              -X POST "http://localhost/containers/$$1/restart" > /dev/null 2>&1 \
+              && log "Restarted $$1" || log "Restart failed: $$1"
+          }
+          log "Watchdog started. Backend=$$WATCHDOG_BACKEND_URL Frontend=$$WATCHDOG_FRONTEND_URL"
+          bf=0; ff=0
+          while true; do
+            ok "$$WATCHDOG_BACKEND_URL"  && bf=0 || { bf=$$((bf+1)); log "Backend fail $${bf}/$${WATCHDOG_FAILURE_THRESHOLD}"; }
+            ok "$$WATCHDOG_FRONTEND_URL" && ff=0 || { ff=$$((ff+1)); log "Frontend fail $${ff}/$${WATCHDOG_FAILURE_THRESHOLD}"; }
+            [ "$$bf" -ge "$$WATCHDOG_FAILURE_THRESHOLD" ] && { restart_c "$$WATCHDOG_BACKEND_CONTAINER";  bf=0; }
+            [ "$$ff" -ge "$$WATCHDOG_FAILURE_THRESHOLD" ] && { restart_c "$$WATCHDOG_FRONTEND_CONTAINER"; ff=0; }
+            sleep "$$WATCHDOG_INTERVAL_SECONDS"
+          done
+
+volumes:
+  pg_data:
+  backend_data:
+
+networks:
+  default:
+    driver: bridge
+    enable_ipv6: false
