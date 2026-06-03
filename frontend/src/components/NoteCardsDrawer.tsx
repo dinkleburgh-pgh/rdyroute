@@ -108,7 +108,7 @@ export default function NoteCardsDrawer() {
     <>
       {/* Floating panel */}
       {open && (
-        <div className="fixed bottom-16 left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl sm:left-auto sm:right-4 sm:w-[26rem]" style={{ maxHeight: "90svh" }}>
+        <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ maxHeight: "80svh" }}>
           {/* Panel header */}
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-6 py-3.5 rounded-t-xl">
             <span className="text-base font-semibold text-slate-100">Note Cards</span>
@@ -199,18 +199,19 @@ export default function NoteCardsDrawer() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={clsx(
-          "fixed bottom-5 right-5 z-40 flex items-center gap-3 rounded-full px-6 py-3.5 text-base font-bold shadow-2xl transition-all duration-150",
+          "fixed bottom-[4.5rem] right-4 z-40 flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
+          "px-3 py-2 text-sm font-bold md:bottom-5 md:right-5 md:gap-3 md:px-6 md:py-3.5 md:text-base",
           open
             ? "bg-violet-700 text-white ring-4 ring-violet-500/40 shadow-violet-900/50"
             : "bg-gradient-to-br from-violet-600 to-indigo-700 text-white ring-2 ring-violet-400/30 hover:from-violet-500 hover:to-indigo-600 hover:ring-violet-400/50 hover:scale-105",
         )}
       >
         {/* Clipboard / note icon */}
-        <svg className="h-5 w-5 shrink-0" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+        <svg className="h-4 w-4 shrink-0 md:h-5 md:w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
         </svg>
-        Notes
-        <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.5rem] h-6 px-2 text-sm font-extrabold text-indigo-700" style={{ lineHeight: 1 }}>
+        <span className="hidden md:inline">Notes</span>
+        <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.25rem] h-5 px-1.5 text-xs font-extrabold text-indigo-700 md:min-w-[1.5rem] md:h-6 md:px-2 md:text-sm" style={{ lineHeight: 1 }}>
           {displayedNotes.length}
         </span>
       </button>
