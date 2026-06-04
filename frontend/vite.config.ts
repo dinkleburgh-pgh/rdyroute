@@ -45,6 +45,10 @@ export default defineConfig({
         ],
       },
       workbox: {
+        // Take over immediately on update — prevents stale cached assets from
+        // causing blank white pages in Chrome mobile after a new deploy.
+        skipWaiting: true,
+        clientsClaim: true,
         // Cache the app shell and all static assets
         globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
         // Don't cache API or WebSocket traffic — handled at the app layer
