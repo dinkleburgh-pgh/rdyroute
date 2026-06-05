@@ -146,7 +146,13 @@ export default function Load() {
   const sparesLeftTrucks = useMemo(() => {
     return board.filter((t) => {
       if (t.truck_type !== "Spare") return false;
-      if (t.route_swap_route == null && t.state?.oos_spare_route == null) return false;
+      const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route;
+      if (coveredRoute == null) return false;
+      // Don't count the spare if the route it covers isn't running on the load day
+      if (!holidayLoad) {
+        const routeTruck = board.find((r) => r.truck_number === coveredRoute);
+        if (routeTruck && (routeTruck.scheduled_off_days ?? []).includes(loadDay)) return false;
+      }
       return effectiveStatus(t, loadDay, holidayLoad) !== "loaded";
     });
   }, [board, loadDay, holidayLoad]);

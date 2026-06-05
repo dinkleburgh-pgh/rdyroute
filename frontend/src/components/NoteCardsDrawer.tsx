@@ -41,7 +41,6 @@ const STATUS_TEXT: Partial<Record<TruckStatus, string>> = {
   spare:       "text-white",
 };
 
-const ALLOWED_ROUTES = new Set(["/", "/fleet", "/load"]);
 
 export default function NoteCardsDrawer() {
   const location = useLocation();
@@ -127,7 +126,7 @@ export default function NoteCardsDrawer() {
     [byTruck],
   );
 
-  if (!enabled || !ALLOWED_ROUTES.has(location.pathname)) {
+  if (!enabled) {
     return null;
   }
 
