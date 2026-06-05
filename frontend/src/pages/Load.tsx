@@ -1,4 +1,5 @@
 ﻿import { useEffect, useMemo, useState } from "react";
+import { useBlocker } from "react-router-dom";
 import clsx from "clsx";
 import {
   useBoard,
@@ -225,6 +226,20 @@ export default function Load() {
 
   const anyInProgress = Boolean(inProgress);
 
+  // Determines what kind of navigation block to show (if any).
+  // in_progress  → a truck is actively being loaded (hard block)
+  // incomplete   → loading has started but trucks still remain (soft warning)
+  const blockedReason: "in_progress" | "incomplete" | null = anyInProgress
+    ? "in_progress"
+    : loadDone > 0 && totalLeft > 0
+    ? "incomplete"
+    : null;
+
+  const blocker = useBlocker(
+    ({ currentLocation, nextLocation }) =>
+      blockedReason !== null && currentLocation.pathname !== nextLocation.pathname,
+  );
+
   async function startLoad(t: TruckWithState) {
     if (anyInProgress) return;
     setBusy(t.truck_number);
@@ -303,6 +318,67 @@ export default function Load() {
     .sort((a, b) => a.truck_number - b.truck_number);
 
   return (
+    <>
+      {/* Navigation guard: in-progress truck (hard block) */}
+      {blocker.state === "blocked" && blockedReason === "in_progress" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-amber-700/60 bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <h3 className="text-base font-semibold text-amber-300">Truck still loading</h3>
+            </div>
+            <p className="text-sm text-slate-300">
+              Truck <strong className="text-white">#{inProgress?.truck_number}</strong> is currently being loaded. Are you sure you want to leave?
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-600 transition-colors"
+                onClick={() => blocker.reset()}
+              >
+                Stay
+              </button>
+              <button
+                className="flex-1 rounded-lg bg-red-700 px-4 py-2 text-sm font-semibold text-white hover:bg-red-600 transition-colors"
+                onClick={() => blocker.proceed()}
+              >
+                Leave anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Navigation guard: loading started but trucks remain (soft warning) */}
+      {blocker.state === "blocked" && blockedReason === "incomplete" && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4">
+          <div className="w-full max-w-sm rounded-xl border border-orange-700/60 bg-slate-900 p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center gap-2">
+              <svg className="h-5 w-5 shrink-0 text-orange-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v4m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+              </svg>
+              <h3 className="text-base font-semibold text-orange-300">Trucks still to load</h3>
+            </div>
+            <p className="text-sm text-slate-300">
+              <strong className="text-white">{totalLeft} truck{totalLeft !== 1 ? "s" : ""}</strong> still need{totalLeft === 1 ? "s" : ""} to be loaded. Are you sure you want to leave?
+            </p>
+            <div className="flex gap-3">
+              <button
+                className="flex-1 rounded-lg bg-slate-700 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-slate-600 transition-colors"
+                onClick={() => blocker.reset()}
+              >
+                Stay
+              </button>
+              <button
+                className="flex-1 rounded-lg bg-orange-700 px-4 py-2 text-sm font-semibold text-white hover:bg-orange-600 transition-colors"
+                onClick={() => blocker.proceed()}
+              >
+                Leave anyway
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     <div className="p-3 md:p-6 space-y-5">
       <div className="flex items-end justify-between gap-4">
         <h2 className="text-2xl font-semibold">Load</h2>
@@ -545,6 +621,7 @@ export default function Load() {
         </div>
       </section>
     </div>
+    </>
   );
 }
 

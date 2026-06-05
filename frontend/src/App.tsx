@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes } from "react-router-dom";
+import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
@@ -27,43 +27,43 @@ const queryClient = new QueryClient({
   },
 });
 
+const router = createBrowserRouter([
+  { path: "/login", element: <Login /> },
+  { path: "/driver/:token", element: <DriverNotes /> },
+  {
+    path: "/",
+    element: (
+      <ProtectedRoute>
+        <Layout />
+      </ProtectedRoute>
+    ),
+    children: [
+      { index: true, element: <RunDay /> },
+      { path: "board", element: <Board /> },
+      { path: "unload", element: <Unload /> },
+      { path: "load", element: <Load /> },
+      { path: "batches", element: <Batches /> },
+      { path: "fleet", element: <Board fleetMode /> },
+      { path: "shorts", element: <Shorts /> },
+      { path: "audit", element: <Audit /> },
+      { path: "trends", element: <Trends /> },
+      { path: "management", element: <Management /> },
+      { path: "communications", element: <Communications /> },
+      { path: "notes", element: <NotesBoard /> },
+      { path: "supervisor", element: <Navigate to="/management" replace /> },
+      { path: "settings", element: <Navigate to="/management" replace /> },
+    ],
+  },
+  { path: "*", element: <Navigate to="/" replace /> },
+]);
+
 export default function App() {
   useWakeLock();
   return (
     <QueryClientProvider client={queryClient}>
       <StatusColorApplier />
       <AuthProvider>
-        <BrowserRouter>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/driver/:token" element={<DriverNotes />} />
-            <Route
-              path="/"
-              element={
-                <ProtectedRoute>
-                  <Layout />
-                </ProtectedRoute>
-              }
-            >
-              <Route index element={<RunDay />} />
-              <Route path="board" element={<Board />} />
-              <Route path="unload" element={<Unload />} />
-              <Route path="load" element={<Load />} />
-              <Route path="batches" element={<Batches />} />
-              <Route path="fleet" element={<Board fleetMode />} />
-              <Route path="shorts" element={<Shorts />} />
-              <Route path="audit" element={<Audit />} />
-              <Route path="trends" element={<Trends />} />
-              <Route path="management" element={<Management />} />
-              <Route path="communications" element={<Communications />} />
-              <Route path="notes" element={<NotesBoard />} />
-              <Route path="management" element={<Management />} />
-              <Route path="supervisor" element={<Navigate to="/management" replace />} />
-              <Route path="settings" element={<Navigate to="/management" replace />} />
-            </Route>
-            <Route path="*" element={<Navigate to="/" replace />} />
-          </Routes>
-        </BrowserRouter>
+        <RouterProvider router={router} />
       </AuthProvider>
     </QueryClientProvider>
   );

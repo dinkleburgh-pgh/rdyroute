@@ -232,6 +232,9 @@ export default function Layout() {
       ? Math.round((loadedScheduled / totalScheduledLoad) * 100)
       : 0;
 
+  // Trucks still needing to be loaded — drives the Load nav badge.
+  const trucksNotYetLoaded = totalScheduledLoad - loadedScheduled;
+
   const inProgressTruck = useMemo(
     () => (board ?? []).find((t) => t.state?.status === "in_progress"),
     [board],
@@ -317,20 +320,28 @@ export default function Layout() {
 
           {/* Primary action buttons */}
           <div className="space-y-2 pt-2">
-            {primaryNav.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  clsx(
-                    "block rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-center text-sm font-medium transition-colors",
-                    isActive ? "ring-2 ring-blue-500" : "hover:bg-slate-700",
-                  )
-                }
-              >
-                {item.label}
-              </NavLink>
-            ))}
+            {primaryNav.map((item) => {
+              const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    clsx(
+                      "flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors",
+                      isActive ? "ring-2 ring-blue-500" : "hover:bg-slate-700",
+                    )
+                  }
+                >
+                  {item.label}
+                  {showLoadBadge && (
+                    <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-bold text-white">
+                      {trucksNotYetLoaded}
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
           </div>
 
           <hr className="border-slate-800" />
@@ -485,20 +496,28 @@ export default function Layout() {
       {/* Mobile bottom nav — primary workflow actions, no hamburger required */}
       {primaryNav.length > 0 && (
         <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-800 bg-slate-900 md:hidden">
-          {primaryNav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) =>
-                clsx(
-                  "flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
-                  isActive ? "text-blue-400" : "text-slate-500",
-                )
-              }
-            >
-              {item.label === "Communications" ? "Comms" : item.label}
-            </NavLink>
-          ))}
+          {primaryNav.map((item) => {
+            const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
+            return (
+              <NavLink
+                key={item.to}
+                to={item.to}
+                className={({ isActive }) =>
+                  clsx(
+                    "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
+                    isActive ? "text-blue-400" : "text-slate-500",
+                  )
+                }
+              >
+                {item.label === "Communications" ? "Comms" : item.label}
+                {showLoadBadge && (
+                  <span className="absolute right-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[9px] font-bold text-white">
+                    {trucksNotYetLoaded}
+                  </span>
+                )}
+              </NavLink>
+            );
+          })}
         </nav>
       )}
 
