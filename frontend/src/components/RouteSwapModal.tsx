@@ -52,9 +52,15 @@ export default function RouteSwapModal({ onClose }: Props) {
   const swapRouteSet = new Set(swaps.map((s) => s.route_truck));
   const swapLoadOnSet = new Set(swaps.map((s) => s.load_on_truck));
 
-  // OOS trucks with no swap yet — shown as prefill rows
+  // OOS trucks with no swap yet — shown as prefill rows.
+  // Only include trucks that actually run on the load day (not scheduled off).
   const unswappedOos = [...board]
-    .filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swapRouteSet.has(t.truck_number))
+    .filter((t) =>
+      t.truck_type !== "Spare" &&
+      effectiveStatus(t, loadDay, holidayLoad) === "oos" &&
+      !swapRouteSet.has(t.truck_number) &&
+      (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+    )
     .sort((a, b) => a.truck_number - b.truck_number);
 
   async function addOosSwap(routeTruckNum: number, loadOnTruckNum: number) {
@@ -69,8 +75,12 @@ export default function RouteSwapModal({ onClose }: Props) {
   // Sorted truck lists
   const sorted = [...board].sort((a, b) => a.truck_number - b.truck_number);
 
-  // Route Truck options: all non-spare trucks
-  const routeOptions = sorted.filter((t) => t.truck_type !== "Spare");
+  // Route Truck options: non-spare trucks that run on the load day
+  const routeOptions = sorted.filter(
+    (t) =>
+      t.truck_type !== "Spare" &&
+      (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+  );
 
   // Load On options: all trucks (grouped), including OOS trucks
   const spares        = sorted.filter((t) => t.truck_type === "Spare");
