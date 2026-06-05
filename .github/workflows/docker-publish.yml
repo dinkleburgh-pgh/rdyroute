@@ -76,3 +76,30 @@ jobs:
             ${{ env.FRONTEND_IMAGE }}:${{ steps.appver.outputs.app_version }}
           cache-from: type=gha,scope=frontend
           cache-to: type=gha,mode=max,scope=frontend
+
+      # ── Notify production (after images are in GHCR) ──────────────────
+      # Pings the /updates/push webhook so Portainer pulls the images that
+      # were just built — not the ones from the previous commit.
+      # Requires: PROD_UPDATE_URL and PROD_UPDATE_SECRET repo secrets.
+      # PROD_UPDATE_URL  = https://rdyroute.app/api/updates/push
+      # PROD_UPDATE_SECRET = value of update_push_secret AppSetting
+      - name: Notify production to redeploy
+        if: ${{ secrets.PROD_UPDATE_URL != '' }}
+        env:
+          PROD_UPDATE_URL: ${{ secrets.PROD_UPDATE_URL }}
+          PROD_UPDATE_SECRET: ${{ secrets.PROD_UPDATE_SECRET }}
+        run: |
+          curl -fsS \
+            -X POST "$PROD_UPDATE_URL" \
+            -H "Content-Type: application/json" \
+            -H "x-readyroute-secret: $PROD_UPDATE_SECRET" \
+            -d '{
+              "ref": "refs/heads/main",
+              "head_commit": {
+                "id": "${{ github.sha }}",
+                "message": ${{ toJson(github.event.head_commit.message) }}
+              }
+            }' \
+            --max-time 15 \
+          && echo "[notify] Production redeploy triggered." \
+          || echo "[notify] WARNING: could not reach production (non-fatal)."
