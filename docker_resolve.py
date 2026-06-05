@@ -98,13 +98,28 @@ def cmd_portainer_redeploy():
         sys.stderr.write(f"portainer_redeploy: missing env vars: {', '.join(missing)}\n")
         sys.exit(1)
 
+    # Fetch current stack env so we don't wipe it on every redeploy.
+    # Portainer's git/redeploy endpoint replaces env with whatever is passed;
+    # sending [] would clear all stack vars (including the PORTAINER_* ones).
+    current_env: list = []
+    try:
+        get_req = urllib.request.Request(
+            f"{url}/api/stacks/{stack}",
+            headers={"X-API-Key": api_key},
+        )
+        with urllib.request.urlopen(get_req, context=ctx, timeout=15) as r:  # noqa: S310
+            stack_info = json.loads(r.read().decode(errors="replace"))
+            current_env = stack_info.get("Env") or []
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(f"portainer_redeploy: could not fetch stack env (continuing): {exc}\n")
+
     endpoint = f"{url}/api/stacks/{stack}/git/redeploy?endpointId={ep}"
     payload = json.dumps({
         "prune": False,
         "pullImage": True,
         "repositoryAuthentication": False,
         "repositoryReferenceName": "refs/heads/main",
-        "env": [],
+        "env": current_env,
     }).encode()
 
     ctx = ssl.create_default_context()
