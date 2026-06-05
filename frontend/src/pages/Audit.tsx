@@ -44,7 +44,6 @@ function TruckPicker({
     .filter((t) => t.truck_type !== "Spare")
     .sort((a, b) => a.truck_number - b.truck_number);
 
-  const notAudited = trucks.filter((t) => !entriesByTruck.has(t.truck_number));
   const audited    = trucks.filter((t) =>  entriesByTruck.has(t.truck_number));
 
   const topSummary = [...topItems]
@@ -69,55 +68,34 @@ function TruckPicker({
         </div>
       )}
 
-      {/* Not yet audited */}
-      {notAudited.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">
-            Needs Audit
-          </h3>
-          <div className="grid gap-2 grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
-            {notAudited.map((t) => (
+      {/* All trucks — audited ones turn green */}
+      {trucks.length > 0 && (
+        <div className="grid gap-2 grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
+          {trucks.map((t) => {
+            const count = entriesByTruck.get(t.truck_number)?.length ?? 0;
+            const isAudited = count > 0;
+            return (
               <button
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
-                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
+                className={clsx(
+                  "flex aspect-square flex-col items-center justify-center rounded-xl text-white shadow transition active:scale-95",
+                  isAudited
+                    ? "bg-emerald-900/70 ring-1 ring-emerald-700/60 hover:bg-emerald-800/70"
+                    : "bg-slate-700 hover:bg-slate-600 hover:shadow-lg",
+                )}
               >
-                <span className="text-2xl font-black leading-none">{t.truck_number}</span>
-                <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                  {t.truck_type}
+                <span className={clsx("font-black leading-none", isAudited ? "text-xl text-emerald-200" : "text-2xl")}>
+                  {t.truck_number}
+                </span>
+                <span className={clsx("mt-0.5 text-[10px] font-medium", isAudited ? "font-semibold text-emerald-400" : "uppercase tracking-wider text-slate-400")}>
+                  {isAudited ? `${count} item${count !== 1 ? "s" : ""}` : t.truck_type}
                 </span>
               </button>
-            ))}
-          </div>
-        </section>
-      )}
-
-      {/* Already audited */}
-      {audited.length > 0 && (
-        <section className="space-y-3">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">
-            Audited
-          </h3>
-          <div className="grid gap-2 grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
-            {audited.map((t) => {
-              const count = entriesByTruck.get(t.truck_number)?.length ?? 0;
-              return (
-                <button
-                  key={t.truck_number}
-                  type="button"
-                  onClick={() => onSelect(t)}
-                  className="flex aspect-square flex-col items-center justify-center rounded-xl bg-emerald-900/70 text-white shadow ring-1 ring-emerald-700/60 transition active:scale-95 hover:bg-emerald-800/70"
-                >
-                  <span className="text-xl font-black leading-none text-emerald-200">{t.truck_number}</span>
-                  <span className="mt-0.5 text-[10px] font-semibold text-emerald-400">
-                    {count} item{count !== 1 ? "s" : ""}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </section>
+            );
+          })}
+        </div>
       )}
 
       {trucks.length === 0 && (

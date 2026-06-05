@@ -3,12 +3,13 @@
  * Enabled via the `note_cards_enabled` app setting.
  * Rendered on /fleet and /load routes by Layout.tsx.
  */
-import { useMemo, useState } from "react";
+import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { useLocation } from "react-router-dom";
-import { useSettings, useTruckNotes, useBoard } from "../api/hooks";
+import { useSettings, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
+import { useAuth } from "../contexts/AuthContext";
 import type { TruckNote, TruckStatus } from "../types";
 
 const NOTE_TYPE_COLOR: Record<string, string> = {
@@ -44,11 +45,37 @@ const ALLOWED_ROUTES = new Set(["/", "/fleet", "/load"]);
 
 export default function NoteCardsDrawer() {
   const location = useLocation();
+  const { user } = useAuth();
   const { data: settings } = useSettings();
   const { data: notes = [] } = useTruckNotes({ activeOnly: true });
   const { data: board = [] } = useBoard(todayIso());
+  const upsert = useUpsertSetting();
   const [open, setOpen] = useState(false);
+  const [tab, setTab] = useState<"truck" | "mine">("truck");
   const [filter, setFilter] = useState<"all" | "today">("all");
+
+  // Personal note state
+  const personalKey = `personal_note_${user?.username ?? "unknown"}`;
+  const savedPersonal = (settings ?? []).find((s) => s.key === personalKey)?.value as string ?? "";
+  const [personalDraft, setPersonalDraft] = useState<string | null>(null);
+  const [noteSaved, setNoteSaved] = useState(false);
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    if (personalDraft === null && savedPersonal !== "") setPersonalDraft(savedPersonal);
+  }, [savedPersonal, personalDraft]);
+
+  const personalText = personalDraft ?? savedPersonal;
+
+  function handlePersonalChange(val: string) {
+    setPersonalDraft(val);
+    if (saveTimer.current) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(async () => {
+      await upsert.mutateAsync({ key: personalKey, value: val });
+      setNoteSaved(true);
+      setTimeout(() => setNoteSaved(false), 1500);
+    }, 800);
+  }
 
   const { loadDay } = workdayNumbers();
 
@@ -100,7 +127,7 @@ export default function NoteCardsDrawer() {
     [byTruck],
   );
 
-  if (!enabled || !ALLOWED_ROUTES.has(location.pathname) || activeNotes.length === 0) {
+  if (!enabled || !ALLOWED_ROUTES.has(location.pathname)) {
     return null;
   }
 
@@ -110,30 +137,53 @@ export default function NoteCardsDrawer() {
       {open && (
         <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ maxHeight: "80svh" }}>
           {/* Panel header */}
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-6 py-3.5 rounded-t-xl">
-            <span className="text-base font-semibold text-slate-100">Note Cards</span>
+          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-4 py-3 rounded-t-xl">
+            {/* Tab switcher */}
+            <div className="flex items-center gap-1 rounded-lg overflow-hidden ring-1 ring-slate-700">
+              <button
+                type="button"
+                onClick={() => setTab("truck")}
+                className={clsx(
+                  "px-3 py-1.5 text-xs font-semibold transition-colors",
+                  tab === "truck" ? "bg-indigo-700 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                )}
+              >
+                Truck {activeNotes.length > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{activeNotes.length}</span>}
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("mine")}
+                className={clsx(
+                  "px-3 py-1.5 text-xs font-semibold transition-colors border-l border-slate-700",
+                  tab === "mine" ? "bg-emerald-700 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                )}
+              >
+                My Notes
+              </button>
+            </div>
+
             <div className="flex items-center gap-2">
-              {/* Show All / Today Only filter */}
-              <div className="flex rounded-lg overflow-hidden ring-1 ring-slate-700">
-                {(["all", "today"] as const).map((f) => (
-                  <button
-                    key={f}
-                    type="button"
-                    onClick={() => setFilter(f)}
-                    className={clsx(
-                      "px-2.5 py-1 text-xs font-semibold transition-colors",
-                      filter === f
-                        ? "bg-indigo-700 text-white"
-                        : "bg-slate-800 text-slate-400 hover:bg-slate-700",
-                    )}
-                  >
-                    {f === "all" ? "Show All" : "Today Only"}
-                  </button>
-                ))}
-              </div>
-              <span className="rounded-full bg-slate-700 px-3 py-1 text-xs font-bold text-slate-300">
-                {displayedNotes.length} note{displayedNotes.length !== 1 ? "s" : ""} · {truckNums.length} truck{truckNums.length !== 1 ? "s" : ""}
-              </span>
+              {/* Show All / Today Only filter — only on truck tab */}
+              {tab === "truck" && (
+                <div className="flex rounded-lg overflow-hidden ring-1 ring-slate-700">
+                  {(["all", "today"] as const).map((f) => (
+                    <button
+                      key={f}
+                      type="button"
+                      onClick={() => setFilter(f)}
+                      className={clsx(
+                        "px-2.5 py-1 text-xs font-semibold transition-colors",
+                        filter === f
+                          ? "bg-indigo-700 text-white"
+                          : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                        f === "today" && "border-l border-slate-700",
+                      )}
+                    >
+                      {f === "all" ? "All" : "Today"}
+                    </button>
+                  ))}
+                </div>
+              )}
               <button
                 type="button"
                 onClick={() => setOpen(false)}
@@ -147,9 +197,32 @@ export default function NoteCardsDrawer() {
             </div>
           </div>
 
-          {/* Scrollable note list */}
+          {/* Scrollable content */}
           <div className="overflow-y-auto p-5 space-y-5">
-            {truckNums.map((truckNum) => {
+
+            {/* My Notes tab */}
+            {tab === "mine" && (
+              <div className="space-y-2">
+                <div className="flex items-center gap-2">
+                  <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                  <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">{user?.username}</span>
+                  {noteSaved && <span className="text-[10px] text-emerald-500 ml-auto">Saved</span>}
+                  {upsert.isPending && !noteSaved && <span className="text-[10px] text-slate-500 ml-auto">Saving…</span>}
+                </div>
+                <textarea
+                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
+                  rows={12}
+                  placeholder="Personal notes visible only to you…"
+                  value={personalText}
+                  onChange={(e) => handlePersonalChange(e.target.value)}
+                />
+              </div>
+            )}
+
+            {/* Truck Notes tab */}
+            {tab === "truck" && truckNums.map((truckNum) => {
               const truckNotes = byTruck.get(truckNum) ?? [];
               return (
                 <div

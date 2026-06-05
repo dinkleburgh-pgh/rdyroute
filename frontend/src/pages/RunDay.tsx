@@ -20,6 +20,7 @@ import {
   useUnloadsDayOverride,
   useTruckNotes,
 } from "../api/hooks";
+import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckNote, TruckStatus, TruckWithState } from "../types";
@@ -128,6 +129,14 @@ export default function RunDay() {
       setSearchParams({}, { replace: true });
     }
   }, [searchParams, setSearchParams]);
+
+  // Shift notes — visible inline on the main page, editable by supervisors+
+  const { user } = useAuth();
+  const canEditNotes = ["admin", "fleet", "supervisor", "lead", "atl"].includes(user?.role ?? "");
+  const { data: dailyNotes = "" } = useDailyNotes(runDate);
+  const setDailyNotesMutation = useSetDailyNotes();
+  const [notesEditing, setNotesEditing] = useState(false);
+  const [notesDraft, setNotesDraft] = useState("");
 
   const unloadTrucks = useMemo(
     () =>
@@ -269,6 +278,69 @@ export default function RunDay() {
           {runDate}
         </p>
       </div>
+
+      {/* Shift Handoff Notes */}
+      {(dailyNotes || canEditNotes) && (
+        <div className={clsx(
+          "rounded-xl border px-4 py-3",
+          dailyNotes
+            ? "border-amber-700/40 bg-amber-950/20"
+            : "border-slate-700/40 bg-slate-800/20",
+        )}>
+          <div className="mb-1.5 flex items-center gap-2">
+            <svg className="h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+            </svg>
+            <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Shift Notes</span>
+            {canEditNotes && !notesEditing && (
+              <button
+                type="button"
+                onClick={() => { setNotesDraft(dailyNotes); setNotesEditing(true); }}
+                className="ml-auto rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+              >
+                Edit
+              </button>
+            )}
+          </div>
+          {notesEditing ? (
+            <div className="space-y-2">
+              <textarea
+                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                rows={3}
+                placeholder="Add shift handoff notes for the next team…"
+                value={notesDraft}
+                onChange={(e) => setNotesDraft(e.target.value)}
+                autoFocus
+              />
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  disabled={setDailyNotesMutation.isPending}
+                  onClick={async () => {
+                    await setDailyNotesMutation.mutateAsync({ runDate, notes: notesDraft });
+                    setNotesEditing(false);
+                  }}
+                  className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
+                >
+                  Save
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setNotesEditing(false)}
+                  className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-600 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          ) : dailyNotes ? (
+            <p className="whitespace-pre-wrap text-sm text-amber-100/90">{dailyNotes}</p>
+          ) : (
+            <p className="text-xs text-slate-500 italic">No shift notes for today. Click Edit to add.</p>
+          )}
+        </div>
+      )}
+
       <section>
         <button
           type="button"

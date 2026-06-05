@@ -423,6 +423,14 @@ class RouteSwapOut(_OrmBase):
     created_at: datetime
 
 
+class RouteSwapLogOut(_OrmBase):
+    id: int
+    run_date: date
+    route_truck: int
+    load_on_truck: int
+    created_at: datetime
+
+
 # ---------------------------------------------------------------------------
 # Notices
 # ---------------------------------------------------------------------------

@@ -9,15 +9,15 @@ V1 mapping:
   _apply_manual_route_change(A, A) resets → DELETE removes the swap row(s)
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import RouteSwap, TruckState, TruckStatus
-from schemas import RouteSwapCreate, RouteSwapOut
+from models import RouteSwap, RouteSwapLog, TruckState, TruckStatus
+from schemas import RouteSwapCreate, RouteSwapOut, RouteSwapLogOut
 
 router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
 
@@ -117,6 +117,15 @@ def create_swap(payload: RouteSwapCreate, db: Session = Depends(get_db)):
     for row in created:
         db.refresh(row)
 
+    # Append to swap log (append-only history that survives future deletions)
+    for row in created:
+        db.add(RouteSwapLog(
+            run_date=row.run_date,
+            route_truck=row.route_truck,
+            load_on_truck=row.load_on_truck,
+        ))
+    db.commit()
+
     # Activate covering trucks: if a load_on_truck is still in "spare" (idle)
     # status, move it to "dirty" so it appears in the unload workflow.
     load_on_trucks = {row.load_on_truck for row in created}
@@ -181,3 +190,19 @@ def clear_all_swaps(
     """Remove all route swap assignments for a run date."""
     db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date))
     db.commit()
+
+
+@router.get("/log", response_model=list[RouteSwapLogOut])
+def get_swap_log(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Return the route swap history log for the past N days."""
+    from datetime import datetime, timezone
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+    rows = db.scalars(
+        select(RouteSwapLog)
+        .where(RouteSwapLog.run_date >= cutoff)
+        .order_by(RouteSwapLog.run_date.desc(), RouteSwapLog.created_at.desc())
+    ).all()
+    return rows

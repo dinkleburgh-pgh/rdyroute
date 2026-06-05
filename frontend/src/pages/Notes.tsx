@@ -6,7 +6,7 @@
  *   workday   — shown only when workday_num matches the current load or unload day.
  *   one_off   — shown until expires_on, then auto-archived.
  */
-import { useState, useEffect, useRef } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { QRCodeSVG } from "qrcode.react";
 import { useBoard } from "../api/hooks";
@@ -16,11 +16,8 @@ import {
   useRegenerateQR,
   useTruckNotes,
   useUpdateNote,
-  useUpsertSetting,
-  useSettings,
 } from "../api/hooks";
 import { todayIso, publicBase } from "../api/client";
-import { useAuth } from "../contexts/AuthContext";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
 
 // ---------------------------------------------------------------------------
@@ -61,59 +58,6 @@ function isExpired(note: TruckNote): boolean {
 // ---------------------------------------------------------------------------
 // Personal Notes pad (per-user, stored in AppSettings)
 // ---------------------------------------------------------------------------
-
-function PersonalNotePad() {
-  const { user } = useAuth();
-  const upsert = useUpsertSetting();
-  const { data: settings = [] } = useSettings();
-
-  const settingKey = `personal_note_${user?.username ?? "unknown"}`;
-  const saved = (settings.find((s) => s.key === settingKey)?.value as string) ?? "";
-
-  const [draft, setDraft] = useState<string | null>(null);
-  const [saved_, setSaved] = useState(false);
-  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  // Sync draft from server on first load
-  useEffect(() => {
-    if (draft === null && saved !== "") setDraft(saved);
-  }, [saved, draft]);
-
-  const text = draft ?? saved;
-
-  function handleChange(val: string) {
-    setDraft(val);
-    if (saveTimer.current) clearTimeout(saveTimer.current);
-    saveTimer.current = setTimeout(async () => {
-      await upsert.mutateAsync({ key: settingKey, value: val });
-      setSaved(true);
-      setTimeout(() => setSaved(false), 1500);
-    }, 800);
-  }
-
-  return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900 p-4 space-y-2">
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-          </svg>
-          <span className="text-xs font-semibold uppercase tracking-wide text-emerald-400">My Notes</span>
-          <span className="text-xs text-slate-500">{user?.username}</span>
-        </div>
-        {saved_ && <span className="text-[10px] text-emerald-500">Saved</span>}
-        {upsert.isPending && <span className="text-[10px] text-slate-500">Saving…</span>}
-      </div>
-      <textarea
-        className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
-        rows={4}
-        placeholder="Personal notes visible only to you…"
-        value={text}
-        onChange={(e) => handleChange(e.target.value)}
-      />
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Note form (create + edit)
@@ -626,9 +570,6 @@ export default function NotesBoard() {
 
   return (
     <div className="space-y-5 p-3 md:p-6">
-      {/* Personal notes pad */}
-      <PersonalNotePad />
-
       {/* Header */}
       <div className="flex flex-wrap items-end gap-4">
         <h2 className="text-2xl font-semibold">Truck Notes</h2>

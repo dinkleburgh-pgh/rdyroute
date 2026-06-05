@@ -3,6 +3,7 @@ import {
   useAuditByRoute,
   useAuditByTruck,
   useAuditDailyTrend,
+  useRouteSwapLog,
 } from "../api/hooks";
 
 const RANGES = [
@@ -14,10 +15,12 @@ const RANGES = [
 
 export default function Trends() {
   const [days, setDays] = useState(14);
+  const [swapDays, setSwapDays] = useState(30);
 
   const { data: daily, isLoading: dailyLoading } = useAuditDailyTrend(days);
   const { data: byTruck } = useAuditByTruck(days);
   const { data: byRoute } = useAuditByRoute(days);
+  const { data: swapLog = [], isLoading: swapLoading } = useRouteSwapLog(swapDays);
 
   const dailyMax = Math.max(1, ...(daily ?? []).map((d) => d.total_qty));
 
@@ -115,6 +118,63 @@ export default function Trends() {
             value: t.total_qty,
           }))}
         />
+      </div>
+
+      {/* Route Coverage History */}
+      <div className="card">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+            Route coverage / swap history
+          </h3>
+          <div className="flex gap-1">
+            {[7, 14, 30, 90].map((d) => (
+              <button
+                key={d}
+                onClick={() => setSwapDays(d)}
+                className={
+                  "rounded-md px-3 py-1 text-sm transition-colors " +
+                  (swapDays === d
+                    ? "bg-violet-600 text-white"
+                    : "bg-slate-800 text-slate-300 hover:bg-slate-700")
+                }
+              >
+                {d}d
+              </button>
+            ))}
+          </div>
+        </div>
+        {swapLoading && <p className="text-slate-400 text-sm">Loading…</p>}
+        {!swapLoading && swapLog.length === 0 && (
+          <p className="text-sm text-slate-500">No route coverage events in this range.</p>
+        )}
+        {swapLog.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="border-b border-slate-700 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
+                  <th className="pb-2 pr-4">Date</th>
+                  <th className="pb-2 pr-4">Route truck</th>
+                  <th className="pb-2">Loaded by</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {swapLog.map((row) => (
+                  <tr key={row.id} className="text-slate-300">
+                    <td className="py-1.5 pr-4 tabular-nums text-slate-400">{row.run_date}</td>
+                    <td className="py-1.5 pr-4 font-semibold">#{row.route_truck}</td>
+                    <td className="py-1.5">
+                      {row.load_on_truck === row.route_truck ? (
+                        <span className="text-slate-500 italic">self</span>
+                      ) : (
+                        <span className="text-violet-300">#{row.load_on_truck}</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -433,6 +433,27 @@ class RouteSwap(Base):
 
 
 # ---------------------------------------------------------------------------
+# Route Swap Log (append-only history — survives swap deletions)
+# ---------------------------------------------------------------------------
+
+class RouteSwapLog(Base):
+    """
+    Append-only log of every route swap that was ever created.
+    Unlike RouteSwap rows (which are deleted when cleared), these persist
+    so the Trends page can show OOS/swap history over time.
+    """
+    __tablename__ = "route_swap_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    route_truck: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    load_on_truck: Mapped[int] = mapped_column(Integer, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ---------------------------------------------------------------------------
 # Notices (Run Day banner)
 # ---------------------------------------------------------------------------
 

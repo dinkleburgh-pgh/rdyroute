@@ -179,6 +179,14 @@ export interface Notice {
   expires_at: string | null;
 }
 
+export interface RouteSwapLog {
+  id: number;
+  run_date: string;
+  route_truck: number;
+  load_on_truck: number;
+  created_at: string;
+}
+
 export type AuthRequestStatus = "pending" | "approved" | "denied";
 
 export interface AuthRequestRecord {

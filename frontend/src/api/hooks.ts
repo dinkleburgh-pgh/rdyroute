@@ -12,6 +12,7 @@ import type {
   NoticeSeverity,
   NoteType,
   RouteSwap,
+  RouteSwapLog,
   Shortage,
   SpareAssignment,
   TokenResponse,
@@ -372,6 +373,15 @@ export function useDeleteRouteSwap() {
       qc.invalidateQueries({ queryKey: ["route-swaps", vars.runDate] });
       qc.invalidateQueries({ queryKey: ["board", vars.runDate] });
     },
+  });
+}
+
+export function useRouteSwapLog(days = 30) {
+  return useQuery({
+    queryKey: ["route-swap-log", days],
+    queryFn: async () =>
+      (await api.get<RouteSwapLog[]>("/route-swaps/log", { params: { days } })).data,
+    staleTime: 60_000,
   });
 }
 

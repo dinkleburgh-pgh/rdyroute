@@ -6,26 +6,12 @@
  *
  * Accessible from the sidebar "Route Swap" button.
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { todayIso } from "../api/client";
-import { useBoard, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useHolidayLoad } from "../api/hooks";
+import { useBoard, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useHolidayLoad, useRouteSwapLog } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
 import { effectiveStatus } from "../utils/truckStatus";
 import type { TruckWithState, RouteSwap } from "../types";
-
-// ---- helpers ---------------------------------------------------------------
-
-function truckLabel(t: TruckWithState, loadDay: number, holidayLoad: boolean, swapLoadOnSet: Set<number>, swapRouteSet: Set<number>): string {
-  if (t.truck_type === "Spare") return `#${t.truck_number} — Spare`;
-  const eff = effectiveStatus(t, loadDay, holidayLoad);
-  if (eff === "oos") {
-    if (swapRouteSet.has(t.truck_number)) return `#${t.truck_number} — OOS (route covered)`;
-    return `#${t.truck_number} — OOS`;
-  }
-  if (eff === "off") return `#${t.truck_number} — Off`;
-  if (swapLoadOnSet.has(t.truck_number)) return `#${t.truck_number} — Covering another route`;
-  return `#${t.truck_number}`;
-}
 
 // ---- component -------------------------------------------------------------
 
@@ -42,6 +28,26 @@ export default function RouteSwapModal({ onClose }: Props) {
 
   const createSwap = useCreateRouteSwap();
   const deleteSwap = useDeleteRouteSwap();
+  const { data: swapLog = [] } = useRouteSwapLog(60);
+
+  // Per route_truck: ordered list of the last 2 distinct load_on_truck values used historically
+  const recentCoverageFor = useMemo(() => {
+    const map = new Map<number, number[]>();
+    // log is newest-first from API; iterate to collect up to 2 distinct per route
+    const sorted = [...swapLog].sort(
+      (a, b) => new Date(b.run_date).getTime() - new Date(a.run_date).getTime(),
+    );
+    for (const entry of sorted) {
+      const list = map.get(entry.route_truck) ?? [];
+      if (!list.includes(entry.load_on_truck)) {
+        list.push(entry.load_on_truck);
+        map.set(entry.route_truck, list);
+      }
+    }
+    // Trim to max 2
+    map.forEach((v, k) => map.set(k, v.slice(0, 2)));
+    return map;
+  }, [swapLog]);
 
   const [routeTruck, setRouteTruck] = useState("");
   const [loadOnTruck, setLoadOnTruck] = useState("");
@@ -89,6 +95,89 @@ export default function RouteSwapModal({ onClose }: Props) {
   const oosRouteless  = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && swapRouteSet.has(t.truck_number));
   const oosUncovered  = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swapRouteSet.has(t.truck_number));
   const otherTrucks   = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
+
+  // Board truck map for quick label lookup
+  const boardByNum = useMemo(() => new Map(board.map((t) => [t.truck_number, t])), [board]);
+
+  function loadOnLabel(truckNum: number, forRouteTruck?: number): string {
+    const t = boardByNum.get(truckNum);
+    const alreadyCovering = swapLoadOnSet.has(truckNum);
+    const isSuggested = forRouteTruck !== undefined && (recentCoverageFor.get(forRouteTruck) ?? []).includes(truckNum);
+    const prefix = isSuggested ? "★ " : alreadyCovering ? "⚠ " : "";
+    if (!t) return `${prefix}#${truckNum}`;
+    if (t.truck_type === "Spare") return `${prefix}#${truckNum} — Spare`;
+    const eff = effectiveStatus(t, loadDay, holidayLoad);
+    if (eff === "off") return `${prefix}#${truckNum} — Off`;
+    if (eff === "oos") return `${prefix}#${truckNum} — OOS${swapRouteSet.has(truckNum) ? " / route covered" : ""}`;
+    if (alreadyCovering) return `${prefix}#${truckNum} — already covering a route`;
+    return `${prefix}#${truckNum}`;
+  }
+
+  /** Render a full Load On <select> body for a given context route truck */
+  function LoadOnOptions({ forRoute }: { forRoute?: number }) {
+    const suggestions = forRoute ? (recentCoverageFor.get(forRoute) ?? []) : [];
+    const suggestedTrucks = suggestions
+      .map((n) => boardByNum.get(n))
+      .filter((t): t is typeof board[0] => t !== undefined);
+    return (
+      <>
+        {suggestedTrucks.length > 0 && (
+          <optgroup label="★ Recently used for this route">
+            {suggestedTrucks.map((t) => (
+              <option key={t.truck_number} value={t.truck_number}>
+                {loadOnLabel(t.truck_number, forRoute)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {spares.length > 0 && (
+          <optgroup label="Spare trucks">
+            {spares.map((t) => (
+              <option key={t.truck_number} value={t.truck_number}>
+                {loadOnLabel(t.truck_number, forRoute)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {offTrucks.length > 0 && (
+          <optgroup label="Off today">
+            {offTrucks.map((t) => (
+              <option key={t.truck_number} value={t.truck_number}>
+                {loadOnLabel(t.truck_number, forRoute)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {oosRouteless.length > 0 && (
+          <optgroup label="OOS — route covered (available)">
+            {oosRouteless.map((t) => (
+              <option key={t.truck_number} value={t.truck_number}>
+                {loadOnLabel(t.truck_number, forRoute)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {oosUncovered.length > 0 && (
+          <optgroup label="OOS — route uncovered">
+            {oosUncovered.map((t) => (
+              <option key={t.truck_number} value={t.truck_number}>
+                {loadOnLabel(t.truck_number, forRoute)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {otherTrucks.length > 0 && (
+          <optgroup label="Route trucks">
+            {otherTrucks.map((t) => (
+              <option key={t.truck_number} value={t.truck_number}>
+                {loadOnLabel(t.truck_number, forRoute)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+      </>
+    );
+  }
 
   async function handleAdd() {
     const rt = parseInt(routeTruck);
@@ -165,27 +254,7 @@ export default function RouteSwapModal({ onClose }: Props) {
                       }}
                     >
                       <option value="">— Load on —</option>
-                      {spares.length > 0 && (
-                        <optgroup label="Spare trucks">
-                          {spares.map((s) => (
-                            <option key={s.truck_number} value={s.truck_number}>#{s.truck_number} — Spare</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {offTrucks.length > 0 && (
-                        <optgroup label="Off today">
-                          {offTrucks.map((s) => (
-                            <option key={s.truck_number} value={s.truck_number}>#{s.truck_number} — Off</option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {otherTrucks.length > 0 && (
-                        <optgroup label="Route trucks">
-                          {otherTrucks.map((s) => (
-                            <option key={s.truck_number} value={s.truck_number}>#{s.truck_number}</option>
-                          ))}
-                        </optgroup>
-                      )}
+                      <LoadOnOptions forRoute={t.truck_number} />
                     </select>
                   </div>
                 ))}
@@ -276,51 +345,7 @@ export default function RouteSwapModal({ onClose }: Props) {
                   onChange={(e) => { setLoadOnTruck(e.target.value); setError(null); }}
                 >
                   <option value="">— select —</option>
-                  {spares.length > 0 && (
-                    <optgroup label="Spare trucks">
-                      {spares.map((t) => (
-                        <option key={t.truck_number} value={t.truck_number}>
-                          #{t.truck_number} — Spare
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {offTrucks.length > 0 && (
-                    <optgroup label="Off today">
-                      {offTrucks.map((t) => (
-                        <option key={t.truck_number} value={t.truck_number}>
-                          #{t.truck_number} — Off
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {oosRouteless.length > 0 && (
-                    <optgroup label="OOS — route covered (available)">
-                      {oosRouteless.map((t) => (
-                        <option key={t.truck_number} value={t.truck_number}>
-                          #{t.truck_number} — OOS / route covered
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {oosUncovered.length > 0 && (
-                    <optgroup label="OOS — route uncovered">
-                      {oosUncovered.map((t) => (
-                        <option key={t.truck_number} value={t.truck_number}>
-                          #{t.truck_number} — OOS
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
-                  {otherTrucks.length > 0 && (
-                    <optgroup label="Route trucks">
-                      {otherTrucks.map((t) => (
-                        <option key={t.truck_number} value={t.truck_number}>
-                          {truckLabel(t, loadDay, holidayLoad, swapLoadOnSet, swapRouteSet)}
-                        </option>
-                      ))}
-                    </optgroup>
-                  )}
+                  <LoadOnOptions forRoute={routeTruck ? parseInt(routeTruck) : undefined} />
                 </select>
               </div>
             </div>
