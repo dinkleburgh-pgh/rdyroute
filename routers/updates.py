@@ -32,7 +32,7 @@ KEY_SECRET = "update_push_secret"
 KEY_COMMAND = "update_deploy_command"
 KEY_LAST = "update_last_status"
 
-DEFAULT_COMMAND = "bash ./deploy.sh"
+DEFAULT_COMMAND = "python3 /app/docker_resolve.py portainer_redeploy"
 RUN_TIMEOUT_SECONDS = 60 * 20
 _run_lock = Lock()
 
