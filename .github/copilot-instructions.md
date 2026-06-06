@@ -100,11 +100,38 @@ Top-level categories: `3x10`, `3x5`, `4x6`, `Paper`, `Bulk`.
 | SQLAlchemy models | `models.py` |
 | Pydantic schemas | `schemas.py` |
 | DB session / settings | `database.py` |
+| Docker socket / Portainer | `docker_resolve.py` |
+| Truck status helpers | `frontend/src/utils/truckStatus.ts` |
+| App shell / nav | `frontend/src/components/Layout.tsx` |
+| Note cards drawer | `frontend/src/components/NoteCardsDrawer.tsx` |
+| Route swap modal | `frontend/src/components/RouteSwapModal.tsx` |
+| MCP knowledge server | `.mcp/readyroute_server.py` |
 
 ### Settings page panel pattern
 Each panel in `Settings.tsx` is a standalone function component.  
 Use `FieldRow` helper for labeled rows, `SaveButton` for save/revert.  
-Add new categories to the `Category` union type, the `CATEGORIES` array (with `adminOnly` if fleet/atl only), and the render switch.
+Add new categories to the `Category` union type, the `CARD_GROUPS` array (with `adminOnly` if fleet/atl only), and the render switch in the `renderPanel` function.
+
+### React Router
+Uses `createBrowserRouter` + `RouterProvider` (NOT legacy `BrowserRouter`).  
+`useBlocker` requires the data router — **do not revert** to `BrowserRouter`.  
+Only one `useBlocker` per component is supported — merge into one with a `blockedReason` discriminant.
+
+### NoteCardsDrawer
+Floating bottom-right FAB. Shown on **all routes** when `note_cards_enabled` AppSetting is true.  
+Two tabs: **Truck Notes** (active truck notes, All/Today filter) and **My Notes** (per-user textarea, auto-saves to `personal_note_{username}` AppSetting, 800 ms debounce).
+
+### Route swap suggestions
+`RouteSwapModal` fetches `useRouteSwapLog(60)` to derive the last 2 distinct `load_on_truck` values per `route_truck` from history.  
+Shown as "★ Recently used for this route" optgroup at top of every Load On dropdown.  
+Trucks already covering a route today are labeled `⚠ already covering a route`.
+
+### Load page — Total Left counting
+`sparesLeftTrucks` skips any spare whose covered route is scheduled off on `loadDay` (prevents phantom +1 in the Total Left stat card).
+
+### Audit page — TruckPicker
+All trucks in a **single flat grid** — no "Needs Audit" / "Audited" section split.  
+Audited trucks turn emerald green and show item count; un-audited stay slate with truck type label.
 
 ---
 
@@ -148,4 +175,25 @@ The dev server runs at `http://localhost:5180`. Navigate to the relevant route b
 ### Syntax / type error checks
 
 After every code edit, run **`get_errors`** on the modified files before reporting completion. This catches TypeScript type errors, missing imports, and Python syntax issues immediately rather than leaving broken code silently in place.
+
+---
+
+## CI / Deploy pipeline
+
+Images are built by GitHub Actions on push to `main` and pushed to GHCR.  
+**The `/updates/push` webhook is called at the END of the CI workflow** (after images are in GHCR), not on raw git push — this prevents Portainer redeploying before new images exist.
+
+Requires repo secrets: `PROD_UPDATE_URL`, `PROD_UPDATE_SECRET` (optional).
+
+### Deploy command
+Stored in AppSetting `update_deploy_command`.  
+**Correct value:** `python3 /app/docker_resolve.py portainer_redeploy`  
+**Wrong:** `bash ./deploy.sh` — requires `docker` CLI which is not in the container.
+
+### Portainer redeploy
+`docker_resolve.py portainer_redeploy`:
+1. GETs current stack from Portainer API to fetch live `Env` array
+2. PUTs to `/api/stacks/{id}/git/redeploy` with `pullImage=true` + preserved `Env`
+
+**Never send `"env": []`** — that wipes all stack environment variables.
 
