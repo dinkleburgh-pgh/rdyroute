@@ -10,6 +10,7 @@ XSS-safe browser clients).  A parallel server-side session table mirrors the
 V1 .truck_sessions.json for clients that prefer cookie-based auth.
 """
 
+import os
 import time
 import uuid
 from collections import defaultdict
@@ -55,6 +56,10 @@ JWT_COOKIE     = "readyroutev2_jwt"
 _RATE_LIMIT_WINDOW = 300   # seconds
 _RATE_LIMIT_MAX    = 10    # attempts per window
 
+# IPs that are never rate-limited (comma-separated env var)
+_bypass_raw = os.getenv("RATE_LIMIT_BYPASS_IPS", "127.0.0.1,::1")
+_RATE_LIMIT_BYPASS: set[str] = {ip.strip() for ip in _bypass_raw.split(",") if ip.strip()}
+
 # In-memory cache: ip → list of timestamps (unix float)
 _attempt_cache: dict[str, list[float]] = defaultdict(list)
 _cache_warmed = False
@@ -75,6 +80,8 @@ def _warm_attempt_cache(db: Session) -> None:
 
 
 def _check_rate_limit(ip: str, db: Session) -> None:
+    if ip in _RATE_LIMIT_BYPASS:
+        return
     _warm_attempt_cache(db)
     now = time.time()
     cutoff = now - _RATE_LIMIT_WINDOW
