@@ -61,7 +61,7 @@ async def lifespan(app: FastAPI):
     try:
         _alembic_command.upgrade(_alembic_cfg, "head")
         log.info("Alembic: migrations applied (or already current)")
-    except Exception as _alembic_err:
+    except BaseException as _alembic_err:
         log.error("Alembic migration failed: %s — falling back to create_all()", _alembic_err)
         Base.metadata.create_all(bind=engine)
 
