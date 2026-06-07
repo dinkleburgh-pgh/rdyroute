@@ -84,7 +84,6 @@ jobs:
       # PROD_UPDATE_URL  = https://rdyroute.app/api/updates/push
       # PROD_UPDATE_SECRET = value of update_push_secret AppSetting
       - name: Notify production to redeploy
-        if: ${{ secrets.PROD_UPDATE_URL != '' }}
         env:
           PROD_UPDATE_URL: ${{ secrets.PROD_UPDATE_URL }}
           PROD_UPDATE_SECRET: ${{ secrets.PROD_UPDATE_SECRET }}
