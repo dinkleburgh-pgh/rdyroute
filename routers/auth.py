@@ -201,7 +201,10 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(client_ip, db)
+    # Skip rate limit for bypass IPs and for admin-level usernames configured in env
+    _bypass_usernames = {u.strip() for u in os.getenv("RATE_LIMIT_BYPASS_USERS", "").split(",") if u.strip()}
+    if payload.username.lower() not in _bypass_usernames:
+        _check_rate_limit(client_ip, db)
 
     user = db.scalars(select(User).where(User.username == payload.username.lower())).first()
     if user is None or not user.is_enabled or not _verify_password(payload.password, user.hashed_password):
