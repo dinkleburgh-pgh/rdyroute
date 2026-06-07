@@ -35,12 +35,25 @@ RUN rm -rf .venv .data __pycache__
 
 # Persist sqlite + logs across container restarts when this dir is a volume.
 RUN mkdir -p /app/.data
-VOLUME ["/app/.data"]
 
 COPY docker-entrypoint.sh docker_resolve.py ./
 RUN chmod +x /app/docker-entrypoint.sh
 
+# Run as non-root. The data volume must be owned by this user.
+# Add appuser to the docker group (GID 999) so it can read the Docker socket
+# when /var/run/docker.sock is mounted. On hosts where docker group GID differs
+# set DOCKER_GID build-arg accordingly.
+ARG DOCKER_GID=999
+RUN addgroup --system appgroup \
+ && addgroup --system --gid ${DOCKER_GID} docker 2>/dev/null || true \
+ && adduser --system --ingroup appgroup appuser \
+ && adduser appuser docker 2>/dev/null || true \
+ && chown -R appuser:appgroup /app/.data
+USER appuser
+
 EXPOSE 8000
+
+VOLUME ["/app/.data"]
 
 # tini reaps zombie processes — important for uvicorn --reload children too.
 # docker-entrypoint.sh auto-resolves the postgres hostname via Docker socket

@@ -2,13 +2,20 @@ import { useEffect, useMemo, useState } from "react";
 import {
   useBoard,
   useBulkUpdateStatus,
+  useCreateRouteSwap,
+  useDeleteRouteSwap,
+  useHolidayLoad,
   usePaceAverage,
   useRecordLoadDuration,
+  useRouteSwapLog,
+  useRouteSwaps,
   useUpsertTruckState,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
 import type { TruckStatus, TruckWithState } from "../types";
 import { useAuth } from "../contexts/AuthContext";
+import { effectiveStatus } from "../utils/truckStatus";
+import { workdayNumbers } from "../components/Clock";
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
@@ -52,6 +59,14 @@ export default function Supervisor() {
   const recordDuration = useRecordLoadDuration();
   const bulk = useBulkUpdateStatus();
 
+  // OOS / route swap data
+  const { data: swaps = [] } = useRouteSwaps(runDate);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
+  const { data: swapLog = [] } = useRouteSwapLog(60);
+  const createSwap = useCreateRouteSwap();
+  const deleteSwap = useDeleteRouteSwap();
+  const { loadDay } = workdayNumbers();
+
   const isPrivileged =
     user?.role === "admin" ||
     user?.role === "fleet" ||
@@ -72,6 +87,53 @@ export default function Supervisor() {
     });
     return c;
   }, [board]);
+
+  // ---------------------------------------------------------------------------
+  // OOS / route-card data
+  // ---------------------------------------------------------------------------
+  const boardByNum = useMemo(() => new Map((board ?? []).map((t) => [t.truck_number, t])), [board]);
+  const swapByRoute = useMemo(() => new Map(swaps.map((s) => [s.route_truck, s])), [swaps]);
+  const swapLoadOnSet = useMemo(() => new Set(swaps.map((s) => s.load_on_truck)), [swaps]);
+
+  // All OOS trucks visible on this run date, sorted
+  const oosTrucks = useMemo(() =>
+    (board ?? [])
+      .filter((t) =>
+        t.truck_type !== "Spare" &&
+        effectiveStatus(t, loadDay, holidayLoad) === "oos" &&
+        (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+      )
+      .sort((a, b) => a.truck_number - b.truck_number),
+    [board, loadDay, holidayLoad],
+  );
+
+  // Available load-on candidates: spares, off-trucks, OOS-but-covered
+  const loadOnCandidates = useMemo(() => {
+    const sorted = [...(board ?? [])].sort((a, b) => a.truck_number - b.truck_number);
+    return {
+      spares:    sorted.filter((t) => t.truck_type === "Spare"),
+      off:       sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off"),
+      oosCovd:   sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && swapByRoute.has(t.truck_number)),
+      other:     sorted.filter((t) => t.truck_type !== "Spare" && !["off","oos"].includes(effectiveStatus(t, loadDay, holidayLoad))),
+    };
+  }, [board, loadDay, holidayLoad, swapByRoute]);
+
+  // Per route_truck: last 2 distinct load_on_truck values historically
+  const recentFor = useMemo(() => {
+    const map = new Map<number, number[]>();
+    const sorted = [...swapLog].sort(
+      (a, b) => new Date(b.run_date).getTime() - new Date(a.run_date).getTime(),
+    );
+    for (const entry of sorted) {
+      const list = map.get(entry.route_truck) ?? [];
+      if (!list.includes(entry.load_on_truck)) list.push(entry.load_on_truck);
+      map.set(entry.route_truck, list.slice(0, 2));
+    }
+    return map;
+  }, [swapLog]);
+
+  // Per-card select state for unassigned OOS trucks
+  const [oosSelects, setOosSelects] = useState<Record<number, string>>({});
 
   // Bulk-action draft
   const [fromStatus, setFromStatus] = useState<TruckStatus>("loaded");
@@ -108,6 +170,183 @@ export default function Supervisor() {
       )}
 
       {isLoading && <p className="text-slate-400">Loading…</p>}
+
+      {/* ── OOS Route Cards ─────────────────────────────────────── */}
+      {oosTrucks.length > 0 && (
+        <section>
+          <div className="mb-3 flex items-center gap-2">
+            <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+              OOS Routes
+            </h3>
+            <span className="rounded-full bg-red-900/60 px-2 py-0.5 text-xs font-bold text-red-300">
+              {oosTrucks.length} truck{oosTrucks.length !== 1 ? "s" : ""}
+            </span>
+            <span className="text-xs text-slate-500">
+              {swaps.filter((s) => oosTrucks.some((t) => t.truck_number === s.route_truck)).length} of {oosTrucks.length} covered
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {oosTrucks.map((truck) => {
+              const swap = swapByRoute.get(truck.truck_number);
+              const covered = !!swap;
+              const recent = recentFor.get(truck.truck_number) ?? [];
+              const selVal = oosSelects[truck.truck_number] ?? "";
+
+              return (
+                <div
+                  key={truck.truck_number}
+                  className={[
+                    "relative rounded-xl border p-4 transition-colors",
+                    covered
+                      ? "border-emerald-700/60 bg-emerald-950/30"
+                      : "border-amber-700/50 bg-amber-950/20",
+                  ].join(" ")}
+                >
+                  {/* Card header */}
+                  <div className="mb-3 flex items-start justify-between gap-2">
+                    <div>
+                      <p className="text-2xl font-black leading-none text-slate-100">
+                        #{truck.truck_number}
+                      </p>
+                      <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wider text-red-400">
+                        Out of Service
+                      </p>
+                    </div>
+                    <span
+                      className={[
+                        "rounded-full px-2 py-0.5 text-[11px] font-bold",
+                        covered
+                          ? "bg-emerald-800/60 text-emerald-300"
+                          : "bg-amber-800/50 text-amber-300",
+                      ].join(" ")}
+                    >
+                      {covered ? "✓ Covered" : "Needs cover"}
+                    </span>
+                  </div>
+
+                  {/* Current assignment */}
+                  {covered && swap ? (
+                    <div className="mb-3 flex items-center justify-between rounded-lg border border-emerald-800/50 bg-emerald-900/20 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">Loading truck:</span>
+                        <span className="text-base font-black text-blue-300">
+                          #{swap.load_on_truck}
+                        </span>
+                        {boardByNum.get(swap.load_on_truck)?.truck_type === "Spare" && (
+                          <span className="rounded bg-cyan-900/50 px-1.5 py-0.5 text-[10px] font-semibold text-cyan-400">
+                            Spare
+                          </span>
+                        )}
+                        {swapLoadOnSet.has(swap.load_on_truck) && (
+                          <span className="text-[10px] text-amber-400">also covers another route</span>
+                        )}
+                      </div>
+                      <button
+                        disabled={!isPrivileged || deleteSwap.isPending}
+                        onClick={() => deleteSwap.mutate({ id: swap.id, runDate, alsoReciprocal: false })}
+                        className="rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ) : (
+                    /* Assignment selector */
+                    <div className="mb-1 space-y-2">
+                      {recent.length > 0 && (
+                        <div className="flex flex-wrap gap-1.5">
+                          {recent.map((n) => {
+                            const t = boardByNum.get(n);
+                            const busy = swapLoadOnSet.has(n);
+                            return (
+                              <button
+                                key={n}
+                                disabled={!isPrivileged || createSwap.isPending}
+                                onClick={() =>
+                                  createSwap.mutate({
+                                    run_date: runDate,
+                                    route_truck: truck.truck_number,
+                                    load_on_truck: n,
+                                  })
+                                }
+                                className={[
+                                  "rounded-md border px-2.5 py-1 text-xs font-semibold transition-colors disabled:opacity-40",
+                                  busy
+                                    ? "border-amber-700/50 bg-amber-950/20 text-amber-300 hover:bg-amber-900/40"
+                                    : "border-slate-600 bg-slate-800 text-slate-200 hover:bg-slate-700",
+                                ].join(" ")}
+                                title={busy ? "Already covering a route today" : undefined}
+                              >
+                                ★ #{n}
+                                {t?.truck_type === "Spare" ? " Spare" : ""}
+                                {busy ? " ⚠" : ""}
+                              </button>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      <select
+                        className="input w-full text-sm"
+                        value={selVal}
+                        disabled={!isPrivileged || createSwap.isPending}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setOosSelects((p) => ({ ...p, [truck.truck_number]: val }));
+                          if (val) {
+                            createSwap.mutate(
+                              { run_date: runDate, route_truck: truck.truck_number, load_on_truck: parseInt(val) },
+                              { onSuccess: () => setOosSelects((p) => { const n = { ...p }; delete n[truck.truck_number]; return n; }) },
+                            );
+                          }
+                        }}
+                      >
+                        <option value="">— Assign covering truck —</option>
+                        {loadOnCandidates.spares.length > 0 && (
+                          <optgroup label="Spare trucks">
+                            {loadOnCandidates.spares.map((t) => (
+                              <option key={t.truck_number} value={t.truck_number}>
+                                #{t.truck_number} — Spare{swapLoadOnSet.has(t.truck_number) ? " ⚠ busy" : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {loadOnCandidates.off.length > 0 && (
+                          <optgroup label="Off today">
+                            {loadOnCandidates.off.map((t) => (
+                              <option key={t.truck_number} value={t.truck_number}>
+                                #{t.truck_number} — Off{swapLoadOnSet.has(t.truck_number) ? " ⚠ busy" : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {loadOnCandidates.oosCovd.length > 0 && (
+                          <optgroup label="OOS — route covered (available driver)">
+                            {loadOnCandidates.oosCovd.map((t) => (
+                              <option key={t.truck_number} value={t.truck_number}>
+                                #{t.truck_number} — OOS / covered
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {loadOnCandidates.other.length > 0 && (
+                          <optgroup label="Route trucks">
+                            {loadOnCandidates.other.map((t) => (
+                              <option key={t.truck_number} value={t.truck_number}>
+                                #{t.truck_number}{swapLoadOnSet.has(t.truck_number) ? " ⚠ already covering" : ""}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </section>
+      )}
 
       {/* Stuck trucks */}
       <section className="card">

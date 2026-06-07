@@ -18,56 +18,48 @@ interface StoredUser {
 }
 
 interface AuthContextValue {
-  token: string | null;
+  /** Non-null when the user is authenticated. Null when logged out or session check pending. */
   user: StoredUser | null;
-  setSession: (token: string, user: StoredUser) => void;
+  /** True while the initial /auth/me session check is in flight. Hide the app until false. */
+  loading: boolean;
+  setSession: (user: StoredUser) => void;
   logout: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [token, setToken] = useState<string | null>(() =>
-    localStorage.getItem("readyroutev2_token"),
-  );
-  const [user, setUser] = useState<StoredUser | null>(() => {
-    const raw = localStorage.getItem("readyroutev2_user");
-    return raw ? (JSON.parse(raw) as StoredUser) : null;
-  });
+/** Non-sensitive display fields persisted in localStorage for instant startup rendering. */
+const LS_USER_KEY = "readyroutev2_user";
 
-  const setSession = useCallback((tok: string, u: StoredUser) => {
-    localStorage.setItem("readyroutev2_token", tok);
-    localStorage.setItem("readyroutev2_user", JSON.stringify(u));
-    setToken(tok);
+export function AuthProvider({ children }: { children: ReactNode }) {
+  // Seed from localStorage so returning users don't flash a blank screen.
+  // The /auth/me check below validates that the httpOnly JWT cookie is still
+  // valid and replaces or clears the cached user accordingly.
+  const [user, setUser] = useState<StoredUser | null>(() => {
+    try {
+      const raw = localStorage.getItem(LS_USER_KEY);
+      return raw ? (JSON.parse(raw) as StoredUser) : null;
+    } catch {
+      return null;
+    }
+  });
+  // true until the first /auth/me resolves — ProtectedRoute blocks render
+  const [loading, setLoading] = useState(true);
+
+  const setSession = useCallback((u: StoredUser) => {
+    localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
     setUser(u);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem("readyroutev2_token");
-    localStorage.removeItem("readyroutev2_user");
-    setToken(null);
+    localStorage.removeItem(LS_USER_KEY);
     setUser(null);
   }, []);
 
-  // Listen for cross-tab logout / 401 wipes
+  // On every mount, verify the httpOnly JWT cookie is still valid by calling
+  // /auth/me. This is the single source of auth truth — no localStorage token.
+  // Also keeps the cached role/display_name in sync with DB changes.
   useEffect(() => {
-    const handler = () => {
-      const tok = localStorage.getItem("readyroutev2_token");
-      if (!tok) {
-        setToken(null);
-        setUser(null);
-      }
-    };
-    window.addEventListener("storage", handler);
-    return () => window.removeEventListener("storage", handler);
-  }, []);
-
-  // Refresh cached user from /auth/me whenever we have a token.
-  // Without this, role changes in the DB (e.g. demoting "admin" → "lead")
-  // never propagate to clients that already had a session cached in
-  // localStorage from before the change.
-  useEffect(() => {
-    if (!token) return;
     let cancelled = false;
     api.get("/auth/me").then((res) => {
       if (cancelled) return;
@@ -77,28 +69,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         display_role: res.data.display_role ?? null,
         display_name: res.data.display_name,
       };
-      setUser((prev) => {
-        if (
-          prev &&
-          prev.username === fresh.username &&
-          prev.role === fresh.role &&
-          prev.display_role === fresh.display_role &&
-          prev.display_name === fresh.display_name
-        ) {
-          return prev;
-        }
-        localStorage.setItem("readyroutev2_user", JSON.stringify(fresh));
-        return fresh;
-      });
+      localStorage.setItem(LS_USER_KEY, JSON.stringify(fresh));
+      setUser(fresh);
     }).catch(() => {
-      // 401 handler in api client will clear the session
+      if (cancelled) return;
+      // 401 = no valid session → clear cached user
+      localStorage.removeItem(LS_USER_KEY);
+      setUser(null);
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
     });
     return () => { cancelled = true; };
-  }, [token]);
+  }, []);
+
+  // Cross-tab sync: if another tab logs out (clears LS_USER_KEY), mirror it here.
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === LS_USER_KEY && !e.newValue) {
+        setUser(null);
+      }
+    };
+    window.addEventListener("storage", handler);
+    return () => window.removeEventListener("storage", handler);
+  }, []);
 
   const value = useMemo(
-    () => ({ token, user, setSession, logout }),
-    [token, user, setSession, logout],
+    () => ({ user, loading, setSession, logout }),
+    [user, loading, setSession, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -114,5 +111,5 @@ export function applySession(
   tok: TokenResponse,
   setSession: AuthContextValue["setSession"],
 ) {
-  setSession(tok.access_token, { username: tok.username, role: tok.role });
+  setSession({ username: tok.username, role: tok.role });
 }

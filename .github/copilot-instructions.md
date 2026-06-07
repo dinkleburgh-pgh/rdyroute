@@ -106,6 +106,23 @@ Top-level categories: `3x10`, `3x5`, `4x6`, `Paper`, `Bulk`.
 | Note cards drawer | `frontend/src/components/NoteCardsDrawer.tsx` |
 | Route swap modal | `frontend/src/components/RouteSwapModal.tsx` |
 | MCP knowledge server | `.mcp/readyroute_server.py` |
+| DB migrations | `alembic/versions/` |
+
+### Schema migrations (Alembic)
+Inline `ALTER TABLE` in `main.py` lifespan has been replaced by Alembic.  
+On startup, `lifespan` calls `alembic upgrade head` automatically.
+
+**Workflow for new migrations:**
+```powershell
+# After changing models.py, generate a migration:
+$env:DATABASE_URL="sqlite:///./truckv2_dev.db"; alembic revision --autogenerate -m "describe_change"
+# Review the generated file in alembic/versions/, then it applies on next startup.
+# To apply immediately in dev:
+alembic upgrade head
+```
+- Always use `render_as_batch=True` (already set in env.py) — required for SQLite ALTER TABLE.
+- Never hand-edit existing migration files after they've been applied.
+- The `alembic_version` table tracks the current schema version.
 
 ### Settings page panel pattern
 Each panel in `Settings.tsx` is a standalone function component.  

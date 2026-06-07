@@ -45,8 +45,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // Take over immediately on update — prevents stale cached assets from
-        // causing blank white pages in Chrome mobile after a new deploy.
+        // skipWaiting + clientsClaim make the new SW activate immediately.
+        // The app (main.tsx) listens for the resulting 'controllerchange' event
+        // and calls location.reload() so the new HTML + new JS chunks load
+        // together — this is what prevents blank pages after a deploy.
         skipWaiting: true,
         clientsClaim: true,
         // Cache the app shell and all static assets
@@ -54,19 +56,12 @@ export default defineConfig({
         // Don't cache API or WebSocket traffic — handled at the app layer
         navigateFallback: "index.html",
         navigateFallbackDenylist: [/^\/api/, /^\/ws/],
-        runtimeCaching: [
-          {
-            // Network-first for the board API so fresh data is preferred when online
-            urlPattern: /^https?:\/\/.*\/api\//,
-            handler: "NetworkFirst",
-            options: {
-              cacheName: "api-cache",
-              networkTimeoutSeconds: 5,
-              cacheableResponse: { statuses: [0, 200] },
-              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
-            },
-          },
-        ],
+        // Do NOT cache API responses in the service worker.
+        // React Query + the offline queue already handle stale-while-revalidate
+        // and optimistic updates. Caching API responses in the SW creates a
+        // second layer of staleness that races with React Query and can silently
+        // serve stale board state for up to maxAgeSeconds after a network failure.
+        runtimeCaching: [],
       },
       devOptions: {
         // Keep disabled in dev — the module-type service worker interferes with

@@ -147,8 +147,8 @@ function _fmtCountdown(secs: number): string {
 // Route Card panel (fleet mode only)
 // ---------------------------------------------------------------------------
 
-function RouteCardPanel({ data, runDate }: { data: TruckWithState[]; runDate: string }) {
-  const [collapsed, setCollapsed] = useState(false);
+function RouteCardPanel({ data, runDate, startExpanded = false }: { data: TruckWithState[]; runDate: string; startExpanded?: boolean }) {
+  const [collapsed, setCollapsed] = useState(!startExpanded);
   const [selectedRoute, setSelectedRoute] = useState<number | null>(null);
   const [selectedSpare, setSelectedSpare] = useState<number | "">("");
 
@@ -401,6 +401,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [selectedTrucks, setSelectedTrucks] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<TruckStatus>("dirty");
   const [pendingOosTruck, setPendingOosTruck] = useState<TruckWithState | null>(null);
+  const [oosAssignOpen, setOosAssignOpen] = useState<Set<number>>(new Set());
+  const [oosCardSelects, setOosCardSelects] = useState<Record<number, string>>({});
   const [pendingOffLoadTruck, setPendingOffLoadTruck] = useState<TruckWithState | null>(null);
   const [pendingOffLoadRoute, setPendingOffLoadRoute] = useState<string>("");
   const [pendingOffLoadError, setPendingOffLoadError] = useState<string | null>(null);
@@ -418,6 +420,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const updateTruck = useUpdateTruck();
   const bulkUpdate = useBulkUpdateStatus();
   const createSwap = useCreateRouteSwap();
+  const deleteSwap = useDeleteRouteSwap();
+  const assignSpare = useAssignSpare();
+  const returnSpare = useReturnSpare();
   const { user } = useAuth();
   const isAdmin = user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor";
   const navigate = useNavigate();
@@ -1015,7 +1020,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 : "hover:text-blue-300";
 
             return (
-            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale",  !fleetMode && detailNum === t.truck_number && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && (filter === "oos" ? oosAssignOpen.has(t.truck_number) : detailNum === t.truck_number) && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {
@@ -1053,6 +1058,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   } else {
                     setConfirmTruck(t);
                   }
+                } else if (filter === "oos" && !fleetMode) {
+                  setOosAssignOpen((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(t.truck_number)) next.delete(t.truck_number);
+                    else next.add(t.truck_number);
+                    return next;
+                  });
                 } else {
                   setDetailNum(detailNum === t.truck_number ? null : t.truck_number);
                 }
@@ -1180,6 +1192,144 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   </span>
                 </div>
               )}
+
+              {/* OOS view: inline assignment panel */}
+              {!fleetMode && filter === "oos" && status === "oos" && (() => {
+                const cov = coveringTruckByRoute.get(t.truck_number);
+                const spareAsgn = spareAssignments.find((a) => a.covering_route_truck === t.truck_number);
+                const swap = routeSwaps.find((s) => s.route_truck === t.truck_number);
+                const isOpen = oosAssignOpen.has(t.truck_number);
+
+                if (cov) {
+                  // Covered — show covering truck + remove
+                  return (
+                    <div
+                      className="mt-1 border-t border-slate-700 pt-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-xs text-slate-400">Covered by</span>
+                          <span className="text-sm font-black text-sky-400">#{cov.num}</span>
+                          {cov.status && (
+                            <span className={clsx("badge text-[10px] py-0", STATUS_BG[cov.status], STATUS_BADGE_TEXT[cov.status])}>
+                              {STATUS_LABELS[cov.status]}
+                            </span>
+                          )}
+                        </div>
+                        <button
+                          className="rounded px-2 py-1 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                          disabled={returnSpare.isPending || deleteSwap.isPending}
+                          onClick={() => {
+                            if (spareAsgn) returnSpare.mutate(spareAsgn.id);
+                            else if (swap) deleteSwap.mutate({ id: swap.id, runDate });
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    </div>
+                  );
+                }
+
+                if (!isOpen) {
+                  // Not covered, collapsed — show tap hint
+                  return (
+                    <div className="mt-1 border-t border-slate-700 pt-2 text-center">
+                      <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
+                    </div>
+                  );
+                }
+
+                // Not covered, expanded — show picker
+                const sorted = [...(data ?? [])].sort((a, b) => a.truck_number - b.truck_number);
+                const lastUsedNums = getSwapHistory(t.truck_number);
+                const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
+                const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
+                const offTrucks   = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) === "off");
+                const otherTrucks = sorted.filter((x) => {
+                  if (x.truck_type === "Spare") return false;
+                  const s = effectiveStatus(x, runDayNum, holidayLoad);
+                  return s !== "off" && s !== "oos";
+                });
+
+                return (
+                  <div
+                    className="mt-1 space-y-2 border-t border-slate-700 pt-2"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="flex gap-1.5">
+                      <select
+                        className="input flex-1 text-xs"
+                        value={oosCardSelects[t.truck_number] ?? ""}
+                        onChange={(e) => setOosCardSelects((p) => ({ ...p, [t.truck_number]: e.target.value }))}
+                      >
+                        <option value="">— assign truck —</option>
+                        {lastUsed.length > 0 && (
+                          <optgroup label="Last Used">
+                            {lastUsed.map((x) => (
+                              <option key={x.truck_number} value={x.truck_number}>
+                                #{x.truck_number} — {x.truck_type === "Spare" ? "Spare" : (x.state?.status ?? "dirty")}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {spareTrucks.length > 0 && (
+                          <optgroup label="Spare Trucks">
+                            {spareTrucks.map((x) => (
+                              <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {offTrucks.length > 0 && (
+                          <optgroup label={`Off — Day ${runDayNum}`}>
+                            {offTrucks.map((x) => (
+                              <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {otherTrucks.length > 0 && (
+                          <optgroup label="Other">
+                            {otherTrucks.map((x) => (
+                              <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} ({x.state?.status ?? "dirty"})</option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
+                      <button
+                        className="rounded-lg bg-green-700 px-3 text-xs font-semibold disabled:opacity-50"
+                        disabled={
+                          !oosCardSelects[t.truck_number] ||
+                          assignSpare.isPending || createSwap.isPending
+                        }
+                        onClick={async () => {
+                          const pickedNum = Number(oosCardSelects[t.truck_number]);
+                          const picked = (data ?? []).find((x) => x.truck_number === pickedNum);
+                          if (picked?.truck_type === "Spare") {
+                            await assignSpare.mutateAsync({
+                              run_date: runDate,
+                              spare_truck_number: pickedNum,
+                              covering_route_truck: t.truck_number,
+                            });
+                          } else {
+                            await createSwap.mutateAsync({
+                              run_date: runDate,
+                              route_truck: t.truck_number,
+                              load_on_truck: pickedNum,
+                              two_way: false,
+                            });
+                          }
+                          recordSwapHistory(t.truck_number, pickedNum);
+                          setOosCardSelects((p) => { const n = { ...p }; delete n[t.truck_number]; return n; });
+                          setOosAssignOpen((prev) => { const next = new Set(prev); next.delete(t.truck_number); return next; });
+                        }}
+                      >
+                        {assignSpare.isPending || createSwap.isPending ? "…" : "Assign"}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {fleetMode && (
                 <div className="mt-auto flex flex-col gap-2">

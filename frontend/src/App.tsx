@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import Layout from "./components/Layout";
+import ErrorBoundary from "./components/ErrorBoundary";
 import { useSettings } from "./api/hooks";
 import useWakeLock from "./hooks/useWakeLock";
 import Login from "./pages/Login";
@@ -28,8 +29,8 @@ const queryClient = new QueryClient({
 });
 
 const router = createBrowserRouter([
-  { path: "/login", element: <Login /> },
-  { path: "/driver/:token", element: <DriverNotes /> },
+  { path: "/login", element: <Login />, errorElement: <ErrorBoundary /> },
+  { path: "/driver/:token", element: <DriverNotes />, errorElement: <ErrorBoundary /> },
   {
     path: "/",
     element: (
@@ -37,6 +38,7 @@ const router = createBrowserRouter([
         <Layout />
       </ProtectedRoute>
     ),
+    errorElement: <ErrorBoundary />,
     children: [
       { index: true, element: <RunDay /> },
       { path: "board", element: <Board /> },

@@ -529,3 +529,15 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class LoginAttempt(Base):
+    """
+    Persists failed/rate-limit login attempts across server restarts.
+    Rows are pruned hourly; only the last RATE_LIMIT_WINDOW seconds are kept.
+    """
+    __tablename__ = "login_attempts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ip_address: Mapped[str] = mapped_column(String(45), nullable=False, index=True)
+    attempted_at: Mapped[float] = mapped_column(Float, nullable=False)  # unix timestamp

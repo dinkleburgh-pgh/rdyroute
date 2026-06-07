@@ -3,7 +3,7 @@ import axios, { AxiosError, AxiosRequestConfig } from "axios";
 // All requests go through the Vite dev-server proxy at /api → http://127.0.0.1:8000
 export const api = axios.create({
   baseURL: "/api",
-  withCredentials: true,
+  withCredentials: true,  // required for httpOnly JWT + session cookies
 });
 
 /**
@@ -16,27 +16,34 @@ export function publicBase(): string {
   return import.meta.env.VITE_PUBLIC_URL || (typeof window !== "undefined" ? window.location.origin : "");
 }
 
-// Attach JWT from localStorage on every request
+// JWT is now stored in an httpOnly cookie set by the backend — the browser
+// sends it automatically. No Authorization header needed from the client.
+// We keep this interceptor only so legacy API clients using the old
+// Bearer token (e.g. OpenAPI docs, scripts) still work transparently.
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem("readyroutev2_token");
-  if (token) {
+  if (token && !config.headers?.Authorization) {
+    config.headers = config.headers ?? {};
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
 // On 401, try once to mint a fresh JWT using the long-lived session cookie.
-// Only wipe localStorage and bounce to /login if that refresh also fails.
+// Only wipe the cached user and bounce to /login if that refresh also fails.
 type RetryConfig = AxiosRequestConfig & { _retried?: boolean };
 
-let refreshInflight: Promise<string | null> | null = null;
+let refreshInflight: Promise<boolean> | null = null;
 
 function clearSession() {
-  localStorage.removeItem("readyroutev2_token");
+  // The JWT lives in an httpOnly cookie — the backend clears it on /auth/logout.
+  // We only clear the non-sensitive display info from localStorage here.
   localStorage.removeItem("readyroutev2_user");
+  // Also clear any legacy token from before the httpOnly cookie migration.
+  localStorage.removeItem("readyroutev2_token");
 }
 
-async function tryRefresh(): Promise<string | null> {
+async function tryRefresh(): Promise<boolean> {
   if (refreshInflight) return refreshInflight;
   refreshInflight = (async () => {
     try {
@@ -46,18 +53,18 @@ async function tryRefresh(): Promise<string | null> {
         {},
         { withCredentials: true },
       );
-      const token: string | undefined = res.data?.access_token;
+      // Backend sets a fresh httpOnly JWT cookie. Update localStorage display info.
       const user = res.data
         ? { username: res.data.username, role: res.data.role }
         : null;
-      if (token) {
-        localStorage.setItem("readyroutev2_token", token);
-        if (user) localStorage.setItem("readyroutev2_user", JSON.stringify(user));
-        return token;
+      if (user) localStorage.setItem("readyroutev2_user", JSON.stringify(user));
+      // Keep legacy token in localStorage for any old Bearer-header fallback.
+      if (res.data?.access_token) {
+        localStorage.setItem("readyroutev2_token", res.data.access_token);
       }
-      return null;
+      return true;
     } catch {
-      return null;
+      return false;
     } finally {
       refreshInflight = null;
     }
@@ -80,10 +87,12 @@ api.interceptors.response.use(
 
     if (status === 401 && cfg && !cfg._retried && !isAuthEndpoint) {
       cfg._retried = true;
-      const newToken = await tryRefresh();
-      if (newToken) {
-        cfg.headers = { ...(cfg.headers ?? {}), Authorization: `Bearer ${newToken}` };
-        return api.request(cfg);
+      const refreshed = await tryRefresh();
+      if (refreshed) {
+        // Retry without the old Bearer header so the httpOnly cookie takes over.
+        const retryCfg = { ...cfg };
+        if (retryCfg.headers) delete (retryCfg.headers as Record<string, unknown>).Authorization;
+        return api.request(retryCfg);
       }
       clearSession();
     } else if (status === 401) {

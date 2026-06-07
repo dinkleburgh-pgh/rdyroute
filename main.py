@@ -49,46 +49,25 @@ def _should_log_error(key: str) -> bool:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _t_start = time.monotonic()
-    Base.metadata.create_all(bind=engine)
+
+    # Run all pending Alembic migrations before accepting traffic.
+    # This replaces the old inline ALTER TABLE statements and create_all().
+    # Alembic applies migrations idempotently: already-applied versions are skipped.
+    from alembic.config import Config as _AlembicConfig
+    from alembic import command as _alembic_command
+    import os as _os
+    _alembic_cfg = _AlembicConfig(_os.path.join(_os.path.dirname(__file__), "alembic.ini"))
+    _alembic_cfg.set_main_option("sqlalchemy.url", str(engine.url))
+    try:
+        _alembic_command.upgrade(_alembic_cfg, "head")
+        log.info("Alembic: migrations applied (or already current)")
+    except Exception as _alembic_err:
+        log.error("Alembic migration failed: %s — falling back to create_all()", _alembic_err)
+        Base.metadata.create_all(bind=engine)
+
     db = SessionLocal()
     try:
-        # Status enum migration: legacy combined 'oos_spare' status was
-        # split into separate 'oos' and 'spare' values. Map existing rows:
-        # any with a covering route assignment → spare, otherwise → oos.
-        from sqlalchemy import text as _sql_text
-        try:
-            db.execute(_sql_text(
-                "UPDATE truck_states SET status='spare' "
-                "WHERE status='oos_spare' AND oos_spare_route IS NOT NULL"
-            ))
-            db.execute(_sql_text(
-                "UPDATE truck_states SET status='oos' WHERE status='oos_spare'"
-            ))
-            db.commit()
-        except Exception:  # noqa: BLE001 - dev migration, ignore if column missing
-            db.rollback()
-        # Column migration: add scheduled_off_days if it doesn't exist yet
-        try:
-            db.execute(_sql_text(
-                "ALTER TABLE trucks ADD COLUMN scheduled_off_days JSON DEFAULT '[]'"
-            ))
-            db.commit()
-        except Exception:  # noqa: BLE001 - column already exists
-            db.rollback()
-        # Column migrations: add ip_address and user_agent to sessions table
-        for _col, _typedef in [("ip_address", "VARCHAR(45)"), ("user_agent", "VARCHAR(256)")]:
-            try:
-                db.execute(_sql_text(f"ALTER TABLE sessions ADD COLUMN {_col} {_typedef}"))
-                db.commit()
-            except Exception:  # noqa: BLE001 - column already exists
-                db.rollback()
-        # Column migration: add qr_token to trucks for driver QR code access
-        try:
-            db.execute(_sql_text("ALTER TABLE trucks ADD COLUMN qr_token VARCHAR(36)"))
-            db.commit()
-        except Exception:  # noqa: BLE001 - column already exists
-            db.rollback()
-        # Backfill qr_token for any existing trucks that don't have one yet
+        # Data backfill: ensure all trucks have a QR token (safe to re-run; skips non-null)
         import uuid as _uuid
         from sqlalchemy import select as _select
         from models import Truck as _Truck
@@ -135,9 +114,10 @@ async def lifespan(app: FastAPI):
         log.warning("Health-confirm: server did not open port %d within 60 s", _port)
 
     async def _cleanup_expired_sessions() -> None:
-        """Hourly task to prune expired session rows so the table doesn't grow unboundedly."""
+        """Hourly task to prune expired session rows and old login attempt records."""
         from datetime import timezone as _tz
         from sqlalchemy import text as _t2
+        from routers.auth import _prune_login_attempts
         while True:
             await asyncio.sleep(3600)
             _db = SessionLocal()
@@ -146,6 +126,7 @@ async def lifespan(app: FastAPI):
                 _now = _dt.now(_tz.utc).timestamp()
                 _db.execute(_t2("DELETE FROM sessions WHERE expires_ts <= :now"), {"now": _now})
                 _db.commit()
+                _prune_login_attempts(_db)
             except Exception:  # noqa: BLE001
                 pass
             finally:
@@ -196,10 +177,20 @@ _origins = (
     else ["*"]
 )
 
+# Browsers reject credentialed requests (withCredentials:true) to wildcard
+# origins. Log a warning so it's obvious in prod logs if misconfigured.
+if "*" in _origins:
+    import warnings as _w
+    _w.warn(
+        "CORS_ORIGINS is set to '*'. This disables cookie-based session auth "
+        "for browsers. Set CORS_ORIGINS=https://yourdomain.com in production.",
+        stacklevel=1,
+    )
+
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_origins,
-    allow_credentials=True,
+    allow_credentials="*" not in _origins,  # credentials only when origins are explicit
     allow_methods=["*"],
     allow_headers=["*"],
 )

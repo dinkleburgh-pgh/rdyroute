@@ -24,12 +24,18 @@ class Settings(BaseSettings):
 settings = Settings()
 
 if settings.secret_key == "change-me-to-a-long-random-string":
-    import warnings
-    warnings.warn(
+    _msg = (
         "SECRET_KEY is using the insecure default value. "
-        "Set a strong random secret in your .env file before deploying to production.",
-        stacklevel=1,
+        "Set SECRET_KEY to a strong random string in your .env file.\n"
+        "Generate one with:  python -c \"import secrets; print(secrets.token_hex(32))\""
     )
+    if not _is_sqlite:
+        # Hard-fail in production (Postgres) — never run with the default key.
+        raise RuntimeError(_msg)
+    else:
+        # Warn in development (SQLite) — still usable locally.
+        import warnings as _warn
+        _warn.warn(_msg, stacklevel=1)
 
 _is_sqlite = settings.database_url.startswith("sqlite")
 

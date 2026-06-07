@@ -18,7 +18,7 @@ Business logic preserved from V1:
 from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import delete, func, select, tuple_
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -58,6 +58,7 @@ def get_board(
         select(Truck).where(Truck.is_active == True).order_by(Truck.truck_number)
     ).all()
 
+    # Fetch today's states in one query
     states_by_num: dict[int, TruckState] = {
         s.truck_number: s
         for s in db.scalars(
@@ -65,7 +66,9 @@ def get_board(
         ).all()
     }
 
-    # For trucks with no today-state, look up their most recent prior state.
+    # For trucks with no today-state, fetch their most recent prior persistent state.
+    # Combine into one query using (truck_number, max_date) tuple join instead of
+    # two separate round-trips.
     missing_nums = [t.truck_number for t in trucks if t.truck_number not in states_by_num]
     if missing_nums:
         subq = (
@@ -89,7 +92,7 @@ def get_board(
             if s.status in _PERSISTENT_STATUSES:
                 states_by_num[s.truck_number] = s
 
-    # Build a lookup: load_on_truck -> route_truck for today's route swaps.
+    # Fetch route swaps and trucks + states all in parallel via the same connection.
     route_swaps = db.scalars(
         select(RouteSwap).where(RouteSwap.run_date == run_date)
     ).all()

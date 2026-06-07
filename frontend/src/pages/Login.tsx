@@ -16,6 +16,8 @@ export default function Login() {
     setError(null);
     try {
       const tok = await login.mutateAsync({ username, password });
+      // Backend sets httpOnly JWT + session cookies automatically.
+      // We just need to update the React auth state.
       applySession(tok, setSession);
       nav("/", { replace: true });
     } catch (err: unknown) {

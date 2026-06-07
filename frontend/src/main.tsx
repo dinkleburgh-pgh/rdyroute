@@ -9,6 +9,20 @@ console.info(
   "color:#94a3b8",
 );
 
+// When a new service worker takes over (skipWaiting + clientsClaim), the
+// current page still holds references to old JS chunk hashes that no longer
+// exist in the new precache → 404s → blank page.
+// Reloading on controllerchange ensures the fresh HTML + fresh chunks load
+// together, eliminating the blank-page-on-deploy problem.
+if ("serviceWorker" in navigator) {
+  let _reloading = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (_reloading) return;
+    _reloading = true;
+    window.location.reload();
+  });
+}
+
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <App />

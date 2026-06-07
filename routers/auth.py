@@ -5,9 +5,9 @@ Covers user management, account requests, login, and session handling.
 
 V1 roles (fleet > supervisor > lead > atl > loader > unloader > guest) are
 preserved verbatim.  Passwords are bcrypt-hashed.  Login issues a JWT that
-the React frontend can store as a Bearer token.  A parallel server-side
-session table mirrors the V1 .truck_sessions.json for clients that prefer
-cookie-based auth.
+the React frontend stores as a Bearer token (and as an httpOnly cookie for
+XSS-safe browser clients).  A parallel server-side session table mirrors the
+V1 .truck_sessions.json for clients that prefer cookie-based auth.
 """
 
 import time
@@ -19,11 +19,11 @@ import bcrypt
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from database import get_db, settings
-from models import AuthRequest, AuthRequestStatus, AuthRole, Session as SessionModel, User
+from models import AuthRequest, AuthRequestStatus, AuthRole, LoginAttempt, Session as SessionModel, User
 from schemas import (
     AuthRequestCreate,
     AuthRequestOut,
@@ -39,29 +39,65 @@ from schemas import (
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/token")
+# Optional variant — returns None instead of 401 when no Authorization header.
+# Used by get_current_user so it can fall back to the httpOnly JWT cookie.
+_optional_oauth2 = OAuth2PasswordBearer(tokenUrl="/auth/token", auto_error=False)
 
 SESSION_COOKIE = "readyroutev2_sid"
+JWT_COOKIE     = "readyroutev2_jwt"
 
 # ---------------------------------------------------------------------------
-# Login rate limiter (in-process; resets on restart — intentional for dev)
+# Login rate limiter
+# In-memory cache warmed from DB on first use; writes persist across restarts.
 # 10 attempts per 5-minute window, keyed by source IP.
 # ---------------------------------------------------------------------------
 
-_login_attempts: dict[str, list[float]] = defaultdict(list)
 _RATE_LIMIT_WINDOW = 300   # seconds
 _RATE_LIMIT_MAX    = 10    # attempts per window
 
+# In-memory cache: ip → list of timestamps (unix float)
+_attempt_cache: dict[str, list[float]] = defaultdict(list)
+_cache_warmed = False
 
-def _check_rate_limit(ip: str) -> None:
-    now = time.monotonic()
-    window = _login_attempts[ip]
-    _login_attempts[ip] = [t for t in window if now - t < _RATE_LIMIT_WINDOW]
-    if len(_login_attempts[ip]) >= _RATE_LIMIT_MAX:
+
+def _warm_attempt_cache(db: Session) -> None:
+    """Load recent attempts from DB into memory (called once per process start)."""
+    global _cache_warmed
+    if _cache_warmed:
+        return
+    _cache_warmed = True
+    cutoff = time.time() - _RATE_LIMIT_WINDOW
+    rows = db.scalars(
+        select(LoginAttempt).where(LoginAttempt.attempted_at >= cutoff)
+    ).all()
+    for row in rows:
+        _attempt_cache[row.ip_address].append(row.attempted_at)
+
+
+def _check_rate_limit(ip: str, db: Session) -> None:
+    _warm_attempt_cache(db)
+    now = time.time()
+    cutoff = now - _RATE_LIMIT_WINDOW
+    # Prune stale in-memory entries
+    _attempt_cache[ip] = [t for t in _attempt_cache[ip] if t >= cutoff]
+    if len(_attempt_cache[ip]) >= _RATE_LIMIT_MAX:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many login attempts. Please wait 5 minutes and try again.",
         )
-    _login_attempts[ip].append(now)
+    # Record this attempt in-memory and in DB
+    _attempt_cache[ip].append(now)
+    db.add(LoginAttempt(ip_address=ip, attempted_at=now))
+    # Don't commit here — let the caller commit (or it commits with login success/failure)
+
+
+def _prune_login_attempts(db: Session) -> None:
+    """Delete login attempt rows older than the rate-limit window. Called hourly."""
+    cutoff = time.time() - _RATE_LIMIT_WINDOW
+    db.execute(delete(LoginAttempt).where(LoginAttempt.attempted_at < cutoff))
+    db.commit()
+    # Reset in-memory cache so stale IPs are released
+    _attempt_cache.clear()
 
 # ---------------------------------------------------------------------------
 # Password helpers
@@ -110,18 +146,23 @@ def _decode_token(token: str) -> dict:
 # ---------------------------------------------------------------------------
 
 def get_current_user(
-    token: str = Depends(oauth2_scheme),
+    bearer_token: str | None = Depends(_optional_oauth2),
+    jwt_cookie: str | None = Cookie(default=None, alias=JWT_COOKIE),
     db: Session = Depends(get_db),
 ) -> User:
+    token = bearer_token or jwt_cookie
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     claims = _decode_token(token)
     username = claims.get("sub")
     sid = claims.get("sid")
     if not username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject")
-    user = db.scalars(select(User).where(User.username == username)).first()
-    if user is None or not user.is_enabled:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or disabled")
-    # Validate the server-side session so logout/revoke immediately invalidates tokens.
+    # Validate server-side session first (primary-key lookup = single index hit).
     if sid:
         now_ts = datetime.now(timezone.utc).timestamp()
         sess = db.get(SessionModel, sid)
@@ -131,6 +172,9 @@ def get_current_user(
                 detail="Session revoked or expired",
                 headers={"WWW-Authenticate": "Bearer"},
             )
+    user = db.scalars(select(User).where(User.username == username)).first()
+    if user is None or not user.is_enabled:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or disabled")
     return user
 
 
@@ -150,22 +194,33 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)):
     client_ip = request.client.host if request.client else "unknown"
-    _check_rate_limit(client_ip)
+    _check_rate_limit(client_ip, db)
 
     user = db.scalars(select(User).where(User.username == payload.username.lower())).first()
     if user is None or not user.is_enabled or not _verify_password(payload.password, user.hashed_password):
+        db.commit()  # persist the failed attempt row
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     ua = request.headers.get("user-agent", "")[:256]
     sid = _write_server_session(user.username, user.role.value, db, ip=client_ip, ua=ua)
     token = _create_access_token(user.username, user.role.value, sid)
 
+    # Session cookie — long-lived, used for transparent JWT refresh.
     response.set_cookie(
         SESSION_COOKIE,
         sid,
         httponly=True,
         samesite="lax",
         max_age=settings.session_expiry_days * 86400,
+    )
+    # JWT cookie — short-lived, allows browser clients to skip localStorage.
+    # XSS-safe: httpOnly prevents JS access. Sent automatically by the browser.
+    response.set_cookie(
+        JWT_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.access_token_expire_minutes * 60,
     )
 
     return TokenResponse(access_token=token, role=user.role, username=user.username)
@@ -195,6 +250,7 @@ def logout(
             db.delete(sess)
             db.commit()
     response.delete_cookie(SESSION_COOKIE)
+    response.delete_cookie(JWT_COOKIE)
 
 
 @router.post("/refresh", response_model=TokenResponse)
@@ -243,6 +299,14 @@ def refresh(
     )
 
     token = _create_access_token(user.username, user.role.value, new_sid)
+    # Also refresh the JWT cookie so the browser client's httpOnly cookie stays valid.
+    response.set_cookie(
+        JWT_COOKIE,
+        token,
+        httponly=True,
+        samesite="lax",
+        max_age=settings.access_token_expire_minutes * 60,
+    )
     return TokenResponse(access_token=token, role=user.role, username=user.username)
 
 

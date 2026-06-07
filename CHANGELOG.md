@@ -8,6 +8,29 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-07
+
+### Security / Infrastructure
+- **JWT stored in httpOnly cookie** (`readyroutev2_jwt`) — removed JWT from localStorage; login/logout/refresh all set/clear the cookie; `get_current_user` accepts Bearer token (legacy) or cookie; `client.ts` falls back to localStorage only if still present.
+- **DB-backed login rate limiter** — `LoginAttempt` table (ip, timestamp) replaces in-memory dict; survives restarts; hourly prune via lifespan cleanup task.
+- **Settings endpoints require auth** — all 4 CRUD routes now require a valid session; non-admins see only their own `personal_note_` key + a whitelist of readable settings; writes require admin except own personal note.
+- **SECRET_KEY hard-fail on startup** — Postgres deployment raises `RuntimeError` if `SECRET_KEY` is the default dev value; SQLite warns instead.
+- **Non-root Docker user** — `appuser` added in Dockerfile with configurable `DOCKER_GID`; container no longer runs as root.
+- **Resource limits** — `deploy.resources.limits` added to backend (1 CPU / 512 MB) and frontend (0.5 CPU / 128 MB) in `docker-compose.prod.yml`; all overridable via env vars.
+- **CORS credentials guard** — `allow_credentials=False` when `allow_origins=["*"]`; startup warning emitted.
+
+### Added
+- **Alembic migrations** — inline `ALTER TABLE` in lifespan replaced by `alembic upgrade head`; `alembic/` initialized with `render_as_batch=True` for SQLite; initial schema migration generated and stamped.
+- **ErrorBoundary** — glassmorphism error page with ambient glow, emoji icon (🗺️/🔒/💥), HTTP status chip, Go Back + Home buttons; added as `errorElement` on all three route groups.
+- **PWA blank-page fix** — `controllerchange` event listener in `main.tsx` triggers `window.location.reload()` when a new service worker takes over; spinner shown in `ProtectedRoute` while auth state loads.
+- **Supervisor OOS Route Cards** — `/supervisor` page shows a card per OOS truck: covered trucks display covering truck # / status badge / Remove button; uncovered trucks show a grouped dropdown (Last Used ★, Spare Trucks, Off Today, Other) + Assign button.
+- **Board OOS inline assignment** — Board `?status=oos` view replaces the separate RouteCardPanel with per-card inline assignment: tap a card to expand a grouped truck picker + Assign; covered cards show covering truck # / Remove inline.
+
+### Changed
+- **Auth flow** — `AuthContext` no longer reads localStorage token on boot; uses `/auth/me` cookie check; `loading` state gates `ProtectedRoute` rendering; `setSession` takes `StoredUser` only.
+
+---
+
 ## [Unreleased] — 2026-06-02
 
 ### Added
