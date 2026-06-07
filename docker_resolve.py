@@ -77,7 +77,7 @@ def cmd_portainer_redeploy():
     Required env vars (set in docker-compose.prod.yml or .env.production):
       PORTAINER_URL         e.g. https://192.168.1.132:31015
       PORTAINER_API_KEY     Portainer access token (Settings → Users → Access tokens)
-      PORTAINER_STACK_ID    numeric stack id (38 for readyroute)
+      PORTAINER_STACK_ID    numeric stack id (42 for readyroute)
       PORTAINER_ENDPOINT_ID numeric endpoint/environment id (3 for local)
     """
     import urllib.request
@@ -102,6 +102,10 @@ def cmd_portainer_redeploy():
     # Portainer's git/redeploy endpoint replaces env with whatever is passed;
     # sending [] would clear all stack vars (including the PORTAINER_* ones).
     current_env: list = []
+    ctx = ssl.create_default_context()
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE  # self-signed cert on Portainer
+
     try:
         get_req = urllib.request.Request(
             f"{url}/api/stacks/{stack}",
@@ -114,17 +118,6 @@ def cmd_portainer_redeploy():
         sys.stderr.write(f"portainer_redeploy: could not fetch stack env (continuing): {exc}\n")
 
     endpoint = f"{url}/api/stacks/{stack}/git/redeploy?endpointId={ep}"
-    payload = json.dumps({
-        "prune": False,
-        "pullImage": True,
-        "repositoryAuthentication": False,
-        "repositoryReferenceName": "refs/heads/main",
-        "env": current_env,
-    }).encode()
-
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE  # self-signed cert on Portainer
 
     req = urllib.request.Request(
         endpoint,
