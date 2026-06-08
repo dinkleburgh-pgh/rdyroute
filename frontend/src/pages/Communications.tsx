@@ -33,6 +33,21 @@ function RoleBadge({ role, username }: { role?: string | null; username?: string
   );
 }
 
+function DeleteButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button
+      className="shrink-0 rounded p-1 text-slate-600 hover:bg-slate-800 hover:text-red-400 transition-colors"
+      onClick={onClick}
+      title="Delete message"
+    >
+      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
+        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
+        <path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z" />
+      </svg>
+    </button>
+  );
+}
+
 function dayLabel(iso: string) {
   const d = new Date(iso);
   const today = new Date();
@@ -121,7 +136,7 @@ export default function Communications() {
       </div>
 
       {/* Message list */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-3 md:px-5">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-4 md:px-5">
         {isLoading && (
           <p className="py-10 text-center text-sm text-slate-500">Loading…</p>
         )}
@@ -140,66 +155,69 @@ export default function Communications() {
               <div className="h-px flex-1 bg-slate-800" />
             </div>
 
-            {msgs.map((m) => {
+            {msgs.map((m, idx) => {
               const isMe = m.username === user?.username;
               const canDelete = !m.is_deleted && (isAdmin || m.username === user?.username);
+              // Consecutive run detection — hide name/role/time on follow-up messages
+              const isContinuation =
+                idx > 0 &&
+                msgs[idx - 1].username === m.username &&
+                !msgs[idx - 1].is_deleted &&
+                !m.is_deleted;
+
               return (
                 <div
                   key={m.id}
-                  className={`group mb-3 flex items-start gap-2.5 ${isMe ? "flex-row-reverse" : ""}`}
+                  className={`flex flex-col ${isMe ? "items-end" : "items-start"} ${
+                    isContinuation ? "mb-0.5 mt-0.5" : "mb-3"
+                  }`}
                   onMouseEnter={() => setHoveredId(m.id)}
                   onMouseLeave={() => setHoveredId(null)}
                 >
-                  {/* Sender identity column */}
-                  <div className={`flex shrink-0 flex-col gap-1 pt-0.5 ${isMe ? "items-end" : "items-start"}`} style={{ minWidth: "4rem" }}>
-                    <span className={`text-base font-bold leading-tight ${
-                      isMe ? "text-blue-300" : "text-slate-200"
-                    }`}>{m.username}</span>
-                    <RoleBadge role={m.sender_role} username={m.username} />
-                  </div>
+                  {/* Metadata header — only on first message in a run */}
+                  {!isContinuation && (
+                    <div className={`mb-1 flex items-center gap-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
+                      <span className={`text-sm font-semibold leading-none ${isMe ? "text-blue-300" : "text-slate-200"}`}>
+                        {m.username}
+                      </span>
+                      <RoleBadge role={m.sender_role} username={m.username} />
+                      <span className="text-[10px] text-slate-500 leading-none">
+                        {timeStr(m.sent_at)}
+                      </span>
+                      {canDelete && hoveredId === m.id && (
+                        <DeleteButton
+                          onClick={() => deleteMsg.mutate({ id: m.id, username: user!.username, role: user!.role })}
+                        />
+                      )}
+                    </div>
+                  )}
 
-                  {/* Bubble + delete button row */}
-                  <div className={`flex min-w-0 flex-1 flex-col gap-0.5 ${isMe ? "items-end" : "items-start"}`}>
-                    <div className={`flex items-start gap-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
+                  {/* Bubble row */}
+                  <div className={`flex items-center gap-1.5 max-w-[80%] ${isMe ? "flex-row-reverse" : ""}`}>
                     <div
-                      className={`relative max-w-full rounded-2xl px-3.5 py-2 text-base leading-relaxed break-words ${
+                      className={[
+                        "rounded-2xl px-3.5 py-2 text-base leading-relaxed break-words",
+                        // Pointed corner on the header side for first-in-run messages
+                        !isContinuation && isMe  ? "rounded-tr-sm" : "",
+                        !isContinuation && !isMe ? "rounded-tl-sm" : "",
                         m.is_deleted
                           ? "bg-slate-800/50 italic text-slate-500"
                           : isMe
-                          ? "rounded-tr-sm bg-blue-600 text-white"
-                          : "rounded-tl-sm bg-slate-800 text-slate-100"
-                      }`}
+                          ? "bg-blue-600 text-white"
+                          : "bg-slate-800 text-slate-100",
+                      ].filter(Boolean).join(" ")}
                       style={{ wordBreak: "break-word" }}
                     >
-                        {m.is_deleted ? "[deleted]" : m.message}
-                      </div>
-
-                      {/* Delete button */}
-                      {canDelete && hoveredId === m.id && (
-                        <button
-                          className="shrink-0 rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-red-400 transition-colors"
-                          onClick={() =>
-                            deleteMsg.mutate({
-                              id: m.id,
-                              username: user!.username,
-                              role: user!.role,
-                            })
-                          }
-                          title="Delete message"
-                        >
-                          <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-                            <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
-                            <path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z" />
-                          </svg>
-                        </button>
-                      )}
+                      {m.is_deleted ? "[deleted]" : m.message}
                     </div>
-                    {/* closes inner bubble+delete row */}
 
-                    {/* Timestamp */}
-                    <span className="text-[10px] text-slate-600">{timeStr(m.sent_at)}</span>
+                    {/* Delete on hover for continuation messages (no metadata line) */}
+                    {canDelete && isContinuation && hoveredId === m.id && (
+                      <DeleteButton
+                        onClick={() => deleteMsg.mutate({ id: m.id, username: user!.username, role: user!.role })}
+                      />
+                    )}
                   </div>
-                  {/* closes bubble column */}
                 </div>
               );
             })}
@@ -239,3 +257,5 @@ export default function Communications() {
     </div>
   );
 }
+
+
