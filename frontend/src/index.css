@@ -13,6 +13,11 @@
   .text-status-unfinished { color: #dc2626; }
 }
 
+@keyframes slideIn {
+  from { opacity: 0; transform: translateX(8px); }
+  to   { opacity: 1; transform: translateX(0); }
+}
+
 /* Scale the entire UI proportionally on non-mobile screens.
    At 1920px wide the root font stays at the default 16px.
    Smaller/larger viewports scale linearly so the layout looks identical. */

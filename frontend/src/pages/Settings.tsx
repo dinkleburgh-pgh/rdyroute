@@ -4,7 +4,6 @@ import clsx from "clsx";
 import {
   useAddTruck,
   useAuditEntries,
-  useAuthRequests,
   useBoard,
   useBulkUpdateStatus,
   useResetWorkday,
@@ -15,11 +14,8 @@ import {
   useUnloadsDayOverride,
   useSetUnloadsDayOverride,
 
-  useChangePassword,
   useCreateNotice,
-  useCreateUser,
   useDeleteNotice,
-  useDeleteUser,
   useFleet,
   useNotices,
   usePaceAverage,
@@ -27,27 +23,28 @@ import {
   useRecordLoadDuration,
   useRemoveTruck,
   useRegenerateQR,
-  useResolveAuthRequest,
   useSettings,
   useTrackedItems,
   useUpdateCensorWords,
   useUpdateNotice,
   useUpdateTrackedItems,
   useUpdateTruck,
-  useUpdateUser,
   useUpdateStatus,
   useUpsertSetting,
   useTriggerUpdate,
   useTriggerPushUpdate,
   useCheckForUpdate,
   useUpsertTruckState,
-  useUsers,
 } from "../api/hooks";
 import type { TrackedItem } from "../api/hooks";
 import { api, todayIso, publicBase } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { useAuth } from "../contexts/AuthContext";
 import type { AppSetting, AuthRole, NoticeSeverity, Truck, TruckStatus, TruckType, TruckWithState } from "../types";
+import UsersPanel from "../components/management/UsersPanel";
+import RequestsPanel from "../components/management/RequestsPanel";
+import RoleAccessPanel from "../components/management/RoleAccessPanel";
+import ActivityPanel from "../components/management/ActivityPanel";
 
 /**
  * Structured settings UI — surfaces well-known V1 keys as proper form
@@ -72,6 +69,7 @@ type Category =
   | "notices"
   | "items"
   | "roles"
+  | "activity"
   | "export_import"
   | "pdf_reports"
   | "driver_qr"
@@ -111,6 +109,7 @@ const CARD_GROUPS: CardGroup[] = [
       { id: "users",    label: "Users" },
       { id: "requests", label: "Requests" },
       { id: "roles",    label: "Role Access" },
+      { id: "activity", label: "Activity" },
     ],
   },
   {
@@ -180,22 +179,7 @@ const CARD_GROUPS: CardGroup[] = [
   },
 ];
 
-const ALL_ROLES: AuthRole[] = [
-  "admin", "fleet", "atl", "supervisor", "lead", "loader", "unloader", "guest",
-];
-
 const SEVERITIES: NoticeSeverity[] = ["info", "warn", "critical"];
-
-const PAGE_ACCESS: { label: string; roles: Set<AuthRole> }[] = [
-  { label: "Unload",       roles: new Set(["admin","fleet","atl","supervisor","lead","unloader"]) },
-  { label: "Load",         roles: new Set(["admin","fleet","atl","supervisor","lead","loader"]) },
-  { label: "Fleet",        roles: new Set(["admin","fleet","atl","supervisor","lead"]) },
-  { label: "Communications", roles: new Set(["admin","fleet","atl","supervisor","lead","loader","unloader"]) },
-  { label: "Short Sheet",  roles: new Set(["admin","fleet","atl","supervisor","lead"]) },
-  { label: "Trends",       roles: new Set(["admin","fleet","atl","supervisor","lead"]) },
-  { label: "Audit",        roles: new Set(["admin","fleet","atl","supervisor","lead","loader"]) },
-  { label: "Management",   roles: new Set(["admin","fleet","atl","supervisor","lead"]) },
-];
 
 const RECOVERY_STATUS_OPTIONS: TruckStatus[] = [
   "dirty", "unfinished", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare",
@@ -309,6 +293,7 @@ export default function Management() {
       case "notices":        return <NoticesPanel disabled={!isAdmin} />;
       case "items":          return <ItemsPanel disabled={!isAdmin} />;
       case "roles":          return <RoleAccessPanel />;
+      case "activity":       return <ActivityPanel />;
       case "recovery":       return <RecoveryPanel />;
       case "resets":         return <ResetsPanel />;
       case "fleet_mgmt":     return <FleetManagementPanel />;
@@ -1621,212 +1606,10 @@ function CommunicationsPanel() {
 
 // ---------------------------------------------------------------------------
 // User Management
+//
+// UsersPanel, RequestsPanel, RoleAccessPanel, and ActivityPanel now live in
+// src/components/management/ and are imported at the top of this file.
 // ---------------------------------------------------------------------------
-
-const ROLE_OPTIONS: AuthRole[] = ["fleet", "supervisor", "lead", "atl", "loader", "unloader", "guest"];
-
-function UsersPanel() {
-  const { user: me } = useAuth();
-  const { data: users = [], isLoading } = useUsers();
-  const createUser = useCreateUser();
-  const updateUser = useUpdateUser();
-  const deleteUser = useDeleteUser();
-  const changePassword = useChangePassword();
-
-  const [createForm, setCreateForm] = useState({ username: "", password: "", role: "loader" as AuthRole, display_name: "" });
-  const [editingUser, setEditingUser] = useState<string | null>(null);
-  const [editRole, setEditRole] = useState<AuthRole>("loader");
-  const [editEnabled, setEditEnabled] = useState(true);
-  const [pwUser, setPwUser] = useState<string | null>(null);
-  const [newPw, setNewPw] = useState("");
-
-  function startEdit(u: { username: string; role: AuthRole; is_enabled: boolean }) {
-    setEditingUser(u.username);
-    setEditRole(u.role);
-    setEditEnabled(u.is_enabled);
-  }
-
-  return (
-    <div className="space-y-4">
-      {/* User table */}
-      <div className="card overflow-x-auto p-0">
-        <table className="w-full text-sm">
-          <thead className="bg-slate-800 text-left text-xs uppercase text-slate-400">
-            <tr>
-              <th className="px-3 py-2">Username</th>
-              <th className="px-3 py-2">Role</th>
-              <th className="px-3 py-2">Status</th>
-              <th className="px-3 py-2 text-right">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {isLoading && (
-              <tr>
-                <td colSpan={4} className="px-3 py-3 text-slate-500">Loading…</td>
-              </tr>
-            )}
-            {users.map((u) => (
-              <tr key={u.username} className="border-t border-slate-800">
-                <td className="px-3 py-2 font-mono font-semibold">{u.username}</td>
-                <td className="px-3 py-2">
-                  {editingUser === u.username ? (
-                    <select
-                      className="input py-0.5 text-xs"
-                      value={editRole}
-                      onChange={(e) => setEditRole(e.target.value as AuthRole)}
-                    >
-                      {ROLE_OPTIONS.map((r) => (
-                        <option key={r} value={r}>{r}</option>
-                      ))}
-                    </select>
-                  ) : (
-                    <span className="rounded bg-slate-800 px-1.5 py-0.5 text-xs">{u.role}</span>
-                  )}
-                </td>
-                <td className="px-3 py-2">
-                  {editingUser === u.username ? (
-                    <label className="flex items-center gap-1 text-xs">
-                      <input
-                        type="checkbox"
-                        checked={editEnabled}
-                        onChange={(e) => setEditEnabled(e.target.checked)}
-                      />
-                      Enabled
-                    </label>
-                  ) : (
-                    <span className={u.is_enabled ? "text-emerald-400" : "text-slate-500"}>
-                      {u.is_enabled ? "Active" : "Disabled"}
-                    </span>
-                  )}
-                </td>
-                <td className="px-3 py-2 text-right text-xs">
-                  {editingUser === u.username ? (
-                    <>
-                      <button
-                        className="btn-primary mr-1 text-xs"
-                        disabled={updateUser.isPending}
-                        onClick={() => {
-                          updateUser.mutate({ username: u.username, role: editRole, is_enabled: editEnabled });
-                          setEditingUser(null);
-                        }}
-                      >
-                        Save
-                      </button>
-                      <button className="btn-ghost text-xs" onClick={() => setEditingUser(null)}>Cancel</button>
-                    </>
-                  ) : (
-                    <>
-                      <button className="btn-ghost mr-1 text-xs" onClick={() => startEdit(u)}>Edit</button>
-                      <button
-                        className="btn-ghost mr-1 text-xs"
-                        onClick={() => { setPwUser(u.username); setNewPw(""); }}
-                      >
-                        Pw
-                      </button>
-                      {u.username !== me?.username && (
-                        <button
-                          className="text-xs text-red-400 hover:text-red-300"
-                          onClick={() => {
-                            if (confirm(`Delete user "${u.username}"?`))
-                              deleteUser.mutate(u.username);
-                          }}
-                        >
-                          Delete
-                        </button>
-                      )}
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Change password inline form */}
-      {pwUser && (
-        <div className="card flex flex-wrap items-end gap-3">
-          <p className="w-full text-sm font-medium text-slate-300">
-            Change password for <span className="font-mono">{pwUser}</span>
-          </p>
-          <input
-            className="input flex-1"
-            type="password"
-            placeholder="New password"
-            value={newPw}
-            onChange={(e) => setNewPw(e.target.value)}
-          />
-          <button
-            className="btn-primary"
-            disabled={!newPw || changePassword.isPending}
-            onClick={() => {
-              changePassword.mutate({ username: pwUser, new_password: newPw });
-              setPwUser(null);
-              setNewPw("");
-            }}
-          >
-            Set password
-          </button>
-          <button className="btn-ghost" onClick={() => setPwUser(null)}>Cancel</button>
-        </div>
-      )}
-
-      {/* Create user form */}
-      <div className="card space-y-3">
-        <p className="text-sm font-semibold text-slate-300">Create new user</p>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <div>
-            <label className="label">Username</label>
-            <input
-              className="input"
-              value={createForm.username}
-              onChange={(e) => setCreateForm({ ...createForm, username: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="label">Password</label>
-            <input
-              className="input"
-              type="password"
-              value={createForm.password}
-              onChange={(e) => setCreateForm({ ...createForm, password: e.target.value })}
-            />
-          </div>
-          <div>
-            <label className="label">Role</label>
-            <select
-              className="input"
-              value={createForm.role}
-              onChange={(e) => setCreateForm({ ...createForm, role: e.target.value as AuthRole })}
-            >
-              {ROLE_OPTIONS.map((r) => (
-                <option key={r} value={r}>{r}</option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="label">Display name</label>
-            <input
-              className="input"
-              value={createForm.display_name}
-              onChange={(e) => setCreateForm({ ...createForm, display_name: e.target.value })}
-            />
-          </div>
-        </div>
-        <button
-          className="btn-primary"
-          disabled={!createForm.username || !createForm.password || createUser.isPending}
-          onClick={() => {
-            createUser.mutate({ ...createForm, display_name: createForm.display_name || createForm.username });
-            setCreateForm({ username: "", password: "", role: "loader", display_name: "" });
-          }}
-        >
-          {createUser.isPending ? "Creating…" : "Create user"}
-        </button>
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Recovery & Admin
@@ -2411,64 +2194,8 @@ function FleetManagementPanel() {
 }
 
 // ---------------------------------------------------------------------------
-// Account Requests
+// Account Requests — moved to src/components/management/RequestsPanel.tsx
 // ---------------------------------------------------------------------------
-
-function RequestsPanel({ disabled }: { disabled: boolean }) {
-  const { user } = useAuth();
-  const { data: requests, isLoading, error } = useAuthRequests(true);
-  const resolve = useResolveAuthRequest();
-
-  if (error)
-    return <p className="text-sm text-amber-400">Cannot load requests (admin-only endpoint).</p>;
-
-  return (
-    <div className="card">
-      <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
-        Pending account requests
-      </h3>
-      {isLoading && <p className="text-slate-400">Loading…</p>}
-      {!isLoading && (requests ?? []).length === 0 && (
-        <p className="text-sm text-slate-500">No pending requests.</p>
-      )}
-      <ul className="divide-y divide-slate-800">
-        {(requests ?? []).map((r) => (
-          <li key={r.id} className="flex items-center justify-between py-3">
-            <div>
-              <p className="font-medium">
-                {r.username}{" "}
-                <span className="text-xs text-slate-400">wants {r.requested_role}</span>
-              </p>
-              <p className="text-xs text-slate-500">
-                Requested {new Date(r.requested_at).toLocaleString()}
-              </p>
-            </div>
-            <div className="space-x-2">
-              <button
-                className="btn-primary"
-                disabled={disabled || resolve.isPending}
-                onClick={() =>
-                  resolve.mutate({ id: r.id, status: "approved", resolved_by: user?.username ?? "admin" })
-                }
-              >
-                Approve
-              </button>
-              <button
-                className="btn-ghost text-red-400"
-                disabled={disabled || resolve.isPending}
-                onClick={() =>
-                  resolve.mutate({ id: r.id, status: "denied", resolved_by: user?.username ?? "admin" })
-                }
-              >
-                Deny
-              </button>
-            </div>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Notices
@@ -2872,51 +2599,8 @@ function ItemsPanel({ disabled }: { disabled: boolean }) {
 }
 
 // ---------------------------------------------------------------------------
-// Role Access (read-only reference table)
+// Role Access — moved to src/components/management/RoleAccessPanel.tsx
 // ---------------------------------------------------------------------------
-
-function RoleAccessPanel() {
-  return (
-    <div className="card space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Role Access</h3>
-        <p className="text-xs text-slate-500">Which pages each role can navigate to.</p>
-      </div>
-      <div className="overflow-x-auto">
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="border-b border-slate-700">
-              <th className="py-2 pr-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-400">
-                Page
-              </th>
-              {ALL_ROLES.map((r) => (
-                <th key={r} className="px-2 py-2 text-center text-xs font-semibold uppercase tracking-wide text-slate-400 capitalize">
-                  {r}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {PAGE_ACCESS.map(({ label, roles }) => (
-              <tr key={label} className="border-b border-slate-800 last:border-0">
-                <td className="py-2 pr-4 font-medium text-slate-300">{label}</td>
-                {ALL_ROLES.map((r) => (
-                  <td key={r} className="px-2 py-2 text-center">
-                    {roles.has(r) ? (
-                      <span className="text-emerald-400">✓</span>
-                    ) : (
-                      <span className="text-slate-700">–</span>
-                    )}
-                  </td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Export & Import
