@@ -96,7 +96,7 @@ export default function Load() {
     return arr;
   }, [loaded, loadedSort]);
 
-  // Route-aware "not yet loaded" computation — mirrors Board/Sidebar logic.
+  // Route-aware "not yet loaded" computation ï¿½ mirrors Board/Sidebar logic.
   // Covering spares (route_swap_route set) stand in for their OOS route truck.
   const coveringSpareByRoute = useMemo(
     () =>
@@ -392,7 +392,7 @@ export default function Load() {
         <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
       </div>
 
-      {/* Dust Garments — read-only, set from Setup Day */}
+      {/* Dust Garments ï¿½ read-only, set from Setup Day */}
       <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 px-4 py-3">
         <div className="mb-2 flex items-center gap-2">
           <DustGarmentIcon className="h-4 w-4 text-amber-400" />
@@ -421,7 +421,7 @@ export default function Load() {
         )}
       </div>
 
-      {/* In-progress truck — top of page */}
+      {/* In-progress truck ï¿½ top of page */}
       {inProgress && (
         <>
           <InProgressPanel
@@ -528,7 +528,7 @@ export default function Load() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                  {t.truck_type}{t.state?.batch_id != null ? ` ï¿½ Batch ${t.state.batch_id}` : ""}
                 </div>
                 {t.state?.wearers ? (
                   <div className="mt-auto pt-1 text-xs text-slate-500">{t.state.wearers} wearers</div>
@@ -612,7 +612,7 @@ export default function Load() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                  {t.truck_type}{t.state?.batch_id != null ? ` ï¿½ Batch ${t.state.batch_id}` : ""}
                 </div>
                 {t.state?.load_finish_time && (
                   <div className="mt-auto pt-1 text-xs text-slate-500">
@@ -742,8 +742,8 @@ function InProgressPanel({
   const paceLabel =
     paceAvgSeconds == null ? null
     : onPace
-      ? `on pace · avg ${formatDuration(paceAvgSeconds)}`
-      : `+${formatDuration(elapsed - paceAvgSeconds)} over · avg ${formatDuration(paceAvgSeconds)}`;
+      ? `on pace Â· avg ${formatDuration(paceAvgSeconds)}`
+      : `+${formatDuration(elapsed - paceAvgSeconds)} over Â· avg ${formatDuration(paceAvgSeconds)}`;
 
   const paceLabelColor =
     onPace == null ? "text-slate-500"
@@ -766,7 +766,7 @@ function InProgressPanel({
             </div>
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-600/50 bg-emerald-950/40 px-3 py-0.5 text-xs font-semibold text-emerald-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}
+              Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` Â· ${LOAD_DAY_NAMES[loadDay]}` : ""}
             </div>
             {truck.state?.has_dust_garment && (
               <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-400">
@@ -796,19 +796,19 @@ function InProgressPanel({
                 )}
               </>
             ) : (
-              <div className="mt-3 text-sm text-slate-500">None</div>
+              <div className="mt-3 font-black text-slate-600" style={{ fontSize: "3.5rem", lineHeight: 1 }}>â€”</div>
             )}
           </div>
         </div>
 
-        {/* Timer number + pace label */}
-        <div className="flex items-baseline justify-between gap-4">
+        {/* Timer â€” centered */}
+        <div className="flex flex-col items-center gap-2 py-1">
           <span className={clsx("font-mono font-black tabular-nums leading-none", timerColor)}
             style={{ fontSize: "3.5rem" }}>
             {formatDuration(elapsed)}
           </span>
           {paceLabel && (
-            <span className={clsx("text-right text-sm font-medium", paceLabelColor)}>
+            <span className={clsx("text-sm font-medium", paceLabelColor)}>
               {paceLabel}
             </span>
           )}
@@ -817,13 +817,13 @@ function InProgressPanel({
         {/* Full-width pace bar */}
         <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
 
-        {/* Finish Loading — immediately below bar */}
+        {/* Finish Loading â€” immediately below bar */}
         <button
           className="w-full rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow transition-colors hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50"
           disabled={busy}
           onClick={onFinish}
         >
-          {busy ? "Finishing…" : "Finish Loading"}
+          {busy ? "Finishingâ€¦" : "Finish Loading"}
         </button>
 
         {/* Cancel */}
