@@ -119,6 +119,14 @@ def cmd_portainer_redeploy():
 
     endpoint = f"{url}/api/stacks/{stack}/git/redeploy?endpointId={ep}"
 
+    payload = json.dumps({
+        "prune": False,
+        "pullImage": True,
+        "repositoryAuthentication": False,
+        "repositoryReferenceName": "refs/heads/main",
+        "env": current_env,
+    }).encode()
+
     req = urllib.request.Request(
         endpoint,
         data=payload,
