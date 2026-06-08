@@ -57,7 +57,10 @@ interface CardGroup {
   id: GroupId;
   label: string;
   desc: string;
-  accent: string;
+  /** Left border color class, e.g. "border-l-sky-500" */
+  borderColor: string;
+  /** Subtle background tint class, e.g. "bg-sky-950/30" */
+  bgTint: string;
   adminOnly?: true;
   tabs: { id: Category; label: string }[];
 }
@@ -67,7 +70,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "app",
     label: "App Settings",
     desc: "Status badge colors",
-    accent: "border-sky-500",
+    borderColor: "border-l-sky-500",
+    bgTint: "bg-sky-950/20",
     tabs: [
       { id: "colors", label: "Badge Colors" },
     ],
@@ -76,7 +80,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "users",
     label: "Users & Access",
     desc: "Manage users, pending requests, and role reference",
-    accent: "border-indigo-500",
+    borderColor: "border-l-indigo-500",
+    bgTint: "bg-indigo-950/20",
     adminOnly: true,
     tabs: [
       { id: "users",    label: "Users" },
@@ -89,7 +94,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "content",
     label: "Notices & Items",
     desc: "Team notices and audit checklist catalog",
-    accent: "border-yellow-500",
+    borderColor: "border-l-yellow-500",
+    bgTint: "bg-yellow-950/20",
     adminOnly: true,
     tabs: [
       { id: "notices", label: "Notices" },
@@ -100,7 +106,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "fleet",
     label: "Fleet",
     desc: "Add, remove, and configure trucks in the fleet",
-    accent: "border-teal-500",
+    borderColor: "border-l-teal-500",
+    bgTint: "bg-teal-950/20",
     adminOnly: true,
     tabs: [
       { id: "fleet_mgmt", label: "Fleet" },
@@ -111,7 +118,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "comms",
     label: "Communications",
     desc: "Manage censored words for the messaging system",
-    accent: "border-pink-500",
+    borderColor: "border-l-pink-500",
+    bgTint: "bg-pink-950/20",
     adminOnly: true,
     tabs: [{ id: "communications", label: "Censor Words" }],
   },
@@ -119,7 +127,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "ops",
     label: "Operations",
     desc: "Workflows, force-finish loads, bulk status changes, and workday resets",
-    accent: "border-orange-500",
+    borderColor: "border-l-orange-500",
+    bgTint: "bg-orange-950/20",
     tabs: [
       { id: "workflows", label: "Workflows" },
       { id: "recovery",  label: "Recovery" },
@@ -130,7 +139,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "advanced",
     label: "Advanced",
     desc: "Raw key/value settings editor",
-    accent: "border-red-500",
+    borderColor: "border-l-red-500",
+    bgTint: "bg-red-950/20",
     adminOnly: true,
     tabs: [
       { id: "advanced",     label: "Advanced" },
@@ -143,7 +153,8 @@ const CARD_GROUPS: CardGroup[] = [
     id: "data",
     label: "Data & Reports",
     desc: "Export / import backups, PDF day reports",
-    accent: "border-emerald-500",
+    borderColor: "border-l-emerald-500",
+    bgTint: "bg-emerald-950/20",
     adminOnly: true,
     tabs: [
       { id: "export_import", label: "Export & Import" },
@@ -232,9 +243,10 @@ export default function Management() {
                 }
               }}
               className={clsx(
-                "rounded-lg border border-slate-700 border-l-4 bg-slate-900 p-4 text-left transition hover:bg-slate-800",
-                group.accent,
-                isActive && "ring-1 ring-slate-400",
+                "rounded-lg border border-slate-800 border-l-4 p-4 text-left transition hover:brightness-110",
+                group.borderColor,
+                group.bgTint,
+                isActive ? "ring-2 ring-white/20" : "",
               )}
             >
               <p className="font-semibold text-slate-100">{group.label}</p>
