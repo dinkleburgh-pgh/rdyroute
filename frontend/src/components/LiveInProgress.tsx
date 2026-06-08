@@ -84,6 +84,150 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
 }
 
 // ---------------------------------------------------------------------------
+// PaceArc — SVG radial progress ring around the timer
+// ---------------------------------------------------------------------------
+
+function PaceArc({
+  elapsed,
+  paceAvgSeconds,
+  size = 200,
+  strokeWidth = 8,
+}: {
+  elapsed: number;
+  paceAvgSeconds: number | null;
+  size?: number;
+  strokeWidth?: number;
+}) {
+  const r = (size - strokeWidth) / 2;
+  const cx = size / 2;
+  const circumference = 2 * Math.PI * r;
+
+  const pct = paceAvgSeconds && paceAvgSeconds > 0
+    ? Math.min(1, elapsed / paceAvgSeconds)
+    : 0;
+
+  const offset = circumference * (1 - pct);
+
+  // Color zones
+  const arcColor =
+    paceAvgSeconds == null ? "#334155"        // no pace data — slate-700
+    : pct >= 1             ? "#ef4444"        // over pace — red
+    : pct >= 0.85          ? "#f97316"        // warning zone — orange
+    :                        "#f59e0b";       // on pace — amber
+
+  // Track (background ring) color
+  const trackColor = "#1e293b"; // slate-800
+
+  return (
+    <svg
+      width={size}
+      height={size}
+      viewBox={`0 0 ${size} ${size}`}
+      className="-rotate-90"
+      aria-hidden="true"
+    >
+      {/* Track */}
+      <circle
+        cx={cx}
+        cy={cx}
+        r={r}
+        fill="none"
+        stroke={trackColor}
+        strokeWidth={strokeWidth}
+      />
+      {/* Progress arc */}
+      {paceAvgSeconds != null && (
+        <circle
+          cx={cx}
+          cy={cx}
+          r={r}
+          fill="none"
+          stroke={arcColor}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          style={{ transition: "stroke-dashoffset 0.8s ease, stroke 0.4s ease" }}
+        />
+      )}
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ElapsedTimer — the arc + number + pace label, self-contained
+// ---------------------------------------------------------------------------
+
+export function ElapsedTimer({
+  startSec,
+  paceAvgSeconds,
+  size = 200,
+}: {
+  startSec: number | null;
+  paceAvgSeconds: number | null;
+  size?: number;
+}) {
+  const [elapsed, setElapsed] = useState(() =>
+    startSec ? Math.max(0, Math.round(Date.now() / 1000 - startSec)) : 0,
+  );
+
+  useEffect(() => {
+    if (!startSec) { setElapsed(0); return; }
+    const tick = () => setElapsed(Math.max(0, Math.round(Date.now() / 1000 - startSec)));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [startSec]);
+
+  const pct = paceAvgSeconds && paceAvgSeconds > 0 ? elapsed / paceAvgSeconds : null;
+  const onPace = pct == null ? null : pct < 1;
+
+  const timerColor =
+    pct == null    ? "text-slate-200"
+    : pct >= 1     ? "text-red-400"
+    : pct >= 0.85  ? "text-orange-400"
+    :                "text-amber-300";
+
+  const paceLabel =
+    paceAvgSeconds == null ? null
+    : onPace
+      ? `on pace · avg ${formatDuration(paceAvgSeconds)}`
+      : `+${formatDuration(elapsed - paceAvgSeconds)} over · avg ${formatDuration(paceAvgSeconds)}`;
+
+  const paceLabelColor =
+    onPace == null  ? "text-slate-500"
+    : onPace        ? "text-emerald-400"
+    :                 "text-red-400";
+
+  return (
+    <div className="relative inline-flex items-center justify-center" style={{ width: size, height: size }}>
+      {/* Arc ring */}
+      <PaceArc elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} size={size} strokeWidth={Math.round(size * 0.045)} />
+
+      {/* Content layered over arc */}
+      <div className="absolute inset-0 flex flex-col items-center justify-center gap-0.5">
+        {startSec ? (
+          <>
+            <span className={clsx("font-mono font-bold tabular-nums leading-none", timerColor)}
+              style={{ fontSize: size * 0.22 }}>
+              {formatDuration(elapsed)}
+            </span>
+            {paceLabel && (
+              <span className={clsx("text-center font-medium leading-none", paceLabelColor)}
+                style={{ fontSize: size * 0.07 }}>
+                {paceLabel}
+              </span>
+            )}
+          </>
+        ) : (
+          <span className="text-sm text-slate-500">No start time</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Truck note cards — one card per applicable note
 // ---------------------------------------------------------------------------
 
@@ -143,16 +287,7 @@ function TruckNotesPanel({ truckNumber, loadDayNum }: { truckNumber: number; loa
 // Top panel: current truck identity + Next Up shortcuts + elapsed timer
 // ---------------------------------------------------------------------------
 
-const DAY_NAMES = [
-  "",
-  "Monday",
-  "Tuesday",
-  "Wednesday",
-  "Thursday",
-  "Friday",
-  "Saturday",
-  "Sunday",
-];
+const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
 function CurrentLoadPanel({
   truck,
@@ -171,61 +306,72 @@ function CurrentLoadPanel({
   const dayNum = truck.state?.load_day_num ?? null;
   const dayLabel =
     dayNum != null && dayNum >= 1 && dayNum <= 7
-      ? `Day ${dayNum} (${DAY_NAMES[dayNum]})`
+      ? `Day ${dayNum} · ${DAY_NAMES[dayNum]}`
       : null;
 
   return (
-    <section className="card">
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-[minmax(180px,240px)_1fr]">
-        {/* Left: identity + Next Up shortcuts */}
-        <div className="flex flex-col items-center gap-3 md:items-start">
-          <p className="text-xs font-semibold uppercase tracking-wider text-slate-400">
+    <section className="card overflow-hidden">
+      {/* Amber pulse bar at top */}
+      <div className="mb-4 h-0.5 w-full animate-pulse rounded-full bg-amber-500/60" />
+
+      {/* Main content: centered column */}
+      <div className="flex flex-col items-center gap-4">
+
+        {/* Truck number + day label */}
+        <div className="flex flex-col items-center gap-2">
+          <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">
             Current Truck
           </p>
-          <p className="text-6xl font-extrabold leading-none text-amber-300">
+          <p className="font-black leading-none text-amber-300" style={{ fontSize: "4.5rem" }}>
             #{truck.truck_number}
           </p>
           {dayLabel && (
-            <span className="inline-flex items-center rounded-full border border-emerald-700/60 bg-emerald-950/40 px-3 py-1 text-xs font-semibold text-emerald-300">
-              <span className="mr-2 text-[10px] uppercase tracking-wide text-emerald-500">
-                Load day
-              </span>
+            <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-700/50 bg-emerald-950/40 px-3 py-1 text-xs font-semibold text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
               {dayLabel}
             </span>
           )}
-
-          <div className="mt-2 flex w-full flex-col gap-2">
-            <button
-              className="btn-ghost w-full"
-              onClick={() => setPickerOpen((o) => !o)}
-            >
-              {nextUp != null ? `Next Up: #${nextUp}` : "Set Next Up"}
-            </button>
-            <Link
-              to={nextUp != null ? `/audit?truck=${nextUp}` : "/audit"}
-              className={clsx(
-                "rounded-md border border-slate-700 px-3 py-2 text-center text-sm font-medium transition-colors",
-                nextUp != null
-                  ? "bg-slate-800 hover:bg-slate-700"
-                  : "pointer-events-none bg-slate-900/40 text-slate-600",
-              )}
-              aria-disabled={nextUp == null}
-            >
-              Audit Next Up
-            </Link>
-          </div>
         </div>
 
-        {/* Right: elapsed timer */}
-        <ElapsedCard
+        {/* Arc timer — the dominant element */}
+        <ElapsedTimer
           startSec={truck.state?.load_start_time ?? null}
           paceAvgSeconds={paceAvgSeconds}
+          size={220}
         />
+
+        {/* Next Up controls */}
+        <div className="flex w-full max-w-xs flex-col gap-2">
+          <button
+            className={clsx(
+              "w-full rounded-lg border px-4 py-2.5 text-sm font-semibold transition-colors",
+              nextUp != null
+                ? "border-sky-700/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/40"
+                : "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700",
+            )}
+            onClick={() => setPickerOpen((o) => !o)}
+          >
+            {nextUp != null ? `Next Up: #${nextUp}` : "Set Next Up"}
+          </button>
+          <Link
+            to={nextUp != null ? `/audit?truck=${nextUp}` : "/audit"}
+            className={clsx(
+              "block rounded-lg border px-4 py-2.5 text-center text-sm font-semibold transition-colors",
+              nextUp != null
+                ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
+                : "pointer-events-none border-slate-800 bg-slate-900/40 text-slate-600",
+            )}
+            aria-disabled={nextUp == null}
+          >
+            Audit Next Up
+          </Link>
+        </div>
       </div>
 
-      {/* Notes for this truck */}
+      {/* Truck notes */}
       <TruckNotesPanel truckNumber={truck.truck_number} loadDayNum={dayNum} />
 
+      {/* Next Up picker — expanded inline */}
       {pickerOpen && (
         <div className="mt-4 border-t border-slate-800 pt-4">
           <NextUpPanel
@@ -237,66 +383,6 @@ function CurrentLoadPanel({
         </div>
       )}
     </section>
-  );
-}
-
-function ElapsedCard({
-  startSec,
-  paceAvgSeconds,
-}: {
-  startSec: number | null;
-  paceAvgSeconds: number | null;
-}) {
-  const [elapsed, setElapsed] = useState(() =>
-    startSec ? Math.max(0, Math.round(Date.now() / 1000 - startSec)) : 0,
-  );
-
-  useEffect(() => {
-    if (!startSec) {
-      setElapsed(0);
-      return;
-    }
-    const tick = () =>
-      setElapsed(Math.max(0, Math.round(Date.now() / 1000 - startSec)));
-    tick();
-    const id = window.setInterval(tick, 1000);
-    return () => window.clearInterval(id);
-  }, [startSec]);
-
-  const onPace = paceAvgSeconds == null ? null : elapsed <= paceAvgSeconds;
-  const accent =
-    onPace == null
-      ? "border-slate-700 from-slate-900 to-slate-950 text-slate-200"
-      : onPace
-        ? "border-emerald-600/60 from-emerald-950/60 to-slate-950 text-emerald-300"
-        : "border-red-700/60 from-red-950/60 to-slate-950 text-red-300";
-
-  return (
-    <div
-      className={clsx(
-        "flex flex-col items-center justify-center rounded-xl border-2 bg-gradient-to-b px-6 py-8 shadow-inner",
-        accent,
-      )}
-    >
-      <p className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-300">
-        Elapsed Time
-      </p>
-      {startSec ? (
-        <>
-          <p className="mt-2 font-mono text-6xl font-bold tabular-nums sm:text-7xl">
-            {formatDuration(elapsed)}
-          </p>
-          {paceAvgSeconds != null && (
-            <p className="mt-1 text-xs">
-              {onPace ? "on pace" : "over pace"} · avg{" "}
-              {formatDuration(paceAvgSeconds)}
-            </p>
-          )}
-        </>
-      ) : (
-        <p className="mt-2 text-sm text-slate-500">No start time recorded.</p>
-      )}
-    </div>
   );
 }
 
@@ -361,7 +447,7 @@ function ShortagesPanel({
 
       <Link
         to={`/audit?truck=${truck.truck_number}`}
-        className="block rounded-md border border-slate-700 bg-slate-800 px-3 py-3 text-center text-sm font-semibold transition-colors hover:bg-slate-700"
+        className="block rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3 text-center text-sm font-semibold transition-colors hover:bg-slate-700"
       >
         Audit
       </Link>
@@ -370,7 +456,7 @@ function ShortagesPanel({
         type="button"
         onClick={finishLoading}
         disabled={busy}
-        className="w-full rounded-md border-2 border-emerald-500/60 bg-emerald-950/40 px-4 py-4 text-lg font-bold uppercase tracking-wider text-emerald-300 shadow-inner transition-colors hover:bg-emerald-900/40 disabled:cursor-not-allowed disabled:opacity-60"
+        className="w-full rounded-xl border-2 border-emerald-500/60 bg-emerald-950/40 px-4 py-4 text-lg font-bold uppercase tracking-wider text-emerald-300 shadow-inner transition-colors hover:bg-emerald-900/50 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
       >
         {busy ? "Finishing…" : "Finish Loading"}
       </button>
@@ -512,7 +598,7 @@ function NextUpPanel({
   );
 }
 
-function formatDuration(totalSeconds: number): string {
+export function formatDuration(totalSeconds: number): string {
   const s = Math.max(0, Math.round(totalSeconds));
   const m = Math.floor(s / 60);
   const sec = s % 60;
@@ -523,3 +609,23 @@ function formatDuration(totalSeconds: number): string {
   }
   return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
 }
+
+
+/**
+ * Live "In Progress" page (V1 parity):
+ *
+ *   CURRENT TRUCK #N        ELAPSED TIME 00:46
+ *   LOAD DAY · Day 2 (Tue)
+ *   [ Set Next Up ]
+ *   [ Audit Next Up ]
+ *
+ *   Select Shortages
+ *   [3x10] [3x5] [4x6]
+ *   [Paper] [Bulk] [Recents]
+ *
+ *   [        Audit         ]
+ *   [    FINISH LOADING    ]
+ *
+ * Rendered on /board?status=in_progress. Pulls the single in-progress truck
+ * from the board and drives the load-completion flow.
+ */

@@ -16,6 +16,7 @@ import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { effectiveStatus } from "../utils/truckStatus";
+import { ElapsedTimer } from "../components/LiveInProgress";
 import type { TruckWithState } from "../types";
 
 /**
@@ -727,10 +728,11 @@ function InProgressPanel({
   onCancel: () => void;
 }) {
   const startSec = truck.state?.load_start_time ?? null;
+
+  // For cancel lock countdown only (ElapsedTimer owns the visual timer)
   const [elapsed, setElapsed] = useState(() =>
     startSec ? Math.max(0, Math.round(Date.now() / 1000 - startSec)) : 0,
   );
-
   useEffect(() => {
     if (!startSec) return;
     const id = window.setInterval(() => {
@@ -739,82 +741,89 @@ function InProgressPanel({
     return () => window.clearInterval(id);
   }, [startSec]);
 
-  const paceDelta = paceAvgSeconds != null ? elapsed - paceAvgSeconds : null;
-  const onPace = paceDelta == null ? null : paceDelta <= 0;
-
   return (
-    <section className="card border-2 border-amber-500/60 bg-amber-950/30">
-      {/* Top: Current Truck + Next Up side by side */}
-      <div className="flex items-start gap-4">
-        {/* Current Truck */}
-        <div className="flex-1 text-center">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Current Truck</div>
-          <div className="font-black tabular-nums text-amber-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
-            #{truck.truck_number}
-          </div>
-          <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-600/60 bg-emerald-950/40 px-3 py-0.5 text-xs font-semibold text-emerald-300">
-            <span className="text-emerald-500/70 font-normal uppercase tracking-wider text-[9px]">Load Day</span>
-            Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` (${LOAD_DAY_NAMES[loadDay]})` : ""}
-          </div>
-          {truck.state?.has_dust_garment && (
-            <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-400">
-              <DustGarmentIcon className="h-3.5 w-3.5" />
-              Dust garment
+    <section className="overflow-hidden rounded-xl border-2 border-amber-500/50 bg-amber-950/20 shadow-inner">
+      {/* Amber pulse bar */}
+      <div className="h-0.5 w-full animate-pulse bg-amber-500/70" />
+
+      <div className="p-4 space-y-4">
+        {/* Top: Current Truck | divider | Next Up */}
+        <div className="flex items-start gap-4">
+          {/* Current Truck */}
+          <div className="flex-1 text-center">
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Current Truck</div>
+            <div className="font-black tabular-nums text-amber-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
+              #{truck.truck_number}
             </div>
-          )}
-          {truck.state?.wearers ? (
-            <div className="mt-0.5 text-xs text-slate-400">{truck.state.wearers} wearers</div>
-          ) : null}
+            <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-600/50 bg-emerald-950/40 px-3 py-0.5 text-xs font-semibold text-emerald-300">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}
+            </div>
+            {truck.state?.has_dust_garment && (
+              <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-400">
+                <DustGarmentIcon className="h-3.5 w-3.5" />
+                Dust garment
+              </div>
+            )}
+            {truck.state?.wearers ? (
+              <div className="mt-0.5 text-xs text-slate-400">{truck.state.wearers} wearers</div>
+            ) : null}
+          </div>
+
+          {/* Divider */}
+          <div className="w-px self-stretch bg-slate-700/50" />
+
+          {/* Next Up */}
+          <div className="flex-1 text-center">
+            <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Next Up</div>
+            {nextUp ? (
+              <>
+                <div className="font-black tabular-nums text-sky-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
+                  #{nextUp.truck_number}
+                </div>
+                {paceAvgSeconds != null && (
+                  <div className="mt-1.5 text-xs text-slate-400">
+                    avg <span className="text-slate-300">{formatDuration(paceAvgSeconds)}</span>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="mt-3 text-sm text-slate-500">None</div>
+            )}
+          </div>
         </div>
 
-        {/* Divider */}
-        <div className="w-px self-stretch bg-slate-700/60" />
+        {/* Arc timer — centered, dominant */}
+        <div className="flex justify-center py-2">
+          <ElapsedTimer
+            startSec={startSec}
+            paceAvgSeconds={paceAvgSeconds}
+            size={180}
+          />
+        </div>
 
-        {/* Next Up */}
-        <div className="flex-1 text-center">
-          <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-400">Next Up</div>
-          {nextUp ? (
-            <>
-              <div className="font-black tabular-nums text-sky-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
-                #{nextUp.truck_number}
-              </div>
-              <div className="mt-1.5 text-xs text-slate-400">
-                Avg for next up:{" "}
-                <span className="text-slate-300">
-                  {paceAvgSeconds != null ? formatDuration(paceAvgSeconds) : "N/A"}
-                </span>
-              </div>
-            </>
+        {/* Actions */}
+        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+          <button
+            className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-base font-bold text-white shadow transition-colors hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50"
+            disabled={busy}
+            onClick={onFinish}
+          >
+            {busy ? "Finishing…" : "Finish Loading"}
+          </button>
+          <button
+            className="btn-ghost sm:w-auto"
+            disabled={busy || elapsed >= 15}
+            onClick={onCancel}
+          >
+            Cancel (back to Unloaded)
+          </button>
+          {elapsed < 15 ? (
+            <span className="text-xs text-slate-500">locks in {15 - elapsed}s</span>
           ) : (
-            <div className="mt-3 text-sm text-slate-500">None</div>
+            <span className="text-xs text-slate-500">cancel locked</span>
           )}
         </div>
-      </div>
-
-      {/* Timer + pace */}
-      <div className="mt-4 flex items-center justify-center gap-3 border-t border-slate-700/50 pt-3">
-        <span className="font-mono text-3xl tabular-nums">{formatDuration(elapsed)}</span>
-        {paceAvgSeconds != null && (
-          <span className={`text-xs ${onPace ? "text-emerald-400" : "text-red-400"}`}>
-            {onPace ? "on pace" : "over pace"} (avg {formatDuration(paceAvgSeconds)})
-          </span>
-        )}
-      </div>
-
-      {/* Actions */}
-      <div className="mt-3 flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
-        <button className="btn-primary w-full py-3 text-base sm:w-auto sm:py-1.5 sm:text-sm" disabled={busy} onClick={onFinish}>
-          Finish Loading
-        </button>
-        <button className="btn-ghost w-full sm:w-auto" disabled={busy || elapsed >= 15} onClick={onCancel}>
-          Cancel (back to Unloaded)
-        </button>
-        {elapsed < 15 && (
-          <span className="text-xs text-slate-500">locks in {15 - elapsed}s</span>
-        )}
-        {elapsed >= 15 && (
-          <span className="text-xs text-slate-500">cancel locked</span>
-        )}
       </div>
     </section>
   );
