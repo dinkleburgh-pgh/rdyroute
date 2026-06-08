@@ -366,15 +366,34 @@ def bulk_update_status(
         )
     ).all()
 
+    # Update trucks that already have a state row
     for row in rows:
         row.status = validated_status
+
+    # Create state rows for trucks that have none (they appear as 'dirty' via null state)
+    existing_nums = {row.truck_number for row in rows}
+    for num in truck_numbers:
+        if num not in existing_nums:
+            db.add(TruckState(
+                truck_number=num,
+                run_date=run_date,
+                status=validated_status,
+                wearers=0,
+            ))
 
     db.commit()
     background_tasks.add_task(
         manager.broadcast,
         {"type": "truck_state_updated", "run_date": str(run_date)},
     )
-    return rows
+    # Re-query to return all affected rows (includes newly-created ones)
+    updated = db.scalars(
+        select(TruckState).where(
+            TruckState.run_date == run_date,
+            TruckState.truck_number.in_(truck_numbers),
+        )
+    ).all()
+    return updated
 
 
 # ---------------------------------------------------------------------------

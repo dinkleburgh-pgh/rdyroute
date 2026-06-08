@@ -6,6 +6,7 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { useBoard, useBulkUpdateStatus } from "../../api/hooks";
 import { useAuth } from "../../contexts/AuthContext";
+import { useToast } from "../../contexts/ToastContext";
 import { todayIso } from "../../api/client";
 import ConfirmDialog from "../ConfirmDialog";
 import type { TruckStatus } from "../../types";
@@ -33,6 +34,7 @@ const STATUS_COLOR: Record<TruckStatus, { bg: string; text: string; ring: string
 
 export default function BulkStatusPanel() {
   const { user } = useAuth();
+  const toast = useToast();
   const runDate = todayIso();
   const { data: board, isLoading } = useBoard(runDate);
   const bulk = useBulkUpdateStatus();
@@ -61,15 +63,23 @@ export default function BulkStatusPanel() {
 
   function handleApply() {
     if (!fromStatus || !toStatus || !candidates.length) return;
+    const count = candidates.length;
+    const fromLabel = STATUS_LABELS[fromStatus];
+    const toLabel = STATUS_LABELS[toStatus];
     bulk.mutate(
       { run_date: runDate, truck_numbers: candidates.map((t) => t.truck_number), new_status: toStatus },
       {
         onSuccess: () => {
+          toast.success(`Moved ${count} truck${count !== 1 ? "s" : ""} from ${fromLabel} → ${toLabel}`);
           setFromStatus(null);
           setToStatus(null);
           setConfirmOpen(false);
         },
-        onError: () => setConfirmOpen(false),
+        onError: (err) => {
+          const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+          toast.error(msg ?? "Bulk status update failed");
+          setConfirmOpen(false);
+        },
       },
     );
   }

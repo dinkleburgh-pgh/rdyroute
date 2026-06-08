@@ -11,16 +11,18 @@ import {
 } from "../../api/hooks";
 import { FieldRow, SaveButton } from "./shared";
 
+const DEFAULT_COMMAND = "python3 /app/docker_resolve.py portainer_redeploy";
+
 export default function UpdatesPanel({ map }: { map: Map<string, unknown> }) {
   const upsert = useUpsertSetting();
   const trigger = useTriggerUpdate();
   const { data: status, isLoading: statusLoading } = useUpdateStatus();
   const { data: check, isFetching: checkFetching, refetch: recheckNow } = useCheckForUpdate();
 
-  const initialCommand = String(map.get("update_deploy_command") ?? "python3 /app/docker_resolve.py portainer_redeploy");
-  const [command, setCommand] = useState(initialCommand);
-  useEffect(() => setCommand(initialCommand), [initialCommand]);
-  const commandDirty = command !== initialCommand;
+  const savedCommand = String(map.get("update_deploy_command") ?? DEFAULT_COMMAND);
+  const [command, setCommand] = useState(savedCommand);
+  useEffect(() => setCommand(savedCommand), [savedCommand]);
+  const commandDirty = command !== savedCommand;
 
   const isRunning = status?.running === true || trigger.isPending;
 
@@ -116,18 +118,28 @@ export default function UpdatesPanel({ map }: { map: Map<string, unknown> }) {
           label="Command"
           hint="Runs inside the backend container when Update is triggered. Uses PORTAINER_URL / PORTAINER_API_KEY / PORTAINER_STACK_ID / PORTAINER_ENDPOINT_ID env vars."
         >
-          <input
-            className="input"
-            value={command}
-            onChange={(e) => setCommand(e.target.value)}
-            placeholder="python3 /app/docker_resolve.py portainer_redeploy"
-          />
+          <div className="space-y-1.5">
+            <input
+              className="input"
+              value={command}
+              onChange={(e) => setCommand(e.target.value)}
+              placeholder={DEFAULT_COMMAND}
+            />
+            {command !== DEFAULT_COMMAND && (
+              <button
+                className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+                onClick={() => setCommand(DEFAULT_COMMAND)}
+              >
+                ↩ Reset to default
+              </button>
+            )}
+          </div>
         </FieldRow>
         <SaveButton
           dirty={commandDirty}
           saving={upsert.isPending}
-          onSave={() => upsert.mutateAsync({ key: "update_deploy_command", value: command.trim() || "python3 /app/docker_resolve.py portainer_redeploy" })}
-          onRevert={() => setCommand(initialCommand)}
+          onSave={() => upsert.mutateAsync({ key: "update_deploy_command", value: command.trim() || DEFAULT_COMMAND })}
+          onRevert={() => setCommand(savedCommand)}
         />
       </div>
     </div>
