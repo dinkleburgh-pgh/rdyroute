@@ -111,5 +111,10 @@ export function applySession(
   tok: TokenResponse,
   setSession: AuthContextValue["setSession"],
 ) {
-  setSession({ username: tok.username, role: tok.role });
+  setSession({
+    username: tok.username,
+    role: tok.role,
+    display_name: (tok as unknown as { display_name?: string }).display_name ?? tok.username,
+    display_role: (tok as unknown as { display_role?: string | null }).display_role ?? null,
+  });
 }

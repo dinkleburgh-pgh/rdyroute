@@ -28,6 +28,13 @@ import DriverNotes from "./pages/DriverNotes";
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: { staleTime: 30_000, refetchOnWindowFocus: false },
+    mutations: {
+      onError: (err) => {
+        // Default fallback: log errors from mutations that don't have their
+        // own onError handler. Call sites can override with a toast as needed.
+        console.error("[mutation error]", err);
+      },
+    },
   },
 });
 

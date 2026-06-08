@@ -135,6 +135,7 @@ export default function Layout() {
   const { data: wizardDone = false } = useWizardCompleted(todayIso());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
 
   const canManageSwaps = ["admin", "fleet", "supervisor", "atl"].includes(user?.role ?? "");
 
@@ -144,9 +145,10 @@ export default function Layout() {
   // Offline sync: queue + flush + connectivity state
   const offlineState = useOfflineSync();
 
-  // Close sidebar on route change (mobile nav tap)
+  // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {
     setSidebarOpen(false);
+    setMoreOpen(false);
   }, [location.pathname]);
 
   const { loadDay, unloadsDay } = workdayNumbers();
@@ -493,32 +495,89 @@ export default function Layout() {
         </main>
       </div>
 
-      {/* Mobile bottom nav — primary workflow actions, no hamburger required */}
+      {/* Mobile bottom nav — primary workflow actions + More drawer */}
       {primaryNav.length > 0 && (
-        <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-800 bg-slate-900 md:hidden">
-          {primaryNav.map((item) => {
-            const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
-            return (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={({ isActive }) =>
-                  clsx(
-                    "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
-                    isActive ? "text-blue-400" : "text-slate-500",
-                  )
-                }
-              >
-                {item.label === "Communications" ? "Comms" : item.label}
-                {showLoadBadge && (
-                  <span className="absolute right-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[9px] font-bold text-white">
-                    {trucksNotYetLoaded}
-                  </span>
+        <>
+          {/* More drawer — slides up from bottom nav */}
+          {moreOpen && (
+            <>
+              <div
+                className="fixed inset-0 z-30 bg-black/50 md:hidden"
+                onClick={() => setMoreOpen(false)}
+              />
+              <div className="fixed bottom-12 inset-x-0 z-40 rounded-t-xl border-t border-slate-800 bg-slate-900 pb-2 shadow-xl md:hidden">
+                <div className="flex items-center justify-between px-4 py-3">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">More</p>
+                  <button onClick={() => setMoreOpen(false)} className="text-slate-500 hover:text-slate-300">
+                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12"/></svg>
+                  </button>
+                </div>
+                <div className="grid grid-cols-3 gap-1 px-3">
+                  {secondaryNav.filter((i) => allowed.has(i.to)).map((item) => (
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      onClick={() => setMoreOpen(false)}
+                      className={({ isActive }) =>
+                        clsx(
+                          "flex flex-col items-center justify-center rounded-lg px-2 py-3 text-[11px] font-semibold transition-colors",
+                          isActive
+                            ? "bg-blue-600/20 text-blue-400"
+                            : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+                        )
+                      }
+                    >
+                      {item.label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-800 bg-slate-900 md:hidden">
+            {primaryNav.map((item) => {
+              const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={({ isActive }) =>
+                    clsx(
+                      "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
+                      isActive ? "text-blue-400" : "text-slate-500",
+                    )
+                  }
+                >
+                  {item.label === "Communications" ? "Comms" : item.label}
+                  {showLoadBadge && (
+                    <span className="absolute right-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[9px] font-bold text-white">
+                      {trucksNotYetLoaded}
+                    </span>
+                  )}
+                </NavLink>
+              );
+            })}
+            {/* More button — only show if user has secondary nav items */}
+            {secondaryNav.some((i) => allowed.has(i.to)) && (
+              <button
+                onClick={() => setMoreOpen((v) => !v)}
+                className={clsx(
+                  "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
+                  moreOpen ? "text-blue-400" : "text-slate-500",
                 )}
-              </NavLink>
-            );
-          })}
-        </nav>
+              >
+                More
+                <span className={clsx(
+                  "absolute top-1.5 right-1/4 h-1 w-1 rounded-full transition-opacity",
+                  secondaryNav.some((i) => allowed.has(i.to) && location.pathname === i.to)
+                    ? "bg-blue-400 opacity-100"
+                    : "opacity-0",
+                )} />
+              </button>
+            )}
+          </nav>
+        </>
       )}
 
       {swapModalOpen && <RouteSwapModal onClose={() => setSwapModalOpen(false)} />}
