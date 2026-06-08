@@ -1,213 +1,242 @@
 /**
- * Recovery panel — force-finish stuck loads, bulk status changes. Extracted from Settings.tsx.
- * Includes StuckRow sub-component and formatRecoveryDuration helper.
+ * Recovery panel — PostgreSQL backup file management.
+ * Lists pg_dump SQL backups created by the background backup_loop(),
+ * allows downloading them, and provides the existing ZIP restore functionality.
  */
-import { useEffect, useMemo, useState } from "react";
-import clsx from "clsx";
-import {
-  useBoard,
-  useBulkUpdateStatus,
-  usePaceAverage,
-  useRecordLoadDuration,
-  useUpsertTruckState,
-} from "../../api/hooks";
-import { todayIso } from "../../api/client";
+import { useState } from "react";
 import { useAuth } from "../../contexts/AuthContext";
-import type { TruckStatus, TruckWithState } from "../../types";
+import { api } from "../../api/client";
+import { useToast } from "../../contexts/ToastContext";
+import ConfirmDialog from "../ConfirmDialog";
+import { DownloadIcon, TrashIcon, RefreshIcon } from "../icons";
 
-const RECOVERY_STATUS_OPTIONS: TruckStatus[] = [
-  "dirty", "unfinished", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare",
-];
-
-const RECOVERY_STATUS_LABELS: Record<TruckStatus, string> = {
-  dirty: "Dirty", unfinished: "Unfinished", shop: "Shop", in_progress: "In Progress",
-  unloaded: "Unloaded", loaded: "Loaded", off: "Off", oos: "OOS", spare: "Spare",
-};
-
-function formatRecoveryDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds < 0) return "—";
-  const s = Math.floor(seconds);
-  const m = Math.floor(s / 60);
-  return `${m}m ${(s % 60).toString().padStart(2, "0")}s`;
+interface PgBackup {
+  filename: string;
+  size_bytes: number;
+  created_at: string;
 }
 
-// ---------------------------------------------------------------------------
-// StuckRow sub-component
-// ---------------------------------------------------------------------------
-
-function StuckRow({
-  truck,
-  paceSeconds,
-  disabled,
-  onForceFinish,
-  onCancel,
-}: {
-  truck: TruckWithState;
-  runDate: string;
-  paceSeconds: number | null;
-  disabled: boolean;
-  onForceFinish: () => void;
-  onCancel: () => void;
-}) {
-  const startTs = truck.state?.load_start_time ?? null;
-  const [now, setNow] = useState(() => Date.now() / 1000);
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now() / 1000), 1000);
-    return () => clearInterval(id);
-  }, []);
-
-  const elapsed = startTs ? now - startTs : 0;
-  const vsPace = paceSeconds && startTs
-    ? elapsed > paceSeconds
-      ? `+${formatRecoveryDuration(elapsed - paceSeconds)} over`
-      : `${formatRecoveryDuration(paceSeconds - elapsed)} under`
-    : "—";
-  const startedLabel = startTs ? new Date(startTs * 1000).toLocaleTimeString() : "—";
-
-  return (
-    <tr className="border-t border-slate-800">
-      <td className="px-3 py-2 font-semibold">#{truck.truck_number}</td>
-      <td className="px-3 py-2 text-slate-300">{startedLabel}</td>
-      <td className="px-3 py-2 font-mono">{formatRecoveryDuration(elapsed)}</td>
-      <td className={"px-3 py-2 " + (paceSeconds && elapsed > paceSeconds ? "text-amber-400" : "text-emerald-400")}>
-        {vsPace}
-      </td>
-      <td className="px-3 py-2 text-right">
-        <button className="btn-primary mr-2 text-xs" disabled={disabled} onClick={onForceFinish}>Force Finish</button>
-        <button className="btn-ghost text-xs" disabled={disabled} onClick={onCancel}>Cancel</button>
-      </td>
-    </tr>
-  );
+function fmtBytes(b: number): string {
+  if (b < 1024) return `${b} B`;
+  if (b < 1024 * 1024) return `${(b / 1024).toFixed(1)} KB`;
+  return `${(b / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-// ---------------------------------------------------------------------------
-// RecoveryPanel
-// ---------------------------------------------------------------------------
+function fmtDate(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleString([], {
+    month: "short", day: "numeric",
+    hour: "numeric", minute: "2-digit",
+  });
+}
 
 export default function RecoveryPanel() {
   const { user } = useAuth();
-  const runDate = todayIso();
-  const { data: board, isLoading } = useBoard(runDate);
-  const { data: pace } = usePaceAverage(30);
-  const upsert = useUpsertTruckState();
-  const recordDuration = useRecordLoadDuration();
-  const bulk = useBulkUpdateStatus();
+  const toast = useToast();
+
+  const [backups, setBackups] = useState<PgBackup[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  // ZIP restore state (existing functionality)
+  const [importing, setImporting] = useState(false);
+  const [importStatus, setImportStatus] = useState<string | null>(null);
 
   const isPrivileged =
     user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor" ||
     user?.role === "lead"  || user?.role === "atl";
 
-  const stuck = useMemo(
-    () => (board ?? []).filter((t) => t.state?.status === "in_progress"),
-    [board],
-  );
+  async function loadBackups() {
+    setLoading(true);
+    try {
+      const res = await api.get<PgBackup[]>("/exports/pg-backups");
+      setBackups(res.data);
+      setLoaded(true);
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      toast.error(err?.response?.data?.detail ?? "Could not load backups");
+    } finally {
+      setLoading(false);
+    }
+  }
 
-  const counts = useMemo(() => {
-    const c: Record<string, number> = {};
-    (board ?? []).forEach((t) => { const s = t.state?.status ?? "dirty"; c[s] = (c[s] ?? 0) + 1; });
-    return c;
-  }, [board]);
+  async function doDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      await api.delete(`/exports/pg-backups/${encodeURIComponent(deleteTarget)}`);
+      toast.success(`Deleted ${deleteTarget}`);
+      setBackups((b) => b.filter((x) => x.filename !== deleteTarget));
+    } catch {
+      toast.error("Could not delete backup");
+    } finally {
+      setDeleting(false);
+      setDeleteTarget(null);
+    }
+  }
 
-  const [fromStatus, setFromStatus] = useState<TruckStatus>("loaded");
-  const [toStatus,   setToStatus]   = useState<TruckStatus>("dirty");
-  const candidates = useMemo(
-    () => (board ?? []).filter((t) => (t.state?.status ?? "dirty") === fromStatus),
-    [board, fromStatus],
-  );
+  function downloadBackup(filename: string) {
+    const a = document.createElement("a");
+    a.href = `/api/exports/pg-backups/${encodeURIComponent(filename)}`;
+    a.download = filename;
+    a.click();
+  }
+
+  async function handleZipImport(file: File) {
+    setImporting(true);
+    setImportStatus(null);
+    const form = new FormData();
+    form.append("file", file);
+    try {
+      const res = await fetch("/api/exports/import/backup", { method: "POST", body: form });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ detail: res.statusText }));
+        setImportStatus(`Error: ${err.detail ?? res.statusText}`);
+      } else {
+        const result = await res.json();
+        const parts = Object.entries(result as Record<string, number>).map(
+          ([k, v]) => `${v} ${k.replace(/_/g, " ")}`,
+        );
+        setImportStatus(parts.length ? `Restored: ${parts.join(", ")}` : "Done");
+      }
+    } catch (e) {
+      setImportStatus(`Network error: ${String(e)}`);
+    } finally {
+      setImporting(false);
+    }
+  }
 
   return (
-    <div className="space-y-4">
-      <div className="flex items-end justify-between gap-4">
-        <p className="text-xs text-slate-400">Force-finish stuck loads and perform bulk status changes for today.</p>
-      </div>
-      {!isPrivileged && <p className="text-xs text-amber-400">Bulk and force actions are admin/supervisor/lead only.</p>}
-      {isLoading && <p className="text-slate-400 text-sm">Loading…</p>}
+    <div className="space-y-6">
+      {!isPrivileged && (
+        <p className="rounded-lg border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs text-amber-400">
+          Recovery actions are restricted to admin / fleet / supervisor / lead / atl roles.
+        </p>
+      )}
 
-      <div className="card">
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">Stuck loads ({stuck.length})</h3>
-        {stuck.length === 0 ? (
-          <p className="text-sm text-slate-500">No trucks currently in progress.</p>
-        ) : (
-          <table className="w-full text-sm">
-            <thead className="bg-slate-800 text-left text-xs uppercase text-slate-400">
-              <tr>
-                <th className="px-3 py-2">Truck</th>
-                <th className="px-3 py-2">Started</th>
-                <th className="px-3 py-2">Elapsed</th>
-                <th className="px-3 py-2">vs pace</th>
-                <th className="px-3 py-2"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {stuck.map((t) => (
-                <StuckRow
-                  key={t.truck_number}
-                  truck={t}
-                  runDate={runDate}
-                  paceSeconds={pace?.avg_seconds ?? null}
-                  disabled={!isPrivileged}
-                  onForceFinish={async () => {
-                    const startTs = t.state?.load_start_time ?? null;
-                    const dur = startTs ? Math.round(Date.now() / 1000 - startTs) : 0;
-                    await upsert.mutateAsync({
-                      truck_number: t.truck_number, run_date: runDate, status: "loaded",
-                      load_finish_time: Date.now() / 1000,
-                      load_duration_seconds: dur > 0 ? dur : undefined,
-                    });
-                    if (dur >= 30 && dur <= 7200) {
-                      try { await recordDuration.mutateAsync({ truck_number: t.truck_number, run_date: runDate, duration_seconds: dur }); }
-                      catch { /* ignore */ }
-                    }
-                  }}
-                  onCancel={() => upsert.mutate({
-                    truck_number: t.truck_number, run_date: runDate,
-                    status: "unloaded", load_start_time: null,
-                  })}
-                />
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-
-      <div className="card">
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">Bulk status change</h3>
-        <div className="grid grid-cols-1 items-end gap-3 md:grid-cols-4">
+      {/* PostgreSQL backup files */}
+      <div className="card space-y-4">
+        <div className="flex items-center justify-between">
           <div>
-            <label className="label">From status</label>
-            <select className="input" value={fromStatus} onChange={(e) => setFromStatus(e.target.value as TruckStatus)}>
-              {RECOVERY_STATUS_OPTIONS.map((s) => (
-                <option key={s} value={s}>{RECOVERY_STATUS_LABELS[s]} ({counts[s] ?? 0})</option>
-              ))}
-            </select>
+            <h3 className="text-sm font-semibold text-slate-200">PostgreSQL Backups</h3>
+            <p className="mt-0.5 text-xs text-slate-500">
+              Automatic pg_dump SQL backups created every 30 minutes. Stored at{" "}
+              <span className="font-mono text-slate-400">/app/.data/backups/</span>
+            </p>
           </div>
-          <div>
-            <label className="label">To status</label>
-            <select className="input" value={toStatus} onChange={(e) => setToStatus(e.target.value as TruckStatus)}>
-              {RECOVERY_STATUS_OPTIONS.map((s) => <option key={s} value={s}>{RECOVERY_STATUS_LABELS[s]}</option>)}
-            </select>
-          </div>
-          <div className="text-sm text-slate-400">
-            {candidates.length} truck{candidates.length === 1 ? "" : "s"} will be updated.
-          </div>
-          <div>
-            <button
-              className="btn-primary w-full"
-              disabled={!isPrivileged || bulk.isPending || candidates.length === 0 || fromStatus === toStatus}
-              onClick={() => {
-                if (!candidates.length) return;
-                if (!confirm(`Change ${candidates.length} truck(s) from ${RECOVERY_STATUS_LABELS[fromStatus]} to ${RECOVERY_STATUS_LABELS[toStatus]}?`)) return;
-                bulk.mutate({ run_date: runDate, truck_numbers: candidates.map((t) => t.truck_number), new_status: toStatus });
-              }}
-            >
-              {bulk.isPending ? "Applying…" : "Apply bulk change"}
-            </button>
-          </div>
+          <button
+            className="btn-ghost gap-1.5 text-xs"
+            onClick={loadBackups}
+            disabled={loading}
+          >
+            <RefreshIcon className="h-3.5 w-3.5" />
+            {loading ? "Loading…" : loaded ? "Refresh" : "Load backups"}
+          </button>
         </div>
-        {candidates.length > 0 && (
-          <p className="mt-2 text-xs text-slate-500">Trucks: {candidates.map((t) => `#${t.truck_number}`).join(", ")}</p>
+
+        {loaded && backups.length === 0 && (
+          <p className="text-sm text-slate-500">
+            No backup files found in <span className="font-mono">/app/.data/backups/</span>.
+            Backups are created automatically every 30 minutes when the app is running against PostgreSQL.
+          </p>
+        )}
+
+        {backups.length > 0 && (
+          <div className="overflow-hidden rounded-lg border border-slate-800">
+            <table className="w-full text-sm">
+              <thead className="bg-slate-800/60 text-left text-xs uppercase tracking-wide text-slate-400">
+                <tr>
+                  <th className="px-3 py-2.5">File</th>
+                  <th className="px-3 py-2.5 text-right">Size</th>
+                  <th className="px-3 py-2.5">Created</th>
+                  <th className="px-3 py-2.5 text-right">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {backups.map((b) => (
+                  <tr key={b.filename} className="border-t border-slate-800 hover:bg-slate-800/30">
+                    <td className="px-3 py-2.5 font-mono text-xs text-slate-300">{b.filename}</td>
+                    <td className="px-3 py-2.5 text-right text-xs text-slate-400">{fmtBytes(b.size_bytes)}</td>
+                    <td className="px-3 py-2.5 text-xs text-slate-400">{fmtDate(b.created_at)}</td>
+                    <td className="px-3 py-2.5 text-right">
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          title="Download"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+                          onClick={() => downloadBackup(b.filename)}
+                        >
+                          <DownloadIcon className="h-4 w-4" />
+                        </button>
+                        <button
+                          title="Delete"
+                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                          disabled={!isPrivileged}
+                          onClick={() => setDeleteTarget(b.filename)}
+                        >
+                          <TrashIcon className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            <p className="border-t border-slate-800 px-3 py-2 text-xs text-slate-600">
+              {backups.length} backup{backups.length !== 1 ? "s" : ""} · newest first · keeping last 48
+            </p>
+          </div>
+        )}
+
+        {!loaded && (
+          <p className="text-xs text-slate-600">Click "Load backups" to list available backup files.</p>
         )}
       </div>
+
+      {/* ZIP backup restore */}
+      <div className="card space-y-3">
+        <h3 className="text-sm font-semibold text-slate-200">Restore from ZIP backup</h3>
+        <p className="text-xs text-slate-500">
+          Upload a <span className="font-mono">readyroute_backup_*.zip</span> file exported from
+          Data &amp; Reports → Export &amp; Import. Restores load durations, audit entries, and fleet configuration.
+        </p>
+        {importStatus && (
+          <p className={`rounded px-3 py-2 text-sm ${
+            importStatus.startsWith("Error")
+              ? "bg-red-900/40 text-red-300"
+              : "bg-emerald-900/40 text-emerald-300"
+          }`}>
+            {importStatus}
+          </p>
+        )}
+        <label className={`btn-ghost cursor-pointer text-sm ${!isPrivileged ? "pointer-events-none opacity-50" : ""}`}>
+          {importing ? "Restoring…" : "Choose backup ZIP…"}
+          <input
+            type="file"
+            className="sr-only"
+            accept=".zip"
+            disabled={importing || !isPrivileged}
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleZipImport(f);
+              e.target.value = "";
+            }}
+          />
+        </label>
+      </div>
+
+      {/* Confirm delete */}
+      <ConfirmDialog
+        open={deleteTarget !== null}
+        title={`Delete ${deleteTarget ?? "backup"}?`}
+        description="This backup file will be permanently removed from the server."
+        confirmLabel="Delete"
+        variant="danger"
+        busy={deleting}
+        onConfirm={doDelete}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </div>
   );
 }

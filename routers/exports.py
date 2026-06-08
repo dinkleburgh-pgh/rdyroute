@@ -4,20 +4,26 @@ Router: /exports
 Data export and import utilities.  Lets admins download historical data as
 JSON files or a full backup ZIP archive.  Import endpoints allow restoring
 those files into the V2 database.
+
+Also provides endpoints for managing pg_dump SQL backup files written by
+the background backup_loop() task.
 """
 
 import io
 import json
+import os
 import zipfile
 from datetime import date, datetime
+from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
-from fastapi.responses import Response, StreamingResponse
+from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AuditEntry, Batch, BatchHistory, LoadDuration, Shortage, Truck, TruckState
+from routers.auth import require_admin
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
@@ -439,3 +445,73 @@ async def import_backup(
 
     db.commit()
     return summary
+
+
+# ---------------------------------------------------------------------------
+# PostgreSQL backup file management
+# ---------------------------------------------------------------------------
+
+_PG_BACKUP_DIR = Path("/app/.data/backups")
+
+
+def _list_pg_backups() -> list[dict]:
+    """Return metadata for all pg_dump SQL backup files, newest first."""
+    if not _PG_BACKUP_DIR.exists():
+        return []
+    files = sorted(
+        _PG_BACKUP_DIR.glob("readyroute-*.sql"),
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    result = []
+    for f in files:
+        stat = f.stat()
+        result.append({
+            "filename": f.name,
+            "size_bytes": stat.st_size,
+            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+        })
+    return result
+
+
+@router.get("/pg-backups")
+def list_pg_backups(
+    _admin=Depends(require_admin),
+) -> list[dict]:
+    """List available PostgreSQL pg_dump backup files."""
+    return _list_pg_backups()
+
+
+@router.get("/pg-backups/{filename}")
+def download_pg_backup(
+    filename: str,
+    _admin=Depends(require_admin),
+) -> FileResponse:
+    """Download a specific pg_dump SQL backup file."""
+    # Sanitise: only allow the expected filename pattern
+    if not filename.startswith("readyroute-") or not filename.endswith(".sql"):
+        raise HTTPException(status_code=400, detail="Invalid backup filename")
+    path = _PG_BACKUP_DIR / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Backup '{filename}' not found")
+    return FileResponse(
+        path=str(path),
+        media_type="application/sql",
+        filename=filename,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.delete("/pg-backups/{filename}", status_code=204)
+def delete_pg_backup(
+    filename: str,
+    _admin=Depends(require_admin),
+) -> None:
+    """Delete a specific pg_dump SQL backup file."""
+    if not filename.startswith("readyroute-") or not filename.endswith(".sql"):
+        raise HTTPException(status_code=400, detail="Invalid backup filename")
+    path = _PG_BACKUP_DIR / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Backup '{filename}' not found")
+    path.unlink()
+

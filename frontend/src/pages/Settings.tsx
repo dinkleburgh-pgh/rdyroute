@@ -17,6 +17,7 @@ import ConnectionsPanel from "../components/management/ConnectionsPanel";
 import RecoveryPanel from "../components/management/RecoveryPanel";
 import ResetsPanel from "../components/management/ResetsPanel";
 import FleetManagementPanel from "../components/management/FleetManagementPanel";
+import BulkStatusPanel from "../components/management/BulkStatusPanel";
 import NoticesPanel from "../components/management/NoticesPanel";
 import ItemsPanel from "../components/management/ItemsPanel";
 import ExportImportPanel from "../components/management/ExportImportPanel";
@@ -35,6 +36,7 @@ type Category =
   | "communications"
   | "users"
   | "fleet_mgmt"
+  | "bulk_status"
   | "advanced"
   | "updates"
   | "development"
@@ -110,8 +112,9 @@ const CARD_GROUPS: CardGroup[] = [
     bgTint: "bg-teal-950/35",
     adminOnly: true,
     tabs: [
-      { id: "fleet_mgmt", label: "Fleet" },
-      { id: "driver_qr",  label: "Driver QR Codes" },
+      { id: "fleet_mgmt",  label: "Fleet" },
+      { id: "bulk_status", label: "Bulk Status" },
+      { id: "driver_qr",   label: "Driver QR Codes" },
     ],
   },
   {
@@ -215,6 +218,7 @@ export default function Management() {
       case "recovery":       return <RecoveryPanel />;
       case "resets":         return <ResetsPanel />;
       case "fleet_mgmt":     return <FleetManagementPanel />;
+      case "bulk_status":    return <BulkStatusPanel />;
       case "driver_qr":      return <DriverQRPanel />;
       case "export_import":  return <ExportImportPanel />;
       case "pdf_reports":    return <PDFReportsPanel />;
