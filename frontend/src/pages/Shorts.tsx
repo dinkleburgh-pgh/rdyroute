@@ -232,6 +232,36 @@ function HierarchyPicker({
     return items.filter(i => topCatOf(i) === tc && subCatOf(i) === sc);
   }
 
+  // Auto-skip: if there's only one top category, go straight to it
+  useEffect(() => {
+    if (topCat !== null || pending !== null) return;
+    if (topCats.length === 1) {
+      setTopCat(topCats[0]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topCats]);
+
+  // Auto-skip: if a top category has exactly 1 item (no subs), jump straight to qty entry
+  useEffect(() => {
+    if (topCat === null || pending !== null) return;
+    const subs = subCatsFor(topCat);
+    const flat = flatItemsFor(topCat);
+    if (subs.length === 0 && flat.length === 1) {
+      selectItem(topCat, flat[0].label);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [topCat]);
+
+  // Auto-skip: if a sub-category has exactly 1 item, jump straight to qty entry
+  useEffect(() => {
+    if (topCat === null || bulkSub === null || pending !== null) return;
+    const subItems = subItemsFor(topCat, bulkSub);
+    if (subItems.length === 1) {
+      selectItem(topCat, subItems[0].label);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bulkSub]);
+
   function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
     return (
       <div className="flex flex-wrap gap-2">
@@ -260,17 +290,17 @@ function HierarchyPicker({
     );
   }
 
-  // Build the selection trail from current state
-  const trail: { label: string; palette: string; onClick: () => void }[] = [];
+  // Build the selection trail from current state — deduplicate consecutive identical labels
+  const trailRaw: { label: string; palette: string; onClick: () => void }[] = [];
   if (topCat !== null) {
-    trail.push({
+    trailRaw.push({
       label: topCat,
       palette: TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
       onClick: reset,
     });
   }
   if (bulkSub !== null) {
-    trail.push({
+    trailRaw.push({
       label: bulkSub,
       palette: SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
       onClick: resetSub,
@@ -282,12 +312,16 @@ function HierarchyPicker({
       (bulkSub ? (SUB_PALETTE[bulkSub] ?? null) : null) ??
       (topCat  ? (TOP_PALETTE[topCat]  ?? null) : null) ??
       "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20";
-    trail.push({
+    trailRaw.push({
       label: pending.detail,
       palette: itemPalette,
       onClick: () => { setPending(null); setQtyInput(""); },
     });
   }
+  // Filter consecutive duplicates (handles auto-skip e.g. Soap > Soap)
+  const trail = trailRaw.filter((step, i) =>
+    i === 0 || step.label.toLowerCase() !== trailRaw[i - 1].label.toLowerCase()
+  );
 
   const subs      = topCat ? subCatsFor(topCat) : [];
   const flatItems = topCat ? flatItemsFor(topCat) : [];
