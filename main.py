@@ -7,6 +7,7 @@ Start the server:
 The React frontend (any origin) connects via the CORS middleware.
 Interactive API docs: http://localhost:8000/docs
 """
+# test: updater smoke test 2026-06-08
 
 from contextlib import asynccontextmanager
 import asyncio
