@@ -5,6 +5,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useTrackedItems, useUpdateTrackedItems, type TrackedItem } from "../../api/hooks";
+import ConfirmDialog from "../ConfirmDialog";
 
 export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const { data: items, isLoading } = useTrackedItems();
@@ -15,6 +16,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [importOpen, setImportOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ label: string; category: string; qty: string }>({ label: "", category: "", qty: "1" });
+  const [confirmRemoveLabel, setConfirmRemoveLabel] = useState<string | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
   const [addLabel, setAddLabel] = useState("");
   const [addQty, setAddQty] = useState("1");
@@ -46,8 +48,14 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     : groups.filter(([k]) => k === activeTab || (activeTab === "" && k === ""));
 
   function removeItem(label: string) {
-    setDraft((d) => d.filter((it) => it.label !== label));
-    if (editingLabel === label) setEditingLabel(null);
+    setConfirmRemoveLabel(label);
+  }
+
+  function doRemove() {
+    if (!confirmRemoveLabel) return;
+    setDraft((d) => d.filter((it) => it.label !== confirmRemoveLabel));
+    if (editingLabel === confirmRemoveLabel) setEditingLabel(null);
+    setConfirmRemoveLabel(null);
   }
 
   function startEdit(it: TrackedItem) {
@@ -301,6 +309,16 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
           </div>
         </div>
       )}
+
+      <ConfirmDialog
+        open={confirmRemoveLabel !== null}
+        title={`Remove "${confirmRemoveLabel}"?`}
+        description="This item will be removed from the tracked items catalog. Save changes to make it permanent."
+        confirmLabel="Remove"
+        variant="danger"
+        onConfirm={doRemove}
+        onCancel={() => setConfirmRemoveLabel(null)}
+      />
     </div>
   );
 }
