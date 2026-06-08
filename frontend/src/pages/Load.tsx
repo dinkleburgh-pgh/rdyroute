@@ -16,7 +16,7 @@ import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { effectiveStatus } from "../utils/truckStatus";
-import { ElapsedTimer } from "../components/LiveInProgress";
+import { ElapsedTimer, PaceBar, useElapsed, formatDuration as fmtDur } from "../components/LiveInProgress";
 import type { TruckWithState } from "../types";
 
 /**
@@ -728,26 +728,35 @@ function InProgressPanel({
   onCancel: () => void;
 }) {
   const startSec = truck.state?.load_start_time ?? null;
+  const elapsed = useElapsed(startSec);
 
-  // For cancel lock countdown only (ElapsedTimer owns the visual timer)
-  const [elapsed, setElapsed] = useState(() =>
-    startSec ? Math.max(0, Math.round(Date.now() / 1000 - startSec)) : 0,
-  );
-  useEffect(() => {
-    if (!startSec) return;
-    const id = window.setInterval(() => {
-      setElapsed(Math.max(0, Math.round(Date.now() / 1000 - startSec)));
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [startSec]);
+  const pct = paceAvgSeconds && paceAvgSeconds > 0 ? elapsed / paceAvgSeconds : null;
+  const onPace = pct == null ? null : pct < 1;
+
+  const timerColor =
+    pct == null   ? "text-slate-200"
+    : pct >= 1    ? "text-red-400"
+    : pct >= 0.85 ? "text-orange-400"
+    :               "text-amber-300";
+
+  const paceLabel =
+    paceAvgSeconds == null ? null
+    : onPace
+      ? `on pace · avg ${fmtDur(paceAvgSeconds)}`
+      : `+${fmtDur(elapsed - paceAvgSeconds)} over · avg ${fmtDur(paceAvgSeconds)}`;
+
+  const paceLabelColor =
+    onPace == null ? "text-slate-500"
+    : onPace       ? "text-emerald-400"
+    :                "text-red-400";
 
   return (
-    <section className="overflow-hidden rounded-xl border-2 border-amber-500/50 bg-amber-950/20 shadow-inner">
+    <section className="overflow-hidden rounded-xl border-2 border-amber-500/50 bg-amber-950/20">
       {/* Amber pulse bar */}
-      <div className="h-0.5 w-full animate-pulse bg-amber-500/70" />
+      <div className="h-1 w-full animate-pulse bg-amber-500/70" />
 
-      <div className="p-4 space-y-4">
-        {/* Top: Current Truck | divider | Next Up */}
+      <div className="space-y-4 p-4">
+        {/* Identity row: Current Truck | divider | Next Up */}
         <div className="flex items-start gap-4">
           {/* Current Truck */}
           <div className="flex-1 text-center">
@@ -770,7 +779,6 @@ function InProgressPanel({
             ) : null}
           </div>
 
-          {/* Divider */}
           <div className="w-px self-stretch bg-slate-700/50" />
 
           {/* Next Up */}
@@ -783,7 +791,7 @@ function InProgressPanel({
                 </div>
                 {paceAvgSeconds != null && (
                   <div className="mt-1.5 text-xs text-slate-400">
-                    avg <span className="text-slate-300">{formatDuration(paceAvgSeconds)}</span>
+                    avg <span className="text-slate-300">{fmtDur(paceAvgSeconds)}</span>
                   </div>
                 )}
               </>
@@ -793,36 +801,43 @@ function InProgressPanel({
           </div>
         </div>
 
-        {/* Arc timer — centered, dominant */}
-        <div className="flex justify-center py-2">
-          <ElapsedTimer
-            startSec={startSec}
-            paceAvgSeconds={paceAvgSeconds}
-            size={180}
-          />
+        {/* Timer number + pace label */}
+        <div className="flex items-baseline justify-between gap-4">
+          <span className={clsx("font-mono font-black tabular-nums leading-none", timerColor)}
+            style={{ fontSize: "3.5rem" }}>
+            {formatDuration(elapsed)}
+          </span>
+          {paceLabel && (
+            <span className={clsx("text-right text-sm font-medium", paceLabelColor)}>
+              {paceLabel}
+            </span>
+          )}
         </div>
 
-        {/* Actions */}
-        <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center">
+        {/* Full-width pace bar */}
+        <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
+
+        {/* Finish Loading — immediately below bar */}
+        <button
+          className="w-full rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow transition-colors hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50"
+          disabled={busy}
+          onClick={onFinish}
+        >
+          {busy ? "Finishing…" : "Finish Loading"}
+        </button>
+
+        {/* Cancel */}
+        <div className="flex items-center gap-3">
           <button
-            className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-base font-bold text-white shadow transition-colors hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50"
-            disabled={busy}
-            onClick={onFinish}
-          >
-            {busy ? "Finishing…" : "Finish Loading"}
-          </button>
-          <button
-            className="btn-ghost sm:w-auto"
+            className="btn-ghost"
             disabled={busy || elapsed >= 15}
             onClick={onCancel}
           >
             Cancel (back to Unloaded)
           </button>
-          {elapsed < 15 ? (
-            <span className="text-xs text-slate-500">locks in {15 - elapsed}s</span>
-          ) : (
-            <span className="text-xs text-slate-500">cancel locked</span>
-          )}
+          <span className="text-xs text-slate-500">
+            {elapsed < 15 ? `locks in ${15 - elapsed}s` : "cancel locked"}
+          </span>
         </div>
       </div>
     </section>
