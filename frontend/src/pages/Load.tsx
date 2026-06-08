@@ -1,4 +1,4 @@
-ï»¿import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useBlocker } from "react-router-dom";
 import clsx from "clsx";
 import {
@@ -16,7 +16,7 @@ import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { effectiveStatus } from "../utils/truckStatus";
-import { ElapsedTimer, PaceBar, useElapsed, formatDuration as fmtDur } from "../components/LiveInProgress";
+import { PaceBar, useElapsed } from "../components/LiveInProgress";
 import type { TruckWithState } from "../types";
 
 /**
@@ -96,7 +96,7 @@ export default function Load() {
     return arr;
   }, [loaded, loadedSort]);
 
-  // Route-aware "not yet loaded" computation â€” mirrors Board/Sidebar logic.
+  // Route-aware "not yet loaded" computation — mirrors Board/Sidebar logic.
   // Covering spares (route_swap_route set) stand in for their OOS route truck.
   const coveringSpareByRoute = useMemo(
     () =>
@@ -234,8 +234,8 @@ export default function Load() {
   const anyInProgress = Boolean(inProgress);
 
   // Determines what kind of navigation block to show (if any).
-  // in_progress  â†’ a truck is actively being loaded (hard block)
-  // incomplete   â†’ loading has started but trucks still remain (soft warning)
+  // in_progress  ? a truck is actively being loaded (hard block)
+  // incomplete   ? loading has started but trucks still remain (soft warning)
   const blockedReason: "in_progress" | "incomplete" | null = anyInProgress
     ? "in_progress"
     : loadDone > 0 && totalLeft > 0
@@ -392,7 +392,7 @@ export default function Load() {
         <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
       </div>
 
-      {/* Dust Garments â€” read-only, set from Setup Day */}
+      {/* Dust Garments — read-only, set from Setup Day */}
       <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 px-4 py-3">
         <div className="mb-2 flex items-center gap-2">
           <DustGarmentIcon className="h-4 w-4 text-amber-400" />
@@ -421,7 +421,7 @@ export default function Load() {
         )}
       </div>
 
-      {/* In-progress truck â€” top of page */}
+      {/* In-progress truck — top of page */}
       {inProgress && (
         <>
           <InProgressPanel
@@ -528,7 +528,7 @@ export default function Load() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` Â· Batch ${t.state.batch_id}` : ""}
+                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                 </div>
                 {t.state?.wearers ? (
                   <div className="mt-auto pt-1 text-xs text-slate-500">{t.state.wearers} wearers</div>
@@ -612,7 +612,7 @@ export default function Load() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` Â· Batch ${t.state.batch_id}` : ""}
+                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                 </div>
                 {t.state?.load_finish_time && (
                   <div className="mt-auto pt-1 text-xs text-slate-500">
@@ -742,8 +742,8 @@ function InProgressPanel({
   const paceLabel =
     paceAvgSeconds == null ? null
     : onPace
-      ? `on pace Â· avg ${fmtDur(paceAvgSeconds)}`
-      : `+${fmtDur(elapsed - paceAvgSeconds)} over Â· avg ${fmtDur(paceAvgSeconds)}`;
+      ? `on pace · avg ${formatDuration(paceAvgSeconds)}`
+      : `+${formatDuration(elapsed - paceAvgSeconds)} over · avg ${formatDuration(paceAvgSeconds)}`;
 
   const paceLabelColor =
     onPace == null ? "text-slate-500"
@@ -766,7 +766,7 @@ function InProgressPanel({
             </div>
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-600/50 bg-emerald-950/40 px-3 py-0.5 text-xs font-semibold text-emerald-300">
               <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
-              Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` Â· ${LOAD_DAY_NAMES[loadDay]}` : ""}
+              Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}
             </div>
             {truck.state?.has_dust_garment && (
               <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-400">
@@ -791,7 +791,7 @@ function InProgressPanel({
                 </div>
                 {paceAvgSeconds != null && (
                   <div className="mt-1.5 text-xs text-slate-400">
-                    avg <span className="text-slate-300">{fmtDur(paceAvgSeconds)}</span>
+                    avg <span className="text-slate-300">{formatDuration(paceAvgSeconds)}</span>
                   </div>
                 )}
               </>
@@ -817,13 +817,13 @@ function InProgressPanel({
         {/* Full-width pace bar */}
         <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
 
-        {/* Finish Loading â€” immediately below bar */}
+        {/* Finish Loading — immediately below bar */}
         <button
           className="w-full rounded-xl bg-emerald-600 py-4 text-lg font-bold text-white shadow transition-colors hover:bg-emerald-500 active:scale-[0.99] disabled:opacity-50"
           disabled={busy}
           onClick={onFinish}
         >
-          {busy ? "Finishingâ€¦" : "Finish Loading"}
+          {busy ? "Finishing…" : "Finish Loading"}
         </button>
 
         {/* Cancel */}
