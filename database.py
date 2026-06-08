@@ -23,6 +23,9 @@ class Settings(BaseSettings):
 
 settings = Settings()
 
+# Determine DB type before it's used anywhere else
+_is_sqlite = settings.database_url.startswith("sqlite")
+
 if settings.secret_key == "change-me-to-a-long-random-string":
     _msg = (
         "SECRET_KEY is using the insecure default value. "
@@ -36,8 +39,6 @@ if settings.secret_key == "change-me-to-a-long-random-string":
         # Warn in development (SQLite) — still usable locally.
         import warnings as _warn
         _warn.warn(_msg, stacklevel=1)
-
-_is_sqlite = settings.database_url.startswith("sqlite")
 
 if _is_sqlite:
     # SQLite needs check_same_thread=False under FastAPI's threadpool,

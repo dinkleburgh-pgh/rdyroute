@@ -28,6 +28,7 @@ interface HealthDetail {
   db: DbProbe;
   db_fallback: string | null;
   extra_dbs: DbProbe[];
+  last_backup: { type: string; ok: boolean; path?: string; error?: string; at?: string } | null;
 }
 
 function formatUptime(s: number): string {
@@ -188,6 +189,36 @@ export default function ConnectionsPanel() {
       {health && health.extra_dbs.length === 0 && (
         <p className="text-xs text-slate-600">
           No backup databases configured. Set <span className="font-mono text-slate-400">BACKUP_DATABASE_URL</span> in <span className="font-mono text-slate-400">.env</span> to add one.
+        </p>
+      )}
+
+      {/* Last backup status */}
+      {health?.last_backup && (
+        <div className={clsx(
+          "rounded-lg border px-4 py-3 text-sm",
+          health.last_backup.ok
+            ? "border-emerald-700/40 bg-emerald-950/30 text-emerald-300"
+            : "border-red-700/40 bg-red-950/30 text-red-300",
+        )}>
+          <div className="flex items-center justify-between">
+            <span className="font-semibold">
+              {health.last_backup.ok ? "● Last backup successful" : "● Last backup failed"}
+            </span>
+            <span className="text-xs opacity-70 uppercase tracking-wide">{health.last_backup.type}</span>
+          </div>
+          {health.last_backup.at && (
+            <p className="mt-0.5 text-xs opacity-70">
+              {new Date(health.last_backup.at).toLocaleString()}
+            </p>
+          )}
+          {health.last_backup.error && (
+            <p className="mt-1 font-mono text-xs opacity-80">{health.last_backup.error}</p>
+          )}
+        </div>
+      )}
+      {health && !health.last_backup && (
+        <p className="text-xs text-slate-600">
+          No backup run yet this session — first backup runs within 30 minutes.
         </p>
       )}
     </div>

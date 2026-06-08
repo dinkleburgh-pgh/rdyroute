@@ -336,6 +336,10 @@ def health_detail():
 
     fallback_reason = _os.environ.get("DB_FALLBACK_REASON")
 
+    # Include last backup status so the UI can surface it
+    from backups import get_last_backup_status
+    last_backup = get_last_backup_status()
+
     return {
         "status": "ok" if overall_ok else "degraded",
         "version": app.version,
@@ -344,4 +348,5 @@ def health_detail():
         "db": primary,
         "db_fallback": fallback_reason,
         "extra_dbs": extras,
+        "last_backup": last_backup if last_backup else None,
     }
