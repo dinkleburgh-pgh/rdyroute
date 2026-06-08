@@ -300,68 +300,73 @@ function InProgressCard({
 
       <div className="space-y-5 p-4 md:p-6">
 
-        {/* Row 1: truck # left | next-up buttons right */}
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex flex-col gap-1">
-            <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-500">Current Truck</p>
-            <p className="font-black leading-none text-amber-300" style={{ fontSize: "4rem" }}>
+        {/* Row 1: Current Truck | divider | Next Up — mirroring Load page */}
+        <div className="flex items-start gap-4">
+          {/* Current Truck */}
+          <div className="flex-1 text-center">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Current Truck</p>
+            <p className="font-black leading-none text-amber-300" style={{ fontSize: "3.5rem" }}>
               #{truck.truck_number}
             </p>
             {dayLabel && (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-700/50 bg-emerald-950/40 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-700/50 bg-emerald-950/40 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
                 <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
                 {dayLabel}
               </span>
             )}
           </div>
 
-          <div className="flex flex-col items-end gap-2 pt-1">
-            <button
-              className={clsx(
-                "rounded-lg border px-4 py-2 text-sm font-semibold transition-colors",
-                nextUp != null
-                  ? "border-sky-700/60 bg-sky-950/40 text-sky-300 hover:bg-sky-900/40"
-                  : "border-slate-700 bg-slate-800 text-slate-300 hover:bg-slate-700",
-              )}
-              onClick={() => setPickerOpen((o) => !o)}
-            >
-              {nextUp != null ? `Next Up: #${nextUp}` : "Set Next Up"}
-            </button>
-            <Link
-              to={nextUp != null ? `/audit?truck=${nextUp}` : "/audit"}
-              className={clsx(
-                "rounded-lg border px-4 py-2 text-center text-sm font-semibold transition-colors",
-                nextUp != null
-                  ? "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700"
-                  : "pointer-events-none border-slate-800 bg-slate-900/40 text-slate-600",
-              )}
-              aria-disabled={nextUp == null}
-            >
-              Audit Next Up
-            </Link>
+          <div className="w-px self-stretch bg-slate-700/50" />
+
+          {/* Next Up */}
+          <div className="flex-1 text-center">
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Next Up</p>
+            {nextUp != null ? (
+              <>
+                <p className="font-black leading-none text-sky-400" style={{ fontSize: "3.5rem" }}>
+                  #{nextUp}
+                </p>
+                <button
+                  className="mt-2 rounded-lg border border-sky-700/60 bg-sky-950/40 px-3 py-1 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-900/40"
+                  onClick={() => setPickerOpen((o) => !o)}
+                >
+                  {pickerOpen ? "Close" : "Change"}
+                </button>
+              </>
+            ) : (
+              <>
+                <p className="font-black leading-none text-slate-600" style={{ fontSize: "3.5rem" }}>—</p>
+                <button
+                  className="mt-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"
+                  onClick={() => setPickerOpen((o) => !o)}
+                >
+                  Set Next Up
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {/* Truck notes */}
         <TruckNotesPanel truckNumber={truck.truck_number} loadDayNum={dayNum} />
 
-        {/* Row 2: timer number (left) + pace label (right) */}
-        <div className="flex items-baseline justify-between gap-4">
+        {/* Timer — centered, matching Load page */}
+        <div className="flex flex-col items-center gap-2 py-1">
           <span className={clsx("font-mono font-black tabular-nums leading-none", timerColor)}
             style={{ fontSize: "3.5rem" }}>
             {formatDuration(elapsed)}
           </span>
           {paceLabel && (
-            <span className={clsx("text-right text-sm font-medium leading-tight", paceLabelColor)}>
+            <span className={clsx("text-sm font-medium", paceLabelColor)}>
               {paceLabel}
             </span>
           )}
         </div>
 
-        {/* Row 3: full-width pace bar */}
+        {/* Full-width pace bar */}
         <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
 
-        {/* Row 4: Finish Loading immediately below bar */}
+        {/* Finish Loading immediately below bar */}
         <button
           type="button"
           onClick={finishLoading}
@@ -371,13 +376,27 @@ function InProgressCard({
           {busy ? "Finishing…" : "Finish Loading"}
         </button>
 
-        {/* Audit button */}
-        <Link
-          to={`/audit?truck=${truck.truck_number}`}
-          className="block rounded-xl border border-slate-700 bg-slate-800/60 py-3 text-center text-sm font-semibold transition-colors hover:bg-slate-700"
-        >
-          Audit #{truck.truck_number}
-        </Link>
+        {/* Audit + Next Up audit buttons */}
+        <div className="grid grid-cols-2 gap-2">
+          <Link
+            to={`/audit?truck=${truck.truck_number}`}
+            className="block rounded-xl border border-slate-700 bg-slate-800/60 py-3 text-center text-sm font-semibold transition-colors hover:bg-slate-700"
+          >
+            Audit #{truck.truck_number}
+          </Link>
+          <Link
+            to={nextUp != null ? `/audit?truck=${nextUp}` : "/audit"}
+            className={clsx(
+              "block rounded-xl border py-3 text-center text-sm font-semibold transition-colors",
+              nextUp != null
+                ? "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700"
+                : "pointer-events-none border-slate-800 bg-slate-900/40 text-slate-600",
+            )}
+            aria-disabled={nextUp == null}
+          >
+            Audit Next Up
+          </Link>
+        </div>
 
         {/* Divider */}
         <div className="border-t border-slate-800" />
