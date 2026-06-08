@@ -71,7 +71,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "App Settings",
     desc: "Status badge colors",
     borderColor: "border-l-sky-500",
-    bgTint: "bg-sky-950/20",
+    bgTint: "bg-sky-950/35",
     tabs: [
       { id: "colors", label: "Badge Colors" },
     ],
@@ -81,7 +81,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "Users & Access",
     desc: "Manage users, pending requests, and role reference",
     borderColor: "border-l-indigo-500",
-    bgTint: "bg-indigo-950/20",
+    bgTint: "bg-indigo-950/35",
     adminOnly: true,
     tabs: [
       { id: "users",    label: "Users" },
@@ -95,7 +95,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "Notices & Items",
     desc: "Team notices and audit checklist catalog",
     borderColor: "border-l-yellow-500",
-    bgTint: "bg-yellow-950/20",
+    bgTint: "bg-yellow-950/35",
     adminOnly: true,
     tabs: [
       { id: "notices", label: "Notices" },
@@ -107,7 +107,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "Fleet",
     desc: "Add, remove, and configure trucks in the fleet",
     borderColor: "border-l-teal-500",
-    bgTint: "bg-teal-950/20",
+    bgTint: "bg-teal-950/35",
     adminOnly: true,
     tabs: [
       { id: "fleet_mgmt", label: "Fleet" },
@@ -119,7 +119,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "Communications",
     desc: "Manage censored words for the messaging system",
     borderColor: "border-l-pink-500",
-    bgTint: "bg-pink-950/20",
+    bgTint: "bg-pink-950/35",
     adminOnly: true,
     tabs: [{ id: "communications", label: "Censor Words" }],
   },
@@ -128,7 +128,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "Operations",
     desc: "Workflows, force-finish loads, bulk status changes, and workday resets",
     borderColor: "border-l-orange-500",
-    bgTint: "bg-orange-950/20",
+    bgTint: "bg-orange-950/35",
     tabs: [
       { id: "workflows", label: "Workflows" },
       { id: "recovery",  label: "Recovery" },
@@ -140,7 +140,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "Advanced",
     desc: "Raw key/value settings editor",
     borderColor: "border-l-red-500",
-    bgTint: "bg-red-950/20",
+    bgTint: "bg-red-950/35",
     adminOnly: true,
     tabs: [
       { id: "advanced",     label: "Advanced" },
@@ -154,7 +154,7 @@ const CARD_GROUPS: CardGroup[] = [
     label: "Data & Reports",
     desc: "Export / import backups, PDF day reports",
     borderColor: "border-l-emerald-500",
-    bgTint: "bg-emerald-950/20",
+    bgTint: "bg-emerald-950/35",
     adminOnly: true,
     tabs: [
       { id: "export_import", label: "Export & Import" },
@@ -243,14 +243,14 @@ export default function Management() {
                 }
               }}
               className={clsx(
-                "rounded-lg border border-slate-800 border-l-4 p-4 text-left transition hover:brightness-110",
+                "rounded-lg border border-slate-700/60 border-l-4 p-4 text-left transition hover:brightness-110",
                 group.borderColor,
                 group.bgTint,
                 isActive ? "ring-2 ring-white/20" : "",
               )}
             >
-              <p className="font-semibold text-slate-100">{group.label}</p>
-              <p className="mt-1 text-xs text-slate-400">{group.desc}</p>
+              <p className="text-base font-bold text-white">{group.label}</p>
+              <p className="mt-1.5 text-sm text-slate-300">{group.desc}</p>
             </button>
           );
         })}
