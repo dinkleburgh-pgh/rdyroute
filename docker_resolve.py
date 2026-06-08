@@ -75,60 +75,89 @@ def cmd_portainer_redeploy():
     """Trigger a Portainer stack redeploy via the Portainer HTTP API.
 
     Works for both git-backed stacks (type 1) and compose-file stacks (type 2).
-    Fetches the current stack file + env from Portainer, then calls PUT with
-    pullImage=True to pull new images and recreate containers.
+    Resolves the stack by NAME so the numeric ID never needs to be updated,
+    even when the stack is deleted and recreated in Portainer.
 
-    Required env vars (set in docker-compose.prod.yml or .env.production):
+    Required env vars:
       PORTAINER_URL         e.g. https://192.168.1.132:31015
-      PORTAINER_API_KEY     Portainer access token (Settings → Users → Access tokens)
-      PORTAINER_STACK_ID    numeric stack id
-      PORTAINER_ENDPOINT_ID numeric endpoint/environment id
+      PORTAINER_API_KEY     Portainer access token
+      PORTAINER_ENDPOINT_ID numeric endpoint/environment id (e.g. 3)
+
+    Stack identification (one of):
+      PORTAINER_STACK_NAME  stack name e.g. "rdyroute2"  ← preferred, stable
+      PORTAINER_STACK_ID    numeric stack id              ← fallback / override
     """
     import urllib.request
     import ssl
 
-    url     = os.environ.get("PORTAINER_URL", "").rstrip("/")
-    api_key = os.environ.get("PORTAINER_API_KEY", "")
-    stack   = os.environ.get("PORTAINER_STACK_ID", "")
-    ep      = os.environ.get("PORTAINER_ENDPOINT_ID", "")
+    url        = os.environ.get("PORTAINER_URL", "").rstrip("/")
+    api_key    = os.environ.get("PORTAINER_API_KEY", "")
+    ep         = os.environ.get("PORTAINER_ENDPOINT_ID", "")
+    stack_name = os.environ.get("PORTAINER_STACK_NAME", "").strip()
+    stack_id   = os.environ.get("PORTAINER_STACK_ID", "").strip()
 
+    # Validate required vars
     missing = [k for k, v in {
         "PORTAINER_URL": url,
         "PORTAINER_API_KEY": api_key,
-        "PORTAINER_STACK_ID": stack,
         "PORTAINER_ENDPOINT_ID": ep,
     }.items() if not v]
     if missing:
         sys.stderr.write(f"portainer_redeploy: missing env vars: {', '.join(missing)}\n")
+        sys.exit(1)
+    if not stack_name and not stack_id:
+        sys.stderr.write(
+            "portainer_redeploy: set PORTAINER_STACK_NAME (e.g. rdyroute2) "
+            "or PORTAINER_STACK_ID\n"
+        )
         sys.exit(1)
 
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE  # self-signed cert on Portainer
 
-    def _get(path: str) -> dict:
-        req = urllib.request.Request(
-            f"{url}{path}",
-            headers={"X-API-Key": api_key},
-        )
-        with urllib.request.urlopen(req, context=ctx, timeout=15) as r:  # noqa: S310
-            return json.loads(r.read().decode(errors="replace"))
+    def _get(path: str):
+        r = urllib.request.Request(f"{url}{path}", headers={"X-API-Key": api_key})
+        with urllib.request.urlopen(r, context=ctx, timeout=15) as resp:  # noqa: S310
+            return json.loads(resp.read().decode(errors="replace"))
 
-    # Fetch current stack metadata (env + type)
+    # ── Resolve stack ID from name if needed ─────────────────────────────────
+    if stack_name and not stack_id:
+        try:
+            all_stacks = _get("/api/stacks")
+        except Exception as exc:  # noqa: BLE001
+            sys.stderr.write(f"portainer_redeploy: could not list stacks: {exc}\n")
+            sys.exit(1)
+
+        match = next((s for s in all_stacks if s.get("Name") == stack_name), None)
+        if match is None:
+            available = [s.get("Name", "?") for s in all_stacks]
+            sys.stderr.write(
+                f"portainer_redeploy: stack '{stack_name}' not found. "
+                f"Available: {available}\n"
+            )
+            sys.exit(1)
+
+        stack_id = str(match["Id"])
+        sys.stdout.write(
+            f"portainer_redeploy: resolved '{stack_name}' → stack ID {stack_id}\n"
+        )
+
+    # ── Fetch stack metadata (type + env) ────────────────────────────────────
     current_env: list = []
     stack_type: int = 2  # default: compose file stack
     try:
-        stack_info = _get(f"/api/stacks/{stack}")
+        stack_info = _get(f"/api/stacks/{stack_id}")
         current_env = stack_info.get("Env") or []
         stack_type  = stack_info.get("Type", 2)
     except Exception as exc:  # noqa: BLE001
-        sys.stderr.write(f"portainer_redeploy: could not fetch stack info (continuing): {exc}\n")
+        sys.stderr.write(f"portainer_redeploy: could not fetch stack info: {exc}\n")
+        sys.exit(1)
 
-    # For git-backed stacks (type 1) we can use the git/redeploy shortcut.
-    # For compose-file stacks (type 2) we must supply the full stack file.
+    # ── Build redeploy request based on stack type ───────────────────────────
     if stack_type == 1:
-        # Git-backed stack — use the git redeploy endpoint
-        endpoint = f"{url}/api/stacks/{stack}/git/redeploy?endpointId={ep}"
+        # Git-backed stack — use the git/redeploy shortcut
+        endpoint = f"{url}/api/stacks/{stack_id}/git/redeploy?endpointId={ep}"
         payload = json.dumps({
             "prune": False,
             "pullImage": True,
@@ -137,16 +166,15 @@ def cmd_portainer_redeploy():
             "env": current_env,
         }).encode()
     else:
-        # Compose-file stack (type 2) — fetch the stack file and use PUT
-        stack_file_content = ""
+        # Compose-file stack (type 2) — must supply the current stack file
         try:
-            file_info = _get(f"/api/stacks/{stack}/file")
+            file_info = _get(f"/api/stacks/{stack_id}/file")
             stack_file_content = file_info.get("StackFileContent", "")
         except Exception as exc:  # noqa: BLE001
             sys.stderr.write(f"portainer_redeploy: could not fetch stack file: {exc}\n")
             sys.exit(1)
 
-        endpoint = f"{url}/api/stacks/{stack}?endpointId={ep}"
+        endpoint = f"{url}/api/stacks/{stack_id}?endpointId={ep}"
         payload = json.dumps({
             "env": current_env,
             "prune": False,
@@ -154,14 +182,12 @@ def cmd_portainer_redeploy():
             "stackFileContent": stack_file_content,
         }).encode()
 
+    # ── Fire the redeploy ────────────────────────────────────────────────────
     redeploy_req = urllib.request.Request(
         endpoint,
         data=payload,
         method="PUT",
-        headers={
-            "Content-Type": "application/json",
-            "X-API-Key": api_key,
-        },
+        headers={"Content-Type": "application/json", "X-API-Key": api_key},
     )
     try:
         with urllib.request.urlopen(redeploy_req, context=ctx, timeout=120) as resp:  # noqa: S310
