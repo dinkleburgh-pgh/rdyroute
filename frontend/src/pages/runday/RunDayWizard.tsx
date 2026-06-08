@@ -158,11 +158,23 @@ export default function RunDayWizard({
   }
 
   async function saveAbsentAndAdvance() {
-    await Promise.all(
-      [...absentSelected].map((num) =>
-        upsert.mutateAsync({ truck_number: num, run_date: runDate, status: "dirty" }),
-      ),
-    );
+    const tasks: Promise<unknown>[] = [];
+
+    // Absent trucks: mark dirty (they weren't pushed yesterday)
+    for (const num of absentSelected) {
+      tasks.push(upsert.mutateAsync({ truck_number: num, run_date: runDate, status: "dirty" }));
+    }
+
+    // Non-absent returning trucks: auto-set to unloaded.
+    // These trucks were off yesterday and are back today — they were already
+    // loaded/pushed the day before, so they return in an unloaded state.
+    for (const t of returningTrucks) {
+      if (!absentSelected.has(t.truck_number)) {
+        tasks.push(upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, status: "unloaded" }));
+      }
+    }
+
+    await Promise.all(tasks);
     setStep(5);
   }
 
