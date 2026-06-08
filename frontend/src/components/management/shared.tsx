@@ -9,30 +9,11 @@ import type { TruckStatus } from "../../types";
 // Value coercion helpers (settings come back as `unknown`)
 // ---------------------------------------------------------------------------
 
-export function asNumber(v: unknown, fallback: number): number {
-  if (typeof v === "number" && Number.isFinite(v)) return v;
-  if (typeof v === "string") {
-    const n = parseFloat(v);
-    if (Number.isFinite(n)) return n;
-  }
-  return fallback;
-}
-
 export function asBool(v: unknown, fallback: boolean): boolean {
   if (typeof v === "boolean") return v;
   if (typeof v === "string") return v === "true" || v === "1";
   if (typeof v === "number") return v !== 0;
   return fallback;
-}
-
-export function asString(v: unknown, fallback: string): string {
-  if (typeof v === "string") return v;
-  if (v == null) return fallback;
-  try {
-    return String(v);
-  } catch {
-    return fallback;
-  }
 }
 
 // ---------------------------------------------------------------------------

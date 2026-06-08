@@ -10,7 +10,6 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
   const initial = useMemo(
     () => ({
       batching_disabled: asBool(map.get("batching_disabled"), false),
-      skip_batching_disabled: asBool(map.get("skip_batching_disabled"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
       outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
@@ -44,21 +43,6 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, batching_disabled: e.target.checked })}
           />
           Hide Batches
-        </label>
-      </FieldRow>
-      <FieldRow
-        label="Skip batching disabled"
-        hint="When set, loaders cannot bypass batch assignment before finishing a load."
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.skip_batching_disabled}
-            onChange={(e) =>
-              setForm({ ...form, skip_batching_disabled: e.target.checked })
-            }
-          />
-          Require batch
         </label>
       </FieldRow>
       <FieldRow

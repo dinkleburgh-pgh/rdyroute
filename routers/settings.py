@@ -1,12 +1,9 @@
 """
 Router: /settings
 
-Key-value application settings store.  Replaces the ad-hoc fields that were
-scattered across the V1 JSON state file (timezone_key, ui_theme, warn_seconds,
-badge colors, pace parameters, off_schedule, etc.).
-
-Each setting is a JSON-serialisable value stored under a string key.  The
-React frontend and other routers can read/write settings via these endpoints.
+Key-value application settings store. Each setting is a JSON-serialisable
+value stored under a string key. The React frontend and other routers can
+read/write settings via these endpoints.
 """
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -24,41 +21,24 @@ router = APIRouter(prefix="/settings", tags=["settings"])
 # Well-known setting keys (informational; not enforced at the API boundary)
 # ---------------------------------------------------------------------------
 KNOWN_KEYS = {
-    "timezone_key",
-    "ui_theme",
-    "warn_seconds",
-    "rollover_prompt_hour",
-    "rollover_snooze_minutes",
-    "auto_refresh_ms",
-    "pace_avg_override_enabled",
-    "pace_avg_override_seconds",
-    "pace_buffer_base_seconds",
-    "pace_buffer_per_truck_seconds",
-    "pace_buffer_percent",
-    "pace_loader_baseline_count",
-    "pace_loader_active_count",
     "status_badge_colors",
-    "off_schedule",
-    "shorts_mode",
-    "tracked_items_map",
-    "inprog_layout_style",
-    "skip_batching_disabled",
     "batching_disabled",
-    "role_workflow_settings",
+    "batch_no_cap",
+    "outside_timer_enabled",
+    "note_cards_enabled",
+    "tracked_items_map",
     "communications_censor_words",
 }
 
 
 # Keys any authenticated user may read (non-sensitive operational settings)
 _USER_READABLE_KEYS = {
-    "timezone_key", "ui_theme", "warn_seconds", "rollover_prompt_hour",
-    "rollover_snooze_minutes", "auto_refresh_ms", "pace_avg_override_enabled",
-    "pace_avg_override_seconds", "pace_buffer_base_seconds",
-    "pace_buffer_per_truck_seconds", "pace_buffer_percent",
-    "pace_loader_baseline_count", "pace_loader_active_count",
-    "status_badge_colors", "off_schedule", "shorts_mode", "tracked_items_map",
-    "inprog_layout_style", "skip_batching_disabled", "batching_disabled",
-    "role_workflow_settings", "note_cards_enabled",
+    "status_badge_colors",
+    "batching_disabled",
+    "batch_no_cap",
+    "outside_timer_enabled",
+    "note_cards_enabled",
+    "tracked_items_map",
 }
 
 # Keys any authenticated user may write to (e.g. personal notes)

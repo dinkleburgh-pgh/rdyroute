@@ -7,12 +7,17 @@ import { useUpsertSetting } from "../../api/hooks";
 import type { AppSetting } from "../../types";
 
 const WELL_KNOWN_KEYS = new Set([
-  "timezone_key", "ui_theme", "warn_seconds", "rollover_prompt_hour",
-  "rollover_snooze_minutes", "auto_refresh_ms", "pace_avg_override_enabled",
-  "pace_avg_override_seconds", "pace_buffer_base_seconds", "pace_buffer_per_truck_seconds",
-  "pace_buffer_percent", "pace_loader_baseline_count", "pace_loader_active_count",
-  "status_badge_colors", "skip_batching_disabled", "batching_disabled",
+  "status_badge_colors",
+  "batching_disabled",
+  "batch_no_cap",
+  "outside_timer_enabled",
+  "note_cards_enabled",
   "communications_censor_words",
+  "update_deploy_command",
+  "update_push_enabled",
+  "update_push_secret",
+  "update_last_status",
+  "tracked_items_map",
 ]);
 
 const HIDDEN_KEYS = new Set(["communications_censor_words"]);

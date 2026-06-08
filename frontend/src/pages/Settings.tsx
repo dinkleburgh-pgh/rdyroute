@@ -7,8 +7,6 @@ import UsersPanel from "../components/management/UsersPanel";
 import RequestsPanel from "../components/management/RequestsPanel";
 import RoleAccessPanel from "../components/management/RoleAccessPanel";
 import ActivityPanel from "../components/management/ActivityPanel";
-import GeneralPanel from "../components/management/GeneralPanel";
-import PacePanel from "../components/management/PacePanel";
 import ColorsPanel from "../components/management/ColorsPanel";
 import WorkflowsPanel from "../components/management/WorkflowsPanel";
 import CommunicationsPanel from "../components/management/CommunicationsPanel";
@@ -32,8 +30,6 @@ import DriverQRPanel from "../components/management/DriverQRPanel";
  */
 
 type Category =
-  | "general"
-  | "pace"
   | "colors"
   | "workflows"
   | "communications"
@@ -70,12 +66,10 @@ const CARD_GROUPS: CardGroup[] = [
   {
     id: "app",
     label: "App Settings",
-    desc: "General, pace, and badge colors",
+    desc: "Status badge colors",
     accent: "border-sky-500",
     tabs: [
-      { id: "general",   label: "General" },
-      { id: "pace",      label: "Pace" },
-      { id: "colors",    label: "Badge Colors" },
+      { id: "colors", label: "Badge Colors" },
     ],
   },
   {
@@ -163,7 +157,7 @@ export default function Management() {
   const isAdmin = user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor";
   const isPrivileged = isAdmin || user?.role === "lead" || user?.role === "atl";
   const [activeGroup, setActiveGroup] = useState<GroupId | null>(null);
-  const [activeTab, setActiveTab] = useState<Category>("general");
+  const [activeTab, setActiveTab] = useState<Category>("colors");
   const { data, isLoading } = useSettings();
 
   const map = useMemo(() => {
@@ -194,8 +188,6 @@ export default function Management() {
   function renderPanel() {
     if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
     switch (activeTab) {
-      case "general":        return <GeneralPanel map={map} />;
-      case "pace":           return <PacePanel map={map} />;
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;

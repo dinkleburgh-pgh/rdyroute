@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useSettings, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import type { TruckWithState } from "../types";
 
@@ -16,6 +16,11 @@ export default function Unload() {
   const runDate = todayIso();
   const { data } = useBoard(runDate);
   const { data: batches } = useBatchSummary(runDate);
+  const { data: settings } = useSettings();
+  const batchingDisabled = useMemo(
+    () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
+    [settings],
+  );
   const upsert = useUpsertTruckState();
   const assign = useAssignBatch();
   const navigate = useNavigate();
@@ -175,24 +180,28 @@ export default function Unload() {
                   </button>
                 ) : (
                   <>
-                    {/* Batch chip */}
-                    <button
-                      className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:hidden"
-                      onClick={() => toggleBatch(t)}
-                    >
-                      <span>{batchLabel}</span>
-                      <span className="text-slate-500">{isBatchOpen ? "▲" : "▼"}</span>
-                    </button>
-                    <button
-                      className="hidden w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:flex"
-                      onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}&source=unload`)}
-                    >
-                      <span>{batchLabel}</span>
-                      <span className="text-slate-500">↗</span>
-                    </button>
+                    {/* Batch chip — hidden when batching is disabled */}
+                    {!batchingDisabled && (
+                      <>
+                        <button
+                          className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:hidden"
+                          onClick={() => toggleBatch(t)}
+                        >
+                          <span>{batchLabel}</span>
+                          <span className="text-slate-500">{isBatchOpen ? "▲" : "▼"}</span>
+                        </button>
+                        <button
+                          className="hidden w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:flex"
+                          onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}&source=unload`)}
+                        >
+                          <span>{batchLabel}</span>
+                          <span className="text-slate-500">↗</span>
+                        </button>
+                      </>
+                    )}
 
                     {/* Inline batch panel (mobile) */}
-                    {isBatchOpen && (
+                    {!batchingDisabled && isBatchOpen && (
                       <div className="space-y-2 rounded-lg bg-slate-800 p-2 md:hidden">
                         <div className="grid grid-cols-3 gap-1.5">
                           {[1, 2, 3, 4, 5, 6].map((n) => (
