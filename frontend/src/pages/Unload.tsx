@@ -281,6 +281,18 @@ export default function Unload() {
     <div className="space-y-6 p-3 md:p-6">
       <h2 className="text-2xl font-semibold">Unload</h2>
 
+      {/* ── Spares / Coverages ─────────────────────────────────────────── */}
+      {dirtyCoverages.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-violet-400">
+            Spares / Coverages ({dirtyCoverages.length})
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {dirtyCoverages.map((t) => renderDirtyCard(t))}
+          </div>
+        </section>
+      )}
+
       {/* ── Dirty (route trucks) ───────────────────────────────────────── */}
       <section>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-red-400">
@@ -293,18 +305,6 @@ export default function Unload() {
           )}
         </div>
       </section>
-
-      {/* ── Spares / Coverages ─────────────────────────────────────────── */}
-      {dirtyCoverages.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-violet-400">
-            Spares / Coverages ({dirtyCoverages.length})
-          </h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {dirtyCoverages.map((t) => renderDirtyCard(t))}
-          </div>
-        </section>
-      )}
 
       {/* ── Unfinished ─────────────────────────────────────────────────── */}
       <section>

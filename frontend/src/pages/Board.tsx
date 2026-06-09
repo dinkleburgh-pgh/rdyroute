@@ -550,15 +550,18 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           : "grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
       )}>
         {(() => {
-          type SentinelHeader = { __header: "dirty" | "unfinished"; count: number };
+          type SentinelHeader = { __header: "dirty" | "unfinished" | "coverages"; count: number };
           type GridRow = TruckWithState | SentinelHeader;
           const rows: GridRow[] = [];
           if (!fleetMode && filter === "dirty") {
             const dirtyRows = filtered.filter((t) => effectiveStatus(t, runDayNum, holidayLoad) === "dirty");
             const unfinishedRows = filtered.filter((t) => effectiveStatus(t, runDayNum, holidayLoad) === "unfinished");
+            const dirtyRouteRows = dirtyRows.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null);
+            const dirtyCoverageRows = dirtyRows.filter((t) => t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null);
             rows.push(
-              { __header: "dirty", count: dirtyRows.length },
-              ...dirtyRows,
+              ...(dirtyCoverageRows.length > 0 ? [{ __header: "coverages", count: dirtyCoverageRows.length } as SentinelHeader, ...dirtyCoverageRows] : []),
+              { __header: "dirty", count: dirtyRouteRows.length },
+              ...dirtyRouteRows,
               { __header: "unfinished", count: unfinishedRows.length },
               ...unfinishedRows,
             );
@@ -567,6 +570,18 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           }
           return rows.map((row) => {
             if ("__header" in row) {
+              if (row.__header === "coverages") {
+                return (
+                  <div key={`header-${row.__header}`} className="col-span-full my-2 flex flex-col items-center justify-center gap-1">
+                    <span className="text-4xl font-black uppercase tracking-widest text-violet-400">
+                      Spares / Coverages
+                    </span>
+                    <span className="text-sm font-medium text-slate-500">
+                      {row.count} truck{row.count !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                );
+              }
               // Skip the dirty header — the page already has a "Dirty" heading.
               // Only render the Unfinished sub-section header.
               if (row.__header !== "unfinished") return null;
