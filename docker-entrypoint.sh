@@ -52,7 +52,11 @@ fi
 # be reached, fall back to SQLite automatically and flag it for the health UI.
 # ---------------------------------------------------------------------------
 if [ -n "$DATABASE_URL" ] && echo "$DATABASE_URL" | grep -q "postgresql"; then
-    if python3 -c "
+    _pg_ok=0
+    _attempt=0
+    while [ $_attempt -lt 4 ]; do
+        _attempt=$((_attempt + 1))
+        if python3 -c "
 import sys, os
 from urllib.parse import urlparse
 url = os.environ['DATABASE_URL']
@@ -68,9 +72,18 @@ c = psycopg.connect(
 )
 c.close()
 " 2>/dev/null; then
+            _pg_ok=1
+            break
+        fi
+        if [ $_attempt -lt 4 ]; then
+            printf '[entrypoint] postgres attempt %d/4 failed — retrying in 3s\n' "$_attempt"
+            sleep 3
+        fi
+    done
+    if [ $_pg_ok -eq 1 ]; then
         printf '[entrypoint] postgres connection OK — using %s\n' "$DATABASE_URL"
     else
-        printf '[entrypoint] postgres unreachable — falling back to SQLite\n'
+        printf '[entrypoint] postgres unreachable after 4 attempts — falling back to SQLite\n'
         DATABASE_URL="sqlite:////app/.data/truckv2_prod.db"
         export DATABASE_URL
         export DB_FALLBACK_REASON="postgres unreachable at startup"
