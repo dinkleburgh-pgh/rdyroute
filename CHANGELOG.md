@@ -8,6 +8,19 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [build.138] — 2026-06-08
+
+### Added
+- **Paper Bay timer** — new 25-minute countdown on the fleet board that auto-transitions a truck to "loaded" when it expires. Toggle in Settings → Workflows. Displays as a violet countdown widget. Cancels any active Outside timer for the same truck on start and expiry. Persisted in localStorage (`rr_paper_bay_timers`).
+- **`paper_bay_enabled` setting** — registered as a known key in `settings.py`; readable by all authenticated users; toggle in WorkflowsPanel.
+
+### Changed
+- **Outside timer label** — fleet dropdown now reads "⏱ Outside (20 min)" to match the actual 20-minute countdown (was incorrectly labeled as 15 min).
+- **useOutsideTimer.ts refactored** — extracted generic `useTimedStatusTransition` hook shared by Outside and Paper Bay timers; localStorage helpers unified; doc comments updated.
+- **WorkflowsPanel** — removed "Dev feature:" prefix from Outside timer and Note Cards hints; added Paper Bay timer toggle.
+
+---
+
 ## [Unreleased] — 2026-06-07
 
 ### Security / Infrastructure

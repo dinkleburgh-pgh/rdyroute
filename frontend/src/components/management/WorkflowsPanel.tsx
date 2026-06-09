@@ -12,6 +12,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       batching_disabled: asBool(map.get("batching_disabled"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
       outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
+      paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
     }),
     [map],
@@ -60,7 +61,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       <FieldRow
         label="Outside timer"
-        hint="Dev feature: lets fleet set a truck to 'Outside' — a 10-minute countdown that auto-transitions to Unloaded."
+        hint="Lets fleet mark a truck as 'Outside' — a 20-minute countdown that auto-transitions to Unloaded."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -72,8 +73,21 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
         </label>
       </FieldRow>
       <FieldRow
+        label="Paper Bay timer"
+        hint="Lets fleet mark a truck as 'Paper Bay' — a 25-minute countdown that auto-transitions to Loaded."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.paper_bay_enabled}
+            onChange={(e) => setForm({ ...form, paper_bay_enabled: e.target.checked })}
+          />
+          Enable Paper Bay
+        </label>
+      </FieldRow>
+      <FieldRow
         label="Note Cards"
-        hint="Dev feature: shows a persistent Note Cards drawer on the fleet board, displaying all active truck notes in compact card rectangles."
+        hint="Shows a persistent Note Cards drawer on the fleet board, displaying all active truck notes in compact card rectangles."
       >
         <label className="flex items-center gap-2 text-sm">
           <input

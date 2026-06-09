@@ -32,3 +32,7 @@ npm run preview
 - `src/components/` — `Layout` (sidebar) and `ProtectedRoute`
 - `src/pages/` — `Login`, `Dashboard`, `Fleet`, `Batches`, `Shorts`, `Audit`,
   `Communications`, `Settings`
+  - `board/` — Extracted sub-components: RouteCardPanel, TruckDetailPanel,
+    TruckDetailModal, StartLoadModal, FleetTruckEditor, StatusEditor, Stat,
+    constants, useOutsideTimer (Outside + Paper Bay hooks)
+  - `runday/` — Extracted sub-components: TruckCard, TruckWizard

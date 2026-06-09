@@ -71,6 +71,16 @@ dirty / loaded → off / oos
 
 `unfinished` is a manual hand-off state from the Unload page — used when a truck couldn't be fully unloaded but should not return to the Dirty queue. It surfaces as a sub-section on the Dirty board and on the Unload page until cleared.
 
+### Timer workflows (optional)
+Two timed countdowns can be enabled in Settings → Workflows:
+
+| Timer | Duration | Auto-transition | Visual |
+|---|---|---|---|
+| Outside | 20 min | `dirty/loaded` → `unloaded` | Orange widget |
+| Paper Bay | 25 min | any status → `loaded` | Violet widget; cancels Outside timer for same truck |
+
+Timers persist in `localStorage` across page reloads.
+
 Spare trucks are managed separately and never enter the off-day pooling logic.
 
 ### Truck types

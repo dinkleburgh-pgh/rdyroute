@@ -25,6 +25,7 @@ KNOWN_KEYS = {
     "batching_disabled",
     "batch_no_cap",
     "outside_timer_enabled",
+    "paper_bay_enabled",
     "note_cards_enabled",
     "tracked_items_map",
     "communications_censor_words",
@@ -37,6 +38,7 @@ _USER_READABLE_KEYS = {
     "batching_disabled",
     "batch_no_cap",
     "outside_timer_enabled",
+    "paper_bay_enabled",
     "note_cards_enabled",
     "tracked_items_map",
 }

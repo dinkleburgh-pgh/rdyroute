@@ -34,7 +34,7 @@ import {
   FLEET_RAIL_STATUSES,
   DustGarmentIcon,
 } from "./board/constants";
-import { useOutsideTimer, fmtCountdown } from "./board/useOutsideTimer";
+import { useOutsideTimer, usePaperBayTimer, fmtCountdown } from "./board/useOutsideTimer";
 import RouteCardPanel from "./board/RouteCardPanel";
 import StartLoadModal from "./board/StartLoadModal";
 import TruckDetailPanel from "./board/TruckDetailPanel";
@@ -105,11 +105,20 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     [settings],
   );
 
-  // --- Outside timer (extracted to a reusable hook) ---
+  const paperBayEnabled = useMemo(
+    () => (settings ?? []).find((s) => s.key === "paper_bay_enabled")?.value === true,
+    [settings],
+  );
+
+  // --- Outside timer: 20 min → unloaded ---
   const { countdowns: outsideCountdowns, start: startOutsideTimer, cancel: cancelOutsideTimer } =
     useOutsideTimer(runDate, data, upsert);
-  // Presence in the countdowns map indicates an active timer.
   const outsideTimers = outsideCountdowns;
+
+  // --- Paper Bay timer: 25 min → loaded (also cancels outside timer on start/expire) ---
+  const { countdowns: paperBayCountdowns, start: startPaperBayTimer, cancel: cancelPaperBayTimer } =
+    usePaperBayTimer(runDate, data, upsert, cancelOutsideTimer);
+  const paperBayTimers = paperBayCountdowns;
 
   const inProgressTruck = useMemo(
     () => (data ?? []).find((t) => t.state?.status === "in_progress"),
@@ -909,12 +918,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <div className="mt-auto flex flex-col gap-2">
                   {!multiSelect && !isReadOnly && status !== "oos" && (
                     <select
-                      className="input min-h-[2.5rem] text-xs md:min-h-0"
+                       className="input min-h-[2.5rem] text-xs md:min-h-0"
                       value={status}
                       disabled={upsert.isPending}
                       onClick={(e) => e.stopPropagation()}
                       onChange={(e) => {
-                        const next = e.target.value as TruckStatus | "__outside__";
+                        const next = e.target.value as TruckStatus | "__outside__" | "__paperbay__";
                         if (status === "off" && next === "loaded") {
                           setPendingOffLoadTruck(t);
                           setPendingOffLoadRoute("");
@@ -925,6 +934,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         if (next === "__outside__") {
                           e.currentTarget.value = status;
                           startOutsideTimer(t.truck_number);
+                          return;
+                        }
+                        if (next === "__paperbay__") {
+                          e.currentTarget.value = status;
+                          startPaperBayTimer(t.truck_number);
                           return;
                         }
                         if (next === "oos") {
@@ -945,8 +959,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           Off (scheduled)
                         </option>
                       )}
-                      {outsideTimerEnabled && !outsideTimers.has(t.truck_number) && (
-                        <option value="__outside__">⏱ Outside (15 min)</option>
+                      {outsideTimerEnabled && !outsideTimers.has(t.truck_number) && !paperBayTimers.has(t.truck_number) && (
+                        <option value="__outside__">⏱ Outside (20 min)</option>
+                      )}
+                      {paperBayEnabled && !paperBayTimers.has(t.truck_number) && !outsideTimers.has(t.truck_number) && (
+                        <option value="__paperbay__">📄 Paper Bay (25 min)</option>
                       )}
                       {FLEET_STATUS_OPTIONS.map((s) => (
                         <option key={s} value={s}>
@@ -970,6 +987,23 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         type="button"
                         className="ml-auto rounded px-2 py-1 text-xs font-semibold text-orange-500 transition-colors hover:text-orange-300 active:bg-orange-900/40"
                         onClick={() => cancelOutsideTimer(t.truck_number)}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  )}
+                  {paperBayEnabled && paperBayTimers.has(t.truck_number) && (
+                    <div
+                      className="flex items-center gap-1.5 rounded-lg border border-violet-700/50 bg-violet-950/70 px-2 py-1.5"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <span className="text-xs font-bold text-violet-300">
+                        📄 Paper Bay {fmtCountdown(paperBayCountdowns.get(t.truck_number) ?? 0)}
+                      </span>
+                      <button
+                        type="button"
+                        className="ml-auto rounded px-2 py-1 text-xs font-semibold text-violet-500 transition-colors hover:text-violet-300 active:bg-violet-900/40"
+                        onClick={() => cancelPaperBayTimer(t.truck_number)}
                       >
                         Cancel
                       </button>
