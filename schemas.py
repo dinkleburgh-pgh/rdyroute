@@ -38,6 +38,7 @@ class TruckUpdate(BaseModel):
     is_active: bool | None = None
     is_persistent_spare: bool | None = None
     is_oos: bool | None = None
+    uniform_size: str | None = None
     scheduled_off_days: list[int] | None = None
 
 
@@ -48,6 +49,7 @@ class TruckOut(_OrmBase):
     is_active: bool
     is_persistent_spare: bool
     is_oos: bool
+    uniform_size: str | None = None
     scheduled_off_days: list[int]
     qr_token: str | None
     created_at: datetime
@@ -71,6 +73,7 @@ class TruckStateCreate(BaseModel):
     shop_note: str = ""
     oos_spare_route: int | None = None
     has_dust_garment: bool = False
+    priority_hold: bool = False
 
 
 class TruckStateUpdate(BaseModel):
@@ -85,6 +88,7 @@ class TruckStateUpdate(BaseModel):
     shop_note: str | None = None
     oos_spare_route: int | None = None
     has_dust_garment: bool | None = None
+    priority_hold: bool | None = None
 
 
 class TruckStateOut(_OrmBase):
@@ -102,6 +106,7 @@ class TruckStateOut(_OrmBase):
     shop_note: str
     oos_spare_route: int | None
     has_dust_garment: bool
+    priority_hold: bool = False
     updated_at: datetime
 
 
@@ -513,3 +518,98 @@ class SettingOut(_OrmBase):
     key: str
     value: Any
     updated_at: datetime
+
+
+# ---------------------------------------------------------------------------
+# Trend / Analytics
+# ---------------------------------------------------------------------------
+
+class TrendDailyPoint(BaseModel):
+    run_date: date
+    total_qty: int
+    entry_count: int
+
+
+class TrendSummary(BaseModel):
+    total_qty: int
+    avg_per_day: float
+    peak_day: date | None
+    peak_qty: int
+    entry_count: int
+    days_with_data: int
+    trend_direction: str  # "up" | "down" | "stable"
+    change_vs_prior_pct: float | None
+    daily_series: list[TrendDailyPoint]
+
+
+class TrendTruckPoint(BaseModel):
+    run_date: date
+    total_qty: int
+
+
+class TrendRoutePoint(BaseModel):
+    run_date: date
+    total_qty: int
+
+
+class TrendTruckPoint(BaseModel):
+    run_date: date
+    total_qty: int
+
+
+class TrendRoutePoint(BaseModel):
+    run_date: date
+    total_qty: int
+
+
+class TrendComparison(BaseModel):
+    current: list[TrendDailyPoint]
+    prior: list[TrendDailyPoint]
+
+# ---------------------------------------------------------------------------
+# Load-pace trend types
+# ---------------------------------------------------------------------------
+
+class PaceDailyPoint(BaseModel):
+    run_date: date
+    avg_seconds: float
+    load_count: int
+
+
+class CompletionDailyPoint(BaseModel):
+    run_date: date
+    total_trucks: int
+    loaded_trucks: int
+    pct: float
+
+
+class WearersDailyPoint(BaseModel):
+    run_date: date
+    avg_wearers: float
+    truck_count: int
+
+
+class CycleDailyPoint(BaseModel):
+    run_date: date
+    avg_seconds: float
+    truck_count: int
+
+
+class ShortageDailyPoint(BaseModel):
+    run_date: date
+    total_qty: int
+    entry_count: int
+
+
+class ShortageCategoryPoint(BaseModel):
+    category: str
+    total_qty: int
+
+
+class AnomalyDay(BaseModel):
+    run_date: date
+    metric: str           # "completion", "pace", "wearers", "audit_volume"
+    value: float
+    mean: float
+    sigma: float
+    z_score: float

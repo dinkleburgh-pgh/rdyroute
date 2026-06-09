@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { applySession, useAuth } from "../contexts/AuthContext";
 import { useLogin } from "../api/hooks";
@@ -28,6 +29,11 @@ export default function Login() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950">
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
       <form onSubmit={onSubmit} className="card w-80 space-y-4">
         <h1 className="text-xl font-semibold">ReadyRoute V2 — Sign in</h1>
         <div>
@@ -58,6 +64,7 @@ export default function Login() {
           API: <code>{window.location.origin}/api</code>
         </p>
       </form>
+      </motion.div>
     </div>
   );
 }

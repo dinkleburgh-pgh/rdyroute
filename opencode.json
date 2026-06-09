@@ -1,0 +1,10 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "browser": {
+      "type": "local",
+      "command": ["node", ".opencode/mcp/browser-server.mjs"],
+      "enabled": true
+    }
+  }
+}

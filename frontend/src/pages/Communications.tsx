@@ -1,6 +1,9 @@
 import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from "react";
+import { motion } from "framer-motion";
 import { useMessages, useSendMessage, useDeleteMessage } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
+
+import { format, parseISO } from "date-fns";
 
 const CHANNELS = ["Team"];
 
@@ -40,26 +43,23 @@ function DeleteButton({ onClick }: { onClick: () => void }) {
       onClick={onClick}
       title="Delete message"
     >
-      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="currentColor">
-        <path d="M5.5 5.5A.5.5 0 0 1 6 6v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm2.5 0a.5.5 0 0 1 .5.5v6a.5.5 0 0 1-1 0V6a.5.5 0 0 1 .5-.5zm3 .5a.5.5 0 0 0-1 0v6a.5.5 0 0 0 1 0V6z" />
-        <path fillRule="evenodd" d="M14.5 3a1 1 0 0 1-1 1H13v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4h-.5a1 1 0 0 1-1-1V2a1 1 0 0 1 1-1H6a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1h3.5a1 1 0 0 1 1 1v1zM4.118 4 4 4.059V13a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1V4.059L11.882 4H4.118zM2.5 3V2h11v1h-11z" />
-      </svg>
+      <div className="h-3.5 w-3.5 rounded-full bg-current" />
     </button>
   );
 }
 
 function dayLabel(iso: string) {
-  const d = new Date(iso);
+  const d = parseISO(iso);
   const today = new Date();
   const yest = new Date(today);
   yest.setDate(yest.getDate() - 1);
   if (d.toDateString() === today.toDateString()) return "Today";
   if (d.toDateString() === yest.toDateString()) return "Yesterday";
-  return d.toLocaleDateString([], { weekday: "long", month: "short", day: "numeric" });
+  return format(d, "EEEE, MMM d");
 }
 
 function timeStr(iso: string) {
-  return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+  return format(parseISO(iso), "h:mm a");
 }
 
 export default function Communications() {
@@ -166,8 +166,11 @@ export default function Communications() {
                 !m.is_deleted;
 
               return (
-                <div
+                <motion.div
                   key={m.id}
+                  initial={{ opacity: 0, y: 8 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.3, delay: idx * 0.02 }}
                   className={`flex flex-col ${isMe ? "items-end" : "items-start"} ${
                     isContinuation ? "mb-0.5 mt-0.5" : "mb-3"
                   }`}
@@ -218,7 +221,7 @@ export default function Communications() {
                       />
                     )}
                   </div>
-                </div>
+                </motion.div>
               );
             })}
           </div>

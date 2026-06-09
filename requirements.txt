@@ -9,3 +9,4 @@ bcrypt>=4.2.1
 python-jose[cryptography]>=3.3.0
 python-multipart>=0.0.12
 alembic>=1.13.3
+better-profanity>=0.7.0

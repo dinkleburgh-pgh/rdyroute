@@ -38,20 +38,28 @@ export default function TruckDetailModal({
         className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="flex items-center justify-between border-b border-slate-800 p-4">
-          <div>
-            <h3 className="text-xl font-semibold">Truck #{truck.truck_number}</h3>
+        <div className="relative flex items-center justify-between border-b border-slate-800 px-4 py-5">
+          <div className="flex-1" />
+          <div className="text-center">
+            <h3 className="text-5xl font-black tracking-tight text-white">#{truck.truck_number}</h3>
             <p className="text-xs text-slate-400">
-              {truck.truck_type} · {truck.is_active ? "Active" : "Inactive"}
+              {truck.truck_type}
+              {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
+              {" · "}{truck.is_active ? "Active" : "Inactive"}
               {truck.is_persistent_spare ? " · Persistent spare" : ""}
             </p>
             {readOnly && (
               <p className="mt-0.5 text-xs font-semibold text-amber-400">Archive — read only</p>
             )}
+            {truck.state?.priority_hold && (
+              <p className="mt-0.5 text-xs font-semibold text-red-400">Hold — Do Not Load</p>
+            )}
           </div>
-          <button className="btn-ghost" onClick={onClose}>
-            Close
-          </button>
+          <div className="flex-1 flex justify-end">
+            <button className="btn-ghost" onClick={onClose}>
+              Close
+            </button>
+          </div>
         </div>
 
         <div className="space-y-4 p-4">

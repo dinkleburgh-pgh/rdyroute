@@ -2,6 +2,7 @@
  * Renders the stack of active toasts in the bottom-right corner.
  * Matches the app's dark theme (slate-900 surface, status-colored accent).
  */
+import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
 import { useToast, type ToastVariant } from "../contexts/ToastContext";
 import { CheckIcon, XIcon, AlertTriangleIcon } from "./icons";
@@ -26,27 +27,32 @@ export default function ToastContainer() {
 
   return (
     <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex w-80 max-w-[calc(100vw-2rem)] flex-col gap-2">
-      {toasts.map((t) => (
-        <div
-          key={t.id}
-          role="status"
-          className={clsx(
-            "pointer-events-auto flex items-start gap-2 rounded-lg border border-slate-800 border-l-4 bg-slate-900 px-3 py-2.5 shadow-lg",
-            "animate-[slideIn_0.15s_ease-out]",
-            VARIANT_STYLES[t.variant].border,
-          )}
-        >
-          <VariantIcon variant={t.variant} />
-          <p className="flex-1 text-sm text-slate-200">{t.message}</p>
-          <button
-            onClick={() => dismiss(t.id)}
-            className="shrink-0 text-slate-500 transition-colors hover:text-slate-300"
-            aria-label="Dismiss"
+      <AnimatePresence>
+        {toasts.map((t) => (
+          <motion.div
+            key={t.id}
+            role="status"
+            initial={{ opacity: 0, y: -8, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, x: 40 }}
+            transition={{ duration: 0.2 }}
+            className={clsx(
+              "pointer-events-auto flex items-start gap-2 rounded-lg border border-slate-800 border-l-4 bg-slate-900 px-3 py-2.5 shadow-lg",
+              VARIANT_STYLES[t.variant].border,
+            )}
           >
-            <XIcon className="h-3.5 w-3.5" />
-          </button>
-        </div>
-      ))}
+            <VariantIcon variant={t.variant} />
+            <p className="flex-1 text-sm text-slate-200">{t.message}</p>
+            <button
+              onClick={() => dismiss(t.id)}
+              className="shrink-0 text-slate-500 transition-colors hover:text-slate-300"
+              aria-label="Dismiss"
+            >
+              <XIcon className="h-3.5 w-3.5" />
+            </button>
+          </motion.div>
+        ))}
+      </AnimatePresence>
     </div>
   );
 }

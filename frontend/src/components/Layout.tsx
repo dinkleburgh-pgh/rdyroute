@@ -1,6 +1,8 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
+import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
 import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
@@ -12,6 +14,7 @@ import { OfflineIndicator } from "./OfflineIndicator";
 import type { AuthRole, TruckStatus, TruckWithState } from "../types";
 import { buildRouteStatusCounts, effectiveStatus } from "../utils/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
+import { Menu, X } from "lucide-react";
 
 const STATUS_LABEL: Record<TruckStatus, string> = {
   dirty: "Dirty",
@@ -21,8 +24,8 @@ const STATUS_LABEL: Record<TruckStatus, string> = {
   unloaded: "Unloaded",
   loaded: "Loaded",
   off: "OFF",
-  oos: "OOS",
-  spare: "SPARE",
+  oos: "OOS / HOLD",
+  spare: "SPARE / COV",
 };
 
 const STATUS_DOT: Record<TruckStatus, string> = {
@@ -105,9 +108,9 @@ function BuildInfo() {
   const shortCommit = commit ? commit.slice(0, 7) : "";
   const dateLabel = (() => {
     if (!buildDate) return "";
-    const d = new Date(buildDate);
+    const d = parseISO(buildDate);
     if (Number.isNaN(d.getTime())) return "";
-    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+    return format(d, "PP");
   })();
   return (
     <div className="pt-2 text-center text-[10px] leading-tight text-slate-500">
@@ -155,8 +158,16 @@ export default function Layout() {
   const loadDayNum = loadDay;
 
   const counts = useMemo(
-    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay),
-    [board, loadDayNum, unloadsDay, holidayLoad],
+    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload),
+    [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload],
+  );
+
+  const holdCount = useMemo(
+    () => (board ?? []).filter((t) =>
+      t.state?.priority_hold === true &&
+      (t.state?.status === "dirty" || t.state == null)
+    ).length,
+    [board],
   );
 
   // Load progress mirrors the Day Overview: denominator = route trucks scheduled
@@ -324,21 +335,27 @@ export default function Layout() {
           <div className="space-y-2 pt-2">
             {primaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
+              const showUnloadBadge = item.to === "/unload" && holdCount > 0;
               return (
                 <NavLink
                   key={item.to}
                   to={item.to}
                   className={({ isActive }) =>
                     clsx(
-                      "flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors",
+                      "relative flex items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors",
                       isActive ? "ring-2 ring-blue-500" : "hover:bg-slate-700",
                     )
                   }
                 >
-                  {item.label}
+                  <span>{item.label}</span>
                   {showLoadBadge && (
-                    <span className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-bold text-white">
+                    <span className="absolute right-2 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[10px] font-bold text-white">
                       {trucksNotYetLoaded}
+                    </span>
+                  )}
+                  {showUnloadBadge && (
+                    <span className="absolute right-2 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
+                      {holdCount}
                     </span>
                   )}
                 </NavLink>
@@ -358,7 +375,7 @@ export default function Layout() {
               end
               className={({ isActive }) =>
                 clsx(
-                  "flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  "relative flex w-full items-center justify-center rounded-md border px-3 py-2 text-sm font-medium transition-colors",
                   isActive
                     ? "border-cyan-500 bg-cyan-950/60 text-cyan-300"
                     : "border-slate-700 bg-slate-800 hover:bg-slate-700",
@@ -369,7 +386,7 @@ export default function Layout() {
                 <span className="h-2 w-2 rounded-full bg-cyan-400" />
                 Day Overview
               </span>
-              <span className="rounded bg-cyan-800/60 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
+              <span className="absolute right-2 rounded bg-cyan-800/60 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
                 {(holidayLoad || holidayUnload) ? "Holiday" : `Day ${unloadsDay}`}
               </span>
             </NavLink>
@@ -377,7 +394,7 @@ export default function Layout() {
               <button
                 key={s}
                 onClick={() => nav(`/board?status=${s}`)}
-                className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-700"
+                className="relative flex w-full items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-700"
               >
                 <span className="flex items-center gap-2">
                   <span className={clsx(
@@ -387,7 +404,7 @@ export default function Layout() {
                   )} />
                   {STATUS_LABEL[s]}
                 </span>
-                <span className="text-slate-300">
+                <span className="absolute right-2 text-slate-300">
                   {s === "in_progress"
                     ? inProgressTruck
                       ? <span className="text-yellow-300 text-base font-bold">#{inProgressTruck.truck_number}</span>
@@ -467,10 +484,7 @@ export default function Layout() {
             onClick={() => setSidebarOpen(true)}
             className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100 md:hidden"
           >
-            {/* Hamburger */}
-            <svg className="h-6 w-6" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3 6h18M3 12h18M3 18h18" />
-            </svg>
+            <Menu className="h-6 w-6" />
           </button>
           <span className="text-sm font-semibold text-slate-200 md:hidden">ReadyRoute V2</span>
           <div className="ml-auto flex items-center gap-2 text-xs">
@@ -491,7 +505,17 @@ export default function Layout() {
         </header>
 
         <main className="flex-1 overflow-auto pb-14 md:pb-0">
-          <Outlet />
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={location.pathname}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <Outlet />
+            </motion.div>
+          </AnimatePresence>
         </main>
       </div>
 
@@ -509,7 +533,7 @@ export default function Layout() {
                 <div className="flex items-center justify-between px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">More</p>
                   <button onClick={() => setMoreOpen(false)} className="text-slate-500 hover:text-slate-300">
-                    <svg viewBox="0 0 24 24" className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2}><path d="M18 6 6 18M6 6l12 12"/></svg>
+                    <X className="h-5 w-5" />
                   </button>
                 </div>
                 <div className="grid grid-cols-3 gap-1 px-3">
@@ -529,8 +553,22 @@ export default function Layout() {
                     >
                       {item.label}
                     </NavLink>
-                  ))}
-                </div>
+            ))}
+            {holdCount > 0 && (
+              <button
+                onClick={() => nav(`/board?status=hold`)}
+                className="ml-4 relative flex w-[calc(100%-1rem)] items-center justify-center rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-amber-950/40"
+              >
+                <span className="flex items-center gap-2">
+                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
+                  Hold
+                </span>
+                <span className="absolute right-2 rounded bg-amber-800/60 px-1.5 py-0.5 text-xs font-semibold text-amber-300">
+                  {holdCount}
+                </span>
+              </button>
+            )}
+          </div>
               </div>
             </>
           )}
@@ -538,6 +576,7 @@ export default function Layout() {
           <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-800 bg-slate-900 md:hidden">
             {primaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
+              const showUnloadBadge = item.to === "/unload" && holdCount > 0;
               return (
                 <NavLink
                   key={item.to}
@@ -553,6 +592,11 @@ export default function Layout() {
                   {showLoadBadge && (
                     <span className="absolute right-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-amber-600 px-1 text-[9px] font-bold text-white">
                       {trucksNotYetLoaded}
+                    </span>
+                  )}
+                  {showUnloadBadge && (
+                    <span className="absolute right-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
+                      {holdCount}
                     </span>
                   )}
                 </NavLink>

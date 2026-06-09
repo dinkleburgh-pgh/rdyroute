@@ -30,6 +30,7 @@ export interface Truck {
   is_active: boolean;
   is_persistent_spare: boolean;
   is_oos: boolean;
+  uniform_size: "18" | "22" | null;
   scheduled_off_days: number[];
   qr_token: string | null;
   created_at: string;
@@ -50,6 +51,7 @@ export interface TruckState {
   shop_note: string;
   oos_spare_route: number | null;
   has_dust_garment: boolean;
+  priority_hold: boolean;
   updated_at: string;
 }
 

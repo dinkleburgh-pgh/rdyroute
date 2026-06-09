@@ -1,9 +1,12 @@
 import { useEffect, useRef, useState } from "react";
+import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
 import { useAssignBatch, useBatchSummary, useSettings, useUpsertTruckState } from "../api/hooks";
+import { Package } from "lucide-react";
 import { todayIso } from "../api/client";
 import type { BatchSummary } from "../types";
+import AnimateCard from "../components/AnimateCard";
 
 const BATCH_CAP = 400;
 
@@ -64,11 +67,12 @@ function BatchCard({
   }
 
   return (
-    <div
+    <AnimateCard
       className={clsx(
         "card flex flex-col gap-2 md:gap-3",
         selected && "ring-2 ring-blue-500",
       )}
+      delay={0.1}
       onClick={onSelect}
     >
       {/* Header */}
@@ -143,7 +147,7 @@ function BatchCard({
           </button>
         </div>
       )}
-    </div>
+    </AnimateCard>
   );
 }
 
@@ -175,6 +179,11 @@ export default function Batches() {
   }, [truck]);
 
   return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
     <div className="space-y-4 p-3 md:p-6">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <h2 className="text-2xl font-semibold">Batches</h2>
@@ -224,9 +233,7 @@ export default function Batches() {
       {truck && selectedBatch === null && (
         <div className="flex items-center justify-center">
           <div className="flex animate-pulse items-center gap-2 rounded-full border border-blue-500/40 bg-blue-950/50 px-5 py-2.5 shadow-lg shadow-blue-900/20">
-            <svg className="h-4 w-4 shrink-0 text-blue-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5" />
-            </svg>
+            <Package className="h-4 w-4 shrink-0 text-blue-400" />
             <span className="text-sm font-semibold text-blue-300">Tap a batch card to assign</span>
           </div>
         </div>
@@ -269,5 +276,6 @@ export default function Batches() {
         </div>
       )}
     </div>
+    </motion.div>
   );
 }

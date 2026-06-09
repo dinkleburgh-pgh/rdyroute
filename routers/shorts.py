@@ -9,15 +9,15 @@ V1 mapping:
   SHORTS_BUTTON_MAP                →  served via GET /shorts/categories
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import Shortage
-from schemas import ShortageCreate, ShortageOut, ShortageUpdate
+from schemas import ShortageCategoryPoint, ShortageCreate, ShortageDailyPoint, ShortageOut, ShortageUpdate
 from ws_manager import manager
 
 router = APIRouter(prefix="/shorts", tags=["shorts"])
@@ -132,3 +132,52 @@ def clear_shortages_for_truck(
     )
     db.commit()
     background_tasks.add_task(manager.broadcast, {"type": "shortage_updated", "run_date": str(run_date)})
+
+
+# ---------------------------------------------------------------------------
+# Trend aggregation endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/trends/daily", response_model=list[ShortageDailyPoint])
+def shortage_daily_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Per-day total shortage quantity and entry count."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            Shortage.run_date,
+            func.sum(Shortage.quantity).label("total_qty"),
+            func.count(Shortage.id).label("entry_count"),
+        )
+        .where(Shortage.run_date >= cutoff)
+        .group_by(Shortage.run_date)
+        .order_by(Shortage.run_date)
+    ).all()
+    return [
+        ShortageDailyPoint(run_date=r[0], total_qty=r[1] or 0, entry_count=r[2])
+        for r in rows
+    ]
+
+
+@router.get("/trends/by-category", response_model=list[ShortageCategoryPoint])
+def shortage_by_category_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Shortage quantities grouped by item category, sorted descending."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            Shortage.item_category.label("category"),
+            func.sum(Shortage.quantity).label("total_qty"),
+        )
+        .where(Shortage.run_date >= cutoff)
+        .group_by(Shortage.item_category)
+        .order_by(func.sum(Shortage.quantity).desc())
+    ).all()
+    return [
+        ShortageCategoryPoint(category=r[0], total_qty=r[1] or 0)
+        for r in rows
+    ]

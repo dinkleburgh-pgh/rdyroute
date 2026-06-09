@@ -15,7 +15,7 @@ Business logic preserved from V1:
     single fetch.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import delete, func, select, tuple_
@@ -24,7 +24,16 @@ from sqlalchemy.orm import Session
 from database import get_db
 from models import RouteSwap, Truck, TruckState, User
 from routers.auth import get_current_user, require_admin
-from schemas import TruckStateCreate, TruckStateOut, TruckStateUpdate, TruckWithState
+from schemas import (
+    AnomalyDay,
+    CompletionDailyPoint,
+    CycleDailyPoint,
+    TruckStateCreate,
+    TruckStateOut,
+    TruckStateUpdate,
+    TruckWithState,
+    WearersDailyPoint,
+)
 from ws_manager import manager
 
 router = APIRouter(prefix="/trucks", tags=["trucks"])
@@ -91,6 +100,33 @@ def get_board(
         for s in prev_states:
             if s.status in _PERSISTENT_STATUSES:
                 states_by_num[s.truck_number] = s
+
+        # Carry forward "unloaded" for idle Spare trucks whose garments
+        # are still clean (never went out on a route).
+        truck_by_num = {t.truck_number: t for t in trucks}
+        unloaded_spare_candidates = [
+            s for s in prev_states
+            if s.status == "unloaded"
+            and states_by_num.get(s.truck_number) is None
+            and truck_by_num.get(s.truck_number) is not None
+            and truck_by_num[s.truck_number].truck_type == "Spare"
+            and not s.oos_spare_route
+        ]
+        if unloaded_spare_candidates:
+            spare_nums = [c.truck_number for c in unloaded_spare_candidates]
+            spare_dates = list({c.run_date for c in unloaded_spare_candidates})
+            covered = {
+                (rs.load_on_truck, rs.run_date)
+                for rs in db.scalars(
+                    select(RouteSwap).where(
+                        RouteSwap.run_date.in_(spare_dates),
+                        RouteSwap.load_on_truck.in_(spare_nums),
+                    )
+                ).all()
+            }
+            for s in unloaded_spare_candidates:
+                if (s.truck_number, s.run_date) not in covered:
+                    states_by_num[s.truck_number] = s
 
     # Fetch route swaps and trucks + states all in parallel via the same connection.
     route_swaps = db.scalars(
@@ -425,3 +461,162 @@ def _assert_no_other_in_progress(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Truck {conflict.truck_number} is already in progress for {run_date}. Finish it before starting another.",
         )
+
+
+# ---------------------------------------------------------------------------
+# Trend aggregation endpoints
+# ---------------------------------------------------------------------------
+
+@router.get("/trends/completion", response_model=list[CompletionDailyPoint])
+def truck_completion_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Per-day: total route trucks scheduled vs loaded, expressed as pct."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            TruckState.run_date,
+            func.count(TruckState.id).label("total"),
+            func.sum(
+                func.case((TruckState.status == "loaded", 1), else_=0)
+            ).label("loaded"),
+        )
+        .where(TruckState.run_date >= cutoff)
+        .group_by(TruckState.run_date)
+        .order_by(TruckState.run_date)
+    ).all()
+    return [
+        CompletionDailyPoint(
+            run_date=r[0],
+            total_trucks=r[1],
+            loaded_trucks=r[2] or 0,
+            pct=round((r[2] or 0) / r[1] * 100, 1) if r[1] else 0,
+        )
+        for r in rows
+    ]
+
+
+@router.get("/trends/wearers", response_model=list[WearersDailyPoint])
+def truck_wearers_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Per-day average wearer count for trucks that were loaded."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            TruckState.run_date,
+            func.avg(TruckState.wearers).label("avg_w"),
+            func.count(TruckState.id).label("tc"),
+        )
+        .where(
+            TruckState.run_date >= cutoff,
+            TruckState.status == "loaded",
+            TruckState.wearers > 0,
+        )
+        .group_by(TruckState.run_date)
+        .order_by(TruckState.run_date)
+    ).all()
+    return [
+        WearersDailyPoint(
+            run_date=r[0],
+            avg_wearers=round(r[1], 1) if r[1] else 0,
+            truck_count=r[2],
+        )
+        for r in rows
+    ]
+
+
+@router.get("/trends/cycle", response_model=list[CycleDailyPoint])
+def truck_cycle_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Per-day average load duration (from TruckState.load_duration_seconds)."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            TruckState.run_date,
+            func.avg(TruckState.load_duration_seconds).label("avg_s"),
+            func.count(TruckState.id).label("tc"),
+        )
+        .where(
+            TruckState.run_date >= cutoff,
+            TruckState.status == "loaded",
+            TruckState.load_duration_seconds.isnot(None),
+            TruckState.load_duration_seconds >= 30,
+        )
+        .group_by(TruckState.run_date)
+        .order_by(TruckState.run_date)
+    ).all()
+    return [
+        CycleDailyPoint(
+            run_date=r[0],
+            avg_seconds=round(r[1], 1) if r[1] else 0,
+            truck_count=r[2],
+        )
+        for r in rows
+    ]
+
+
+@router.get("/trends/anomalies", response_model=list[AnomalyDay])
+def truck_anomalies(
+    days_back: int = Query(default=90, ge=14, le=365),
+    db: Session = Depends(get_db),
+):
+    """Days where completion rate, pace, or wearers diverge >2σ from the mean."""
+    from statistics import mean, stdev
+    cutoff = date.today() - timedelta(days=days_back)
+    daily = db.execute(
+        select(
+            TruckState.run_date,
+            func.count(TruckState.id).label("tot"),
+            func.sum(func.case((TruckState.status == "loaded", 1), else_=0)).label("lod"),
+            func.avg(
+                func.case(
+                    (TruckState.status == "loaded", TruckState.load_duration_seconds),
+                    else_=None,
+                )
+            ).label("pac"),
+            func.avg(
+                func.case(
+                    (TruckState.status == "loaded", TruckState.wearers),
+                    else_=None,
+                )
+            ).label("wav"),
+        )
+        .where(TruckState.run_date >= cutoff)
+        .group_by(TruckState.run_date)
+        .order_by(TruckState.run_date)
+    ).all()
+
+    anomalies: list[AnomalyDay] = []
+    if len(daily) < 7:
+        return anomalies
+
+    pcts = [d[2] / d[1] * 100 if d[1] else 0 for d in daily]
+    paces = [d[3] for d in daily if d[3] is not None and d[3] >= 30]
+    wearers_list = [d[4] for d in daily if d[4] is not None and d[4] > 0]
+
+    for d in daily:
+        if len(pcts) >= 7:
+            m = mean(pcts)
+            s = stdev(pcts) if len(pcts) > 1 else 1
+            z = (d[2] / d[1] * 100 - m) / s if d[1] and s else 0
+            if abs(z) > 2:
+                anomalies.append(AnomalyDay(run_date=d[0], metric="completion", value=round(d[2] / d[1] * 100, 1) if d[1] else 0, mean=round(m, 1), sigma=round(s, 2), z_score=round(z, 2)))
+        if d[3] is not None and d[3] >= 30 and len(paces) >= 7:
+            m = mean(paces)
+            s = stdev(paces) if len(paces) > 1 else 1
+            z = (d[3] - m) / s if s else 0
+            if abs(z) > 2:
+                anomalies.append(AnomalyDay(run_date=d[0], metric="pace", value=round(d[3], 1), mean=round(m, 1), sigma=round(s, 2), z_score=round(z, 2)))
+        if d[4] is not None and d[4] > 0 and len(wearers_list) >= 7:
+            m = mean(wearers_list)
+            s = stdev(wearers_list) if len(wearers_list) > 1 else 1
+            z = (d[4] - m) / s if s else 0
+            if abs(z) > 2:
+                anomalies.append(AnomalyDay(run_date=d[0], metric="wearers", value=round(d[4], 1), mean=round(m, 1), sigma=round(s, 2), z_score=round(z, 2)))
+
+    return sorted(anomalies, key=lambda a: a.run_date, reverse=True)

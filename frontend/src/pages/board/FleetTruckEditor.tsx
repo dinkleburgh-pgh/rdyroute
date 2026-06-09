@@ -112,6 +112,64 @@ export default function FleetTruckEditor({ truck, runDate }: { truck: TruckWithS
         </label>
       </div>
 
+      {/* Request Hold — only shown when truck is on hold */}
+      {truck.state?.priority_hold && (
+        <div className="flex items-center justify-between gap-4 rounded-md border border-red-600/40 bg-red-950/20 p-3">
+          <div>
+            <p className="text-sm font-medium text-red-300">Request Hold active</p>
+            <p className="text-xs text-red-500/80">This truck is flagged as "Do Not Load" until cleared.</p>
+          </div>
+          <button
+            type="button"
+            disabled={upsertState.isPending}
+            onClick={() =>
+              upsertState.mutate({
+                truck_number: truck.truck_number,
+                run_date: runDate,
+                priority_hold: false,
+                wearers: truck.state?.wearers ?? 0,
+              })
+            }
+            className="rounded px-3 py-1.5 text-sm font-medium bg-red-700 text-white hover:bg-red-600 disabled:opacity-50 transition shrink-0"
+          >
+            {upsertState.isPending ? "…" : "Clear Hold"}
+          </button>
+        </div>
+      )}
+
+      {/* Trailer size — Uniform only */}
+      {truck.truck_type === "Uniform" && (
+        <div>
+          <div className="flex items-center justify-between mb-2">
+            <div>
+              <p className="text-sm font-medium text-slate-200">Trailer size</p>
+              <p className="text-xs text-slate-500">18 foot or 22 foot trailer</p>
+            </div>
+          </div>
+          <div className="flex gap-2">
+            {(["18", "22"] as const).map((size) => {
+              const active = truck.uniform_size === size;
+              return (
+                <button
+                  key={size}
+                  type="button"
+                  disabled={update.isPending}
+                  onClick={() => update.mutate({ truck_number: truck.truck_number, uniform_size: active ? null : size })}
+                  className={clsx(
+                    "rounded-md px-4 py-1.5 text-sm font-medium transition",
+                    active
+                      ? "bg-indigo-700 text-white ring-1 ring-indigo-500"
+                      : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                  )}
+                >
+                  {size} ft
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {/* Scheduled off days — hidden for spare trucks */}
       {!truck.is_persistent_spare && truck.truck_type !== "Spare" && (
         <div>

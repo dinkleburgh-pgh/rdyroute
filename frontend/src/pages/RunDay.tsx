@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
 import clsx from "clsx";
+import { Clock, Calendar, Check } from "lucide-react";
 import {
   useBoard,
   useDailyNotes,
@@ -232,9 +233,7 @@ export default function RunDay() {
             : "border-slate-700/40 bg-slate-800/20",
         )}>
           <div className="mb-1.5 flex items-center gap-2">
-            <svg className="h-4 w-4 shrink-0 text-amber-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-            </svg>
+            <Clock className="h-4 w-4 shrink-0 text-amber-400" />
             <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Shift Notes</span>
             {canEditNotes && !notesEditing && (
               <button
@@ -291,12 +290,9 @@ export default function RunDay() {
           onClick={() => setUnloadCollapsed((c) => { const next = !c; localStorage.setItem("runday:unloadCollapsed", next ? "1" : "0"); return next; })}
           className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
         >
-          <svg
+          <Calendar
             className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", unloadCollapsed && "-rotate-90")}
-            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          />
           <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
             Unload &mdash; Day {holidayUnload ? `${unloadsDay2} + ` : ""}{unloadsDay}
           </h2>
@@ -341,7 +337,7 @@ export default function RunDay() {
               const status: TruckStatus = raw === "loaded" ? "unloaded" : raw;
               const truckUnloadDay = holidayUnload
                 ? (t.scheduled_off_days ?? []).includes(unloadsDay) ? unloadsDay2 : unloadsDay
-                : undefined;
+                : unloadsDay;
               return (
                 <TruckCard
                   key={t.truck_number}
@@ -366,12 +362,9 @@ export default function RunDay() {
           onClick={() => setLoadCollapsed((c) => { const next = !c; localStorage.setItem("runday:loadCollapsed", next ? "1" : "0"); return next; })}
           className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
         >
-          <svg
+          <Check
             className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", loadCollapsed && "-rotate-90")}
-            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          />
           <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
             Load &mdash; Day {holidayLoad ? `${loadDay2} + ` : ""}{loadDay}
           </h2>
@@ -412,7 +405,7 @@ export default function RunDay() {
               const offDaysLoad = t.scheduled_off_days ?? [];
               const truckLoadDay = holidayLoad
                 ? (offDaysLoad.includes(loadDay) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : loadDay
-                : undefined;
+                : loadDay;
               return (
                 <TruckCard
                   key={t.truck_number}

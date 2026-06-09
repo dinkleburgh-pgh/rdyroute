@@ -9,6 +9,7 @@ import { useMemo, useState } from "react";
 import clsx from "clsx";
 import type { AuthRequestStatus } from "../../types";
 import { useAuthRequests } from "../../api/hooks";
+import { format, parseISO } from "date-fns";
 import { AlertTriangleIcon } from "../icons";
 import RoleBadge, { UserAvatar } from "./RoleBadge";
 
@@ -113,7 +114,7 @@ export default function ActivityPanel() {
                   <p className="truncate text-sm text-slate-200">
                     <span className="font-medium text-slate-100">{e.username}</span> — {e.action}
                   </p>
-                  <p className="text-xs text-slate-500">{new Date(e.ts).toLocaleString()}</p>
+                  <p className="text-xs text-slate-500">{format(parseISO(e.ts), "PPpp")}</p>
                 </div>
               </div>
               <span

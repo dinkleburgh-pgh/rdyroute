@@ -108,6 +108,7 @@ class Truck(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     is_persistent_spare: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     is_oos: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    uniform_size: Mapped[str | None] = mapped_column(String(2), nullable=True, default=None)
     scheduled_off_days: Mapped[list[int]] = mapped_column(JSON, nullable=False, default=list)
     qr_token: Mapped[str | None] = mapped_column(
         String(36), unique=True, nullable=True, index=True,
@@ -153,6 +154,8 @@ class TruckState(Base):
     oos_spare_route: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Dust garment flag
     has_dust_garment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Priority unload + hold — truck flagged for urgent unload; once unloaded it holds the load workflow
+    priority_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False

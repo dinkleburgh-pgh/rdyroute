@@ -50,6 +50,7 @@ export function buildRouteStatusCounts(
   loadDayNum: number,
   holidayLoad: boolean,
   unloadsDayNum?: number,
+  holidayUnload?: boolean,
 ): Record<TruckStatus, number> {
   const out: Record<TruckStatus, number> = {
     dirty: 0,
@@ -72,7 +73,7 @@ export function buildRouteStatusCounts(
     if (unloadsDayNum !== undefined && s === "off") {
       const raw = (t.state?.status ?? "dirty") as TruckStatus;
       if (raw === "dirty" || raw === "unloaded") {
-        return effectiveStatus(t, unloadsDayNum, holidayLoad);
+        return effectiveStatus(t, unloadsDayNum, holidayUnload ?? holidayLoad);
       }
     }
     return s;
@@ -96,6 +97,8 @@ export function buildRouteStatusCounts(
         out[statusFor(t)] += 1;
       } else {
         out.spare += 1;
+        const s = statusFor(t);
+        out[s] += 1;
       }
       continue;
     }

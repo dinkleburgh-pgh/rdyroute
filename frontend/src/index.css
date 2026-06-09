@@ -11,6 +11,28 @@
 @layer utilities {
   .bg-status-unfinished { background: linear-gradient(to right, #dc2626 50%, #16a34a 50%); color: #ffffff; }
   .text-status-unfinished { color: #dc2626; }
+  .animate-priority-glow {
+    animation: priorityGlow 2s ease-in-out infinite;
+  }
+}
+
+@keyframes priorityGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 rgba(239, 68, 68, 0.0), 0 0 0 rgba(239, 68, 68, 0.0);
+    border-color: rgba(239, 68, 68, 0.3);
+  }
+  25% {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.3), inset 0 0 8px rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 20px rgba(239, 68, 68, 0.4), inset 0 0 12px rgba(239, 68, 68, 0.08);
+    border-color: rgba(239, 68, 68, 0.7);
+  }
+  75% {
+    box-shadow: 0 0 12px rgba(239, 68, 68, 0.3), inset 0 0 8px rgba(239, 68, 68, 0.05);
+    border-color: rgba(239, 68, 68, 0.5);
+  }
 }
 
 @keyframes slideIn {

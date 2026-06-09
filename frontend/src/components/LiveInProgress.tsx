@@ -201,7 +201,7 @@ function TruckNotesPanel({ truckNumber, loadDayNum }: { truckNumber: number; loa
         return (
           <div key={n.id} className={clsx("rounded-xl border px-4 py-3", s.border, s.bg)}>
             <div className="flex items-start gap-3">
-              <span className={clsx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>{s.label}</span>
+              <span className={clsx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>{n.note_type === "workday" ? `Day ${n.workday_num}` : s.label}</span>
               <span className="text-sm leading-snug text-slate-200">{n.body}</span>
             </div>
           </div>

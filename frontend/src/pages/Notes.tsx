@@ -7,9 +7,11 @@
  *   one_off   — shown until expires_on, then auto-archived.
  */
 import { useState } from "react";
+import { motion } from "framer-motion";
 import clsx from "clsx";
 import { QRCodeSVG } from "qrcode.react";
 import { useBoard } from "../api/hooks";
+import { AlertTriangleIcon, ChevronRightIcon } from "../components/icons";
 import {
   useCreateNote,
   useDeleteNote,
@@ -19,6 +21,7 @@ import {
 } from "../api/hooks";
 import { todayIso, publicBase } from "../api/client";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
+import AnimateCard from "../components/AnimateCard";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -411,12 +414,14 @@ function TruckNotePanel({
   showArchived,
   isOpen,
   onOpen,
+  index,
 }: {
   truck: TruckWithState;
   notes: TruckNote[];
   showArchived: boolean;
   isOpen: boolean;
   onOpen: () => void;
+  index: number;
 }) {
   const [adding, setAdding]     = useState(false);
   const [editing, setEditing]   = useState<TruckNote | null>(null);
@@ -427,7 +432,7 @@ function TruckNotePanel({
   );
 
   return (
-    <div className="card space-y-3">
+    <AnimateCard className="card space-y-3" delay={index * 0.03}>
       {/* Truck header — tap to open/close */}
       <div className="flex items-center gap-2">
         <button
@@ -442,12 +447,9 @@ function TruckNotePanel({
               {visible.length}
             </span>
           )}
-          <svg
+          <AlertTriangleIcon
             className={clsx("ml-auto h-4 w-4 shrink-0 text-slate-500 transition-transform", isOpen && "rotate-180")}
-            fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24"
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-          </svg>
+          />
         </button>
         {/* QR code button — only for non-spare trucks that have a token */}
         {truck.truck_type !== "Spare" && (
@@ -457,10 +459,7 @@ function TruckNotePanel({
             onClick={() => setShowQR(true)}
             className="shrink-0 rounded p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
           >
-            <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-              <rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/>
-              <rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3zM17 17h4M17 14v3M21 14v7M14 17v4"/>
-            </svg>
+            <ChevronRightIcon className="h-4 w-4" />
           </button>
         )}
       </div>
@@ -507,12 +506,13 @@ function TruckNotePanel({
           {/* Note cards */}
           {visible.length > 0 ? (
             <div className="space-y-2">
-              {visible.map((n) => (
-                <NoteCard
-                  key={n.id}
-                  note={n}
-                  onEdit={(n) => { setAdding(false); setEditing(n); }}
-                />
+              {visible.map((n, i) => (
+                <AnimateCard key={n.id} delay={i * 0.05}>
+                  <NoteCard
+                    note={n}
+                    onEdit={(n) => { setAdding(false); setEditing(n); }}
+                  />
+                </AnimateCard>
               ))}
             </div>
           ) : (
@@ -522,7 +522,7 @@ function TruckNotePanel({
           )}
         </>
       )}
-    </div>
+    </AnimateCard>
   );
 }
 
@@ -569,6 +569,11 @@ export default function NotesBoard() {
   const totalOneOff   = allNotes.filter((n) => n.note_type === "one_off" && n.is_active && !isExpired(n)).length;
 
   return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
     <div className="space-y-5 p-3 md:p-6">
       {/* Header */}
       <div className="flex flex-wrap items-end gap-4">
@@ -645,7 +650,7 @@ export default function NotesBoard() {
         <p className="text-sm text-slate-500">No trucks match the current filters.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {filtered.map((t) => (
+          {filtered.map((t, idx) => (
             <TruckNotePanel
               key={t.truck_number}
               truck={t}
@@ -653,10 +658,12 @@ export default function NotesBoard() {
               showArchived={showArchived}
               isOpen={openTruck === t.truck_number}
               onOpen={() => setOpenTruck((prev) => prev === t.truck_number ? null : t.truck_number)}
+              index={idx}
             />
           ))}
         </div>
       )}
     </div>
+    </motion.div>
   );
 }

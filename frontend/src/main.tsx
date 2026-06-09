@@ -2,9 +2,10 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import "./index.css";
+import { format } from "date-fns";
 
 console.info(
-  `%cReadyRoute V2%c v${__APP_VERSION__}  ${__GIT_COMMIT__}  built ${new Date(__BUILD_DATE__).toLocaleString()}`,
+  `%cReadyRoute V2%c v${__APP_VERSION__}  ${__GIT_COMMIT__}  built ${format(new Date(__BUILD_DATE__), "PPpp")}`,
   "font-weight:bold;color:#38bdf8",
   "color:#94a3b8",
 );

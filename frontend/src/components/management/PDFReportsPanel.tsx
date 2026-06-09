@@ -1,6 +1,7 @@
 /**
  * PDF day reports panel — generates a printable HTML report. Extracted from Settings.tsx.
  */
+import { format } from "date-fns";
 import { useAuditEntries, useBoard } from "../../api/hooks";
 import { todayIso } from "../../api/client";
 
@@ -42,7 +43,7 @@ export default function PDFReportsPanel() {
   </style>
 </head><body>
   <h1>ReadyRoute V2 — Day Report</h1>
-  <p class="sub">Run date: ${today} &nbsp;·&nbsp; Generated: ${new Date().toLocaleString()}</p>
+  <p class="sub">Run date: ${today} &nbsp;·&nbsp; Generated: ${format(new Date(), "PPpp")}</p>
   <h2>Truck States</h2>
   <table><thead><tr><th>#</th><th>Type</th><th>Status</th><th>Wearers</th><th>Load Time</th></tr></thead>
     <tbody>${rows || "<tr><td colspan='5'>No trucks</td></tr>"}</tbody></table>

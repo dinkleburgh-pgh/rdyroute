@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
+import { format } from "date-fns";
 import {
   useBoard,
   useHolidayLoad,
@@ -16,7 +17,10 @@ import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { effectiveStatus } from "../utils/truckStatus";
 import { PaceBar, useElapsed } from "../components/LiveInProgress";
+import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState } from "../types";
+import AnimateCard from "../components/AnimateCard";
+import { motion } from "framer-motion";
 
 /**
  * Load workflow (V1 parity):
@@ -35,6 +39,7 @@ export default function Load() {
   const [busy, setBusy] = useState<number | null>(null);
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
+  const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
 
   const board = data ?? [];
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
@@ -55,7 +60,8 @@ export default function Load() {
       board.filter(
         (t) =>
           (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-          (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+          (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay) ||
+           t.route_swap_route != null || t.state?.oos_spare_route != null),
       ),
     [board, loadDay, holidayLoad],
   );
@@ -234,6 +240,7 @@ export default function Load() {
 
   async function startLoad(t: TruckWithState) {
     if (anyInProgress) return;
+    if (t.state?.priority_hold) return;
     setBusy(t.truck_number);
     try {
       const nowSec = Date.now() / 1000;
@@ -310,7 +317,7 @@ export default function Load() {
     .sort((a, b) => a.truck_number - b.truck_number);
 
   return (
-    <div className="p-3 md:p-6 space-y-5">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
       <div className="flex items-end justify-between gap-4">
         <h2 className="text-2xl font-semibold">Load</h2>
         <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
@@ -382,10 +389,20 @@ export default function Load() {
             <div className="flex flex-wrap gap-2">
               {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
                 const st = t.state?.status ?? "dirty";
+                const cr = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
+                const heldLabel = t.state?.priority_hold ? (
+                  <span className="text-[10px] font-bold text-red-400">HOLD</span>
+                ) : null;
                 return (
                   <span key={t.truck_number} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-2.5 py-1 text-sm font-semibold">
                     <span>#{t.truck_number}</span>
                     <span className={clsx("text-xs", statusColor[st] ?? "text-slate-400")}>{statusLabel[st] ?? st}</span>
+                    {heldLabel}
+                    {cr != null && (
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                        Cov. #{cr}
+                      </span>
+                    )}
                   </span>
                 );
               })}
@@ -412,38 +429,39 @@ export default function Load() {
           </p>
         )}
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
-          {ready.map((t) => {
-            const disabled = anyInProgress || busy === t.truck_number;
+          {ready.map((t, index) => {
+            const isHeld = t.state?.priority_hold === true;
+            const disabled = anyInProgress || busy === t.truck_number || isHeld;
             const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
-            const isOosCover = t.state?.oos_spare_route != null;
-            const isSwap = t.route_swap_route != null && !isOosCover;
             return (
+              <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.02}>
               <button
-                key={t.truck_number}
                 type="button"
                 disabled={disabled}
-                onClick={() => startLoad(t)}
+                onClick={() => setConfirmLoadTruck(t)}
                 className={clsx(
-                  "card relative p-4 flex flex-col gap-1 text-left transition-all duration-150",
+                  "card relative flex flex-col gap-1 text-left transition-all duration-150 min-h-[7.5rem] p-4",
                   disabled
                     ? "cursor-not-allowed opacity-50"
                     : "hover:ring-2 hover:ring-emerald-500 active:scale-[0.98]",
                 )}
-                title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
+                title={isHeld ? "On Hold — Clear in Fleet" : t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-emerald-300">
-                      {t.truck_number}
-                    </span>
+                  <span className={clsx("text-4xl font-extrabold tracking-tight tabular-nums leading-none", isHeld ? "text-red-300" : "text-emerald-300")}>
+                    {t.truck_number}
+                  </span>
+                  <span className="flex flex-col items-end gap-0.5">
+                    {isHeld ? (
+                      <span className="badge bg-red-700 text-white">HOLD</span>
+                    ) : (
+                      <span className="badge bg-emerald-700 text-white">Unloaded</span>
+                    )}
                     {coverRoute != null && (
-                      <span className="text-xs font-bold tabular-nums text-sky-400">
-                        rt #{coverRoute}{isOosCover ? " (cov)" : isSwap ? " (swap)" : ""}
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                        Cov. #{coverRoute}
                       </span>
                     )}
-                  </div>
-                  <span className="flex flex-col items-end gap-0.5">
-                    <span className="badge bg-emerald-700 text-white">Unloaded</span>
                     {t.truck_type === "Dust" && t.state?.has_dust_garment && (
                       <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5" title="Dust garment">
                         <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
@@ -452,12 +470,15 @@ export default function Load() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` � Batch ${t.state.batch_id}` : ""}
+                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                 </div>
-                {t.state?.wearers ? (
+                {isHeld ? (
+                  <div className="mt-auto pt-1 text-[11px] font-semibold text-red-400">Clear in Fleet</div>
+                ) : t.state?.wearers ? (
                   <div className="mt-auto pt-1 text-xs text-slate-500">{t.state.wearers} wearers</div>
                 ) : null}
               </button>
+              </AnimateCard>
             );
           })}
           {ready.length === 0 && (
@@ -506,28 +527,29 @@ export default function Load() {
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
           {loadedSorted.map((t, idx) => {
             const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
-            const isOosCover = t.state?.oos_spare_route != null;
-            const isSwap = t.route_swap_route != null && !isOosCover;
             return (
-              <div key={t.truck_number} className="card relative p-4 flex flex-col gap-1">
+              <AnimateCard key={t.truck_number} delay={idx * 0.03} className="card relative space-y-2 min-h-[7.5rem] p-4 hover:ring-2 hover:ring-blue-500 transition-shadow">
                 {loadedSort === "order" && (
                   <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-900 px-1 text-[10px] font-bold text-blue-300 ring-1 ring-blue-500/60">
                     {idx + 1}
                   </span>
                 )}
                 <div className="flex items-start justify-between gap-1">
-                  <div className="flex flex-col gap-0.5">
-                    <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-sky-300">
-                      {t.truck_number}
+                  <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-sky-300">
+                    {t.truck_number}
+                  </span>
+                  <span className="flex flex-col items-end gap-0.5">
+                    <span className="inline-flex items-center gap-1">
+                      <span className="badge bg-blue-600 text-white">Loaded</span>
+                      {t.state?.priority_hold && (
+                        <span className="badge bg-red-700 text-white">Hold</span>
+                      )}
                     </span>
                     {coverRoute != null && (
-                      <span className="text-xs font-bold tabular-nums text-sky-400">
-                        rt #{coverRoute}{isOosCover ? " (cov)" : isSwap ? " (swap)" : ""}
+                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                        Cov. #{coverRoute}
                       </span>
                     )}
-                  </div>
-                  <span className="flex flex-col items-end gap-0.5">
-                    <span className="badge bg-blue-600 text-white">Loaded</span>
                     {t.truck_type === "Dust" && t.state?.has_dust_garment && (
                       <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5" title="Dust garment">
                         <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
@@ -536,14 +558,14 @@ export default function Load() {
                   </span>
                 </div>
                 <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` � Batch ${t.state.batch_id}` : ""}
+                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                 </div>
                 {t.state?.load_finish_time && (
                   <div className="mt-auto pt-1 text-xs text-slate-500">
-                    Done {new Date(t.state.load_finish_time * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    Done {format(new Date(t.state.load_finish_time * 1000), "h:mm a")}
                   </div>
                 )}
-              </div>
+              </AnimateCard>
             );
           })}
           {loaded.length === 0 && (
@@ -551,7 +573,38 @@ export default function Load() {
           )}
         </div>
       </section>
-    </div>
+      {confirmLoadTruck && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => setConfirmLoadTruck(null)}
+        >
+          <div
+            className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-base font-semibold">Start Loading Truck #{confirmLoadTruck.truck_number}?</h3>
+            <p className="mb-4 text-sm text-slate-400">
+              {anyInProgress
+                ? "Another truck is already in progress. Finish it first."
+                : `${confirmLoadTruck.truck_type}${confirmLoadTruck.state?.batch_id != null ? ` · Batch ${confirmLoadTruck.state.batch_id}` : ""}${confirmLoadTruck.state?.wearers ? ` · ${confirmLoadTruck.state.wearers} wearers` : ""}`}
+            </p>
+            <div className="flex justify-end gap-2">
+              <button className="btn-ghost" onClick={() => setConfirmLoadTruck(null)}>Cancel</button>
+              <button
+                className="rounded-md bg-emerald-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-emerald-600 disabled:opacity-50"
+                disabled={anyInProgress || busy === confirmLoadTruck.truck_number}
+                onClick={() => {
+                  startLoad(confirmLoadTruck);
+                  setConfirmLoadTruck(null);
+                }}
+              >
+                {busy === confirmLoadTruck.truck_number ? "Starting…" : "Start Loading"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </motion.div>
   );
 }
 
@@ -561,14 +614,16 @@ export default function Load() {
 
 function StatCard({ label, value, color, active, onClick }: { label: string; value: number; color: string; active?: boolean; onClick?: () => void }) {
   return (
+    <AnimateCard>
     <button
       type="button"
       onClick={onClick}
-      className={clsx("rounded-lg border px-4 py-3 text-center transition-shadow w-full", color, active && "ring-2 ring-white/30")}
+      className={clsx("rounded-lg border px-4 py-3 text-center transition-shadow w-full min-h-[5rem] flex flex-col items-center justify-center", color, active && "ring-2 ring-white/30")}
     >
       <p className="text-xs font-semibold uppercase tracking-wider opacity-70">{label}</p>
       <p className="mt-1 text-3xl font-bold">{value}</p>
     </button>
+    </AnimateCard>
   );
 }
 
@@ -707,18 +762,26 @@ function InProgressPanel({
           {/* Next Up */}
           <div className="flex-1 text-center">
             <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Next Up</div>
-            {nextUp ? (
-              <>
-                <div className="font-black tabular-nums text-sky-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
-                  #{nextUp.truck_number}
-                </div>
-                {paceAvgSeconds != null && (
-                  <div className="mt-1.5 text-xs text-slate-400">
-                    avg <span className="text-slate-300">{formatDuration(paceAvgSeconds)}</span>
-                  </div>
-                )}
-              </>
-            ) : (
+                {nextUp ? (
+                  <>
+                    <div className="font-black tabular-nums text-sky-400" style={{ fontSize: "3.5rem", lineHeight: 1 }}>
+                      #{nextUp.truck_number}
+                    </div>
+                    {(() => {
+                      const cr = nextUp.state?.oos_spare_route ?? nextUp.route_swap_route ?? null;
+                      return cr != null ? (
+                        <span className="mt-1 inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                          Cov. #{cr}
+                        </span>
+                      ) : null;
+                    })()}
+                    {paceAvgSeconds != null && (
+                      <div className="mt-1.5 text-xs text-slate-400">
+                        avg <span className="text-slate-300">{formatDuration(paceAvgSeconds)}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
               <div className="mt-3 font-black text-slate-600" style={{ fontSize: "3.5rem", lineHeight: 1 }}>—</div>
             )}
           </div>
@@ -779,19 +842,5 @@ function formatDuration(totalSeconds: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-function DustGarmentIcon({ className }: { className?: string }) {
-  // Clean t-shirt silhouette: wide neckline, broad shoulders, short sleeves.
-  // Filled for clear recognition at small sizes (down to ~10px).
-  return (
-    <svg
-      viewBox="0 0 32 32"
-      aria-hidden="true"
-      className={className}
-      fill="currentColor"
-      stroke="none"
-    >
-      <path d="M11 4c.4 1.7 2.2 3 5 3s4.6-1.3 5-3l5.5 2.5a1 1 0 0 1 .5 1.3l-2 5a1 1 0 0 1-1.3.5L21 11.6V27a1 1 0 0 1-1 1H12a1 1 0 0 1-1-1V11.6l-2.7 1.7a1 1 0 0 1-1.3-.5l-2-5a1 1 0 0 1 .5-1.3L11 4z" />
-    </svg>
-  );
-}
+
 

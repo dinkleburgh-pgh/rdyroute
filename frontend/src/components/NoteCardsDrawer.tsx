@@ -6,6 +6,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { useLocation } from "react-router-dom";
+import { FileText, Check, Bell } from "lucide-react";
 import { useSettings, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
@@ -27,7 +28,6 @@ const NOTE_TYPE_LABEL: Record<string, string> = {
   workday:  "Workday",
   one_off:  "One-off",
 };
-const DAY_NAMES_SHORT: Record<number, string> = { 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri" };
 
 const STATUS_TEXT: Partial<Record<TruckStatus, string>> = {
   dirty:       "text-status-dirty",
@@ -189,9 +189,7 @@ export default function NoteCardsDrawer() {
                 className="rounded p-1 text-slate-500 hover:text-slate-300 transition-colors"
                 aria-label="Close"
               >
-                <svg className="h-5 w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <FileText className="h-5 w-5" />
               </button>
             </div>
           </div>
@@ -203,9 +201,7 @@ export default function NoteCardsDrawer() {
             {tab === "mine" && (
               <div className="space-y-2">
                 <div className="flex items-center gap-2">
-                  <svg className="h-4 w-4 text-emerald-400" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
-                  </svg>
+                  <Check className="h-4 w-4 text-emerald-400" />
                   <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">{user?.username}</span>
                   {noteSaved && <span className="text-[10px] text-emerald-500 ml-auto">Saved</span>}
                   {upsert.isPending && !noteSaved && <span className="text-[10px] text-slate-500 ml-auto">Saving…</span>}
@@ -242,13 +238,8 @@ export default function NoteCardsDrawer() {
                       >
                         <div className="mb-2 flex flex-wrap items-center gap-1.5">
                           <span className={clsx("rounded-full px-2 py-0.5 text-sm font-semibold", NOTE_TYPE_COLOR[n.note_type])}>
-                            {NOTE_TYPE_LABEL[n.note_type]}
+                            {n.note_type === "workday" ? `Day ${n.workday_num}` : NOTE_TYPE_LABEL[n.note_type]}
                           </span>
-                          {n.note_type === "workday" && n.workday_num && (
-                            <span className="rounded-full bg-slate-700 px-2 py-0.5 text-sm font-semibold text-slate-300">
-                              {DAY_NAMES_SHORT[n.workday_num]}
-                            </span>
-                          )}
                           {n.note_type === "one_off" && n.expires_on && (
                             <span className="rounded-full bg-slate-700 px-2 py-0.5 text-sm font-semibold text-slate-300">
                               until {n.expires_on}
@@ -279,9 +270,7 @@ export default function NoteCardsDrawer() {
         )}
       >
         {/* Clipboard / note icon */}
-        <svg className="h-4 w-4 shrink-0 md:h-5 md:w-5" fill="none" stroke="currentColor" strokeWidth={2} viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-        </svg>
+        <Bell className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
         <span className="hidden md:inline">Notes</span>
         <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.25rem] h-5 px-1.5 text-xs font-extrabold text-indigo-700 md:min-w-[1.5rem] md:h-6 md:px-2 md:text-sm" style={{ lineHeight: 1 }}>
           {displayedNotes.length}

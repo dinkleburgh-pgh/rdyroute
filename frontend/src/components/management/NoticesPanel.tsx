@@ -2,6 +2,7 @@
  * Notices panel — post and manage team notices. Extracted from Settings.tsx.
  */
 import { useState } from "react";
+import { format, parseISO } from "date-fns";
 import { useCreateNotice, useDeleteNotice, useNotices, useUpdateNotice } from "../../api/hooks";
 import type { NoticeSeverity } from "../../types";
 
@@ -61,7 +62,7 @@ export default function NoticesPanel({ disabled }: { disabled: boolean }) {
                 </p>
                 {n.body && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-400">{n.body}</p>}
                 <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
-                  {n.created_by} · {new Date(n.created_at).toLocaleString()} · {n.is_active ? "Active" : "Hidden"}
+                  {n.created_by} · {format(parseISO(n.created_at), "PPpp")} · {n.is_active ? "Active" : "Hidden"}
                 </p>
               </div>
               <div className="space-x-2 text-right">

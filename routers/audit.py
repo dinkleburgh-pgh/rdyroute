@@ -26,7 +26,18 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AuditEntry, AuditPhoto
-from schemas import AuditEntryCreate, AuditEntryOut, AuditEntryUpdate, AuditPhotoOut
+from schemas import (
+    AnomalyDay,
+    AuditEntryCreate,
+    AuditEntryOut,
+    AuditEntryUpdate,
+    AuditPhotoOut,
+    TrendComparison,
+    TrendDailyPoint,
+    TrendRoutePoint,
+    TrendSummary,
+    TrendTruckPoint,
+)
 
 router = APIRouter(prefix="/audit", tags=["audit"])
 
@@ -42,6 +53,21 @@ _PHOTO_ROOT = Path(
 ).resolve()
 _MAX_PHOTO_BYTES = 10 * 1024 * 1024  # 10 MB
 _ALLOWED_PHOTO_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif", "image/heic"}
+
+
+# ---------------------------------------------------------------------------
+# Available dates
+# ---------------------------------------------------------------------------
+
+
+@router.get("/dates")
+def audit_dates(db: Session = Depends(get_db)):
+    rows = (
+        db.execute(select(AuditEntry.run_date).distinct().order_by(AuditEntry.run_date.desc()))
+        .scalars()
+        .all()
+    )
+    return [str(r) for r in rows]
 
 
 # ---------------------------------------------------------------------------
@@ -184,6 +210,179 @@ def audit_by_truck(
     return [{"truck_number": r.truck_number, "item_label": r.item_label, "total_qty": r.total_qty} for r in rows]
 
 
+@router.get("/trends/summary")
+def trend_summary(
+    days_back: int = Query(default=14, ge=1, le=365),
+    compare_days_back: int | None = Query(default=None, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Consolidated KPI summary with optional prior-period comparison."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            AuditEntry.run_date,
+            func.sum(AuditEntry.quantity).label("total_qty"),
+            func.count(AuditEntry.id).label("entry_count"),
+        )
+        .where(AuditEntry.run_date >= cutoff)
+        .group_by(AuditEntry.run_date)
+        .order_by(AuditEntry.run_date)
+    ).all()
+
+    daily_series = [
+        TrendDailyPoint(run_date=r.run_date, total_qty=r.total_qty, entry_count=r.entry_count)
+        for r in rows
+    ]
+    total_qty = sum(r.total_qty for r in rows)
+    entry_count = sum(r.entry_count for r in rows)
+    days_with_data = len(rows)
+    avg_per_day = round(total_qty / days_with_data, 1) if days_with_data else 0.0
+
+    peak = max(rows, key=lambda r: r.total_qty) if rows else None
+    peak_day = peak.run_date if peak else None
+    peak_qty = peak.total_qty if peak else 0
+
+    # Simple trend: compare first half vs second half of the period
+    mid = len(daily_series) // 2
+    if mid >= 2 and len(daily_series) >= 4:
+        first_half = sum(d.total_qty for d in daily_series[:mid])
+        second_half = sum(d.total_qty for d in daily_series[mid:])
+        change = ((second_half - first_half) / first_half) * 100
+        trend_direction = "up" if change > 5 else ("down" if change < -5 else "stable")
+    else:
+        change = None
+        trend_direction = "stable"
+
+    # Prior-period comparison
+    change_vs_prior_pct = None
+    if compare_days_back and days_back > 0:
+        prior_cutoff = cutoff - timedelta(days=compare_days_back)
+        prior_cutoff_end = cutoff - timedelta(days=1)
+        prior_rows = db.execute(
+            select(func.sum(AuditEntry.quantity).label("total_qty"))
+            .where(
+                AuditEntry.run_date >= prior_cutoff,
+                AuditEntry.run_date <= prior_cutoff_end,
+            )
+        ).scalar()
+        if prior_rows and total_qty > 0:
+            change_vs_prior_pct = round(
+                ((total_qty - prior_rows) / prior_rows) * 100, 1
+            )
+
+    return TrendSummary(
+        total_qty=total_qty,
+        avg_per_day=avg_per_day,
+        peak_day=peak_day,
+        peak_qty=peak_qty,
+        entry_count=entry_count,
+        days_with_data=days_with_data,
+        trend_direction=trend_direction,
+        change_vs_prior_pct=change_vs_prior_pct,
+        daily_series=daily_series,
+    )
+
+
+@router.get("/trends/by-truck/{truck_number}")
+def trend_by_truck(
+    truck_number: int,
+    days_back: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Daily trend for a single truck."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            AuditEntry.run_date,
+            func.sum(AuditEntry.quantity).label("total_qty"),
+        )
+        .where(
+            AuditEntry.truck_number == truck_number,
+            AuditEntry.run_date >= cutoff,
+        )
+        .group_by(AuditEntry.run_date)
+        .order_by(AuditEntry.run_date)
+    ).all()
+    return [
+        TrendTruckPoint(run_date=r.run_date, total_qty=r.total_qty) for r in rows
+    ]
+
+
+@router.get("/trends/by-route/{route_number}")
+def trend_by_route(
+    route_number: int,
+    days_back: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Daily trend for a single route."""
+    cutoff = date.today() - timedelta(days=days_back)
+    route_expr = func.coalesce(AuditEntry.route_override, AuditEntry.truck_number)
+    rows = db.execute(
+        select(
+            AuditEntry.run_date,
+            func.sum(AuditEntry.quantity).label("total_qty"),
+        )
+        .where(
+            route_expr == route_number,
+            AuditEntry.run_date >= cutoff,
+        )
+        .group_by(AuditEntry.run_date)
+        .order_by(AuditEntry.run_date)
+    ).all()
+    return [
+        TrendRoutePoint(run_date=r.run_date, total_qty=r.total_qty) for r in rows
+    ]
+
+
+@router.get("/trends/comparison")
+def trend_comparison(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Split current period in half for side-by-side trend comparison."""
+    total_days = days_back
+    half = total_days // 2
+    today = date.today()
+
+    # Current half (most recent)
+    cur_cutoff = today - timedelta(days=half)
+    cur_rows = db.execute(
+        select(
+            AuditEntry.run_date,
+            func.sum(AuditEntry.quantity).label("total_qty"),
+            func.count(AuditEntry.id).label("entry_count"),
+        )
+        .where(
+            AuditEntry.run_date >= cur_cutoff,
+            AuditEntry.run_date <= today,
+        )
+        .group_by(AuditEntry.run_date)
+        .order_by(AuditEntry.run_date)
+    ).all()
+
+    # Prior half
+    pri_cutoff = today - timedelta(days=total_days)
+    pri_cutoff_end = today - timedelta(days=half + 1)
+    pri_rows = db.execute(
+        select(
+            AuditEntry.run_date,
+            func.sum(AuditEntry.quantity).label("total_qty"),
+            func.count(AuditEntry.id).label("entry_count"),
+        )
+        .where(
+            AuditEntry.run_date >= pri_cutoff,
+            AuditEntry.run_date <= pri_cutoff_end,
+        )
+        .group_by(AuditEntry.run_date)
+        .order_by(AuditEntry.run_date)
+    ).all()
+
+    return TrendComparison(
+        current=[TrendDailyPoint(run_date=r.run_date, total_qty=r.total_qty, entry_count=r.entry_count) for r in cur_rows],
+        prior=[TrendDailyPoint(run_date=r.run_date, total_qty=r.total_qty, entry_count=r.entry_count) for r in pri_rows],
+    )
+
+
 @router.get("/active-warnings")
 def active_warnings(
     run_date: date = Query(...),
@@ -300,3 +499,44 @@ def delete_audit_photo(photo_id: str, db: Session = Depends(get_db)):
         pass
     db.delete(row)
     db.commit()
+
+
+@router.get("/trends/anomalies", response_model=list[AnomalyDay])
+def audit_anomalies(
+    days_back: int = Query(default=90, ge=14, le=365),
+    db: Session = Depends(get_db),
+):
+    """Days where audit volume diverges >2σ from the mean."""
+    from statistics import mean, stdev
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            AuditEntry.run_date,
+            func.sum(AuditEntry.quantity).label("total_qty"),
+        )
+        .where(AuditEntry.run_date >= cutoff)
+        .group_by(AuditEntry.run_date)
+        .order_by(AuditEntry.run_date)
+    ).all()
+
+    anomalies: list[AnomalyDay] = []
+    if len(rows) < 7:
+        return anomalies
+
+    volumes = [r[1] for r in rows]
+    m = mean(volumes)
+    s = stdev(volumes) if len(volumes) > 1 else 1
+
+    for r in rows:
+        z = (r[1] - m) / s if s else 0
+        if abs(z) > 2:
+            anomalies.append(AnomalyDay(
+                run_date=r[0],
+                metric="audit_volume",
+                value=round(r[1], 1),
+                mean=round(m, 1),
+                sigma=round(s, 2),
+                z_score=round(z, 2),
+            ))
+
+    return sorted(anomalies, key=lambda a: a.run_date, reverse=True)

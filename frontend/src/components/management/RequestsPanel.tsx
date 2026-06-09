@@ -8,6 +8,7 @@ import type { AuthRequestStatus } from "../../types";
 import { useAuthRequests, useResolveAuthRequest } from "../../api/hooks";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
+import { format, parseISO } from "date-fns";
 import RoleBadge, { UserAvatar } from "./RoleBadge";
 
 const STATUS_CHIP: Record<AuthRequestStatus, string> = {
@@ -75,7 +76,7 @@ export default function RequestsPanel({ disabled }: { disabled: boolean }) {
                   <RoleBadge role={r.requested_role} />
                 </p>
                 <p className="text-xs text-slate-500">
-                  Requested {new Date(r.requested_at).toLocaleString()}
+                  Requested {format(parseISO(r.requested_at), "PPpp")}
                   {r.resolved_at && r.resolved_by && (
                     <>
                       {" · "}

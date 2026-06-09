@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import {
   useBoard,
   useBulkUpdateStatus,
@@ -16,6 +17,7 @@ import type { TruckStatus, TruckWithState } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { effectiveStatus } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
+import AnimateCard from "../components/AnimateCard";
 
 const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
@@ -143,6 +145,11 @@ export default function Supervisor() {
   }, [board, fromStatus]);
 
   return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
     <div className="space-y-4 p-3 md:p-6">
       <div className="flex items-end justify-between gap-4">
         <div>
@@ -187,14 +194,14 @@ export default function Supervisor() {
           </div>
 
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {oosTrucks.map((truck) => {
+            {oosTrucks.map((truck, i) => {
               const swap = swapByRoute.get(truck.truck_number);
               const covered = !!swap;
               const recent = recentFor.get(truck.truck_number) ?? [];
               const selVal = oosSelects[truck.truck_number] ?? "";
 
               return (
-                <div
+                <AnimateCard
                   key={truck.truck_number}
                   className={[
                     "relative rounded-xl border p-4 transition-colors",
@@ -202,6 +209,7 @@ export default function Supervisor() {
                       ? "border-emerald-700/60 bg-emerald-950/30"
                       : "border-amber-700/50 bg-amber-950/20",
                   ].join(" ")}
+                  delay={i * 0.08}
                 >
                   {/* Card header */}
                   <div className="mb-3 flex items-start justify-between gap-2">
@@ -230,7 +238,7 @@ export default function Supervisor() {
                     <div className="mb-3 flex items-center justify-between rounded-lg border border-emerald-800/50 bg-emerald-900/20 px-3 py-2">
                       <div className="flex items-center gap-2">
                         <span className="text-xs text-slate-400">Loading truck:</span>
-                        <span className="text-base font-black text-blue-300">
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
                           #{swap.load_on_truck}
                         </span>
                         {boardByNum.get(swap.load_on_truck)?.truck_type === "Spare" && (
@@ -341,7 +349,7 @@ export default function Supervisor() {
                       </select>
                     </div>
                   )}
-                </div>
+                </AnimateCard>
               );
             })}
           </div>
@@ -349,7 +357,8 @@ export default function Supervisor() {
       )}
 
       {/* Stuck trucks */}
-      <section className="card">
+      <AnimateCard className="card">
+        <section>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
           Stuck loads ({stuck.length})
         </h3>
@@ -410,9 +419,11 @@ export default function Supervisor() {
           </table>
         )}
       </section>
+      </AnimateCard>
 
       {/* Bulk action */}
-      <section className="card">
+      <AnimateCard className="card">
+        <section>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">
           Bulk status change
         </h3>
@@ -460,15 +471,23 @@ export default function Supervisor() {
               }
               onClick={() => {
                 if (!candidates.length) return;
-                if (
-                  !confirm(
-                    `Change ${candidates.length} truck(s) from ${STATUS_LABELS[fromStatus]} to ${STATUS_LABELS[toStatus]}?`,
-                  )
-                )
+                const blocked = toStatus === "in_progress"
+                  ? candidates.filter((t) => t.state?.priority_hold)
+                  : [];
+                const apply = blocked.length > 0
+                  ? candidates.filter((t) => !t.state?.priority_hold)
+                  : candidates;
+                if (blocked.length > 0 && !confirm(
+                  `${blocked.length} held truck(s) (#${blocked.map((t) => t.truck_number).join(", #")}) will be skipped.\n\nChange ${apply.length} truck(s) from ${STATUS_LABELS[fromStatus]} to ${STATUS_LABELS[toStatus]}?`,
+                ))
+                  return;
+                if (blocked.length === 0 && !confirm(
+                  `Change ${candidates.length} truck(s) from ${STATUS_LABELS[fromStatus]} to ${STATUS_LABELS[toStatus]}?`,
+                ))
                   return;
                 bulk.mutate({
                   run_date: runDate,
-                  truck_numbers: candidates.map((t) => t.truck_number),
+                  truck_numbers: apply.map((t) => t.truck_number),
                   new_status: toStatus,
                 });
               }}
@@ -483,7 +502,9 @@ export default function Supervisor() {
           </p>
         )}
       </section>
+      </AnimateCard>
     </div>
+    </motion.div>
   );
 }
 

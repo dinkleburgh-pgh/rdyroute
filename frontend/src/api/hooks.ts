@@ -76,6 +76,7 @@ export function useUpdateTruck() {
       is_active?: boolean;
       is_persistent_spare?: boolean;
       is_oos?: boolean;
+      uniform_size?: string | null;
       scheduled_off_days?: number[];
     }) => {
       const { truck_number, ...patch } = args;
@@ -143,6 +144,7 @@ export function useUpsertTruckState() {
       shop_note?: string | null;
       oos_spare_route?: number | null;
       has_dust_garment?: boolean | null;
+      priority_hold?: boolean | null;
     }) => {
       const { truck_number, run_date, ...patch } = args;
       // Try PUT first; if no row exists yet, create one
@@ -194,6 +196,7 @@ export function useUpsertTruckState() {
               shop_note: "",
               oos_spare_route: null,
               has_dust_garment: false,
+              priority_hold: false,
               updated_at: new Date().toISOString(),
             };
             return {
@@ -210,6 +213,7 @@ export function useUpsertTruckState() {
                 ...(vars.shop_note          !== undefined && { shop_note: vars.shop_note ?? "" }),
                 ...(vars.oos_spare_route    !== undefined && { oos_spare_route: vars.oos_spare_route }),
                 ...(vars.has_dust_garment   !== undefined && { has_dust_garment: vars.has_dust_garment ?? false }),
+                ...(vars.priority_hold    !== undefined && { priority_hold: vars.priority_hold ?? false }),
               },
             };
           });
@@ -504,6 +508,14 @@ export function useAuditDailyTrend(daysBack = 14) {
         "/audit/trends/daily",
         { params: { days_back: daysBack } },
       )).data,
+  });
+}
+
+export function useAuditDates() {
+  return useQuery({
+    queryKey: ["audit-dates"],
+    queryFn: async () =>
+      (await api.get<string[]>("/audit/dates")).data,
   });
 }
 
@@ -806,6 +818,136 @@ export function useSetWizardCompleted() {
   });
 }
 
+export interface TrendDailyPoint {
+  run_date: string;
+  total_qty: number;
+  entry_count: number;
+}
+
+export interface TrendSummary {
+  total_qty: number;
+  avg_per_day: number;
+  peak_day: string | null;
+  peak_qty: number;
+  entry_count: number;
+  days_with_data: number;
+  trend_direction: "up" | "down" | "stable";
+  change_vs_prior_pct: number | null;
+  daily_series: TrendDailyPoint[];
+}
+
+export interface TrendTruckPoint {
+  run_date: string;
+  total_qty: number;
+}
+
+export interface TrendRoutePoint {
+  run_date: string;
+  total_qty: number;
+}
+
+export interface TrendComparison {
+  current: TrendDailyPoint[];
+  prior: TrendDailyPoint[];
+}
+
+export interface PaceDailyPoint {
+  run_date: string;
+  avg_seconds: number;
+  load_count: number;
+}
+
+export interface CompletionDailyPoint {
+  run_date: string;
+  total_trucks: number;
+  loaded_trucks: number;
+  pct: number;
+}
+
+export interface WearersDailyPoint {
+  run_date: string;
+  avg_wearers: number;
+  truck_count: number;
+}
+
+export interface CycleDailyPoint {
+  run_date: string;
+  avg_seconds: number;
+  truck_count: number;
+}
+
+export interface ShortageDailyPoint {
+  run_date: string;
+  total_qty: number;
+  entry_count: number;
+}
+
+export interface ShortageCategoryPoint {
+  category: string;
+  total_qty: number;
+}
+
+export interface AnomalyDay {
+  run_date: string;
+  metric: string;
+  value: number;
+  mean: number;
+  sigma: number;
+  z_score: number;
+}
+
+export function useTrendSummary(daysBack = 14, compareDaysBack?: number) {
+  return useQuery({
+    queryKey: ["trend-summary", daysBack, compareDaysBack],
+    queryFn: async () =>
+      (
+        await api.get<TrendSummary>("/audit/trends/summary", {
+          params: { days_back: daysBack, compare_days_back: compareDaysBack },
+        })
+      ).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useTruckTrend(truckNumber: number, daysBack = 30) {
+  return useQuery({
+    queryKey: ["trend-truck", truckNumber, daysBack],
+    queryFn: async () =>
+      (
+        await api.get<TrendTruckPoint[]>(`/audit/trends/by-truck/${truckNumber}`, {
+          params: { days_back: daysBack },
+        })
+      ).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useRouteTrend(routeNumber: number, daysBack = 30) {
+  return useQuery({
+    queryKey: ["trend-route", routeNumber, daysBack],
+    queryFn: async () =>
+      (
+        await api.get<TrendRoutePoint[]>(`/audit/trends/by-route/${routeNumber}`, {
+          params: { days_back: daysBack },
+        })
+      ).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useTrendComparison(daysBack = 14) {
+  return useQuery({
+    queryKey: ["trend-comparison", daysBack],
+    queryFn: async () =>
+      (
+        await api.get<TrendComparison>("/audit/trends/comparison", {
+          params: { days_back: daysBack },
+        })
+      ).data,
+    staleTime: 60_000,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Audit — by route / by truck
 // ---------------------------------------------------------------------------
@@ -836,6 +978,82 @@ export function useAuditByTruck(daysBack = 30) {
     queryFn: async () =>
       (await api.get<AuditTruckRow[]>("/audit/trends/by-truck", { params: { days_back: daysBack } }))
         .data,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Load Pace, Completion, Wearers, Cycle, Shortage Trends, Anomalies
+// ---------------------------------------------------------------------------
+
+export function useLoadPaceTrend(daysBack = 14) {
+  return useQuery({
+    queryKey: ["load-pace-trend", daysBack],
+    queryFn: async () =>
+      (await api.get<PaceDailyPoint[]>("/load-durations/trends/daily", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useCompletionTrend(daysBack = 14) {
+  return useQuery({
+    queryKey: ["completion-trend", daysBack],
+    queryFn: async () =>
+      (await api.get<CompletionDailyPoint[]>("/trucks/trends/completion", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useWearersTrend(daysBack = 14) {
+  return useQuery({
+    queryKey: ["wearers-trend", daysBack],
+    queryFn: async () =>
+      (await api.get<WearersDailyPoint[]>("/trucks/trends/wearers", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useCycleTimeTrend(daysBack = 14) {
+  return useQuery({
+    queryKey: ["cycle-trend", daysBack],
+    queryFn: async () =>
+      (await api.get<CycleDailyPoint[]>("/trucks/trends/cycle", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useShortageDailyTrend(daysBack = 14) {
+  return useQuery({
+    queryKey: ["shortage-trend-daily", daysBack],
+    queryFn: async () =>
+      (await api.get<ShortageDailyPoint[]>("/shorts/trends/daily", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useShortageByCategory(daysBack = 14) {
+  return useQuery({
+    queryKey: ["shortage-trend-cat", daysBack],
+    queryFn: async () =>
+      (await api.get<ShortageCategoryPoint[]>("/shorts/trends/by-category", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useTruckAnomalies(daysBack = 90) {
+  return useQuery({
+    queryKey: ["truck-anomalies", daysBack],
+    queryFn: async () =>
+      (await api.get<AnomalyDay[]>("/trucks/trends/anomalies", { params: { days_back: daysBack } })).data,
+    staleTime: 120_000,
+  });
+}
+
+export function useAuditAnomalies(daysBack = 90) {
+  return useQuery({
+    queryKey: ["audit-anomalies", daysBack],
+    queryFn: async () =>
+      (await api.get<AnomalyDay[]>("/audit/trends/anomalies", { params: { days_back: daysBack } })).data,
+    staleTime: 120_000,
   });
 }
 

@@ -4,6 +4,7 @@
 import { useState } from "react";
 import clsx from "clsx";
 import { useUpsertSetting } from "../../api/hooks";
+import { format, parseISO } from "date-fns";
 import type { AppSetting } from "../../types";
 
 const WELL_KNOWN_KEYS = new Set([
@@ -73,7 +74,7 @@ export default function AdvancedPanel({ settings }: { settings: AppSetting[] }) 
               <tr key={s.key} className={clsx("border-t border-slate-800", WELL_KNOWN_KEYS.has(s.key) && "opacity-60")}>
                 <td className="px-3 py-2 font-mono text-xs">{s.key}</td>
                 <td className="px-3 py-2 font-mono text-xs text-slate-300">{JSON.stringify(s.value)}</td>
-                <td className="px-3 py-2 text-slate-400">{new Date(s.updated_at).toLocaleString()}</td>
+                <td className="px-3 py-2 text-slate-400">{format(parseISO(s.updated_at), "PPpp")}</td>
               </tr>
             ))}
             {settings.length === 0 && (

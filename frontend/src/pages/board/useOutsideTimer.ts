@@ -175,16 +175,18 @@ function useTimedStatusTransition({
 // ---------------------------------------------------------------------------
 
 const _OUTSIDE_LS_KEY = "rr_outside_timers";
-const _OUTSIDE_DURATION_MS = 20 * 60 * 1000; // 20 minutes
+const _OUTSIDE_DEFAULT_MINUTES = 20;
 
 export function useOutsideTimer(
   runDate: string,
   data: TruckWithState[] | undefined,
   upsert: UpsertFn,
+  durationMinutes?: number,
 ): TimerApi {
+  const ms = (durationMinutes ?? _OUTSIDE_DEFAULT_MINUTES) * 60 * 1000;
   return useTimedStatusTransition({
     storageKey: _OUTSIDE_LS_KEY,
-    durationMs: _OUTSIDE_DURATION_MS,
+    durationMs: ms,
     targetStatus: "unloaded",
     runDate,
     data,
@@ -198,17 +200,19 @@ export function useOutsideTimer(
 // ---------------------------------------------------------------------------
 
 const _PAPER_BAY_LS_KEY = "rr_paper_bay_timers";
-const _PAPER_BAY_DURATION_MS = 25 * 60 * 1000; // 25 minutes
+const _PAPER_BAY_DEFAULT_MINUTES = 25;
 
 export function usePaperBayTimer(
   runDate: string,
   data: TruckWithState[] | undefined,
   upsert: UpsertFn,
   cancelOutside: (truckNum: number) => void,
+  durationMinutes?: number,
 ): TimerApi {
+  const ms = (durationMinutes ?? _PAPER_BAY_DEFAULT_MINUTES) * 60 * 1000;
   const api = useTimedStatusTransition({
     storageKey: _PAPER_BAY_LS_KEY,
-    durationMs: _PAPER_BAY_DURATION_MS,
+    durationMs: ms,
     targetStatus: "loaded",
     runDate,
     data,

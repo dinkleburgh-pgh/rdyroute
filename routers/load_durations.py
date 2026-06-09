@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import LoadDuration
-from schemas import LoadDurationCreate, LoadDurationOut
+from schemas import LoadDurationCreate, LoadDurationOut, PaceDailyPoint
 
 router = APIRouter(prefix="/load-durations", tags=["load-durations"])
 
@@ -101,3 +101,27 @@ def purge_abnormal(
     total_after = db.scalar(select(func.count()).select_from(LoadDuration))
     removed = (total_before or 0) - (total_after or 0)
     return {"removed": removed, "remaining": total_after}
+
+
+@router.get("/trends/daily", response_model=list[PaceDailyPoint])
+def load_pace_daily_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+):
+    """Per-day average load duration over the last N days (excluding <30s / >7200s)."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            LoadDuration.run_date,
+            func.avg(LoadDuration.duration_seconds).label("avg_seconds"),
+            func.count(LoadDuration.id).label("load_count"),
+        )
+        .where(
+            LoadDuration.run_date >= cutoff,
+            LoadDuration.duration_seconds >= _MIN_VALID_SECONDS,
+            LoadDuration.duration_seconds <= _MAX_VALID_SECONDS,
+        )
+        .group_by(LoadDuration.run_date)
+        .order_by(LoadDuration.run_date)
+    ).all()
+    return [PaceDailyPoint(run_date=r[0], avg_seconds=round(r[1], 1) if r[1] else 0, load_count=r[2]) for r in rows]

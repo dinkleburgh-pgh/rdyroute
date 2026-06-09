@@ -1,0 +1,21 @@
+﻿import { chromium } from "playwright";
+import { writeFileSync } from "fs";
+const b = await chromium.launch({ headless: false });
+const ctx = await b.newContext();
+const p = await ctx.newPage();
+const cdp = await ctx.newCDPSession(p);
+await cdp.send("Network.setCacheDisabled", { cacheDisabled: true });
+await p.goto("http://192.168.1.212:5180/login", { waitUntil: "networkidle" });
+await p.locator("input").nth(0).fill("ready");
+await p.locator("input[type=password]").fill("ready");
+await p.locator("button").first().click();
+await p.waitForTimeout(2000);
+await p.goto("http://192.168.1.212:5180/audit", { waitUntil: "networkidle" });
+await p.waitForTimeout(1000);
+writeFileSync("C:/Users/DINKLE~1/AppData/Local/Temp/opencode/audit1.png", await p.screenshot({ fullPage: false }));
+// Click a truck
+await p.locator("button").filter({ hasText: /^4$/ }).first().click().catch(() => {});
+await p.waitForTimeout(1000);
+writeFileSync("C:/Users/DINKLE~1/AppData/Local/Temp/opencode/audit2.png", await p.screenshot({ fullPage: false }));
+console.log("done");
+await b.close();

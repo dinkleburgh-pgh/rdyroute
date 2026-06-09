@@ -1,4 +1,7 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
+import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
 import {
   useAddTruck,
@@ -71,6 +74,12 @@ export default function Fleet() {
   const [mode, setMode] = useState<Mode>("single");
   const [selectedNum, setSelectedNum] = useState<number | null>(null);
   const [multi, setMulti] = useState<Set<number>>(new Set());
+  const [params] = useSearchParams();
+
+  useEffect(() => {
+    const t = params.get("truck");
+    if (t) setSelectedNum(Number(t));
+  }, [params]);
 
   const trucks = useMemo(
     () => (board ?? []).slice().sort((a, b) => a.truck_number - b.truck_number),
@@ -122,7 +131,12 @@ export default function Fleet() {
   }
 
   return (
-    <div className="space-y-4 p-3 md:p-6">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="space-y-4 p-3 md:p-6"
+    >
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="text-2xl font-semibold">Fleet</h2>
@@ -158,7 +172,7 @@ export default function Fleet() {
       </div>
 
       {mode === "multi" && multi.size > 0 && (
-        <div className="card flex flex-wrap items-center gap-2 p-3">
+        <AnimateCard className="card flex flex-wrap items-center gap-2 p-3">
           <span className="text-sm text-slate-400">Set status for {multi.size}:</span>
           {STATUS_OPTIONS.map((s) => (
             <button key={s} className="btn-ghost text-xs" onClick={() => bulkSet(s)}>
@@ -168,18 +182,18 @@ export default function Fleet() {
           <button className="btn-ghost text-xs" onClick={() => setMulti(new Set())}>
             Clear
           </button>
-        </div>
+        </AnimateCard>
       )}
 
       {isLoading && <p className="text-slate-500">Loading…</p>}
 
       <div className="grid grid-cols-4 gap-2 sm:grid-cols-6 md:grid-cols-8 lg:grid-cols-10 xl:grid-cols-12">
-        {trucks.map((t) => {
+        {trucks.map((t, i) => {
           const status = (t.state?.status ?? "dirty") as TruckStatus;
           const isSelected = mode === "multi" && multi.has(t.truck_number);
           const isOOS = status === "oos" || status === "spare";
           return (
-            <button
+            <motion.button
               key={t.truck_number}
               type="button"
               onClick={() => handleTileClick(t)}
@@ -190,6 +204,10 @@ export default function Fleet() {
                 status === "in_progress" && "animate-pulse ring-2 ring-amber-400",
               )}
               title={`${STATUS_LABELS[status]}${t.state?.wearers ? ` · ${t.state.wearers}w` : ""}`}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: i * 0.02 }}
+              whileHover={{ scale: 1.03 }}
             >
               <span
                 className={clsx(
@@ -218,7 +236,7 @@ export default function Fleet() {
                   D
                 </span>
               )}
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -232,7 +250,7 @@ export default function Fleet() {
           onClose={() => setSelectedNum(null)}
         />
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -378,6 +396,35 @@ function TruckActionPanel({
                 {STATUS_LABELS[s]}
               </button>
             ))}
+            {truck.state?.priority_hold ? (
+              <button
+                onClick={() =>
+                  upsert.mutate({
+                    truck_number: truck.truck_number,
+                    run_date: runDate,
+                    priority_hold: false,
+                    wearers,
+                  })
+                }
+                className="rounded border border-red-600/60 bg-red-900/40 px-3 py-1.5 text-sm font-medium text-red-300 hover:bg-red-900/70"
+              >
+                Clear Hold
+              </button>
+            ) : (
+              <button
+                onClick={() =>
+                  upsert.mutate({
+                    truck_number: truck.truck_number,
+                    run_date: runDate,
+                    priority_hold: true,
+                    wearers,
+                  })
+                }
+                className="rounded border border-amber-600/60 bg-amber-900/40 px-3 py-1.5 text-sm font-medium text-amber-300 hover:bg-amber-900/70"
+              >
+                🚩 Unload &amp; Hold
+              </button>
+            )}
           </div>
         </section>
 
@@ -539,7 +586,7 @@ function AddRemovePanel() {
   }
 
   return (
-    <div className="card space-y-3 p-4">
+    <AnimateCard className="card space-y-3 p-4">
       <h3 className="text-lg font-semibold">Add / Remove trucks</h3>
       <form onSubmit={onAdd} className="flex flex-wrap items-end gap-3">
         <label className="text-sm">
@@ -640,6 +687,6 @@ function AddRemovePanel() {
           </tbody>
         </table>
       </div>
-    </div>
+    </AnimateCard>
   );
 }

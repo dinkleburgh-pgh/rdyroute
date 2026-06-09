@@ -17,6 +17,7 @@ import {
   useDriverDeleteNote,
 } from "../api/hooks";
 import type { NoteType, TruckNote } from "../types";
+import { format } from "date-fns";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -256,11 +257,7 @@ export default function DriverNotes() {
   const { data: truckInfo } = useDriverTruckInfo(token);
   const [adding, setAdding] = useState(false);
 
-  const today = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    month: "long",
-    day: "numeric",
-  });
+  const today = format(new Date(), "EEEE, MMMM d");
 
   const truckNumber = truckInfo?.truck_number ?? notes?.[0]?.truck_number ?? null;
 

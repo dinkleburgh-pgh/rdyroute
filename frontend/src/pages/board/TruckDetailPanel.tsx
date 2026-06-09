@@ -7,6 +7,8 @@ import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
 import { STATUS_LABELS } from "./constants";
 
+import { format } from "date-fns";
+
 export default function TruckDetailPanel({
   truck,
   runDate,
@@ -33,7 +35,7 @@ export default function TruckDetailPanel({
 
   function fmtTime(ts: number | null | undefined) {
     if (!ts) return "—";
-    return new Date(ts * 1000).toLocaleString();
+    return format(new Date(ts * 1000), "PPpp");
   }
 
   const stats: { label: string; value: ReactNode }[] = [
@@ -50,14 +52,16 @@ export default function TruckDetailPanel({
   return (
     <div className="mt-4 rounded-xl border border-slate-700 bg-slate-900 shadow-2xl">
       {/* Header */}
-      <div className="relative flex items-center justify-center px-6 py-5 border-b border-slate-800">
+      <div className="relative flex items-center justify-center px-6 py-6 border-b border-slate-800">
         <div className="text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-            {truck.truck_type} · {truck.is_active ? "Active" : "Inactive"}
+            {truck.truck_type}
+            {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
+            {" · "}{truck.is_active ? "Active" : "Inactive"}
             {truck.is_persistent_spare ? " · Persistent spare" : ""}
           </p>
-          <h2 className="mt-0.5 text-4xl font-black uppercase tracking-widest text-white">
-            TRUCK #{truck.truck_number}
+          <h2 className="mt-0.5 text-5xl font-black tracking-tight text-white">
+            #{truck.truck_number}
           </h2>
         </div>
         <button

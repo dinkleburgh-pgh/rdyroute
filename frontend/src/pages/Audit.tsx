@@ -5,10 +5,14 @@
  * Phase 2: ItemLogger  — hierarchical category → sub → item selection.
  */
 import { useState, useMemo, useRef, useEffect, type FormEvent } from "react";
+import { motion } from "framer-motion";
+import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
+import { useSearchParams } from "react-router-dom";
 import {
   auditPhotoFileUrl,
   useAuditByRoute,
+  useAuditDates,
   useAuditEntries,
   useAuditPhotos,
   useBoard,
@@ -70,12 +74,12 @@ function TruckPicker({
 
       {/* All trucks — audited ones turn green */}
       {trucks.length > 0 && (
-        <div className="grid gap-2 grid-cols-4 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
-          {trucks.map((t) => {
+        <div className="grid gap-2 grid-cols-3 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
+          {trucks.map((t, i) => {
             const count = entriesByTruck.get(t.truck_number)?.length ?? 0;
             const isAudited = count > 0;
             return (
-              <button
+              <motion.button
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
@@ -85,6 +89,10 @@ function TruckPicker({
                     ? "bg-emerald-900/70 ring-1 ring-emerald-700/60 hover:bg-emerald-800/70"
                     : "bg-slate-700 hover:bg-slate-600 hover:shadow-lg",
                 )}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: i * 0.02 }}
+                whileHover={{ scale: 1.03 }}
               >
                 <span className={clsx("font-black leading-none", isAudited ? "text-xl text-emerald-200" : "text-2xl")}>
                   {t.truck_number}
@@ -92,7 +100,7 @@ function TruckPicker({
                 <span className={clsx("mt-0.5 text-[10px] font-medium", isAudited ? "font-semibold text-emerald-400" : "uppercase tracking-wider text-slate-400")}>
                   {isAudited ? `${count} item${count !== 1 ? "s" : ""}` : t.truck_type}
                 </span>
-              </button>
+              </motion.button>
             );
           })}
         </div>
@@ -104,7 +112,7 @@ function TruckPicker({
 
       {/* Top items */}
       {topSummary.length > 0 && (
-        <section className="card space-y-2 self-start">
+        <AnimateCard className="card space-y-2 self-start">
           <p className="text-xs font-bold uppercase tracking-widest text-slate-500">
             Top Removed · Last 7 days
           </p>
@@ -121,7 +129,7 @@ function TruckPicker({
               </div>
             ))}
           </div>
-        </section>
+        </AnimateCard>
       )}
     </div>
   );
@@ -280,7 +288,7 @@ function HierarchyPicker({
 
   function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
     return (
-      <div className="flex flex-wrap gap-2">
+      <div className="grid grid-cols-3 gap-2">
         {gridItems.map((item) => {
           const disp = MAT_SIZES.has(cat) && item.label.startsWith(cat + " ")
             ? item.label.slice(cat.length + 1)
@@ -292,7 +300,7 @@ function HierarchyPicker({
               disabled={isPending}
               onClick={() => selectItem(item.label)}
               className={clsx(
-                "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+                "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
                 LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
                 MAT_COLOR_PALETTE[disp] ?? btnClass,
               )}
@@ -406,14 +414,14 @@ function HierarchyPicker({
       ) : topCat === null ? (
         <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {topCats.map((cat) => (
               <button
                 key={cat}
                 type="button"
                 onClick={() => setTopCat(cat)}
                 className={clsx(
-                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
               >
@@ -434,14 +442,14 @@ function HierarchyPicker({
       ) : bulkSub === null ? (
         <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Subcategory</p>
-          <div className="flex flex-wrap gap-3">
+          <div className="grid grid-cols-3 gap-2">
             {subs.map((sub) => (
               <button
                 key={sub}
                 type="button"
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
-                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
               >
@@ -514,11 +522,11 @@ function ItemLogger({
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
+          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition min-h-[44px] min-w-[44px]"
         >
           back
         </button>
-        <span className="text-3xl font-black text-white">#{truck.truck_number}</span>
+        <span className="text-6xl font-black text-white">#{truck.truck_number}</span>
         <div className="flex items-center gap-2">
           {entries.length > 0 && (
             <span className="rounded-full bg-emerald-900/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
@@ -607,7 +615,7 @@ function ItemLogger({
             <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
               Logged this session
             </h4>
-            <div className="flex flex-wrap gap-2">
+      <div className="flex flex-wrap gap-2">
               {[...entries].reverse().map((e) => (
                 <div
                   key={e.id}
@@ -647,10 +655,21 @@ function ItemLogger({
 export default function Audit() {
   const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
+  const [searchParams]               = useSearchParams();
 
   const { data: board        = [] } = useBoard(runDate);
+
+  useEffect(() => {
+    if (selectedTruck !== null || board.length === 0) return;
+    const truckParam = searchParams.get("truck");
+    if (!truckParam) return;
+    const num = parseInt(truckParam, 10);
+    const match = board.find((t) => t.truck_number === num);
+    if (match) setSelected(match);
+  }, [board, selectedTruck, searchParams]);
   const { data: entries      = [] } = useAuditEntries(runDate);
   const { data: topItems     = [] } = useAuditByRoute(7);
+  const { data: auditDates  = [] } = useAuditDates();
 
   const entriesByTruck = useMemo(() => {
     const map = new Map<number, AuditEntry[]>();
@@ -666,28 +685,43 @@ export default function Audit() {
     : [];
 
   return (
-    <div className="flex min-h-0 flex-col">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="flex min-h-0 flex-col"
+    >
       {/* Page header */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-3 md:px-6">
-        <h2 className="text-xl font-semibold text-slate-100">Audit</h2>
-        <input
-          className="input"
-          type="date"
-          max={todayIso()}
-          value={runDate}
-          onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
-        />
+      <div className="flex items-center justify-center gap-3 border-b border-slate-800 px-3 py-3 md:justify-start md:px-6">
+        <h2 className="text-3xl font-black text-slate-100 md:text-xl md:font-semibold">Audit</h2>
       </div>
 
       {/* Main content */}
       {selectedTruck === null ? (
-        <TruckPicker
+        <div className="flex min-h-0 flex-1 flex-col">
+          {auditDates.length > 0 && (
+            <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 md:px-6">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</span>
+              <select
+                className="input py-1 text-sm"
+                value={runDate}
+                onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
+              >
+                <option value={todayIso()}>Today</option>
+                {auditDates.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          )}
+          <TruckPicker
           runDate={runDate}
           board={board}
           entriesByTruck={entriesByTruck}
           topItems={topItems}
           onSelect={(t) => { setSelected(t); }}
         />
+        </div>
       ) : (
         <ItemLogger
           truck={selectedTruck}
@@ -696,7 +730,7 @@ export default function Audit() {
           onBack={() => setSelected(null)}
         />
       )}
-    </div>
+    </motion.div>
   );
 }
 
@@ -755,7 +789,7 @@ function PhotosPanel({
               placeholder="" onChange={(e) => setTruck(e.target.value)} />
           </label>
         )}
-        <label className="flex-1 min-w-[12rem] text-sm">
+        <label className="flex-1 min-w-[8rem] text-sm">
           <span className="label">Caption</span>
           <input className="input w-full" value={caption} onChange={(e) => setCaption(e.target.value)} placeholder="optional" />
         </label>
@@ -773,7 +807,7 @@ function PhotosPanel({
       )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {(photos ?? []).map((p) => (
-          <figure key={p.id} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
+          <AnimateCard key={p.id} className="overflow-hidden rounded-xl border border-slate-800 bg-slate-950">
             <a href={auditPhotoFileUrl(p.id)} target="_blank" rel="noreferrer">
               <img src={auditPhotoFileUrl(p.id)} alt={p.caption || p.file_name}
                 loading="lazy" className="h-32 w-full object-cover" />
@@ -788,7 +822,7 @@ function PhotosPanel({
                 Delete
               </button>
             </figcaption>
-          </figure>
+          </AnimateCard>
         ))}
       </div>
     </div>

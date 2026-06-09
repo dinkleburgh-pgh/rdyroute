@@ -17,6 +17,7 @@ import {
 } from "../../api/hooks";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
+import { format, parseISO } from "date-fns";
 import { ALL_ROLES, ROLE_LABELS } from "../../utils/permissions";
 import ConfirmDialog from "../ConfirmDialog";
 import { SearchIcon, PlusIcon, EditIcon, LockIcon, TrashIcon } from "../icons";
@@ -244,7 +245,7 @@ export default function UsersPanel() {
                       )}
                     </td>
                     <td className="px-3 py-2.5 text-xs text-slate-400">
-                      {u.created_at ? new Date(u.created_at).toLocaleDateString() : "—"}
+                      {u.created_at ? format(parseISO(u.created_at), "PP") : "—"}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-1">

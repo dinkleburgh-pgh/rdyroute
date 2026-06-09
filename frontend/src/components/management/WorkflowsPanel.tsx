@@ -12,7 +12,9 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       batching_disabled: asBool(map.get("batching_disabled"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
       outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
+      outside_timer_minutes: Number(map.get("outside_timer_minutes") ?? 20),
       paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
+      paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
     }),
     [map],
@@ -61,7 +63,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       <FieldRow
         label="Outside timer"
-        hint="Lets fleet mark a truck as 'Outside' — a 20-minute countdown that auto-transitions to Unloaded."
+        hint="Lets fleet mark a truck as 'Outside' — a countdown that auto-transitions to Unloaded."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -69,12 +71,21 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             checked={form.outside_timer_enabled}
             onChange={(e) => setForm({ ...form, outside_timer_enabled: e.target.checked })}
           />
-          Enable Outside
+          Enable
+          <input
+            type="number"
+            min={1}
+            max={120}
+            value={form.outside_timer_minutes}
+            onChange={(e) => setForm({ ...form, outside_timer_minutes: Number(e.target.value) || 20 })}
+            className="input ml-2 w-16"
+          />
+          <span className="text-xs text-slate-500">min</span>
         </label>
       </FieldRow>
       <FieldRow
         label="Paper Bay timer"
-        hint="Lets fleet mark a truck as 'Paper Bay' — a 25-minute countdown that auto-transitions to Loaded."
+        hint="Lets fleet mark a truck as 'Paper Bay' — a countdown that auto-transitions to Loaded."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -82,7 +93,16 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             checked={form.paper_bay_enabled}
             onChange={(e) => setForm({ ...form, paper_bay_enabled: e.target.checked })}
           />
-          Enable Paper Bay
+          Enable
+          <input
+            type="number"
+            min={1}
+            max={120}
+            value={form.paper_bay_timer_minutes}
+            onChange={(e) => setForm({ ...form, paper_bay_timer_minutes: Number(e.target.value) || 25 })}
+            className="input ml-2 w-16"
+          />
+          <span className="text-xs text-slate-500">min</span>
         </label>
       </FieldRow>
       <FieldRow

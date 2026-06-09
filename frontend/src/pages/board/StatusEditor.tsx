@@ -28,20 +28,34 @@ export default function StatusEditor({
           className="input flex-1 disabled:opacity-40 disabled:cursor-not-allowed"
           value={status}
           disabled={upsert.isPending || status === "oos"}
-          onChange={(e) =>
+          onChange={(e) => {
+            const val = e.target.value;
+            if (val === "__unload_hold__") {
+              e.currentTarget.value = status;
+              upsert.mutate({
+                truck_number: truck.truck_number,
+                run_date: runDate,
+                priority_hold: true,
+                wearers: truck.state?.wearers ?? 0,
+              });
+              return;
+            }
             upsert.mutate({
               truck_number: truck.truck_number,
               run_date: runDate,
-              status: e.target.value as TruckStatus,
+              status: val as TruckStatus,
               wearers: truck.state?.wearers ?? 0,
-            })
-          }
+            });
+          }}
         >
           {STATUS_OPTIONS.map((s) => (
             <option key={s} value={s}>
               {STATUS_LABELS[s]}
             </option>
           ))}
+          {!truck.state?.priority_hold && (
+            <option value="__unload_hold__">🚩 Unload &amp; Hold</option>
+          )}
         </select>
       </div>
       <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">

@@ -6,6 +6,7 @@
  */
 import { useState, useMemo, useRef, useEffect } from "react";
 import { useSearchParams } from "react-router-dom";
+import { motion } from "framer-motion";
 import clsx from "clsx";
 import {
   useBoard,
@@ -19,6 +20,7 @@ import {
 import { todayIso } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type { Shortage, TruckWithState } from "../types";
+import AnimateCard from "../components/AnimateCard";
 
 // ---------------------------------------------------------------------------
 // Colour palette
@@ -134,19 +136,23 @@ function TruckPicker({
           {withShorts.length > 0 && (
             <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Routes</h3>
           )}
-          <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-4">
-            {withoutShorts.map((t) => (
-              <button
+          <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-3">
+            {withoutShorts.map((t, i) => (
+              <motion.button
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
                 className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: i * 0.02 }}
+                whileHover={{ scale: 1.03 }}
               >
                 <span className="text-2xl font-black leading-none">{t.truck_number}</span>
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
                   {t.truck_type}
                 </span>
-              </button>
+              </motion.button>
             ))}
           </div>
         </section>
@@ -156,21 +162,25 @@ function TruckPicker({
       {withShorts.length > 0 && (
         <section className="space-y-2">
           <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Logged</h3>
-          <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-4">
-            {withShorts.map((t) => {
+          <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-3">
+            {withShorts.map((t, i) => {
               const count = shortsByTruck.get(t.truck_number)?.length ?? 0;
               return (
-                <button
+                <motion.button
                   key={t.truck_number}
                   type="button"
                   onClick={() => onSelect(t)}
                   className="flex aspect-square flex-col items-center justify-center rounded-xl bg-amber-900/60 text-white shadow ring-1 ring-amber-700/60 transition active:scale-95 hover:bg-amber-800/60"
+                  initial={{ opacity: 0, y: 12 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.35, delay: i * 0.02 }}
+                  whileHover={{ scale: 1.03 }}
                 >
                   <span className="text-xl font-black leading-none text-amber-200">{t.truck_number}</span>
                   <span className="mt-0.5 text-[10px] font-semibold text-amber-400">
                     {count} item{count !== 1 ? "s" : ""}
                   </span>
-                </button>
+                </motion.button>
               );
             })}
           </div>
@@ -264,26 +274,30 @@ function HierarchyPicker({
 
   function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
     return (
-      <div className="flex flex-wrap gap-2">
-        {gridItems.map((item) => {
+      <div className="grid grid-cols-3 gap-2">
+        {gridItems.map((item, i) => {
           const disp = MAT_SIZES_S.has(cat) && item.label.startsWith(cat + " ")
             ? item.label.slice(cat.length + 1)
             : item.label;
           const detail = disp; // for mats: just color; for others: full label
           return (
-            <button
+            <motion.button
               key={item.label}
               type="button"
               disabled={isPending}
               onClick={() => selectItem(cat, detail)}
               className={clsx(
-                "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+                "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
                 LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
                 MAT_COLOR_PALETTE[disp] ?? btnClass,
               )}
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: i * 0.02 }}
+              whileHover={{ scale: 1.03 }}
             >
               {disp}
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -392,19 +406,23 @@ function HierarchyPicker({
       ) : topCat === null ? (
         <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Category</p>
-          <div className="flex flex-wrap gap-3">
-            {topCats.map((cat) => (
-              <button
+          <div className="grid grid-cols-3 gap-2">
+            {topCats.map((cat, i) => (
+              <motion.button
                 key={cat}
                 type="button"
                 onClick={() => setTopCat(cat)}
                 className={clsx(
-                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: i * 0.02 }}
+                whileHover={{ scale: 1.03 }}
               >
                 {cat}
-              </button>
+              </motion.button>
             ))}
           </div>
         </div>
@@ -420,19 +438,23 @@ function HierarchyPicker({
       ) : bulkSub === null ? (
         <div className="space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Subcategory</p>
-          <div className="flex flex-wrap gap-3">
-            {subs.map((sub) => (
-              <button
+          <div className="grid grid-cols-3 gap-2">
+            {subs.map((sub, i) => (
+              <motion.button
                 key={sub}
                 type="button"
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
-                  "rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
                   SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.35, delay: i * 0.02 }}
+                whileHover={{ scale: 1.03 }}
               >
                 {sub}
-              </button>
+              </motion.button>
             ))}
           </div>
         </div>
@@ -481,7 +503,7 @@ function LoggedList({ shorts }: { shorts: Shortage[] }) {
           const label = s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category;
           if (editId === s.id) {
             return (
-              <div key={s.id} className="flex items-center gap-2 rounded-xl border border-amber-700/60 bg-amber-950/40 px-3 py-2">
+              <AnimateCard key={s.id} className="flex items-center gap-2 rounded-xl border border-amber-700/60 bg-amber-950/40 px-3 py-2">
                 <span className="text-xs font-semibold text-slate-200">{label}</span>
                 <input
                   type="number"
@@ -508,11 +530,11 @@ function LoggedList({ shorts }: { shorts: Shortage[] }) {
                 >
                   ✕
                 </button>
-              </div>
-            );
-          }
-          return (
-            <div key={s.id} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 w-full sm:w-auto">
+                </AnimateCard>
+              );
+            }
+            return (
+              <AnimateCard key={s.id} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 w-full sm:w-auto">
               <span className="flex-1 min-w-0 text-sm font-semibold text-slate-200">{label}</span>
               <span className="shrink-0 text-xl font-black text-white">×{s.quantity}</span>
               <div className="flex shrink-0 gap-2">
@@ -532,7 +554,7 @@ function LoggedList({ shorts }: { shorts: Shortage[] }) {
                   Delete
                 </button>
               </div>
-            </div>
+            </AnimateCard>
           );
         })}
       </div>
@@ -594,7 +616,7 @@ export function ShortageLogger({
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
+          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition min-h-[44px] min-w-[44px]"
         >
           back
         </button>
@@ -658,7 +680,12 @@ export default function Shorts() {
     : [];
 
   return (
-    <div className="flex h-full flex-col">
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+      className="flex h-full flex-col"
+    >
       {/* Page header */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-3 md:px-6">
         <h2 className="text-xl font-semibold text-slate-100">Shortages</h2>
@@ -685,6 +712,6 @@ export default function Shorts() {
           onBack={() => setSelected(null)}
         />
       )}
-    </div>
+    </motion.div>
   );
 }

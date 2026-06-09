@@ -9,6 +9,7 @@ import { api } from "../../api/client";
 import { useToast } from "../../contexts/ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
 import { DownloadIcon, TrashIcon, RefreshIcon } from "../icons";
+import { format, parseISO } from "date-fns";
 
 interface PgBackup {
   filename: string;
@@ -23,11 +24,7 @@ function fmtBytes(b: number): string {
 }
 
 function fmtDate(iso: string): string {
-  const d = new Date(iso);
-  return d.toLocaleString([], {
-    month: "short", day: "numeric",
-    hour: "numeric", minute: "2-digit",
-  });
+  return format(parseISO(iso), "MMM d, h:mm a");
 }
 
 export default function RecoveryPanel() {

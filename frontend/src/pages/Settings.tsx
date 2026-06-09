@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { motion } from "framer-motion";
 import clsx from "clsx";
 import { useSettings } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
@@ -227,17 +228,26 @@ export default function Management() {
   }
 
   return (
+    <motion.div
+      initial={{ opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.35 }}
+    >
     <div className="space-y-4 p-3 md:p-6">
       <h2 className="text-2xl font-semibold">Management</h2>
 
       {/* Card group grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {visibleGroups.map((group) => {
+        {visibleGroups.map((group, i) => {
           const isActive = activeGroup === group.id;
           return (
-            <button
+            <motion.button
               key={group.id}
               type="button"
+              initial={{ opacity: 0, y: 12 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.35, delay: i * 0.1 }}
+              whileHover={{ scale: 1.02 }}
               onClick={() => {
                 if (isActive) {
                   setActiveGroup(null);
@@ -255,7 +265,7 @@ export default function Management() {
             >
               <p className="text-base font-bold text-white">{group.label}</p>
               <p className="mt-1.5 text-sm text-slate-300">{group.desc}</p>
-            </button>
+            </motion.button>
           );
         })}
       </div>
@@ -284,6 +294,7 @@ export default function Management() {
         </div>
       )}
     </div>
+    </motion.div>
   );
 }
 

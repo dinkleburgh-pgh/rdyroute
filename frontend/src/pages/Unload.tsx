@@ -3,6 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useSettings, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import type { TruckWithState } from "../types";
+import AnimateCard from "../components/AnimateCard";
+import { motion } from "framer-motion";
+import clsx from "clsx";
 
 /**
  * Unload workflow (V1 parity):
@@ -56,11 +59,15 @@ export default function Unload() {
     [allTrucks, recentlyUnloaded],
   );
   const dirtyRoute = useMemo(
-    () => dirty.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null),
+    () => dirty.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && t.state?.priority_hold !== true),
     [dirty],
   );
   const dirtyCoverages = useMemo(
-    () => dirty.filter((t) => t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null),
+    () => dirty.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) && t.state?.priority_hold !== true),
+    [dirty],
+  );
+  const requested = useMemo(
+    () => dirty.filter((t) => t.state?.priority_hold === true),
     [dirty],
   );
   const unfinished = useMemo(
@@ -147,27 +154,47 @@ export default function Unload() {
     setBatchOpen(null);
   }
 
-  function renderDirtyCard(t: TruckWithState) {
+  function renderDirtyCard(t: TruckWithState, index: number = 0) {
     const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
     const isUndo = recentlyUnloaded.has(t.truck_number);
     const isBatchOpen = batchOpen === t.truck_number;
     const isOverflowOpen = overflowOpen === t.truck_number;
     const batchLabel = t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign batch";
     const isBusy = busy === t.truck_number;
+    const isPriority = t.state?.priority_hold === true;
+
+    const cardClass = isPriority
+      ? "card animate-priority-glow flex flex-col gap-2 p-3 min-h-[8rem] border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900"
+      : "card flex flex-col gap-2 p-3 min-h-[8rem]";
+
+    const numberColor = isPriority ? "text-amber-300" : "text-red-400";
 
     return (
-      <div key={t.truck_number} className="card flex flex-col gap-2 p-3 min-h-[8rem]">
+      <AnimateCard key={t.truck_number} delay={index * 0.03} className={cardClass}>
         {/* Header: truck number + status badge */}
         <div className="flex items-start justify-between gap-1">
           <div>
-            <span className="text-3xl font-black leading-none text-red-400">
+            <span className={clsx("text-3xl font-black leading-none", numberColor)}>
               #{t.truck_number}
             </span>
             {coveredRoute != null && (
-              <div className="text-[10px] font-medium text-sky-400">cov. #{coveredRoute}</div>
+              <span className="mt-0.5 inline-flex items-center gap-1 self-start rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                Cov. #{coveredRoute}
+              </span>
             )}
           </div>
-          <span className="badge bg-status-dirty mt-0.5 shrink-0">Dirty</span>
+          <div className="flex flex-col items-end gap-1 mt-0.5 shrink-0">
+            {isPriority && (
+              <motion.span
+                animate={{ opacity: [1, 0.6, 1] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
+                className="badge bg-amber-500 font-bold text-black"
+              >
+                REQUEST
+              </motion.span>
+            )}
+            <span className="badge bg-status-dirty">Dirty</span>
+          </div>
         </div>
 
         {isUndo ? (
@@ -241,7 +268,12 @@ export default function Unload() {
             {/* Primary action: Mark Unloaded */}
             <div className="flex gap-1.5">
               <button
-                className="flex-1 rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50"
+                className={clsx(
+                  "flex-1 rounded-lg py-3.5 text-sm font-bold text-white shadow-sm transition-colors active:scale-[0.98] disabled:opacity-50",
+                  isPriority
+                    ? "bg-amber-600 hover:bg-amber-500"
+                    : "bg-emerald-600 hover:bg-emerald-500",
+                )}
                 disabled={isBusy}
                 onClick={() => markUnloaded(t)}
               >
@@ -273,13 +305,25 @@ export default function Unload() {
             </div>
           </>
         )}
-      </div>
+      </AnimateCard>
     );
   }
 
   return (
-    <div className="space-y-6 p-3 md:p-6">
+    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-6 p-3 md:p-6">
       <h2 className="text-2xl font-semibold">Unload</h2>
+
+      {/* ── Requests ─────────────────────────────────────────────────── */}
+      {requested.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-red-400">
+            Requests ({requested.length})
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {requested.map((t, index) => renderDirtyCard(t, index))}
+          </div>
+        </section>
+      )}
 
       {/* ── Spares / Coverages ─────────────────────────────────────────── */}
       {dirtyCoverages.length > 0 && (
@@ -288,7 +332,7 @@ export default function Unload() {
             Spares / Coverages ({dirtyCoverages.length})
           </h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {dirtyCoverages.map((t) => renderDirtyCard(t))}
+            {dirtyCoverages.map((t, index) => renderDirtyCard(t, index))}
           </div>
         </section>
       )}
@@ -299,7 +343,7 @@ export default function Unload() {
           Dirty ({dirtyRoute.length})
         </h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {dirtyRoute.map((t) => renderDirtyCard(t))}
+          {dirtyRoute.map((t, index) => renderDirtyCard(t, index))}
           {dirtyRoute.length === 0 && (
             <p className="col-span-full text-sm text-slate-500">No dirty trucks.</p>
           )}
@@ -312,13 +356,13 @@ export default function Unload() {
           Unfinished ({unfinished.length})
         </h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {unfinished.map((t) => {
+          {unfinished.map((t, index) => {
             const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
             const isOverflowOpen = overflowOpen === t.truck_number;
             const isBusy = busy === t.truck_number;
 
             return (
-              <div key={t.truck_number} className="card flex flex-col gap-2 p-3 min-h-[8rem]">
+              <AnimateCard key={t.truck_number} delay={index * 0.03} className="card flex flex-col gap-2 p-3 min-h-[8rem]">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-1">
                   <div>
@@ -326,7 +370,9 @@ export default function Unload() {
                       #{t.truck_number}
                     </span>
                     {coveredRoute != null && (
-                      <div className="text-[10px] font-medium text-sky-400">cov. #{coveredRoute}</div>
+                      <span className="mt-0.5 inline-flex items-center gap-1 self-start rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                        Cov. #{coveredRoute}
+                      </span>
                     )}
                   </div>
                   <span className="badge bg-status-unfinished mt-0.5 shrink-0">Unfinished</span>
@@ -368,7 +414,7 @@ export default function Unload() {
                     )}
                   </div>
                 </div>
-              </div>
+              </AnimateCard>
             );
           })}
           {unfinished.length === 0 && (
@@ -400,8 +446,8 @@ export default function Unload() {
           Batches
         </h3>
         <div className="columns-2 gap-3 md:columns-3">
-          {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b) => (
-            <div key={b.batch_number} className="card mb-3 break-inside-avoid p-4 space-y-2">
+          {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => (
+            <AnimateCard key={b.batch_number} delay={index * 0.03} className="card mb-3 break-inside-avoid p-4 space-y-2">
               <p className="font-bold text-slate-100">Batch {b.batch_number}</p>
               <div className="flex flex-wrap gap-1">
                 {b.trucks.length === 0 ? (
@@ -421,11 +467,11 @@ export default function Unload() {
                 </span>{" "}
                 / 400
               </p>
-            </div>
+            </AnimateCard>
           ))}
         </div>
       </section>
-    </div>
+    </motion.div>
   );
 }
 

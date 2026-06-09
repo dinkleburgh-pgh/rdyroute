@@ -25,14 +25,6 @@ from sqlalchemy.orm import Session
 
 from models import AppSetting, AuthRole, User
 
-# Default profanity list seeded into the chat censor word list on first run.
-# Admins can edit via PUT /communications/censor-words.
-_DEFAULT_CENSOR_WORDS = [
-    "fuck", "fucker", "fucking", "shit", "bitch", "asshole", "bastard",
-    "damn", "dick", "cunt", "piss", "crap", "cock", "pussy", "whore",
-    "slut", "twat", "wank", "bullshit",
-]
-
 DEFAULT_V1_USERS_PATH = r"C:\Users\dinkleburgh\TruckApp\auth_users.json"
 
 # V1 used a couple of role aliases we no longer recognise.  Map them to the
@@ -156,27 +148,11 @@ def import_v1_users(db: Session, path: str | os.PathLike[str] | None = None) -> 
     return inserted
 
 
-def ensure_default_censor_words(db: Session) -> bool:
-    """Seed a starter list of censored words on first run.
-
-    Returns True if the setting row was created, False if it already existed.
-    Existing lists are never overwritten — admins control them via the API.
-    """
-    row = db.get(AppSetting, "communications_censor_words")
-    if row is not None:
-        return False
-    db.add(AppSetting(key="communications_censor_words", value=sorted(set(_DEFAULT_CENSOR_WORDS))))
-    db.commit()
-    return True
-
-
 def run_startup_seed(db: Session) -> dict[str, int | bool]:
     """Convenience helper invoked from the FastAPI lifespan."""
     imported = import_v1_users(db)
     ensure_default_user(db)
-    seeded_censor = ensure_default_censor_words(db)
     return {
         "v1_users_imported": imported,
         "default_user_ready": True,
-        "censor_words_seeded": seeded_censor,
     }
