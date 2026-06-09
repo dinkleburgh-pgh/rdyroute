@@ -110,9 +110,6 @@ services:
     volumes:
       - backend_data:/app/.data
       - /var/run/docker.sock:/var/run/docker.sock:ro
-    networks:
-      - default
-      - ix-postgres
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     deploy:
@@ -200,6 +197,3 @@ networks:
   default:
     driver: bridge
     enable_ipv6: false
-  ix-postgres:
-    external: true
-    name: ix-postgres_default
