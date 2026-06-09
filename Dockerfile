@@ -2,7 +2,7 @@
 # ---------------------------------------------------------------------------
 # ReadyRoute V2 — FastAPI backend
 # ---------------------------------------------------------------------------
-FROM python:3.12-slim AS base
+FROM python:3.12-slim-bookworm AS base
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
@@ -11,17 +11,19 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps: curl for healthchecks, postgresql-client-18 for pg_dump backups.
-# Use the PGDG apt repo so pg_dump matches the production PostgreSQL 18 server.
-RUN apt-get update \
- && apt-get install -y --no-install-recommends curl ca-certificates tini gnupg \
- && curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
-    | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg \
- && echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt bookworm-pgdg main" \
-    > /etc/apt/sources.list.d/pgdg.list \
- && apt-get update \
- && apt-get install -y --no-install-recommends postgresql-client-18 \
- && rm -rf /var/lib/apt/lists/*
+# System deps: curl for healthchecks; pg_dump v18 from PGDG for backups.
+# Pin base to bookworm; use dynamic codename so PGDG channel stays correct.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends curl ca-certificates tini gnupg; \
+    . /etc/os-release; \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        | gpg --dearmor -o /usr/share/keyrings/postgresql.gpg; \
+    echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends postgresql-client-18; \
+    rm -rf /var/lib/apt/lists/*
 
 # Install Python deps first for better layer caching.
 COPY requirements.txt ./
