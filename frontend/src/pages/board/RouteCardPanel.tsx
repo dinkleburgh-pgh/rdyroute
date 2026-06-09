@@ -41,8 +41,12 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
   }, [runDate]);
 
   const oosRoutes = useMemo(
-    () => data.filter((t) => t.is_oos || (t.state?.status ?? "dirty") === "oos"),
-    [data],
+    () => data.filter((t) => {
+      if (!t.is_oos && (t.state?.status ?? "dirty") !== "oos") return false;
+      if (!holidayLoad && (t.scheduled_off_days ?? []).includes(loadDayNum)) return false;
+      return true;
+    }),
+    [data, loadDayNum, holidayLoad],
   );
 
   const assignmentByRoute = useMemo(
