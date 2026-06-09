@@ -382,10 +382,8 @@ export default function Layout() {
                 )
               }
             >
-              <span className="flex items-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-cyan-400" />
-                Day Overview
-              </span>
+              <span className="absolute left-2 h-3 w-3 rounded-full bg-cyan-400" />
+              Day Overview
               <span className="absolute right-2 rounded bg-cyan-800/60 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
                 {(holidayLoad || holidayUnload) ? "Holiday" : `Day ${unloadsDay}`}
               </span>
@@ -396,14 +394,12 @@ export default function Layout() {
                 onClick={() => nav(`/board?status=${s}`)}
                 className="relative flex w-full items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-700"
               >
-                <span className="flex items-center gap-2">
-                  <span className={clsx(
-                    "h-2 w-2 rounded-full",
-                    STATUS_DOT[s],
-                    s === "in_progress" && counts[s] > 0 && "animate-pulse",
-                  )} />
-                  {STATUS_LABEL[s]}
-                </span>
+                <span className={clsx(
+                  "absolute left-2 h-3 w-3 rounded-full",
+                  STATUS_DOT[s],
+                  s === "in_progress" && counts[s] > 0 && "animate-pulse",
+                )} />
+                {STATUS_LABEL[s]}
                 <span className="absolute right-2 text-slate-300">
                   {s === "in_progress"
                     ? inProgressTruck
@@ -559,10 +555,8 @@ export default function Layout() {
                 onClick={() => nav(`/board?status=hold`)}
                 className="ml-4 relative flex w-[calc(100%-1rem)] items-center justify-center rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-amber-950/40"
               >
-                <span className="flex items-center gap-2">
-                  <span className="h-2 w-2 rounded-full bg-amber-500 animate-pulse" />
-                  Hold
-                </span>
+                <span className="absolute left-2 h-3 w-3 rounded-full bg-amber-500 animate-pulse" />
+                Hold
                 <span className="absolute right-2 rounded bg-amber-800/60 px-1.5 py-0.5 text-xs font-semibold text-amber-300">
                   {holdCount}
                 </span>
