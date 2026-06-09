@@ -166,13 +166,22 @@ def cmd_portainer_redeploy():
             "env": current_env,
         }).encode()
     else:
-        # Compose-file stack (type 2) — must supply the current stack file
-        try:
-            file_info = _get(f"/api/stacks/{stack_id}/file")
-            stack_file_content = file_info.get("StackFileContent", "")
-        except Exception as exc:  # noqa: BLE001
-            sys.stderr.write(f"portainer_redeploy: could not fetch stack file: {exc}\n")
-            sys.exit(1)
+        # Compose-file stack (type 2) — use the local compose file baked into
+        # this image so changes to docker-compose.prod.yml are picked up on
+        # each redeploy instead of re-sending Portainer's stale stored copy.
+        import pathlib as _pathlib
+        _local = _pathlib.Path(__file__).parent / "docker-compose.prod.yml"
+        if _local.exists():
+            stack_file_content = _local.read_text()
+            sys.stdout.write("portainer_redeploy: using local docker-compose.prod.yml\n")
+        else:
+            try:
+                file_info = _get(f"/api/stacks/{stack_id}/file")
+                stack_file_content = file_info.get("StackFileContent", "")
+                sys.stdout.write("portainer_redeploy: using Portainer-stored stack file (local not found)\n")
+            except Exception as exc:  # noqa: BLE001
+                sys.stderr.write(f"portainer_redeploy: could not fetch stack file: {exc}\n")
+                sys.exit(1)
 
         endpoint = f"{url}/api/stacks/{stack_id}?endpointId={ep}"
         payload = json.dumps({
