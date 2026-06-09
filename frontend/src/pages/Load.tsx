@@ -338,14 +338,14 @@ export default function Load() {
               <span
                 key={t.truck_number}
                 className={clsx(
-                  "inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-sm font-semibold",
+                  "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-base font-semibold",
                   t.state?.has_dust_garment
                     ? "border-amber-600/60 bg-amber-950/50 text-amber-300"
                     : "border-slate-700 bg-slate-800/60 text-slate-500",
                 )}
               >
                 #{t.truck_number}
-                {t.state?.has_dust_garment && <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />}
+                {t.state?.has_dust_garment && <DustGarmentIcon className="h-5 w-5 text-amber-300" />}
               </span>
             ))}
           </div>
@@ -463,8 +463,8 @@ export default function Load() {
                       </span>
                     )}
                     {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5" title="Dust garment">
-                        <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-1" title="Dust garment">
+                        <DustGarmentIcon className="h-5 w-5 text-amber-300" />
                       </span>
                     )}
                   </span>
@@ -551,8 +551,8 @@ export default function Load() {
                       </span>
                     )}
                     {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5" title="Dust garment">
-                        <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-1" title="Dust garment">
+                        <DustGarmentIcon className="h-5 w-5 text-amber-300" />
                       </span>
                     )}
                   </span>
@@ -748,7 +748,7 @@ function InProgressPanel({
             </div>
             {truck.state?.has_dust_garment && (
               <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-amber-400">
-                <DustGarmentIcon className="h-3.5 w-3.5" />
+                <DustGarmentIcon className="h-5 w-5" />
                 Dust garment
               </div>
             )}
