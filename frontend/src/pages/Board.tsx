@@ -621,7 +621,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 : "hover:text-blue-300";
 
             return (
-            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && (filter === "oos" ? oosAssignOpen.has(t.truck_number) : detailNum === t.truck_number) && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
+            <div key={t.truck_number} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"], fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale", !fleetMode && (filter === "oos" ? oosAssignOpen.has(t.truck_number) : detailNum === t.truck_number) && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
               onClick={() => {
                 if (multiSelect) {
                   setSelectedTrucks((prev) => {

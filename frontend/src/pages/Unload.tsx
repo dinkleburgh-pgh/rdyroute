@@ -156,7 +156,7 @@ export default function Unload() {
     const isBusy = busy === t.truck_number;
 
     return (
-      <div key={t.truck_number} className="card flex flex-col gap-2 p-3">
+      <div key={t.truck_number} className="card flex flex-col gap-2 p-3 min-h-[8rem]">
         {/* Header: truck number + status badge */}
         <div className="flex items-start justify-between gap-1">
           <div>
@@ -318,7 +318,7 @@ export default function Unload() {
             const isBusy = busy === t.truck_number;
 
             return (
-              <div key={t.truck_number} className="card flex flex-col gap-2 p-3">
+              <div key={t.truck_number} className="card flex flex-col gap-2 p-3 min-h-[8rem]">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-1">
                   <div>

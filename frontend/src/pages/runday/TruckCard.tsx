@@ -28,7 +28,7 @@ export default function TruckCard({
   return (
     <div
       className={clsx(
-        "card relative flex flex-col items-center gap-1.5 p-3 text-center transition-opacity",
+        "card relative flex flex-col items-center gap-1.5 p-3 text-center transition-opacity min-h-[7.5rem]",
         done && "opacity-40",
         status === "in_progress" && "animate-pulse ring-2 ring-amber-400",
         showNotes && "ring-1 ring-violet-500/50",
