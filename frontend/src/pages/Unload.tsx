@@ -55,6 +55,14 @@ export default function Unload() {
       ),
     [allTrucks, recentlyUnloaded],
   );
+  const dirtyRoute = useMemo(
+    () => dirty.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null),
+    [dirty],
+  );
+  const dirtyCoverages = useMemo(
+    () => dirty.filter((t) => t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null),
+    [dirty],
+  );
   const unfinished = useMemo(
     () => allTrucks.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
     [allTrucks, recentlyUnloaded],
@@ -139,150 +147,164 @@ export default function Unload() {
     setBatchOpen(null);
   }
 
+  function renderDirtyCard(t: TruckWithState) {
+    const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+    const isUndo = recentlyUnloaded.has(t.truck_number);
+    const isBatchOpen = batchOpen === t.truck_number;
+    const isOverflowOpen = overflowOpen === t.truck_number;
+    const batchLabel = t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign batch";
+    const isBusy = busy === t.truck_number;
+
+    return (
+      <div key={t.truck_number} className="card flex flex-col gap-2 p-3">
+        {/* Header: truck number + status badge */}
+        <div className="flex items-start justify-between gap-1">
+          <div>
+            <span className="text-3xl font-black leading-none text-red-400">
+              #{t.truck_number}
+            </span>
+            {coveredRoute != null && (
+              <div className="text-[10px] font-medium text-sky-400">cov. #{coveredRoute}</div>
+            )}
+          </div>
+          <span className="badge bg-status-dirty mt-0.5 shrink-0">Dirty</span>
+        </div>
+
+        {isUndo ? (
+          /* ── Undo state ── */
+          <button
+            className="w-full rounded-lg border border-slate-600 bg-slate-800 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50"
+            disabled={isBusy}
+            onClick={() => undoUnload(t.truck_number)}
+          >
+            {isBusy ? "…" : "Undo"}
+          </button>
+        ) : (
+          <>
+            {/* Batch chip — hidden when batching is disabled */}
+            {!batchingDisabled && (
+              <>
+                <button
+                  className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:hidden"
+                  onClick={() => toggleBatch(t)}
+                >
+                  <span>{batchLabel}</span>
+                  <span className="text-slate-500">{isBatchOpen ? "▲" : "▼"}</span>
+                </button>
+                <button
+                  className="hidden w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:flex"
+                  onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}&source=unload`)}
+                >
+                  <span>{batchLabel}</span>
+                  <span className="text-slate-500">↗</span>
+                </button>
+              </>
+            )}
+
+            {/* Inline batch panel (mobile) */}
+            {!batchingDisabled && isBatchOpen && (
+              <div className="space-y-2 rounded-lg bg-slate-800 p-2 md:hidden">
+                <div className="grid grid-cols-3 gap-1.5">
+                  {[1, 2, 3, 4, 5, 6].map((n) => (
+                    <button
+                      key={n}
+                      type="button"
+                      onClick={() => setBatchNum(String(n))}
+                      className={
+                        batchNum === String(n)
+                          ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400"
+                          : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"
+                      }
+                    >
+                      {n}
+                    </button>
+                  ))}
+                </div>
+                <input
+                  type="number"
+                  min={0}
+                  className="input w-full"
+                  placeholder="Wearers"
+                  value={wearers}
+                  onChange={(e) => setWearers(e.target.value)}
+                />
+                <button
+                  className="btn-primary w-full font-semibold"
+                  disabled={assign.isPending}
+                  onClick={() => assignBatch(t.truck_number)}
+                >
+                  {assign.isPending ? "Saving…" : "Assign"}
+                </button>
+              </div>
+            )}
+
+            {/* Primary action: Mark Unloaded */}
+            <div className="flex gap-1.5">
+              <button
+                className="flex-1 rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50"
+                disabled={isBusy}
+                onClick={() => markUnloaded(t)}
+              >
+                {isBusy ? "…" : "Mark Unloaded"}
+              </button>
+
+              {/* Overflow: Mark Unfinished */}
+              <div className="relative">
+                <button
+                  className="flex h-full items-center justify-center rounded-lg border border-slate-700 bg-slate-800/60 px-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+                  onClick={() => toggleOverflow(t.truck_number)}
+                  title="More actions"
+                  aria-label="More actions"
+                >
+                  <span className="text-base leading-none">···</span>
+                </button>
+                {isOverflowOpen && (
+                  <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-slate-700 bg-slate-900 py-1 shadow-xl">
+                    <button
+                      className="w-full px-3 py-2 text-left text-sm font-medium text-orange-400 transition-colors hover:bg-slate-800"
+                      disabled={isBusy}
+                      onClick={() => markUnfinished(t)}
+                    >
+                      Mark Unfinished
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6 p-3 md:p-6">
       <h2 className="text-2xl font-semibold">Unload</h2>
 
-      {/* ── Dirty ──────────────────────────────────────────────────────── */}
+      {/* ── Dirty (route trucks) ───────────────────────────────────────── */}
       <section>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-red-400">
-          Dirty ({dirty.length})
+          Dirty ({dirtyRoute.length})
         </h3>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {dirty.map((t) => {
-            const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
-            const isUndo = recentlyUnloaded.has(t.truck_number);
-            const isBatchOpen = batchOpen === t.truck_number;
-            const isOverflowOpen = overflowOpen === t.truck_number;
-            const batchLabel = t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign batch";
-            const isBusy = busy === t.truck_number;
-
-            return (
-              <div key={t.truck_number} className="card flex flex-col gap-2 p-3">
-                {/* Header: truck number + status badge */}
-                <div className="flex items-start justify-between gap-1">
-                  <div>
-                    <span className="text-3xl font-black leading-none text-red-400">
-                      #{t.truck_number}
-                    </span>
-                    {coveredRoute != null && (
-                      <div className="text-[10px] font-medium text-sky-400">cov. #{coveredRoute}</div>
-                    )}
-                  </div>
-                  <span className="badge bg-status-dirty mt-0.5 shrink-0">Dirty</span>
-                </div>
-
-                {isUndo ? (
-                  /* ── Undo state ── */
-                  <button
-                    className="w-full rounded-lg border border-slate-600 bg-slate-800 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50"
-                    disabled={isBusy}
-                    onClick={() => undoUnload(t.truck_number)}
-                  >
-                    {isBusy ? "…" : "Undo"}
-                  </button>
-                ) : (
-                  <>
-                    {/* Batch chip — hidden when batching is disabled */}
-                    {!batchingDisabled && (
-                      <>
-                        <button
-                          className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:hidden"
-                          onClick={() => toggleBatch(t)}
-                        >
-                          <span>{batchLabel}</span>
-                          <span className="text-slate-500">{isBatchOpen ? "▲" : "▼"}</span>
-                        </button>
-                        <button
-                          className="hidden w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:flex"
-                          onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}&source=unload`)}
-                        >
-                          <span>{batchLabel}</span>
-                          <span className="text-slate-500">↗</span>
-                        </button>
-                      </>
-                    )}
-
-                    {/* Inline batch panel (mobile) */}
-                    {!batchingDisabled && isBatchOpen && (
-                      <div className="space-y-2 rounded-lg bg-slate-800 p-2 md:hidden">
-                        <div className="grid grid-cols-3 gap-1.5">
-                          {[1, 2, 3, 4, 5, 6].map((n) => (
-                            <button
-                              key={n}
-                              type="button"
-                              onClick={() => setBatchNum(String(n))}
-                              className={
-                                batchNum === String(n)
-                                  ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400"
-                                  : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"
-                              }
-                            >
-                              {n}
-                            </button>
-                          ))}
-                        </div>
-                        <input
-                          type="number"
-                          min={0}
-                          className="input w-full"
-                          placeholder="Wearers"
-                          value={wearers}
-                          onChange={(e) => setWearers(e.target.value)}
-                        />
-                        <button
-                          className="btn-primary w-full font-semibold"
-                          disabled={assign.isPending}
-                          onClick={() => assignBatch(t.truck_number)}
-                        >
-                          {assign.isPending ? "Saving…" : "Assign"}
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Primary action: Mark Unloaded */}
-                    <div className="flex gap-1.5">
-                      <button
-                        className="flex-1 rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50"
-                        disabled={isBusy}
-                        onClick={() => markUnloaded(t)}
-                      >
-                        {isBusy ? "…" : "Mark Unloaded"}
-                      </button>
-
-                      {/* Overflow: Mark Unfinished */}
-                      <div className="relative">
-                        <button
-                          className="flex h-full items-center justify-center rounded-lg border border-slate-700 bg-slate-800/60 px-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
-                          onClick={() => toggleOverflow(t.truck_number)}
-                          title="More actions"
-                          aria-label="More actions"
-                        >
-                          <span className="text-base leading-none">···</span>
-                        </button>
-                        {isOverflowOpen && (
-                          <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-slate-700 bg-slate-900 py-1 shadow-xl">
-                            <button
-                              className="w-full px-3 py-2 text-left text-sm font-medium text-orange-400 transition-colors hover:bg-slate-800"
-                              disabled={isBusy}
-                              onClick={() => markUnfinished(t)}
-                            >
-                              Mark Unfinished
-                            </button>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
-            );
-          })}
-          {dirty.length === 0 && (
+          {dirtyRoute.map((t) => renderDirtyCard(t))}
+          {dirtyRoute.length === 0 && (
             <p className="col-span-full text-sm text-slate-500">No dirty trucks.</p>
           )}
         </div>
       </section>
+
+      {/* ── Spares / Coverages ─────────────────────────────────────────── */}
+      {dirtyCoverages.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-violet-400">
+            Spares / Coverages ({dirtyCoverages.length})
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {dirtyCoverages.map((t) => renderDirtyCard(t))}
+          </div>
+        </section>
+      )}
 
       {/* ── Unfinished ─────────────────────────────────────────────────── */}
       <section>
