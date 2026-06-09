@@ -226,7 +226,7 @@ export default function Communications() {
       </div>
 
       {/* Input area */}
-      <div className="shrink-0 border-t border-slate-800 bg-slate-950 px-3 py-3 md:px-5">
+      <div className="relative z-50 shrink-0 border-t border-slate-800 bg-slate-950 px-3 py-3 md:px-5">
         <form onSubmit={onSend} className="flex items-end gap-2">
           <textarea
             className="input flex-1 resize-none leading-relaxed"

@@ -1,6 +1,7 @@
 /**
  * Truck tile card used on the Day Overview (RunDay) grids. Extracted from RunDay.tsx.
  */
+import { useState } from "react";
 import clsx from "clsx";
 import type { TruckNote, TruckStatus, TruckWithState } from "../../types";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./constants";
@@ -22,6 +23,7 @@ export default function TruckCard({
   isExtraDay?: boolean;
   notes?: TruckNote[];
 }) {
+  const [notePopoverOpen, setNotePopoverOpen] = useState(false);
   const showNotes = notes && notes.length > 0 && (status === "in_progress" || status === "unloaded");
   return (
     <div
@@ -78,12 +80,31 @@ export default function TruckCard({
         </span>
       )}
       {showNotes && (
-        <div className="mt-1 w-full space-y-1 border-t border-slate-700/60 pt-1">
-          {notes!.map((n) => (
-            <p key={n.id} className="text-left text-[10px] leading-snug text-violet-200">
-              {n.body}
-            </p>
-          ))}
+        <div className="relative mt-1">
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); setNotePopoverOpen((o) => !o); }}
+            className="inline-flex items-center gap-1 rounded-md border border-violet-700/40 bg-violet-950/50 px-2 py-0.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-900/40"
+          >
+            📝 {notes!.length}
+          </button>
+          {notePopoverOpen && (
+            <div
+              className="absolute bottom-full left-0 z-30 mb-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="space-y-2">
+                {notes!.map((n) => (
+                  <div key={n.id}>
+                    <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+                      {n.note_type === "constant" ? "Always" : n.note_type === "workday" ? "Workday" : "One-off"}
+                    </span>
+                    <p className="mt-0.5 text-xs leading-snug text-slate-200">{n.body}</p>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>
