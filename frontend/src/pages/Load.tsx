@@ -67,7 +67,11 @@ export default function Load() {
   );
   // Ready = unloaded and scheduled for tomorrow.
   const ready = useMemo(
-    () => loadTrucks.filter((t) => t.state?.status === "unloaded"),
+    () => loadTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true),
+    [loadTrucks],
+  );
+  const heldReady = useMemo(
+    () => loadTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold === true),
     [loadTrucks],
   );
   // Loaded = physically loaded and scheduled for tomorrow.
@@ -418,6 +422,48 @@ export default function Load() {
         <ProgressRow label="Unload" done={unloadDone} total={unloadRouteTrucks.length} pct={unloadPct} color="bg-emerald-500" />
       </div>
 
+      {/* On Hold */}
+      {heldReady.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-red-400">
+            On Hold ({heldReady.length})
+          </h3>
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
+            {heldReady.map((t, index) => {
+              const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
+              return (
+                <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.0}>
+                  <div className="card relative flex flex-col gap-1 min-h-[7.5rem] p-4 cursor-not-allowed opacity-50">
+                    <div className="flex items-start justify-between gap-1">
+                      <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-red-300">
+                        {t.truck_number}
+                      </span>
+                      <span className="flex flex-col items-end gap-0.5">
+                        <span className="badge bg-red-700 text-white">HOLD</span>
+                        {coverRoute != null && (
+                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                            Cov. #{coverRoute}
+                          </span>
+                        )}
+                        {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+                          <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-1" title="Dust garment">
+                            <DustGarmentIcon className="h-5 w-5 text-amber-300" />
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-400">
+                      {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                    </div>
+                    <div className="mt-auto pt-1 text-[11px] font-semibold text-red-400">Clear in Fleet</div>
+                  </div>
+                </AnimateCard>
+              );
+            })}
+          </div>
+        </section>
+      )}
+
       {/* Ready to load */}
       <section>
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-400">
@@ -430,8 +476,7 @@ export default function Load() {
         )}
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
           {ready.map((t, index) => {
-            const isHeld = t.state?.priority_hold === true;
-            const disabled = anyInProgress || busy === t.truck_number || isHeld;
+            const disabled = anyInProgress || busy === t.truck_number;
             const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
             return (
               <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.02}>
@@ -445,18 +490,14 @@ export default function Load() {
                     ? "cursor-not-allowed opacity-50"
                     : "hover:ring-2 hover:ring-emerald-500 active:scale-[0.98]",
                 )}
-                title={isHeld ? "On Hold — Clear in Fleet" : t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
+                title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
               >
                 <div className="flex items-start justify-between gap-1">
-                  <span className={clsx("text-4xl font-extrabold tracking-tight tabular-nums leading-none", isHeld ? "text-red-300" : "text-emerald-300")}>
+                  <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-emerald-300">
                     {t.truck_number}
                   </span>
                   <span className="flex flex-col items-end gap-0.5">
-                    {isHeld ? (
-                      <span className="badge bg-red-700 text-white">HOLD</span>
-                    ) : (
-                      <span className="badge bg-emerald-700 text-white">Unloaded</span>
-                    )}
+                    <span className="badge bg-emerald-700 text-white">Unloaded</span>
                     {coverRoute != null && (
                       <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
                         Cov. #{coverRoute}
@@ -472,9 +513,7 @@ export default function Load() {
                 <div className="text-xs text-slate-400">
                   {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                 </div>
-                {isHeld ? (
-                  <div className="mt-auto pt-1 text-[11px] font-semibold text-red-400">Clear in Fleet</div>
-                ) : t.state?.wearers ? (
+                {t.state?.wearers ? (
                   <div className="mt-auto pt-1 text-xs text-slate-500">{t.state.wearers} wearers</div>
                 ) : null}
               </button>
