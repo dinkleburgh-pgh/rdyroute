@@ -2,19 +2,13 @@
 Router: /communications
 
 Team-chat messages.  Messages are soft-deleted (is_deleted flag) so admins
-can review deletion history.  Profanity filtering uses the better-profanity
-library (1,400+ built-in words) when available, with a regex fallback.
-Custom additions are stored in AppSetting under communications_censor_words.
+can review deletion history.  Profanity filtering is regex-based using
+custom word lists stored in AppSetting under communications_censor_words.
 """
 
 import re
 import time
 import uuid
-
-try:
-    from better_profanity import profanity as _profanity
-except ImportError:
-    _profanity = None
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import select
@@ -105,17 +99,13 @@ def delete_message(
 # ---------------------------------------------------------------------------
 
 def _load_custom_words(db: Session) -> None:
-    """Sync custom censor words from DB into the in-memory profanity filter."""
-    if _profanity is None:
-        return
-    setting = db.get(AppSetting, _CENSOR_WORDS_KEY)
-    if setting and isinstance(setting.value, list) and setting.value:
-        _profanity.add_censor_words(setting.value)
+    """No-op — custom words are read directly from DB by _apply_censor."""
+    pass
 
 
 @router.get("/censor-words", response_model=list[str])
 def get_censor_words(db: Session = Depends(get_db)):
-    """Return custom-added words (the 1,400+ built-in words are never listed)."""
+    """Return custom-added words for management UI."""
     setting = db.get(AppSetting, _CENSOR_WORDS_KEY)
     if setting is None or not isinstance(setting.value, list):
         return []
@@ -131,8 +121,6 @@ def update_censor_words(words: list[str], db: Session = Depends(get_db)):
     else:
         setting.value = cleaned
     db.commit()
-    if _profanity is not None:
-        _profanity.add_censor_words(cleaned)
     return cleaned
 
 
@@ -140,12 +128,7 @@ def update_censor_words(words: list[str], db: Session = Depends(get_db)):
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _apply_censor(text: str, db: Session | None = None) -> str:
-    if _profanity is not None:
-        return _profanity.censor(text)
-    # Fallback: regex-based censor using custom words from DB
-    if db is None:
-        return text
+def _apply_censor(text: str, db: Session) -> str:
     setting = db.get(AppSetting, _CENSOR_WORDS_KEY)
     if setting is None or not isinstance(setting.value, list) or not setting.value:
         return text
