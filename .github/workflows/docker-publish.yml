@@ -102,3 +102,90 @@ jobs:
             --max-time 15 \
           && echo "[notify] Production redeploy triggered." \
           || echo "[notify] WARNING: could not reach production (non-fatal)."
+
+      # ── Direct Portainer redeploy (bypasses app webhook) ──────────────
+      # For compose-file (type-2) stacks: sends the current docker-compose.prod.yml
+      # directly to Portainer so the stored copy is always up-to-date.
+      # For git-backed (type-1) stacks: calls git/redeploy directly.
+      # No-op if PORTAINER_URL secret is not configured.
+      # Required secrets: PORTAINER_URL, PORTAINER_API_KEY,
+      #   PORTAINER_ENDPOINT_ID, and either PORTAINER_STACK_NAME or PORTAINER_STACK_ID.
+      - name: Direct Portainer redeploy
+        env:
+          PORTAINER_URL:         ${{ secrets.PORTAINER_URL }}
+          PORTAINER_API_KEY:     ${{ secrets.PORTAINER_API_KEY }}
+          PORTAINER_ENDPOINT_ID: ${{ secrets.PORTAINER_ENDPOINT_ID }}
+          PORTAINER_STACK_NAME:  ${{ secrets.PORTAINER_STACK_NAME }}
+          PORTAINER_STACK_ID:    ${{ secrets.PORTAINER_STACK_ID }}
+        run: |
+          if [ -z "$PORTAINER_URL" ] || [ -z "$PORTAINER_API_KEY" ] || [ -z "$PORTAINER_ENDPOINT_ID" ]; then
+            echo "[portainer] PORTAINER_URL/API_KEY/ENDPOINT_ID not configured — skipping direct redeploy."
+            exit 0
+          fi
+          python3 - <<'PYEOF'
+          import os, json, ssl, sys, urllib.request
+
+          url     = os.environ["PORTAINER_URL"].rstrip("/")
+          api_key = os.environ["PORTAINER_API_KEY"]
+          ep      = os.environ["PORTAINER_ENDPOINT_ID"]
+          name    = os.environ.get("PORTAINER_STACK_NAME", "").strip()
+          sid     = os.environ.get("PORTAINER_STACK_ID", "").strip()
+
+          ctx = ssl.create_default_context()
+          ctx.check_hostname = False
+          ctx.verify_mode = ssl.CERT_NONE
+
+          def _get(path):
+              r = urllib.request.Request(f"{url}{path}", headers={"X-API-Key": api_key})
+              with urllib.request.urlopen(r, context=ctx, timeout=15) as resp:
+                  return json.loads(resp.read().decode(errors="replace"))
+
+          def _put(path, body):
+              payload = json.dumps(body).encode()
+              r = urllib.request.Request(
+                  f"{url}{path}", data=payload, method="PUT",
+                  headers={"Content-Type": "application/json", "X-API-Key": api_key},
+              )
+              with urllib.request.urlopen(r, context=ctx, timeout=120) as resp:
+                  return resp.status, resp.read().decode(errors="replace")
+
+          # Resolve stack ID
+          if not sid:
+              all_stacks = _get("/api/stacks")
+              match = next((s for s in all_stacks if s.get("Name") == name), None)
+              if not match:
+                  print(f"[portainer] Stack '{name}' not found. Available: {[s.get('Name') for s in all_stacks]}")
+                  sys.exit(1)
+              sid = str(match["Id"])
+              print(f"[portainer] Resolved '{name}' → stack ID {sid}")
+
+          stack_info = _get(f"/api/stacks/{sid}")
+          current_env = stack_info.get("Env") or []
+          stack_type  = stack_info.get("Type", 2)
+          print(f"[portainer] Stack type={stack_type}, env vars={len(current_env)}")
+
+          if stack_type == 1:
+              # Git-backed: trigger git/redeploy (Portainer pulls latest from main)
+              status, body = _put(
+                  f"/api/stacks/{sid}/git/redeploy?endpointId={ep}",
+                  {"prune": False, "pullImage": True,
+                   "repositoryAuthentication": False,
+                   "repositoryReferenceName": "refs/heads/main",
+                   "env": current_env},
+              )
+          else:
+              # Compose-file: send the local compose file so Portainer's stored copy is updated
+              with open("docker-compose.prod.yml") as f:
+                  compose_content = f.read()
+              print("[portainer] Using local docker-compose.prod.yml for type-2 stack")
+              status, body = _put(
+                  f"/api/stacks/{sid}?endpointId={ep}",
+                  {"env": current_env, "prune": False,
+                   "pullImage": True, "stackFileContent": compose_content},
+              )
+
+          print(f"[portainer] Redeploy status={status}")
+          print(body[:500])
+          if status not in (200, 204):
+              sys.exit(1)
+          PYEOF
