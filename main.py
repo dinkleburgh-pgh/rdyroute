@@ -79,9 +79,11 @@ async def lifespan(app: FastAPI):
             db.commit()
         result = run_startup_seed(db)
         log.info("Startup seed: %s", result)
-        # Pre-load custom censor words into better-profanity
-        from routers.communications import _load_custom_words
-        _load_custom_words(db)
+        try:
+            from routers.communications import _load_custom_words
+            _load_custom_words(db)
+        except Exception as _e:
+            log.warning("Failed to load custom censor words: %s", _e)
     finally:
         db.close()
 
