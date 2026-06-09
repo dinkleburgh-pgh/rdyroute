@@ -331,9 +331,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       if (!matchStatus) return false;
       if (t.truck_type === "Spare") {
         // Show a spare card in a lifecycle-status filter only when it is
-        // actively covering an OOS route (the spare represents that route).
-        // Idle spares and spares assigned to non-OOS routes are hidden — the
-        // route truck's own card already represents the route.
+        // actively covering an OOS route (the spare represents that route),
+        // or when the filter is "dirty" and the spare has dirty status.
+        // Idle spares and spares assigned to non-OOS routes are hidden from
+        // other lifecycle filters (unloaded, loaded, etc.) — the route
+        // truck's own card already represents the route.
+        if (filter === "dirty" && (t.state?.status === "dirty" || t.state == null)) return true;
         const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
         if (coveredRoute == null) return false;
         return truckStatusByNumber.get(coveredRoute) === "oos";

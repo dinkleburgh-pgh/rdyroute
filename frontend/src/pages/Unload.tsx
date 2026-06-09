@@ -32,36 +32,39 @@ export default function Unload() {
   // Trucks marked unloaded this session — card stays in dirty section with Undo until navigation.
   const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
 
-  const nonSpare = useMemo(
+  // Include spare trucks in dirty/unfinished/unloaded views so idle dirty
+  // spares show up in the Unload page alongside route trucks.
+  const allTrucks = useMemo(
     () =>
       (data ?? []).filter(
         (t) =>
           t.truck_type !== "Spare" ||
           t.route_swap_route != null ||
-          t.state?.oos_spare_route != null,
+          t.state?.oos_spare_route != null ||
+          (t.state?.status === "dirty" || t.state == null),
       ),
     [data],
   );
   const dirty = useMemo(
     () =>
-      nonSpare.filter(
+      allTrucks.filter(
         (t) =>
           t.state?.status === "dirty" ||
           t.state == null ||
           recentlyUnloaded.has(t.truck_number),
       ),
-    [nonSpare, recentlyUnloaded],
+    [allTrucks, recentlyUnloaded],
   );
   const unfinished = useMemo(
-    () => nonSpare.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
-    [nonSpare, recentlyUnloaded],
+    () => allTrucks.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
+    [allTrucks, recentlyUnloaded],
   );
   const unloaded = useMemo(
     () =>
-      nonSpare.filter(
+      allTrucks.filter(
         (t) => t.state?.status === "unloaded" && !recentlyUnloaded.has(t.truck_number),
       ),
-    [nonSpare, recentlyUnloaded],
+    [allTrucks, recentlyUnloaded],
   );
 
   async function assignBatch(truckNumber: number) {
