@@ -80,7 +80,7 @@ export default function TruckCard({
         </span>
       )}
       {showNotes && (
-        <div className="relative mt-1">
+        <div className="absolute bottom-2 right-2 z-20">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setNotePopoverOpen((o) => !o); }}
@@ -90,7 +90,7 @@ export default function TruckCard({
           </button>
           {notePopoverOpen && (
             <div
-              className="absolute bottom-full left-0 z-30 mb-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl"
+              className="absolute bottom-full right-0 z-30 mb-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="space-y-2">
