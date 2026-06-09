@@ -3,6 +3,7 @@
 .env.*
 !.env.example
 !.env.usb.example
+!production.env
 
 # Local runtime data
 .data/
