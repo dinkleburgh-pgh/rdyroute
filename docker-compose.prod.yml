@@ -126,8 +126,8 @@ services:
       test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8000/health"]
       interval: 30s
       timeout: 10s
-      retries: 6
-      start_period: 60s
+      retries: 10
+      start_period: 120s
 
   frontend:
     image: ${FRONTEND_IMAGE:-ghcr.io/dinkleburgh-pgh/rdyroute-frontend}:${IMAGE_TAG:-latest}

@@ -68,17 +68,21 @@ async def lifespan(app: FastAPI):
 
     db = SessionLocal()
     try:
-        # Data backfill: ensure all trucks have a QR token (safe to re-run; skips non-null)
-        import uuid as _uuid
-        from sqlalchemy import select as _select
-        from models import Truck as _Truck
-        _trucks_no_token = db.scalars(_select(_Truck).where(_Truck.qr_token.is_(None))).all()
-        for _t in _trucks_no_token:
-            _t.qr_token = str(_uuid.uuid4())
-        if _trucks_no_token:
-            db.commit()
-        result = run_startup_seed(db)
-        log.info("Startup seed: %s", result)
+        try:
+            # Data backfill: ensure all trucks have a QR token (safe to re-run; skips non-null)
+            import uuid as _uuid
+            from sqlalchemy import select as _select
+            from models import Truck as _Truck
+            _trucks_no_token = db.scalars(_select(_Truck).where(_Truck.qr_token.is_(None))).all()
+            for _t in _trucks_no_token:
+                _t.qr_token = str(_uuid.uuid4())
+            if _trucks_no_token:
+                db.commit()
+            result = run_startup_seed(db)
+            log.info("Startup seed: %s", result)
+        except Exception as _e:
+            log.error("Startup operations failed (non-fatal, app will run): %s", _e)
+        log.info("Startup operations complete.")
     finally:
         db.close()
 
