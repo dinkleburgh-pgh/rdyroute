@@ -212,10 +212,14 @@ function HierarchyPicker({
   items,
   onLog,
   isPending,
+  quickSelect,
+  quickKey,
 }: {
   items: TrackedItem[];
   onLog: (label: string, qty: number) => void;
   isPending: boolean;
+  quickSelect?: { label: string } | null;
+  quickKey?: number;
 }) {
   const [topCat, setTopCat]       = useState<string | null>(null);
   const [bulkSub, setBulkSub]     = useState<string | null>(null);
@@ -264,6 +268,12 @@ function HierarchyPicker({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topCats]);
+
+  // Quick-select: when a recently removed chip is tapped, jump to qty input
+  useEffect(() => {
+    if (quickSelect) selectItem(quickSelect.label);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickKey]);
 
   // Auto-skip: if a top category has exactly 1 item (no subs), jump straight to qty entry
   useEffect(() => {
@@ -481,16 +491,25 @@ function ItemLogger({
   entries,
   runDate,
   onBack,
+  recentRemoved,
 }: {
   truck: TruckWithState;
   entries: AuditEntry[];
   runDate: string;
   onBack: () => void;
+  recentRemoved?: { label: string }[];
 }) {
   const create      = useCreateAuditEntry();
   const deleteEntry = useDeleteAuditEntry();
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
+  const [quickSelect, setQuickSelect] = useState<{ label: string } | null>(null);
+  const [quickKey, setQuickKey] = useState(0);
+
+  function handleQuickTap(label: string) {
+    setQuickSelect({ label });
+    setQuickKey((k) => k + 1);
+  }
 
   const [photosOpen, setPhotosOpen] = useState(false);
   const [note, setNote]           = useState("");
@@ -517,23 +536,26 @@ function ItemLogger({
 
   return (
     <div className="flex min-h-0 flex-col">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-3 py-2.5 backdrop-blur-sm md:px-6">
+       {/* Sticky header */}
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-800 bg-slate-950/95 px-3 py-3 backdrop-blur-sm md:px-6">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition min-h-[44px] min-w-[44px]"
+          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition"
         >
-          back
+          ← Back
         </button>
-        <span className="text-6xl font-black text-white">#{truck.truck_number}</span>
-        <div className="flex items-center gap-2">
-          {entries.length > 0 && (
-            <span className="rounded-full bg-emerald-900/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
-              {entries.length} logged
-            </span>
-          )}
+        <div className="flex-1 flex justify-center">
+          <div className="inline-flex items-center gap-3 rounded-xl border-2 border-emerald-600/40 bg-emerald-950/30 px-6 py-2">
+            <span className="text-5xl font-black tabular-nums text-emerald-300">#{truck.truck_number}</span>
+            {entries.length > 0 && (
+              <span className="rounded-full bg-emerald-900/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
+                {entries.length} logged
+              </span>
+            )}
+          </div>
         </div>
+        <div className="w-20 shrink-0 md:hidden" />
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
@@ -607,7 +629,24 @@ function ItemLogger({
         )}
 
         {/* Hierarchical item picker */}
-        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} />
+        {recentRemoved && recentRemoved.length > 0 && (
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Removed</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentRemoved.map((item) => (
+                <button
+                  key={item.label}
+                  type="button"
+                  onClick={() => handleQuickTap(item.label)}
+                  className="shrink-0 rounded-full bg-emerald-900/40 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-800/60 transition"
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} quickSelect={quickSelect} quickKey={quickKey} />
 
         {/* Logged entries */}
         {entries.length > 0 && (
@@ -653,7 +692,7 @@ function ItemLogger({
 // ---------------------------------------------------------------------------
 
 export default function Audit() {
-  const [runDate, setRunDate]        = useState(todayIso());
+  const runDate = todayIso();
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
   const [searchParams]               = useSearchParams();
 
@@ -680,6 +719,18 @@ export default function Audit() {
     return map;
   }, [entries]);
 
+  const recentRemoved = useMemo(() => {
+    const seen = new Set<string>();
+    const list: { label: string }[] = [];
+    for (const e of [...entries].reverse()) {
+      if (!seen.has(e.item_label)) {
+        seen.add(e.item_label);
+        list.push({ label: e.item_label });
+      }
+    }
+    return list.slice(0, 8);
+  }, [entries]);
+
   const truckEntries = selectedTruck
     ? (entriesByTruck.get(selectedTruck.truck_number) ?? [])
     : [];
@@ -699,21 +750,6 @@ export default function Audit() {
       {/* Main content */}
       {selectedTruck === null ? (
         <div className="flex min-h-0 flex-1 flex-col">
-          {auditDates.length > 0 && (
-            <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 md:px-6">
-              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</span>
-              <select
-                className="input py-1 text-sm"
-                value={runDate}
-                onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
-              >
-                <option value={todayIso()}>Today</option>
-                {auditDates.map((d) => (
-                  <option key={d} value={d}>{d}</option>
-                ))}
-              </select>
-            </div>
-          )}
           <TruckPicker
           runDate={runDate}
           board={board}
@@ -728,6 +764,7 @@ export default function Audit() {
           entries={truckEntries}
           runDate={runDate}
           onBack={() => setSelected(null)}
+          recentRemoved={recentRemoved}
         />
       )}
     </motion.div>
