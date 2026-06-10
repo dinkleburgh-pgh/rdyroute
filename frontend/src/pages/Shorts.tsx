@@ -34,6 +34,14 @@ const TOP_PALETTE: Record<string, string> = {
   "Bulk":  "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
 };
 
+const CAT_CHIP_COLORS: Record<string, string> = {
+  "3x10":  "bg-sky-900/40 text-sky-300 hover:bg-sky-800/60",
+  "3x5":   "bg-violet-900/40 text-violet-300 hover:bg-violet-800/60",
+  "4x6":   "bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60",
+  "Paper": "bg-orange-900/40 text-orange-300 hover:bg-orange-800/60",
+  "Bulk":  "bg-rose-900/40 text-rose-300 hover:bg-rose-800/60",
+};
+
 const SUB_PALETTE: Record<string, string> = {
   Aprons:      "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
   "Dust Mops": "bg-gradient-to-b from-teal-600 to-teal-900 ring-1 ring-teal-400/20 hover:from-teal-500 hover:to-teal-800",
@@ -623,17 +631,23 @@ export function ShortageLogger({
           )}
         </div>
         {recentItems && recentItems.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {recentItems.map((item) => (
-              <button
-                key={`${item.category}||${item.detail}`}
-                type="button"
-                onClick={() => handleQuickTap(item.category, item.detail)}
-                className="shrink-0 rounded-full bg-amber-900/40 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-800/60 transition"
-              >
-                {item.category} {item.detail}
-              </button>
-            ))}
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Shorted</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentItems.map((item) => (
+                <button
+                  key={`${item.category}||${item.detail}`}
+                  type="button"
+                  onClick={() => handleQuickTap(item.category, item.detail)}
+                  className={clsx(
+                    "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
+                    CAT_CHIP_COLORS[item.category] ?? "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                  )}
+                >
+                  {item.category} {item.detail}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} quickSelect={quickSelect} quickKey={quickKey} />
@@ -666,17 +680,23 @@ export function ShortageLogger({
       <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
         {/* Recently shorted items quick-list */}
         {recentItems && recentItems.length > 0 && (
-          <div className="flex gap-2 overflow-x-auto pb-1">
-            {recentItems.map((item) => (
-              <button
-                key={`${item.category}||${item.detail}`}
-                type="button"
-                onClick={() => handleQuickTap(item.category, item.detail)}
-                className="shrink-0 rounded-full bg-amber-900/40 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-800/60 transition"
-              >
-                {item.category} {item.detail}
-              </button>
-            ))}
+          <div>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Shorted</p>
+            <div className="flex gap-2 overflow-x-auto pb-1">
+              {recentItems.map((item) => (
+                <button
+                  key={`${item.category}||${item.detail}`}
+                  type="button"
+                  onClick={() => handleQuickTap(item.category, item.detail)}
+                  className={clsx(
+                    "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
+                    CAT_CHIP_COLORS[item.category] ?? "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                  )}
+                >
+                  {item.category} {item.detail}
+                </button>
+              ))}
+            </div>
           </div>
         )}
         {/* Category picker */}
@@ -699,7 +719,7 @@ export function ShortageLogger({
 // ---------------------------------------------------------------------------
 
 export default function Shorts() {
-  const [runDate, setRunDate]        = useState(todayIso());
+  const runDate = todayIso();
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
   const [searchParams]               = useSearchParams();
 
@@ -748,13 +768,6 @@ export default function Shorts() {
       {/* Page header */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-3 md:px-6">
         <h2 className="text-xl font-semibold text-slate-100">Shortages</h2>
-        <input
-          className="input"
-          type="date"
-          max={todayIso()}
-          value={runDate}
-          onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
-        />
       </div>
 
       {selectedTruck === null ? (
