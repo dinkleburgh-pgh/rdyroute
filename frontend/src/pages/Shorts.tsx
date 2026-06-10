@@ -198,10 +198,14 @@ function HierarchyPicker({
   items,
   onLog,
   isPending,
+  quickSelect,
+  quickKey,
 }: {
   items: TrackedItem[];
   onLog: (category: string, detail: string, qty: number) => void;
   isPending: boolean;
+  quickSelect?: { cat: string; det: string } | null;
+  quickKey?: number;
 }) {
   const [topCat, setTopCat]     = useState<string | null>(null);
   const [bulkSub, setBulkSub]   = useState<string | null>(null);
@@ -250,6 +254,12 @@ function HierarchyPicker({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topCats]);
+
+  // Quick-select: when a recently-shorted chip is tapped, jump to qty input
+  useEffect(() => {
+    if (quickSelect) selectItem(quickSelect.cat, quickSelect.det);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [quickKey]);
 
   // Auto-skip: if a top category has exactly 1 item (no subs), jump straight to qty entry
   useEffect(() => {
@@ -568,15 +578,24 @@ export function ShortageLogger({
   runDate,
   onBack,
   inline = false,
+  recentItems,
 }: {
   truck: TruckWithState;
   shorts: Shortage[];
   runDate: string;
   onBack: () => void;
   inline?: boolean;
+  recentItems?: { category: string; detail: string }[];
 }) {
   const { user } = useAuth();
   const create   = useCreateShortage();
+  const [quickSelect, setQuickSelect] = useState<{ cat: string; det: string } | null>(null);
+  const [quickKey, setQuickKey] = useState(0);
+
+  function handleQuickTap(cat: string, det: string) {
+    setQuickSelect({ cat, det });
+    setQuickKey((k) => k + 1);
+  }
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
 
@@ -603,7 +622,21 @@ export function ShortageLogger({
             </span>
           )}
         </div>
-        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} />
+        {recentItems && recentItems.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {recentItems.map((item) => (
+              <button
+                key={`${item.category}||${item.detail}`}
+                type="button"
+                onClick={() => handleQuickTap(item.category, item.detail)}
+                className="shrink-0 rounded-full bg-amber-900/40 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-800/60 transition"
+              >
+                {item.category} {item.detail}
+              </button>
+            ))}
+          </div>
+        )}
+        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} quickSelect={quickSelect} quickKey={quickKey} />
         <LoggedList shorts={shorts} />
       </div>
     );
@@ -631,11 +664,28 @@ export function ShortageLogger({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
+        {/* Recently shorted items quick-list */}
+        {recentItems && recentItems.length > 0 && (
+          <div className="flex gap-2 overflow-x-auto pb-1">
+            {recentItems.map((item) => (
+              <button
+                key={`${item.category}||${item.detail}`}
+                type="button"
+                onClick={() => handleQuickTap(item.category, item.detail)}
+                className="shrink-0 rounded-full bg-amber-900/40 px-3 py-1 text-xs font-semibold text-amber-300 hover:bg-amber-800/60 transition"
+              >
+                {item.category} {item.detail}
+              </button>
+            ))}
+          </div>
+        )}
         {/* Category picker */}
         <HierarchyPicker
           items={items}
           onLog={logItem}
           isPending={create.isPending}
+          quickSelect={quickSelect}
+          quickKey={quickKey}
         />
 
         <LoggedList shorts={shorts} />
@@ -675,6 +725,15 @@ export default function Shorts() {
     return map;
   }, [shorts]);
 
+  const recentItems = useMemo(() => {
+    const map = new Map<string, { category: string; detail: string }>();
+    for (const s of shorts) {
+      const key = `${s.item_category}||${s.item_detail}`;
+      if (!map.has(key)) map.set(key, { category: s.item_category, detail: s.item_detail });
+    }
+    return [...map.values()].slice(0, 8);
+  }, [shorts]);
+
   const truckShorts = selectedTruck
     ? (shortsByTruck.get(selectedTruck.truck_number) ?? [])
     : [];
@@ -710,6 +769,7 @@ export default function Shorts() {
           shorts={truckShorts}
           runDate={runDate}
           onBack={() => setSelected(null)}
+          recentItems={recentItems}
         />
       )}
     </motion.div>
