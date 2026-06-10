@@ -12,6 +12,7 @@ import {
   useBoard,
   useTrackedItems,
   useShortages,
+  useShortageDates,
   useCreateShortage,
   useUpdateShortage,
   useDeleteShortage,
@@ -658,23 +659,26 @@ export function ShortageLogger({
 
   return (
     <div className="flex min-h-0 flex-col">
-      {/* Sticky header */}
-      <div className="sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-800 bg-slate-950/95 px-3 py-2.5 backdrop-blur-sm md:px-6">
+       {/* Sticky header */}
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-800 bg-slate-950/95 px-3 py-3 backdrop-blur-sm md:px-6">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition min-h-[44px] min-w-[44px]"
+          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition"
         >
-          back
+          ← Back
         </button>
-        <span className="text-3xl font-black text-white">#{truck.truck_number}</span>
-        <div className="flex items-center gap-2">
-          {shorts.length > 0 && (
-            <span className="rounded-full bg-amber-900/70 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
-              {shorts.length} logged
-            </span>
-          )}
+        <div className="flex-1 flex justify-center">
+          <div className="inline-flex items-center gap-3 rounded-xl border-2 border-amber-600/40 bg-amber-950/30 px-6 py-2">
+            <span className="text-5xl font-black tabular-nums text-amber-300">#{truck.truck_number}</span>
+            {shorts.length > 0 && (
+              <span className="rounded-full bg-amber-900/70 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
+                {shorts.length} logged
+              </span>
+            )}
+          </div>
         </div>
+        <div className="w-20 shrink-0 md:hidden" />
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
@@ -719,9 +723,11 @@ export function ShortageLogger({
 // ---------------------------------------------------------------------------
 
 export default function Shorts() {
-  const runDate = todayIso();
+  const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
   const [searchParams]               = useSearchParams();
+
+  const { data: shortDates = [] } = useShortageDates();
 
   const { data: board  = [] } = useBoard(runDate);
   const { data: shorts = [] } = useShortages(runDate);
@@ -768,6 +774,16 @@ export default function Shorts() {
       {/* Page header */}
       <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-3 md:px-6">
         <h2 className="text-xl font-semibold text-slate-100">Shortages</h2>
+        <select
+          className="input py-1 text-sm"
+          value={runDate}
+          onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
+        >
+          <option value={todayIso()}>Today</option>
+          {shortDates.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
       </div>
 
       {selectedTruck === null ? (

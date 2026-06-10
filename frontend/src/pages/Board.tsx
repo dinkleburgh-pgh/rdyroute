@@ -359,7 +359,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         // Idle spares and spares assigned to non-OOS routes are hidden from
         // other lifecycle filters (loaded, etc.) — the route
         // truck's own card already represents the route.
-        if (filter === "dirty" && (t.state?.status === "dirty" || t.state == null)) return true;
+        if (filter === "dirty" && (t.state?.status === "dirty" || t.state?.status === "unfinished" || t.state == null)) return true;
         if (filter === "unloaded" && t.state?.status === "unloaded") return true;
         const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
         if (coveredRoute == null) return false;

@@ -401,6 +401,14 @@ export function useShortageCategories() {
   });
 }
 
+export function useShortageDates() {
+  return useQuery({
+    queryKey: ["shortage-dates"],
+    queryFn: async () => (await api.get<string[]>("/shorts/dates")).data,
+    staleTime: 60_000,
+  });
+}
+
 export function useShortages(runDate: string = todayIso(), truckNumber?: number) {
   return useQuery({
     queryKey: ["shorts", runDate, truckNumber ?? "all"],

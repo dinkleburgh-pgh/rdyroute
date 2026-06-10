@@ -95,6 +95,7 @@ export function buildRouteStatusCounts(
       const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
       if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
         out[statusFor(t)] += 1;
+        out.spare += 1;
       } else {
         out.spare += 1;
         const s = statusFor(t);

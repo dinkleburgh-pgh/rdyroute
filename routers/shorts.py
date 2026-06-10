@@ -181,3 +181,16 @@ def shortage_by_category_trend(
         ShortageCategoryPoint(category=r[0], total_qty=r[1] or 0)
         for r in rows
     ]
+
+
+@router.get("/dates", response_model=list[date])
+def shortage_dates(db: Session = Depends(get_db)):
+    """Distinct dates with at least one shortage, most recent first."""
+    rows = db.scalars(
+        select(Shortage.run_date)
+        .where(Shortage.run_date.isnot(None))
+        .distinct()
+        .order_by(Shortage.run_date.desc())
+        .limit(90)
+    ).all()
+    return list(rows)

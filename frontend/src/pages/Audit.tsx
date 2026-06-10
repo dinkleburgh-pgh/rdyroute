@@ -692,7 +692,7 @@ function ItemLogger({
 // ---------------------------------------------------------------------------
 
 export default function Audit() {
-  const runDate = todayIso();
+  const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
   const [searchParams]               = useSearchParams();
 
@@ -750,6 +750,21 @@ export default function Audit() {
       {/* Main content */}
       {selectedTruck === null ? (
         <div className="flex min-h-0 flex-1 flex-col">
+          {auditDates.length > 0 && (
+            <div className="flex items-center gap-2 border-b border-slate-800 px-3 py-2 md:px-6">
+              <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</span>
+              <select
+                className="input py-1 text-sm"
+                value={runDate}
+                onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
+              >
+                <option value={todayIso()}>Today</option>
+                {auditDates.map((d) => (
+                  <option key={d} value={d}>{d}</option>
+                ))}
+              </select>
+            </div>
+          )}
           <TruckPicker
           runDate={runDate}
           board={board}
