@@ -14,6 +14,34 @@
   </head>
   <body class="bg-slate-950 text-slate-100">
     <div id="root"></div>
-    <script type="module" src="/src/main.tsx"></script>
+    <script type="module">
+      const DEV_SW_RESET_KEY = "readyroute:dev-sw-reset";
+      const isViteDevServer = Boolean(document.querySelector('script[src="/@vite/client"]'));
+
+      async function bootstrap() {
+        if (isViteDevServer && "serviceWorker" in navigator) {
+          const registrations = await navigator.serviceWorker.getRegistrations();
+          if (registrations.length > 0) {
+            await Promise.all(registrations.map((registration) => registration.unregister().catch(() => false)));
+            if ("caches" in window) {
+              const keys = await caches.keys().catch(() => []);
+              await Promise.all(keys.map((key) => caches.delete(key).catch(() => false)));
+            }
+            if (!sessionStorage.getItem(DEV_SW_RESET_KEY)) {
+              sessionStorage.setItem(DEV_SW_RESET_KEY, "1");
+              window.location.reload();
+              return;
+            }
+            sessionStorage.removeItem(DEV_SW_RESET_KEY);
+          } else {
+            sessionStorage.removeItem(DEV_SW_RESET_KEY);
+          }
+        }
+
+        await import("/src/main.tsx");
+      }
+
+      void bootstrap();
+    </script>
   </body>
 </html>

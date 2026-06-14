@@ -21,6 +21,17 @@ export function publicBase(): string {
 // We keep this interceptor only so legacy API clients using the old
 // Bearer token (e.g. OpenAPI docs, scripts) still work transparently.
 api.interceptors.request.use((config) => {
+  const method = (config.method ?? "get").toLowerCase();
+  if (method === "get" || method === "head") {
+    const existingParams =
+      config.params && typeof config.params === "object" && !Array.isArray(config.params)
+        ? config.params as Record<string, unknown>
+        : {};
+    config.params = {
+      ...existingParams,
+      _rrts: Date.now(),
+    };
+  }
   const token = localStorage.getItem("readyroutev2_token");
   if (token && !config.headers?.Authorization) {
     config.headers = config.headers ?? {};

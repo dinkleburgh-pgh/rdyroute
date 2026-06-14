@@ -11,6 +11,7 @@ import ErrorBoundary from "./components/ErrorBoundary";
 import { useSettings } from "./api/hooks";
 import { badgeTextColor } from "./utils/color";
 import useWakeLock from "./hooks/useWakeLock";
+import { useAuth } from "./contexts/AuthContext";
 import Login from "./pages/Login";
 import RunDay from "./pages/RunDay";
 import Board from "./pages/Board";
@@ -101,7 +102,8 @@ const STATUS_CLASS_MAP: Record<string, string> = {
 };
 
 function StatusColorApplier() {
-  const { data: settings } = useSettings();
+  const { user, loading } = useAuth();
+  const { data: settings } = useSettings(!loading && !!user);
   useEffect(() => {
     const raw = settings?.find((s) => s.key === "status_badge_colors")?.value;
     if (!raw || typeof raw !== "object") return;

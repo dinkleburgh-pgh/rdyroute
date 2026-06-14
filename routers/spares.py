@@ -12,12 +12,17 @@ V1 mapping:
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import SpareAssignment, TruckState, TruckStatus
+from notification_service import (
+    coverage_assigned_notification,
+    coverage_removed_notification,
+    dispatch_notification,
+)
 from schemas import SpareAssignCreate, SpareAssignOut, SpareAssignReturn
 
 router = APIRouter(prefix="/spares", tags=["spares"])
@@ -36,7 +41,11 @@ def list_assignments(
 
 
 @router.post("", response_model=SpareAssignOut, status_code=status.HTTP_201_CREATED)
-def assign_spare(payload: SpareAssignCreate, db: Session = Depends(get_db)):
+def assign_spare(
+    payload: SpareAssignCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     # Prevent double-assignment of the same spare on the same date
     existing = db.scalars(
         select(SpareAssignment).where(
@@ -78,12 +87,21 @@ def assign_spare(payload: SpareAssignCreate, db: Session = Depends(get_db)):
 
     db.commit()
     db.refresh(row)
+    background_tasks.add_task(
+        dispatch_notification,
+        coverage_assigned_notification(
+            run_date=payload.run_date,
+            route_truck=payload.covering_route_truck,
+            covering_truck=payload.spare_truck_number,
+        ),
+    )
     return row
 
 
 @router.post("/{assignment_id}/return", response_model=SpareAssignOut)
 def return_spare(
     assignment_id: int,
+    background_tasks: BackgroundTasks,
     payload: SpareAssignReturn | None = None,
     db: Session = Depends(get_db),
 ):
@@ -108,13 +126,32 @@ def return_spare(
 
     db.commit()
     db.refresh(row)
+    background_tasks.add_task(
+        dispatch_notification,
+        coverage_removed_notification(
+            run_date=row.run_date,
+            route_truck=row.covering_route_truck,
+            covering_truck=row.spare_truck_number,
+        ),
+    )
     return row
 
 
 @router.delete("/{assignment_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_assignment(assignment_id: int, db: Session = Depends(get_db)):
+def delete_assignment(
+    assignment_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     row = db.get(SpareAssignment, assignment_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+    removed_notification = coverage_removed_notification(
+        run_date=row.run_date,
+        route_truck=row.covering_route_truck,
+        covering_truck=row.spare_truck_number,
+    )
     db.delete(row)
     db.commit()
+    background_tasks.add_task(dispatch_notification, removed_notification)
+    return None

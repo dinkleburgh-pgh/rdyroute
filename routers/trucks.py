@@ -23,6 +23,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import RouteSwap, Truck, TruckState, User
+from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin
 from schemas import (
     AnomalyDay,
@@ -208,6 +209,16 @@ def create_truck_state(
     db.add(row)
     db.commit()
     db.refresh(row)
+    if row.priority_hold:
+        background_tasks.add_task(
+            dispatch_notification,
+            truck_hold_notification(truck_number=truck_number, run_date=payload.run_date),
+        )
+    if row.status == "oos":
+        background_tasks.add_task(
+            dispatch_notification,
+            truck_oos_notification(truck_number=truck_number, run_date=payload.run_date),
+        )
     background_tasks.add_task(
         manager.broadcast,
         {"type": "truck_state_updated", "run_date": str(payload.run_date), "truck_number": truck_number},
@@ -237,6 +248,8 @@ def update_truck_state(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="State not found")
 
+    previous_status = row.status
+    previous_hold = row.priority_hold
     updates = payload.model_dump(exclude_unset=True)
 
     if updates.get("status") and updates["status"].value == "in_progress":
@@ -247,6 +260,16 @@ def update_truck_state(
 
     db.commit()
     db.refresh(row)
+    if not previous_hold and row.priority_hold:
+        background_tasks.add_task(
+            dispatch_notification,
+            truck_hold_notification(truck_number=truck_number, run_date=run_date),
+        )
+    if previous_status != "oos" and row.status == "oos":
+        background_tasks.add_task(
+            dispatch_notification,
+            truck_oos_notification(truck_number=truck_number, run_date=run_date),
+        )
     background_tasks.add_task(
         manager.broadcast,
         {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},
@@ -401,6 +424,7 @@ def bulk_update_status(
             TruckState.truck_number.in_(truck_numbers),
         )
     ).all()
+    previous_status_by_num = {row.truck_number: row.status for row in rows}
 
     # Update trucks that already have a state row
     for row in rows:
@@ -422,6 +446,14 @@ def bulk_update_status(
         manager.broadcast,
         {"type": "truck_state_updated", "run_date": str(run_date)},
     )
+    if validated_status == TruckStatus.oos:
+        for truck_number in truck_numbers:
+            if previous_status_by_num.get(truck_number) == TruckStatus.oos:
+                continue
+            background_tasks.add_task(
+                dispatch_notification,
+                truck_oos_notification(truck_number=truck_number, run_date=run_date),
+            )
     # Re-query to return all affected rows (includes newly-created ones)
     updated = db.scalars(
         select(TruckState).where(

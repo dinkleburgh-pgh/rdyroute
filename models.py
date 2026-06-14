@@ -211,6 +211,109 @@ class Shortage(Base):
 
 
 # ---------------------------------------------------------------------------
+# Shortage Sheet Imports
+# ---------------------------------------------------------------------------
+
+class ShortageSheetImport(Base):
+    """
+    Uploaded shortage-sheet batch awaiting review before live shortages are written.
+    Supports one or more source photos and zero or more draft rows.
+    """
+    __tablename__ = "shortage_sheet_imports"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # UUID hex
+    run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(32), nullable=False, default="needs_review", index=True)
+    extraction_mode: Mapped[str] = mapped_column(String(32), nullable=False, default="manual")
+    sheet_template_id: Mapped[str] = mapped_column(String(32), nullable=False, default="shortage_v1a")
+    header_columns: Mapped[list[dict | list | str | int | float | bool | None]] = mapped_column(
+        JSON, nullable=False, default=list
+    )
+    uploaded_by_user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    uploaded_by_username: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    reviewed_by_username: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    applied_by_username: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    error_message: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    applied_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    uploaded_by_user: Mapped["User | None"] = relationship("User")
+    photos: Mapped[list["ShortageSheetPhoto"]] = relationship(
+        "ShortageSheetPhoto",
+        back_populates="sheet_import",
+        cascade="all, delete-orphan",
+        order_by="ShortageSheetPhoto.uploaded_at",
+    )
+    rows: Mapped[list["ShortageSheetRowDraft"]] = relationship(
+        "ShortageSheetRowDraft",
+        back_populates="sheet_import",
+        cascade="all, delete-orphan",
+        order_by="ShortageSheetRowDraft.id",
+    )
+
+
+class ShortageSheetPhoto(Base):
+    """Original uploaded image for a shortage-sheet import batch."""
+    __tablename__ = "shortage_sheet_photos"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # UUID hex
+    import_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("shortage_sheet_imports.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(80), nullable=False, default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uploaded_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    sheet_import: Mapped["ShortageSheetImport"] = relationship("ShortageSheetImport", back_populates="photos")
+
+
+class ShortageSheetRowDraft(Base):
+    """Editable extracted or manually-entered shortage row pending approval."""
+    __tablename__ = "shortage_sheet_row_drafts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    import_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("shortage_sheet_imports.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    source_photo_id: Mapped[str | None] = mapped_column(
+        String(64), ForeignKey("shortage_sheet_photos.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    source_column_index: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    row_index: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    truck_number: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    item_category: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    item_detail: Mapped[str] = mapped_column(String(120), nullable=False, default="")
+    quantity: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    initials: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    raw_text: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
+    issues: Mapped[list[str]] = mapped_column(JSON, nullable=False, default=list)
+    review_status: Mapped[str] = mapped_column(String(32), nullable=False, default="needs_review", index=True)
+    reviewer_note: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    sheet_import: Mapped["ShortageSheetImport"] = relationship("ShortageSheetImport", back_populates="rows")
+    source_photo: Mapped["ShortageSheetPhoto | None"] = relationship("ShortageSheetPhoto")
+
+
+# ---------------------------------------------------------------------------
 # Audit
 # ---------------------------------------------------------------------------
 
@@ -532,6 +635,37 @@ class AppSetting(Base):
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
     )
+
+
+class PushSubscription(Base):
+    """
+    Browser/device push subscription for a single authenticated user.
+    Endpoint is unique globally; a later subscribe call can reassign it to the
+    current user if the browser session changes hands.
+    """
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    endpoint: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    p256dh: Mapped[str] = mapped_column(String(255), nullable=False)
+    auth: Mapped[str] = mapped_column(String(255), nullable=False)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    device_label: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    user: Mapped["User"] = relationship("User")
 
 
 class LoginAttempt(Base):

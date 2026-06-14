@@ -6,6 +6,9 @@ value stored under a string key. The React frontend and other routers can
 read/write settings via these endpoints.
 """
 
+from collections.abc import Callable
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -29,6 +32,24 @@ KNOWN_KEYS = {
     "note_cards_enabled",
     "tracked_items_map",
     "communications_censor_words",
+    "ollama_base_url",
+    "shortage_sheet_ollama_model",
+    "shortage_sheet_ollama_timeout_seconds",
+    "shortage_sheet_llm_low_confidence_threshold",
+    "shortage_sheet_preprocess_max_image_side",
+}
+
+_CLEAR_TO_EMPTY_SETTING_FACTORIES: dict[str, Callable[[], dict[str, object]]] = {
+    "shortage_sheet_ocr_correction_memory": lambda: {
+        "version": 1,
+        "examples": [],
+        "updated_at": datetime.now(UTC).isoformat(),
+    },
+    "shortage_sheet_ocr_header_correction_memory": lambda: {
+        "version": 1,
+        "examples": [],
+        "updated_at": datetime.now(UTC).isoformat(),
+    },
 }
 
 
@@ -45,6 +66,33 @@ _USER_READABLE_KEYS = {
 
 # Keys any authenticated user may write to (e.g. personal notes)
 _USER_WRITABLE_PREFIX = "personal_note_"
+
+_OPTIONAL_DEFAULT_PREFIXES: tuple[tuple[str, object], ...] = (
+    ("holiday_mode_", False),
+    ("holiday_load_", False),
+    ("holiday_unload_", False),
+    ("wizard_completed_", False),
+    ("daily_notes_", ""),
+    ("load_day_override_", None),
+    ("unloads_day_override_", None),
+)
+
+
+def _optional_default_setting(key: str) -> dict[str, object] | None:
+    """Return a synthetic default setting for known optional per-date keys.
+
+    These keys are intentionally absent until a user changes them. Returning a
+    default value avoids noisy 404s in the browser and backend logs while
+    preserving the same effective frontend behavior.
+    """
+    for prefix, default in _OPTIONAL_DEFAULT_PREFIXES:
+        if key.startswith(prefix):
+            return {
+                "key": key,
+                "value": default,
+                "updated_at": datetime.now(UTC),
+            }
+    return None
 
 
 def _is_user_writable(key: str, user: User) -> bool:
@@ -85,6 +133,9 @@ def get_setting(
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     setting = db.get(AppSetting, key)
     if setting is None:
+        default_setting = _optional_default_setting(key)
+        if default_setting is not None:
+            return default_setting
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Setting '{key}' not found")
     return setting
 
@@ -125,6 +176,16 @@ def delete_setting(
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
+    clear_factory = _CLEAR_TO_EMPTY_SETTING_FACTORIES.get(key)
+    if clear_factory is not None:
+        setting = db.get(AppSetting, key)
+        if setting is None:
+            setting = AppSetting(key=key, value=clear_factory())
+            db.add(setting)
+        else:
+            setting.value = clear_factory()
+        db.commit()
+        return
     setting = db.get(AppSetting, key)
     if setting is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Setting '{key}' not found")

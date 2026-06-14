@@ -24,6 +24,7 @@ import ItemsPanel from "../components/management/ItemsPanel";
 import ExportImportPanel from "../components/management/ExportImportPanel";
 import PDFReportsPanel from "../components/management/PDFReportsPanel";
 import DriverQRPanel from "../components/management/DriverQRPanel";
+import { ShortsWorkspace } from "./Shorts";
 
 /**
  * Structured settings UI — surfaces well-known V1 keys as proper form
@@ -51,15 +52,17 @@ type Category =
   | "export_import"
   | "pdf_reports"
   | "driver_qr"
-  | "connections";
+  | "connections"
+  | "short_imports";
 
 // Two-level navigation: Cards (groups) → Tabs (sub-categories)
-type GroupId = "app" | "users" | "content" | "fleet" | "comms" | "ops" | "advanced" | "data";
+type GroupId = "app" | "users" | "content" | "fleet" | "comms" | "ops" | "advanced" | "data" | "shortages";
 
 interface CardGroup {
   id: GroupId;
   label: string;
   desc: string;
+  mobileDesc: string;
   /** Left border color class, e.g. "border-l-sky-500" */
   borderColor: string;
   /** Subtle background tint class, e.g. "bg-sky-950/30" */
@@ -73,6 +76,7 @@ const CARD_GROUPS: CardGroup[] = [
     id: "app",
     label: "App Settings",
     desc: "Status badge colors",
+    mobileDesc: "Badge colors",
     borderColor: "border-l-sky-500",
     bgTint: "bg-sky-950/35",
     tabs: [
@@ -83,6 +87,7 @@ const CARD_GROUPS: CardGroup[] = [
     id: "users",
     label: "Users & Access",
     desc: "Manage users, pending requests, and role reference",
+    mobileDesc: "Users, requests, roles",
     borderColor: "border-l-indigo-500",
     bgTint: "bg-indigo-950/35",
     adminOnly: true,
@@ -97,6 +102,7 @@ const CARD_GROUPS: CardGroup[] = [
     id: "content",
     label: "Notices & Items",
     desc: "Team notices and audit checklist catalog",
+    mobileDesc: "Notices and item catalog",
     borderColor: "border-l-yellow-500",
     bgTint: "bg-yellow-950/35",
     adminOnly: true,
@@ -106,9 +112,19 @@ const CARD_GROUPS: CardGroup[] = [
     ],
   },
   {
+    id: "shortages",
+    label: "Shortages",
+    desc: "Short sheet photo imports and review queue",
+    mobileDesc: "Sheet imports",
+    borderColor: "border-l-cyan-500",
+    bgTint: "bg-cyan-950/35",
+    tabs: [{ id: "short_imports", label: "Sheet Imports" }],
+  },
+  {
     id: "fleet",
     label: "Fleet",
     desc: "Add, remove, and configure trucks in the fleet",
+    mobileDesc: "Trucks and QR codes",
     borderColor: "border-l-teal-500",
     bgTint: "bg-teal-950/35",
     adminOnly: true,
@@ -122,6 +138,7 @@ const CARD_GROUPS: CardGroup[] = [
     id: "comms",
     label: "Communications",
     desc: "Manage censored words for the messaging system",
+    mobileDesc: "Censor words",
     borderColor: "border-l-pink-500",
     bgTint: "bg-pink-950/35",
     adminOnly: true,
@@ -131,6 +148,7 @@ const CARD_GROUPS: CardGroup[] = [
     id: "ops",
     label: "Operations",
     desc: "Workflows, force-finish loads, bulk status changes, and workday resets",
+    mobileDesc: "Workflows and resets",
     borderColor: "border-l-orange-500",
     bgTint: "bg-orange-950/35",
     tabs: [
@@ -143,6 +161,7 @@ const CARD_GROUPS: CardGroup[] = [
     id: "advanced",
     label: "Advanced",
     desc: "Raw key/value settings editor",
+    mobileDesc: "Raw settings editor",
     borderColor: "border-l-red-500",
     bgTint: "bg-red-950/35",
     adminOnly: true,
@@ -157,6 +176,7 @@ const CARD_GROUPS: CardGroup[] = [
     id: "data",
     label: "Data & Reports",
     desc: "Export / import backups, PDF day reports",
+    mobileDesc: "Import and reports",
     borderColor: "border-l-emerald-500",
     bgTint: "bg-emerald-950/35",
     adminOnly: true,
@@ -214,6 +234,7 @@ export default function Management() {
       case "requests":       return <RequestsPanel disabled={!isAdmin} />;
       case "notices":        return <NoticesPanel disabled={!isAdmin} />;
       case "items":          return <ItemsPanel disabled={!isAdmin} />;
+      case "short_imports":  return <ShortsWorkspace />;
       case "roles":          return <RoleAccessPanel />;
       case "activity":       return <ActivityPanel />;
       case "recovery":       return <RecoveryPanel />;
@@ -237,7 +258,7 @@ export default function Management() {
       <h2 className="text-2xl font-semibold">Management</h2>
 
       {/* Card group grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
         {visibleGroups.map((group, i) => {
           const isActive = activeGroup === group.id;
           return (
@@ -257,14 +278,15 @@ export default function Management() {
                 }
               }}
               className={clsx(
-                "rounded-lg border border-slate-700/60 border-l-4 p-4 text-left transition hover:brightness-110",
+                "rounded-lg border border-slate-700/60 border-l-4 p-3 text-left transition hover:brightness-110 sm:p-4",
                 group.borderColor,
                 group.bgTint,
                 isActive ? "ring-2 ring-white/20" : "",
               )}
             >
-              <p className="text-base font-bold text-white">{group.label}</p>
-              <p className="mt-1.5 text-sm text-slate-300">{group.desc}</p>
+              <p className="text-sm font-bold text-white sm:text-base">{group.label}</p>
+              <p className="mt-1 text-xs leading-snug text-slate-300 sm:hidden">{group.mobileDesc}</p>
+              <p className="mt-1.5 hidden text-sm text-slate-300 sm:block">{group.desc}</p>
             </motion.button>
           );
         })}
@@ -273,22 +295,24 @@ export default function Management() {
       {/* Sub-tab bar + panel (shown when a card is active) */}
       {activeGroupDef && (
         <div>
-          <div className="flex gap-1 border-b border-slate-800">
+          <div className="-mx-3 overflow-x-auto border-b border-slate-800 px-3 sm:mx-0 sm:px-0">
+            <div className="flex min-w-max gap-1">
             {activeGroupDef.tabs.map((tab) => (
               <button
                 key={tab.id}
                 type="button"
                 onClick={() => setActiveTab(tab.id)}
                 className={clsx(
-                  "px-4 py-2 text-sm font-medium transition-colors",
+                  "whitespace-nowrap rounded-t-md px-3 py-2 text-xs font-medium transition-colors sm:px-4 sm:text-sm",
                   activeTab === tab.id
-                    ? "border-b-2 border-blue-500 text-blue-300"
-                    : "text-slate-400 hover:text-slate-200",
+                    ? "border-b-2 border-blue-500 bg-slate-900/50 text-blue-300"
+                    : "text-slate-400 hover:bg-slate-900/40 hover:text-slate-200",
                 )}
               >
                 {tab.label}
               </button>
             ))}
+            </div>
           </div>
           <div className="mt-4">{renderPanel()}</div>
         </div>

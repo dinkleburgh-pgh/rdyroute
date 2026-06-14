@@ -22,6 +22,7 @@ import { todayIso } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type { Shortage, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 
 // ---------------------------------------------------------------------------
 // Colour palette
@@ -722,9 +723,10 @@ export function ShortageLogger({
 // Shorts (root)
 // ---------------------------------------------------------------------------
 
-export default function Shorts() {
+export function ShortsWorkspace() {
   const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
+  const [viewMode, setViewMode] = useState<"log" | "imports">("log");
   const [searchParams]               = useSearchParams();
 
   const { data: shortDates = [] } = useShortageDates();
@@ -784,23 +786,57 @@ export default function Shorts() {
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
+        <div className="ml-auto flex rounded-lg border border-slate-800 bg-slate-900/70 p-1">
+          <button
+            type="button"
+            onClick={() => setViewMode("log")}
+            className={clsx(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition",
+              viewMode === "log" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
+            )}
+          >
+            Log shortages
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewMode("imports")}
+            className={clsx(
+              "rounded-md px-3 py-1.5 text-sm font-medium transition",
+              viewMode === "imports" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
+            )}
+          >
+            Import sheets
+          </button>
+        </div>
       </div>
 
-      {selectedTruck === null ? (
-        <TruckPicker
-          board={board}
-          shortsByTruck={shortsByTruck}
-          onSelect={(t) => setSelected(t)}
-        />
+      {viewMode === "imports" ? (
+        <div className="p-3 md:p-6">
+          <ShortageImportPanel defaultRunDate={runDate} lockedRunDate />
+        </div>
       ) : (
-        <ShortageLogger
-          truck={selectedTruck}
-          shorts={truckShorts}
-          runDate={runDate}
-          onBack={() => setSelected(null)}
-          recentItems={recentItems}
-        />
+        <>
+          {selectedTruck === null ? (
+            <TruckPicker
+              board={board}
+              shortsByTruck={shortsByTruck}
+              onSelect={(t) => setSelected(t)}
+            />
+          ) : (
+            <ShortageLogger
+              truck={selectedTruck}
+              shorts={truckShorts}
+              runDate={runDate}
+              onBack={() => setSelected(null)}
+              recentItems={recentItems}
+            />
+          )}
+        </>
       )}
     </motion.div>
   );
+}
+
+export default function Shorts() {
+  return <ShortsWorkspace />;
 }

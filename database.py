@@ -17,6 +17,15 @@ class Settings(BaseSettings):
     # Optional backup / replica database URLs (comma-separated for multiple).
     # Leave empty to skip. Example: postgresql+psycopg://user:pass@backup-host:5432/dbname
     backup_database_url: str = ""
+    web_push_vapid_public_key: str = ""
+    web_push_vapid_private_key: str = ""
+    web_push_vapid_subject: str = "mailto:admin@readyroute.local"
+    shortage_sheet_photos_dir: str = ""
+    ollama_base_url: str = "http://192.168.1.132:30068"
+    shortage_sheet_ollama_model: str = "minicpm-v:latest"
+    shortage_sheet_ollama_timeout_seconds: int = 60
+    shortage_sheet_llm_low_confidence_threshold: float = 0.82
+    shortage_sheet_preprocess_max_image_side: int = 2400
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

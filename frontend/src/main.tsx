@@ -10,12 +10,15 @@ console.info(
   "color:#94a3b8",
 );
 
+const DEV_SW_RESET_KEY = "readyroute:dev-sw-reset";
+const isLocalDevOrigin = ["localhost", "127.0.0.1"].includes(window.location.hostname);
+
 // When a new service worker takes over (skipWaiting + clientsClaim), the
 // current page still holds references to old JS chunk hashes that no longer
 // exist in the new precache → 404s → blank page.
 // Reloading on controllerchange ensures the fresh HTML + fresh chunks load
 // together, eliminating the blank-page-on-deploy problem.
-if ("serviceWorker" in navigator) {
+if ("serviceWorker" in navigator && !isLocalDevOrigin) {
   let _reloading = false;
   navigator.serviceWorker.addEventListener("controllerchange", () => {
     if (_reloading) return;
@@ -23,6 +26,8 @@ if ("serviceWorker" in navigator) {
     window.location.reload();
   });
 }
+
+sessionStorage.removeItem(DEV_SW_RESET_KEY);
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

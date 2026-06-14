@@ -7,6 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import NoteCardsDrawer from "./NoteCardsDrawer";
+import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
@@ -266,6 +267,9 @@ export default function Layout() {
   const allowed = ROLE_NAV_ACCESS[(user?.role ?? "guest") as AuthRole] ?? new Set<string>();
   const primaryNav = PRIMARY_NAV.filter((i) => allowed.has(i.to));
   const secondaryNav = SECONDARY_NAV.filter((i) => allowed.has(i.to));
+  const shiftName = currentShift().name;
+  const loadBadgeText = `L${loadDay}${holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}`;
+  const unloadBadgeText = `U${unloadsDay}${holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}`;
 
   return (
     <div className="flex h-screen bg-slate-950 text-slate-100">
@@ -457,6 +461,7 @@ export default function Layout() {
               </span>
             </div>
           </div>
+          <NotificationSettingsCard />
           <button
             className="btn-ghost w-full"
             onClick={() => {
@@ -473,7 +478,7 @@ export default function Layout() {
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* App top bar — mobile shows hamburger + brand, all sizes show clock/shift/day badges */}
-        <header className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-800 bg-slate-900 px-3 py-2">
+        <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2">
           <button
             type="button"
             aria-label="Open menu"
@@ -482,18 +487,30 @@ export default function Layout() {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <span className="text-sm font-semibold text-slate-200 md:hidden">ReadyRoute V2</span>
-          <div className="ml-auto flex items-center gap-2 text-xs">
+          <span className="hidden min-[380px]:inline truncate text-sm font-semibold text-slate-200 md:hidden">ReadyRoute</span>
+          <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1 text-[11px] md:hidden">
+            <span className="shrink-0 font-mono tabular-nums text-[11px] text-slate-200"><Clock compact /></span>
+            <span className="inline-flex shrink-0 items-center rounded-md border border-violet-800/60 bg-violet-950/50 px-1.5 py-1 font-semibold text-violet-300">
+              {shiftName}
+            </span>
+            <span className="inline-flex shrink-0 items-center rounded-md border border-blue-800/60 bg-blue-950/50 px-1.5 py-1 font-semibold text-blue-300">
+              {loadBadgeText}
+            </span>
+            <span className="inline-flex shrink-0 items-center rounded-md border border-emerald-800/60 bg-emerald-950/50 px-1.5 py-1 font-semibold text-emerald-300">
+              {unloadBadgeText}
+            </span>
+          </div>
+          <div className="ml-auto hidden items-center gap-2 text-xs md:flex">
             <span className="font-mono"><Clock compact /></span>
             <span className="inline-flex items-center gap-1 rounded-md border border-violet-800/60 bg-violet-950/50 px-2 py-1 font-semibold text-violet-300">
               <span className="text-[10px] uppercase tracking-wider text-violet-400/70">Shift</span>
-              {currentShift().name}
+              {shiftName}
             </span>
             <span className="inline-flex items-center gap-1 rounded-md border border-blue-800/60 bg-blue-950/50 px-2 py-1 font-semibold text-blue-300">
               <span className="text-[10px] uppercase tracking-wider text-blue-400/70">Load</span>
               Day {loadDay}{holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}
             </span>
-            <span className="hidden sm:inline-flex items-center gap-1 rounded-md border border-emerald-800/60 bg-emerald-950/50 px-2 py-1 font-semibold text-emerald-300">
+            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-800/60 bg-emerald-950/50 px-2 py-1 font-semibold text-emerald-300">
               <span className="text-[10px] uppercase tracking-wider text-emerald-400/70">Unload</span>
               Day {unloadsDay}{holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}
             </span>

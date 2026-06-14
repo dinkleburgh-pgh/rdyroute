@@ -343,8 +343,6 @@ if (-not (Test-Path $FrontendDir)) {
 
         $existingFE = Test-Pid -PidFile $FrontendPidF
         if ($existingFE) {
-            # Verify Vite is actually listening; a stale watchdog PID could prevent
-            # port cleanup if Docker owns port 5180.
             $feHealthy = $false
             try {
                 $null = Invoke-WebRequest "http://localhost:${FrontendPort}" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
@@ -352,49 +350,34 @@ if (-not (Test-Path $FrontendDir)) {
             } catch { }
 
             if ($feHealthy) {
-                Write-Info "Frontend already running (PID $($existingFE.Id)) — http://localhost:${FrontendPort}"
+                Write-Info "Frontend already running (PID $($existingFE.Id)) - http://localhost:${FrontendPort}"
             } else {
-                Write-Warn2 "Frontend watchdog PID $($existingFE.Id) alive but port $FrontendPort not responding — restarting..."
+                Write-Warn2 "Frontend PID $($existingFE.Id) alive but port $FrontendPort not responding - restarting..."
                 Stop-Frontend
                 $existingFE = $null
             }
         }
         if (-not $existingFE) {
             Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
-            Write-Info "Starting Vite dev server (with watchdog) on http://localhost:${FrontendPort}..."
+            Write-Info "Starting Vite dev server on http://localhost:${FrontendPort}..."
             $npmCmd = Join-Path (Split-Path $npm.Source -Parent) 'npm.cmd'
             if (-not (Test-Path $npmCmd)) { $npmCmd = $npm.Source }
 
-            # Create sentinel — watchdog exits when this file is removed
-            'running' | Out-File -FilePath $FrontendSentinel -Encoding ascii
-
-            # Build the watchdog script with variables already substituted, then encode it
-            # so that Start-Process never needs to parse paths-with-spaces as arguments.
-            $esc = { param($s) $s -replace "'", "''" }   # escape single-quotes for PowerShell literals
-            $inlineScript = @"
-`$NpmCmd       = '$( & $esc $npmCmd )'
-`$FrontendDir  = '$( & $esc $FrontendDir )'
-`$FrontendPort = '$FrontendPort'
-`$LogFile      = '$( & $esc $FrontendLog )'
-`$SentinelFile = '$( & $esc $FrontendSentinel )'
-. '$( & $esc (Join-Path $PSScriptRoot '_vite_watchdog.ps1') )'
-"@
-            $encodedCmd = [Convert]::ToBase64String(
-                [System.Text.Encoding]::Unicode.GetBytes($inlineScript)
-            )
-
-            $proc = Start-Process -FilePath 'powershell.exe' `
-                -ArgumentList @('-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', $encodedCmd) `
-                -WorkingDirectory $PSScriptRoot `
-                -WindowStyle Hidden -PassThru
+            $proc = Start-Process -FilePath $npmCmd `
+                -ArgumentList @('run', 'dev', '--', '--host', '--port', $FrontendPort) `
+                -WorkingDirectory $FrontendDir `
+                -RedirectStandardOutput $FrontendLog `
+                -RedirectStandardError "$FrontendLog.err" `
+                -WindowStyle Hidden `
+                -PassThru
             $proc.Id | Out-File -FilePath $FrontendPidF -Encoding ascii
             Start-Sleep -Seconds 3
             if ($proc.HasExited) {
-                Write-Err "Frontend watchdog failed to start. Recent log:"
+                Write-Err "Frontend failed to start. Recent log:"
                 if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
                 if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
             } else {
-                Write-Info "Frontend watchdog started (PID $($proc.Id)) — auto-restarts on crash. Log: $FrontendLog"
+                Write-Info "Frontend started (PID $($proc.Id)). Log: $FrontendLog"
             }
         }
     }
@@ -409,17 +392,11 @@ Write-Host ""
 Write-Info "ReadyRoute V2 is up:"
 Write-Info "  Frontend : $frontendUrl"
 Write-Info "  Backend  : $backendUrl   (docs: $backendUrl/docs)"
-Write-Info "Logs in    : $LogDir\"
+Write-Info "Logs in    : $LogDir"
 Write-Info "Stop with  : .\run.ps1 -Stop"
 
 if (-not $NoBrowser) {
-    # Open in VS Code Simple Browser if the 'code' CLI is available; otherwise
-    # fall back to the system default browser.
-    $code = Get-Command code -ErrorAction SilentlyContinue
-    if ($code) {
-        $encodedUrl = [Uri]::EscapeDataString($frontendUrl)
-        try { & $code.Source --open-url "vscode://vscode.simpleBrowser?url=$encodedUrl" | Out-Null } catch { }
-    } else {
-        try { Start-Process $frontendUrl | Out-Null } catch { }
-    }
+    try {
+        Start-Process $frontendUrl | Out-Null
+    } catch { }
 }

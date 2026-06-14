@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { AxiosProgressEvent } from "axios";
 import { api, todayIso } from "./client";
 import * as offlineQueue from "./offlineQueue";
 import type {
@@ -10,10 +11,19 @@ import type {
   Message,
   Notice,
   NoticeSeverity,
+  NotificationEvent,
+  NotificationPublicKey,
+  NotificationStatus,
   NoteType,
+  PushSubscriptionRecord,
   RouteSwap,
   RouteSwapLog,
   Shortage,
+  ShortageSheetImport,
+  ShortageSheetImportDetail,
+  ShortageSheetOcrMemoryStatus,
+  ShortageSheetRowDraft,
+  ShortageSheetTemplate,
   SpareAssignment,
   TokenResponse,
   Truck,
@@ -472,6 +482,251 @@ export function useDeleteShortage() {
   });
 }
 
+export function useShortageSheetImports(filters?: { runDate?: string; status?: string }) {
+  return useQuery({
+    queryKey: ["shorts-imports", filters?.runDate ?? "all", filters?.status ?? "all"],
+    queryFn: async () => {
+      const { data } = await api.get<ShortageSheetImport[] | unknown>("/shorts/imports", {
+        params: {
+          run_date: filters?.runDate || undefined,
+          status: filters?.status || undefined,
+        },
+      });
+      if (!Array.isArray(data)) {
+        throw new Error("Shortage import API returned an unexpected response.");
+      }
+      return data as ShortageSheetImport[];
+    },
+    staleTime: 10_000,
+  });
+}
+
+export function useShortageSheetTemplates() {
+  return useQuery({
+    queryKey: ["shorts-import-templates"],
+    queryFn: async () => {
+      const { data } = await api.get<ShortageSheetTemplate[] | unknown>("/shorts/imports/templates");
+      if (!Array.isArray(data)) {
+        throw new Error("Shortage import template API returned an unexpected response.");
+      }
+      return data as ShortageSheetTemplate[];
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+export function useShortageSheetImport(importId?: string | null) {
+  return useQuery({
+    queryKey: ["shorts-import", importId ?? "none"],
+    enabled: !!importId,
+    queryFn: async () => {
+      const { data } = await api.get<ShortageSheetImportDetail | unknown>(`/shorts/imports/${importId}`);
+      if (!data || typeof data !== "object" || Array.isArray(data)) {
+        throw new Error("Shortage import detail API returned an unexpected response.");
+      }
+      return data as ShortageSheetImportDetail;
+    },
+    staleTime: 5_000,
+  });
+}
+
+export function useCreateShortageSheetImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      run_date: string;
+      files: File[];
+      onUploadProgress?: (progress: { loaded: number; total: number | null; percent: number }) => void;
+    }) => {
+      const form = new FormData();
+      form.append("run_date", args.run_date);
+      for (const file of args.files) form.append("files", file);
+      const { data } = await api.post<ShortageSheetImportDetail>("/shorts/imports", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (event: AxiosProgressEvent) => {
+          const total = typeof event.total === "number" && event.total > 0 ? event.total : null;
+          const loaded = typeof event.loaded === "number" ? event.loaded : 0;
+          const percent = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0;
+          args.onUploadProgress?.({ loaded, total, percent });
+        },
+      });
+      return data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      qc.setQueryData(["shorts-import", data.id], data);
+    },
+  });
+}
+
+export function useCreateShortageSheetRow(importId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      truck_number: number;
+      source_column_index?: number | null;
+      item_category: string;
+      item_detail?: string;
+      quantity?: number;
+      initials?: string;
+      raw_text?: string;
+      review_status?: "needs_review" | "accepted" | "rejected";
+      reviewer_note?: string;
+      confidence_score?: number | null;
+      source_photo_id?: string | null;
+    }) => {
+      if (!importId) throw new Error("Import ID is required");
+      return (await api.post<ShortageSheetRowDraft>(`/shorts/imports/${importId}/rows`, payload)).data;
+    },
+    onSuccess: (_data, _vars, _ctx) => {
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      if (importId) qc.invalidateQueries({ queryKey: ["shorts-import", importId] });
+    },
+  });
+}
+
+export function useUpdateShortageSheetRow(importId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      rowId: number;
+      truck_number?: number | null;
+      source_column_index?: number | null;
+      item_category?: string;
+      item_detail?: string;
+      quantity?: number | null;
+      initials?: string;
+      raw_text?: string;
+      review_status?: "needs_review" | "accepted" | "rejected";
+      reviewer_note?: string;
+      confidence_score?: number | null;
+      source_photo_id?: string | null;
+    }) => {
+      if (!importId) throw new Error("Import ID is required");
+      const { rowId, ...payload } = args;
+      return (await api.patch<ShortageSheetRowDraft>(`/shorts/imports/${importId}/rows/${rowId}`, payload)).data;
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      if (importId) qc.invalidateQueries({ queryKey: ["shorts-import", importId] });
+    },
+  });
+}
+
+export function useUpdateShortageSheetColumn(importId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      column_index: number;
+      truck_number?: number | null;
+      route_number?: number | null;
+      initials?: string;
+      review_status?: "needs_review" | "accepted" | "rejected";
+      reviewer_note?: string;
+      source_photo_id?: string | null;
+    }) => {
+      if (!importId) throw new Error("Import ID is required");
+      const { column_index, ...payload } = args;
+      return (await api.patch<ShortageSheetImportDetail>(`/shorts/imports/${importId}/columns/${column_index}`, payload)).data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      if (importId) qc.setQueryData(["shorts-import", importId], data);
+    },
+  });
+}
+
+export function useDeleteShortageSheetRow(importId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (rowId: number) => {
+      if (!importId) throw new Error("Import ID is required");
+      await api.delete(`/shorts/imports/${importId}/rows/${rowId}`);
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      if (importId) qc.invalidateQueries({ queryKey: ["shorts-import", importId] });
+    },
+  });
+}
+
+export function useDeleteShortageSheetImport() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (importId: string) => {
+      await api.delete(`/shorts/imports/${importId}`);
+    },
+    onSuccess: (_data, importId) => {
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      qc.removeQueries({ queryKey: ["shorts-import", importId] });
+    },
+  });
+}
+
+export function useApproveShortageSheetImport(importId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      if (!importId) throw new Error("Import ID is required");
+      return (await api.post<ShortageSheetImportDetail>(`/shorts/imports/${importId}/approve`)).data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["shorts"] });
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      qc.setQueryData(["shorts-import", data.id], data);
+    },
+  });
+}
+
+export function useRejectShortageSheetImport(importId?: string | null) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (reason: string = "") => {
+      if (!importId) throw new Error("Import ID is required");
+      return (await api.post<ShortageSheetImportDetail>(`/shorts/imports/${importId}/reject`, { reason })).data;
+    },
+    onSuccess: (data) => {
+      qc.invalidateQueries({ queryKey: ["shorts-imports"] });
+      qc.setQueryData(["shorts-import", data.id], data);
+    },
+  });
+}
+
+export function useShortageSheetOcrMemoryStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["shorts-ocr-memory-status"],
+    enabled,
+    queryFn: async () =>
+      (await api.get<ShortageSheetOcrMemoryStatus>("/shorts/imports/ocr-memory/status")).data,
+    staleTime: 30_000,
+  });
+}
+
+export function shortageSheetPhotoFileUrl(id: string): string {
+  const base = api.defaults.baseURL ?? "";
+  return `${base}/shorts/imports/photos/${id}/file`;
+}
+
+export function shortageSheetOcrMemoryExportUrl(): string {
+  const base = api.defaults.baseURL ?? "";
+  return `${base}/shorts/imports/ocr-memory/export`;
+}
+
+export function shortageSheetOcrHeaderMemoryExportUrl(): string {
+  const base = api.defaults.baseURL ?? "";
+  return `${base}/shorts/imports/ocr-memory/header-export`;
+}
+
+export function shortageSheetOcrDatasetExportUrl(): string {
+  const base = api.defaults.baseURL ?? "";
+  return `${base}/shorts/imports/ocr-memory/dataset.zip`;
+}
+
+export function shortageSheetOcrHeaderDatasetExportUrl(): string {
+  const base = api.defaults.baseURL ?? "";
+  return `${base}/shorts/imports/ocr-memory/header-dataset.zip`;
+}
+
 // ---------------------------------------------------------------------------
 // Audit
 // ---------------------------------------------------------------------------
@@ -562,9 +817,10 @@ export function useDeleteMessage() {
 // Settings
 // ---------------------------------------------------------------------------
 
-export function useSettings() {
+export function useSettings(enabled = true) {
   return useQuery({
     queryKey: ["settings"],
+    enabled,
     queryFn: async () => (await api.get<AppSetting[]>("/settings")).data,
     staleTime: 60_000,
   });
@@ -577,6 +833,49 @@ export function useUpsertSetting() {
       (await api.put<AppSetting>(`/settings/${encodeURIComponent(key)}`, { value })).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
   });
+}
+
+export function useNotificationStatus(enabled = true) {
+  return useQuery({
+    queryKey: ["notifications-status"],
+    enabled,
+    queryFn: async () => (await api.get<NotificationStatus>("/notifications/status")).data,
+    staleTime: 30_000,
+    retry: false,
+  });
+}
+
+export function useSubscribeNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: {
+      endpoint: string;
+      keys: { p256dh: string; auth: string };
+      device_label?: string | null;
+      user_agent?: string | null;
+    }) => (await api.post<PushSubscriptionRecord>("/notifications/subscribe", payload)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications-status"] }),
+  });
+}
+
+export function useUnsubscribeNotifications() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { endpoint: string }) =>
+      api.post("/notifications/unsubscribe", payload),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications-status"] }),
+  });
+}
+
+export function useSendNotificationTest() {
+  return useMutation({
+    mutationFn: async (payload?: { endpoint?: string | null }) =>
+      (await api.post<NotificationEvent>("/notifications/test", payload ?? {})).data,
+  });
+}
+
+export async function fetchNotificationPublicKey(): Promise<NotificationPublicKey> {
+  return (await api.get<NotificationPublicKey>("/notifications/public-key")).data;
 }
 
 export interface UpdateStatus {

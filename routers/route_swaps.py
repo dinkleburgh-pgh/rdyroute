@@ -11,12 +11,17 @@ V1 mapping:
 
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
 from database import get_db
 from models import RouteSwap, RouteSwapLog, TruckState, TruckStatus
+from notification_service import (
+    coverage_assigned_notification,
+    coverage_removed_notification,
+    dispatch_notification,
+)
 from schemas import RouteSwapCreate, RouteSwapOut, RouteSwapLogOut
 
 router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
@@ -37,7 +42,11 @@ def list_swaps(
 
 
 @router.post("", response_model=list[RouteSwapOut], status_code=status.HTTP_201_CREATED)
-def create_swap(payload: RouteSwapCreate, db: Session = Depends(get_db)):
+def create_swap(
+    payload: RouteSwapCreate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
     """
     Create a route swap assignment.  If two_way=True, also creates the
     reciprocal row (route_truck=load_on_truck, load_on_truck=route_truck).
@@ -74,6 +83,7 @@ def create_swap(payload: RouteSwapCreate, db: Session = Depends(get_db)):
         )
 
     created: list[RouteSwap] = []
+    previous_load_on_by_route: dict[int, int | None] = {}
 
     def _upsert(rt: int, lo: int) -> RouteSwap:
         existing = db.scalars(
@@ -83,9 +93,11 @@ def create_swap(payload: RouteSwapCreate, db: Session = Depends(get_db)):
             )
         ).first()
         if existing:
+            previous_load_on_by_route[rt] = existing.load_on_truck
             existing.load_on_truck = lo
             db.flush()
             return existing
+        previous_load_on_by_route[rt] = None
         row = RouteSwap(run_date=payload.run_date, route_truck=rt, load_on_truck=lo)
         db.add(row)
         db.flush()
@@ -146,12 +158,24 @@ def create_swap(payload: RouteSwapCreate, db: Session = Depends(get_db)):
             st.status = TruckStatus.dirty
     db.commit()
 
+    for row in created:
+        background_tasks.add_task(
+            dispatch_notification,
+            coverage_assigned_notification(
+                run_date=row.run_date,
+                route_truck=row.route_truck,
+                covering_truck=row.load_on_truck,
+                changed_from_truck=previous_load_on_by_route.get(row.route_truck),
+            ),
+        )
+
     return created
 
 
 @router.delete("/{swap_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_swap(
     swap_id: int,
+    background_tasks: BackgroundTasks,
     also_reciprocal: bool = Query(
         default=False,
         description="Also delete the reciprocal row if a two-way swap exists",
@@ -166,6 +190,14 @@ def delete_swap(
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Swap not found")
 
+    removed_notifications = [
+        coverage_removed_notification(
+            run_date=row.run_date,
+            route_truck=row.route_truck,
+            covering_truck=row.load_on_truck,
+        )
+    ]
+
     if also_reciprocal:
         # Find the reciprocal: route_truck == this row's load_on_truck AND load_on_truck == this row's route_truck
         reciprocal = db.scalars(
@@ -176,20 +208,40 @@ def delete_swap(
             )
         ).first()
         if reciprocal:
+            removed_notifications.append(
+                coverage_removed_notification(
+                    run_date=reciprocal.run_date,
+                    route_truck=reciprocal.route_truck,
+                    covering_truck=reciprocal.load_on_truck,
+                )
+            )
             db.delete(reciprocal)
 
     db.delete(row)
     db.commit()
+    for event in removed_notifications:
+        background_tasks.add_task(dispatch_notification, event)
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
 def clear_all_swaps(
+    background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
 ):
     """Remove all route swap assignments for a run date."""
+    rows = db.scalars(select(RouteSwap).where(RouteSwap.run_date == run_date)).all()
     db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date))
     db.commit()
+    for row in rows:
+        background_tasks.add_task(
+            dispatch_notification,
+            coverage_removed_notification(
+                run_date=row.run_date,
+                route_truck=row.route_truck,
+                covering_truck=row.load_on_truck,
+            ),
+        )
 
 
 @router.get("/log", response_model=list[RouteSwapLogOut])

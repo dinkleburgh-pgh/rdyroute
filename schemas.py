@@ -178,6 +178,168 @@ class ShortageOut(_OrmBase):
 
 
 # ---------------------------------------------------------------------------
+# Shortage Sheet Imports
+# ---------------------------------------------------------------------------
+
+class ShortageSheetRowDraftCreate(BaseModel):
+    truck_number: int = Field(..., ge=1, le=999)
+    source_column_index: int | None = Field(default=None, ge=1, le=16)
+    item_category: str = Field(..., min_length=1, max_length=120)
+    item_detail: str = Field(default="", max_length=120)
+    quantity: int = Field(default=1, ge=1)
+    initials: str = Field(default="", max_length=20)
+    raw_text: str = Field(default="", max_length=4000)
+    review_status: str = Field(default="accepted", pattern="^(needs_review|accepted|rejected)$")
+    reviewer_note: str = Field(default="", max_length=2000)
+    confidence_score: float | None = Field(default=None, ge=0, le=1)
+    source_photo_id: str | None = Field(default=None, max_length=64)
+
+
+class ShortageSheetRowDraftUpdate(BaseModel):
+    truck_number: int | None = Field(default=None, ge=1, le=999)
+    source_column_index: int | None = Field(default=None, ge=1, le=16)
+    item_category: str | None = Field(default=None, min_length=1, max_length=120)
+    item_detail: str | None = Field(default=None, max_length=120)
+    quantity: int | None = Field(default=None, ge=1)
+    initials: str | None = Field(default=None, max_length=20)
+    raw_text: str | None = Field(default=None, max_length=4000)
+    review_status: str | None = Field(default=None, pattern="^(needs_review|accepted|rejected)$")
+    reviewer_note: str | None = Field(default=None, max_length=2000)
+    confidence_score: float | None = Field(default=None, ge=0, le=1)
+    source_photo_id: str | None = Field(default=None, max_length=64)
+
+
+class ShortageSheetPhotoOut(_OrmBase):
+    id: str
+    import_id: str
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    uploaded_at: datetime
+
+
+class ShortageSheetColumnDraftOut(BaseModel):
+    column_index: int
+    truck_number: int | None = None
+    route_number: int | None = None
+    initials: str = ""
+    confidence_score: float | None = None
+    issues: list[str] = Field(default_factory=list)
+    review_status: str = Field(default="needs_review")
+    source_photo_id: str | None = None
+
+
+class ShortageSheetColumnDraftUpdate(BaseModel):
+    truck_number: int | None = Field(default=None, ge=1, le=999)
+    route_number: int | None = Field(default=None, ge=1, le=999)
+    initials: str | None = Field(default=None, max_length=20)
+    review_status: str | None = Field(default=None, pattern="^(needs_review|accepted|rejected)$")
+    reviewer_note: str | None = Field(default=None, max_length=2000)
+    source_photo_id: str | None = Field(default=None, max_length=64)
+
+
+class ShortageSheetRowDraftOut(_OrmBase):
+    id: int
+    import_id: str
+    source_photo_id: str | None
+    source_column_index: int | None
+    row_index: int
+    truck_number: int | None
+    item_category: str
+    item_detail: str
+    quantity: int | None
+    initials: str
+    raw_text: str
+    confidence_score: float | None
+    issues: list[str]
+    review_status: str
+    reviewer_note: str
+    created_at: datetime
+    updated_at: datetime
+
+
+class ShortageSheetImportOut(_OrmBase):
+    id: str
+    run_date: date
+    status: str
+    extraction_mode: str
+    sheet_template_id: str
+    uploaded_by_user_id: int | None
+    uploaded_by_username: str
+    reviewed_by_username: str | None
+    applied_by_username: str | None
+    error_message: str
+    created_at: datetime
+    updated_at: datetime
+    reviewed_at: datetime | None
+    applied_at: datetime | None
+    photo_count: int = 0
+    row_count: int = 0
+    needs_review_count: int = 0
+
+
+class ShortageSheetImportDetailOut(ShortageSheetImportOut):
+    photos: list[ShortageSheetPhotoOut] = Field(default_factory=list)
+    header_columns: list[ShortageSheetColumnDraftOut] = Field(default_factory=list)
+    rows: list[ShortageSheetRowDraftOut] = Field(default_factory=list)
+
+
+class ShortageSheetTemplateRowOut(BaseModel):
+    row_key: str
+    printed_label: str
+    item_category: str
+    item_detail: str
+
+
+class ShortageSheetTemplateOut(BaseModel):
+    id: str
+    name: str
+    description: str
+    top_3x10_order: list[str] = Field(default_factory=list)
+    footer_fields: list[str] = Field(default_factory=list)
+    row_keys: list[str] = Field(default_factory=list)
+    rows: list[ShortageSheetTemplateRowOut] = Field(default_factory=list)
+
+
+class ShortageSheetOllamaStatusOut(BaseModel):
+    configured: bool
+    reachable: bool
+    model_available: bool
+    base_url: str
+    model: str
+    timeout_seconds: int
+    low_confidence_threshold: float
+    preprocess_max_image_side: int
+    available_models: list[str] = Field(default_factory=list)
+    error: str | None = None
+
+
+class ShortageSheetOllamaProbeIn(BaseModel):
+    base_url: str = Field(default="", max_length=500)
+    model: str = Field(default="", max_length=200)
+    timeout_seconds: int | None = Field(default=None, ge=1, le=300)
+    low_confidence_threshold: float | None = Field(default=None, ge=0, le=1)
+    preprocess_max_image_side: int | None = Field(default=None, ge=600, le=6000)
+
+
+class ShortageSheetImportReject(BaseModel):
+    reason: str = Field(default="", max_length=2000)
+
+
+class ShortageSheetOcrMemoryStatusOut(BaseModel):
+    example_count: int = 0
+    accepted_example_count: int = 0
+    header_example_count: int = 0
+    accepted_header_example_count: int = 0
+    template_ids: list[str] = Field(default_factory=list)
+    last_reviewed_at: datetime | None = None
+    last_header_reviewed_at: datetime | None = None
+    model_hint: str = ""
+    adapter_export_supported: bool = True
+    header_adapter_export_supported: bool = True
+
+
+# ---------------------------------------------------------------------------
 # Audit
 # ---------------------------------------------------------------------------
 
@@ -518,6 +680,60 @@ class SettingOut(_OrmBase):
     key: str
     value: Any
     updated_at: datetime
+
+
+class PushSubscriptionKeys(BaseModel):
+    p256dh: str = Field(..., min_length=1)
+    auth: str = Field(..., min_length=1)
+
+
+class PushSubscriptionCreate(BaseModel):
+    endpoint: str = Field(..., min_length=1)
+    keys: PushSubscriptionKeys
+    device_label: str | None = Field(default=None, max_length=120)
+    user_agent: str | None = Field(default=None, max_length=512)
+
+
+class PushSubscriptionRemove(BaseModel):
+    endpoint: str = Field(..., min_length=1)
+
+
+class PushSubscriptionOut(_OrmBase):
+    id: int
+    user_id: int
+    endpoint: str
+    device_label: str | None
+    user_agent: str | None
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    last_seen_at: datetime
+
+
+class NotificationConfigOut(BaseModel):
+    configured: bool
+    subscription_count: int
+
+
+class NotificationPublicKeyOut(BaseModel):
+    configured: bool
+    public_key: str | None = None
+
+
+class NotificationEventOut(BaseModel):
+    type: str
+    title: str
+    body: str
+    tag: str
+    url: str
+    truck_number: int | None = None
+    route_truck: int | None = None
+    covering_truck: int | None = None
+    run_date: date | None = None
+
+
+class NotificationTestRequest(BaseModel):
+    endpoint: str | None = None
 
 
 # ---------------------------------------------------------------------------

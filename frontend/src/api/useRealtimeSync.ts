@@ -16,6 +16,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import type { NotificationEvent } from "../types";
 
 const BASE_DELAY_MS = 1_000;
 const MAX_DELAY_MS = 30_000;
@@ -25,6 +26,7 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
   const retryDelay = useRef(BASE_DELAY_MS);
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
+  const connectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [isWsConnected, setIsWsConnected] = useState(false);
 
   useEffect(() => {
@@ -38,12 +40,18 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (unmounted) {
+          ws.close();
+          return;
+        }
         retryDelay.current = BASE_DELAY_MS; // reset back-off on success
         setIsWsConnected(true);
       };
 
       ws.onmessage = (ev) => {
-        let event: { type: string; run_date?: string; truck_number?: number };
+        let event:
+          | { type: string; run_date?: string; truck_number?: number }
+          | { type: "notification"; event: NotificationEvent };
         try {
           event = JSON.parse(ev.data as string);
         } catch {
@@ -61,6 +69,22 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
           }
         } else if (event.type === "shortage_updated") {
           qc.invalidateQueries({ queryKey: ["shorts"] });
+        } else if (event.type === "notification" && "event" in event) {
+          const notification = event.event;
+          if (notification.run_date) {
+            qc.invalidateQueries({ queryKey: ["board", notification.run_date] });
+            qc.invalidateQueries({ queryKey: ["route-swaps", notification.run_date] });
+            qc.invalidateQueries({ queryKey: ["spares", notification.run_date] });
+          } else {
+            qc.invalidateQueries({ queryKey: ["board"] });
+            qc.invalidateQueries({ queryKey: ["route-swaps"] });
+            qc.invalidateQueries({ queryKey: ["spares"] });
+          }
+          window.dispatchEvent(
+            new CustomEvent<NotificationEvent>("readyroute:notification", {
+              detail: notification,
+            }),
+          );
         }
       };
 
@@ -79,12 +103,19 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
       };
     }
 
-    connect();
+    // Defer the initial connect one tick so React.StrictMode's dev-only
+    // mount/unmount rehearsal can cancel it cleanly without creating a socket
+    // that immediately closes and logs a browser warning.
+    connectTimerRef.current = setTimeout(connect, 0);
 
     return () => {
       unmounted = true;
+      if (connectTimerRef.current) clearTimeout(connectTimerRef.current);
       if (timeoutRef.current) clearTimeout(timeoutRef.current);
-      wsRef.current?.close();
+      if (wsRef.current?.readyState === WebSocket.OPEN) {
+        wsRef.current.close();
+      }
+      wsRef.current = null;
     };
   }, [qc]);
 

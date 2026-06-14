@@ -22,7 +22,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { effectiveStatus, getSwapHistory, recordSwapHistory } from "../utils/truckStatus";
+import { effectiveStatus, effectiveWorkflowStatus, getSwapHistory, recordSwapHistory } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -275,16 +275,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         }
       } else {
         const loadDayEff = effectiveStatus(t, runDayNum, holidayLoad);
-        let s = loadDayEff;
-        // Non-fleet board: re-evaluate auto-off trucks against unloadsDay so
-        // dirty/unloaded trucks that ran today but don't load tomorrow count
-        // in their real status bucket rather than "off".
-        if (!fleetMode && s === "off") {
-          const raw = (t.state?.status ?? "dirty") as TruckStatus;
-          if (raw === "dirty" || raw === "unloaded") {
-          s = effectiveStatus(t, runUnloadsDay, holidayUnload);
-          }
-        }
+        const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
         c[s] = (c[s] ?? 0) + 1;
         // Also count in "off" when scheduled off for load day but shown in
         // an unload-context bucket (off = not loading tomorrow).
@@ -341,13 +332,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       }
       // For all other filters, re-evaluate auto-off trucks against unloadsDay
       // so they surface under their real workflow status.
-      let s = loadDayEff;
-      if (s === "off") {
-        const raw = (t.state?.status ?? "dirty") as TruckStatus;
-        if (raw === "dirty" || raw === "unloaded") {
-          s = effectiveStatus(t, runUnloadsDay, holidayLoad);
-        }
-      }
+      const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
       // In dirty view, also include unfinished trucks (rendered as a sub-section)
       const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
       if (!matchStatus) return false;
@@ -367,7 +352,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       }
       return true;
     });
-  }, [data, filter, fleetMode, fleetFilters, runDayNum, holidayLoad, truckStatusByNumber]);
+  }, [data, filter, fleetMode, fleetFilters, runDayNum, runUnloadsDay, holidayLoad, holidayUnload, truckStatusByNumber]);
 
   // Live lookup so the open detail modal reflects refreshed board data.
   const detailTruck = useMemo(
@@ -400,11 +385,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   setMultiSelect(v => !v);
                 }}
                 className={clsx(
-                  "shrink-0 rounded-md px-2 py-1.5 text-xs font-semibold transition-colors md:mb-2 md:w-full",
-                  multiSelect ? "bg-blue-600 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                  "shrink-0 rounded-md border px-3 py-1.5 text-xs font-semibold transition-colors md:mb-2 md:w-full",
+                  multiSelect
+                    ? "border-blue-400 bg-blue-600 text-white shadow-[0_0_0_1px_rgba(96,165,250,0.3)]"
+                    : "border-amber-600/50 bg-amber-950/40 text-amber-200 hover:bg-amber-900/40",
                 )}
               >
-                {multiSelect ? "✓ Multi" : "Multi"}
+                {multiSelect ? `✓ Bulk Edit${selectedTrucks.size > 0 ? ` · ${selectedTrucks.size}` : ""}` : "Bulk Edit"}
               </button>
             )}
             {isArchive && (
@@ -414,6 +401,21 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               <p className="shrink-0 text-xs font-semibold text-sky-400 md:mt-1 md:text-center">Future</p>
             )}
           </div>
+          {!isReadOnly && !multiSelect && (
+            <button
+              type="button"
+              onClick={() => setMultiSelect(true)}
+              className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-amber-500/40 bg-gradient-to-r from-amber-950/50 to-blue-950/20 px-3 py-2 text-left transition-colors hover:border-amber-400/60 hover:bg-amber-950/40 md:mb-3"
+            >
+              <span className="min-w-0">
+                <span className="block text-xs font-semibold text-amber-300">Bulk edit trucks</span>
+                <span className="block text-[11px] text-slate-400">Select multiple trucks and update them together.</span>
+              </span>
+              <span className="shrink-0 rounded-full bg-amber-500 px-2 py-0.5 text-[10px] font-bold text-slate-950">
+                Multi
+              </span>
+            </button>
+          )}
           {/* Filter pills — horizontal scroll on mobile, vertical list on desktop */}
           <div className="flex gap-1 overflow-x-auto pb-0.5 md:flex-col md:gap-0.5 md:overflow-x-visible md:pb-0">
           <button
@@ -451,6 +453,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
           {multiSelect && (
             <div className="mt-3 space-y-1.5 border-t border-slate-800 pt-3">
+              <div className="rounded-md border border-blue-500/30 bg-blue-950/30 px-2.5 py-2">
+                <p className="text-xs font-semibold text-blue-300">Bulk edit mode active</p>
+                <p className="mt-0.5 text-[11px] text-slate-400">Tap trucks in the grid to select them, then apply one status below.</p>
+              </div>
               <div className="flex items-center justify-between">
                 <p className="text-xs font-semibold text-slate-400">{selectedTrucks.size} selected</p>
                 <div className="flex gap-1">
@@ -577,9 +583,16 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           type SentinelHeader = { __header: "dirty" | "unfinished" | "coverages" | "holdForLoading" | "outOfService" | "spareCoverages" | "idleSpares" | "unloadedRunning" | "unloadedSpare" | "unloadedOff"; count: number };
           type GridRow = TruckWithState | SentinelHeader;
           const rows: GridRow[] = [];
+          let unloadedRunningRows: TruckWithState[] = [];
+          let unloadedSpareRows: TruckWithState[] = [];
+          let unloadedOffRows: TruckWithState[] = [];
           if (!fleetMode && filter === "dirty") {
-            const dirtyRows = filtered.filter((t) => effectiveStatus(t, runDayNum, holidayLoad) === "dirty");
-            const unfinishedRows = filtered.filter((t) => effectiveStatus(t, runDayNum, holidayLoad) === "unfinished");
+            const dirtyRows = filtered.filter(
+              (t) => effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload) === "dirty",
+            );
+            const unfinishedRows = filtered.filter(
+              (t) => effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload) === "unfinished",
+            );
             const dirtyRouteRows = dirtyRows.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null);
             const dirtyCoverageRows = dirtyRows.filter((t) => t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null);
             rows.push(
@@ -609,31 +622,38 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               );
             }
           } else if (!fleetMode && filter === "unloaded") {
-            const runningRows = filtered.filter((t) =>
-              t.truck_type !== "Spare" &&
-              effectiveStatus(t, runDayNum, holidayLoad) !== "off"
+            const isCoveredSpare = (truck: TruckWithState) =>
+              truck.truck_type === "Spare" &&
+              (truck.route_swap_route != null || truck.state?.oos_spare_route != null);
+
+            unloadedRunningRows = filtered.filter((t) =>
+              (t.truck_type !== "Spare" &&
+                effectiveStatus(t, runDayNum, holidayLoad) !== "off") ||
+              isCoveredSpare(t)
             );
-            const offRows = filtered.filter((t) =>
+            unloadedOffRows = filtered.filter((t) =>
               t.truck_type !== "Spare" &&
               effectiveStatus(t, runDayNum, holidayLoad) === "off"
             );
-            const spareRows = filtered.filter((t) => t.truck_type === "Spare");
-            if (spareRows.length > 0) {
+            unloadedSpareRows = filtered.filter((t) =>
+              t.truck_type === "Spare" && !isCoveredSpare(t)
+            );
+            if (unloadedRunningRows.length > 0) {
               rows.push(
-                { __header: "unloadedSpare", count: spareRows.length } as SentinelHeader,
-                ...spareRows,
+                { __header: "unloadedRunning", count: unloadedRunningRows.length } as SentinelHeader,
+                ...unloadedRunningRows,
               );
             }
-            if (runningRows.length > 0) {
+            if (unloadedSpareRows.length > 0) {
               rows.push(
-                { __header: "unloadedRunning", count: runningRows.length } as SentinelHeader,
-                ...runningRows,
+                { __header: "unloadedSpare", count: unloadedSpareRows.length } as SentinelHeader,
+                ...unloadedSpareRows,
               );
             }
-            if (offRows.length > 0) {
+            if (unloadedOffRows.length > 0) {
               rows.push(
-                { __header: "unloadedOff", count: offRows.length } as SentinelHeader,
-                ...offRows,
+                { __header: "unloadedOff", count: unloadedOffRows.length } as SentinelHeader,
+                ...unloadedOffRows,
               );
             }
           } else if (!fleetMode && filter === "oos") {
@@ -654,6 +674,539 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           } else {
             rows.push(...filtered);
           }
+          const renderTruckCard = (truck: TruckWithState, index: number) => {
+            const status = effectiveStatus(truck, runDayNum, holidayLoad);
+            const isUnloadView = filter === "dirty" || filter === "unloaded";
+            const isLoadView = filter === "loaded";
+            let chipDay: number | undefined;
+            let chipIsExtra = false;
+            if (isUnloadView && holidayUnload) {
+              chipDay = (truck.scheduled_off_days ?? []).includes(runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
+              chipIsExtra = chipDay === unloadsDay2;
+            } else if (isLoadView && holidayLoad) {
+              const offDaysLoad = truck.scheduled_off_days ?? [];
+              chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
+              chipIsExtra = chipDay === loadDay2;
+            }
+            const numberColor =
+              status === "loaded"
+                ? "text-sky-300"
+                : !fleetMode && status === "off" && (filter === "off" || filter === "unloaded")
+                ? STATUS_TEXT[effectiveStatus(truck, runUnloadsDay, holidayLoad)]
+                : fleetMode || filter === "unloaded"
+                ? STATUS_TEXT[status]
+                : "hover:text-blue-300";
+            const coverageRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+            const showCoverageBadge = !fleetMode && coverageRoute != null;
+
+            return (
+              <AnimateCard
+                key={truck.truck_number}
+                delay={index * 0.02}
+                className={clsx(
+                  "card cursor-pointer",
+                  fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],
+                  fleetMode && status === "oos" && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
+                  fleetMode && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
+                  !fleetMode && (filter === "oos" ? oosAssignOpen.has(truck.truck_number) : detailNum === truck.truck_number) && "ring-2 ring-blue-500",
+                  "hover:ring-2 hover:ring-blue-500 transition-shadow",
+                  fleetMode && multiSelect && selectedTrucks.has(truck.truck_number) && "ring-2 ring-blue-400",
+                )}
+                onClick={() => {
+                  if (multiSelect) {
+                    setSelectedTrucks((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(truck.truck_number)) next.delete(truck.truck_number);
+                      else next.add(truck.truck_number);
+                      return next;
+                    });
+                    return;
+                  }
+                  if (filter === "dirty" && !fleetMode && truck.state?.status !== "oos") {
+                    if (batchingDisabled) {
+                      upsert.mutate({
+                        truck_number: truck.truck_number,
+                        run_date: runDate,
+                        status: "unloaded",
+                        wearers: truck.state?.wearers ?? 0,
+                      });
+                    } else {
+                      navigate(`/batches?truck=${truck.truck_number}&run_date=${runDate}`);
+                    }
+                  } else if (filter === "unloaded" && !fleetMode) {
+                    if (truck.state?.priority_hold) {
+                      setHoldAlertTruck(truck);
+                      return;
+                    }
+                    if (effectiveStatus(truck, runDayNum, holidayLoad) === "off") {
+                      const alreadyCovered = routeSwaps.some((s) => s.route_truck === truck.truck_number);
+                      if (alreadyCovered) {
+                        setConfirmTruck(truck);
+                      } else {
+                        setOffCoverageTruck(truck);
+                        setOffCoverageLoadOn("");
+                        setOffCoverageError(null);
+                      }
+                    } else {
+                      setConfirmTruck(truck);
+                    }
+                  } else if (filter === "oos" && !fleetMode) {
+                    if (truck.state?.priority_hold) {
+                      setHoldAlertTruck(truck);
+                      return;
+                    }
+                    setOosAssignOpen((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(truck.truck_number)) next.delete(truck.truck_number);
+                      else next.add(truck.truck_number);
+                      return next;
+                    });
+                  } else {
+                    setDetailNum(detailNum === truck.truck_number ? null : truck.truck_number);
+                  }
+                }}
+              >
+                <div className="flex w-full flex-col gap-1">
+                  <div className="flex w-full items-start justify-between gap-2">
+                    <div className="flex min-h-[4.5rem] flex-col justify-between gap-0.5">
+                      <span
+                        className={clsx(
+                          "font-extrabold tracking-tight tabular-nums leading-none",
+                          fleetMode ? "text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                          numberColor,
+                        )}
+                      >
+                        {truck.truck_number}
+                      </span>
+                      {!fleetMode && (
+                        <span className="flex min-h-[1.5rem] items-center">
+                          {showCoverageBadge ? (
+                            <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-sky-900/40 px-2 py-0.5 text-[11px] font-semibold leading-none text-sky-300 ring-1 ring-sky-700/40">
+                              Cov. #{coverageRoute}
+                            </span>
+                          ) : null}
+                        </span>
+                      )}
+                    </div>
+                    <span className="flex min-h-[2.25rem] flex-col items-end justify-start gap-0.5">
+                      <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
+                        {STATUS_LABELS[status]}
+                      </span>
+                      {truck.state?.priority_hold && (
+                        <span className="badge bg-red-700 text-white">Hold</span>
+                      )}
+                      {fleetMode && status === "oos" && (() => {
+                        const cov = coveringTruckByRoute.get(truck.truck_number);
+                        if (!cov) return <span className="text-[10px] font-semibold text-amber-400">Needs assignment</span>;
+                        const coveringTruck = data?.find((d) => d.truck_number === cov.num);
+                        const rawStatus = coveringTruck?.state?.status
+                          ? (coveringTruck.state.status as TruckStatus)
+                          : cov.status;
+                        return (
+                          <>
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setDetailNum(cov.num); }}
+                              className="inline-flex items-center gap-1 rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-sky-400"
+                            >
+                              Cov. #{cov.num}
+                            </button>
+                            {rawStatus && (
+                              <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white", rawStatus === "dirty" && "bg-red-600", rawStatus === "unloaded" && "bg-green-600", rawStatus === "loaded" && "bg-blue-600", rawStatus === "in_progress" && "bg-amber-500", rawStatus === "off" && "bg-slate-500", rawStatus === "oos" && "bg-slate-600", rawStatus === "shop" && "bg-purple-600", rawStatus === "spare" && "bg-cyan-700", rawStatus === "unfinished" && "bg-fuchsia-600")}>
+                                {STATUS_LABELS[rawStatus]}
+                              </span>
+                            )}
+                          </>
+                        );
+                      })()}
+                      {(fleetMode || filter === "off" || filter === "unloaded") && status === "off" && (truck.state?.status === "dirty" || truck.state?.status === "unloaded") && (
+                        <span className={clsx("badge", STATUS_BG[truck.state.status as TruckStatus], STATUS_BADGE_TEXT[truck.state.status as TruckStatus])}>
+                          {STATUS_LABELS[truck.state.status as TruckStatus]}
+                        </span>
+                      )}
+                      {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
+                        <span
+                          className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
+                          title="Garments assigned"
+                        >
+                          <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {fleetMode && (
+                    <div className="text-xs text-slate-400 space-y-0.5">
+                      <div>
+                        {truck.truck_type}
+                        {truck.truck_type === "Uniform" && truck.uniform_size != null && ` · ${truck.uniform_size}ft`}
+                        {truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
+                      </div>
+                      {(() => {
+                        if (status === "oos") {
+                          return null;
+                        }
+                        const coverageRoute = truck.route_swap_route ?? truck.state?.oos_spare_route ?? null;
+                        if (coverageRoute != null) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={(e) => { e.stopPropagation(); setDetailNum(coverageRoute); }}
+                              className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer"
+                            >
+                              Cov. #{coverageRoute}
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {truck.state?.off_note?.toLowerCase().includes("ran special") && (
+                        <span className="text-amber-300 font-medium">Ran Special</span>
+                      )}
+                    </div>
+                  )}
+                  {!fleetMode && filter === "dirty" && truck.state?.status !== "oos" && (
+                    <span className="flex w-full items-center justify-center gap-1 rounded bg-blue-600/20 px-2 py-1 text-xs font-semibold text-blue-300">
+                      {batchingDisabled ? "Mark Unloaded" : "Assign to Batch →"}
+                    </span>
+                  )}
+                </div>
+                {!fleetMode && filter === "unloaded" && (
+                  <div className="text-xs text-slate-400">
+                    {truck.truck_type}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
+                  </div>
+                )}
+                {filter === "loaded" ? (
+                  <>
+                    <div className="text-xs text-slate-400">
+                      {truck.truck_type}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
+                    </div>
+                    {truck.state?.load_finish_time && (
+                      <div className="mt-auto pt-1 text-xs text-slate-500">
+                        Done {format(new Date(truck.state.load_finish_time * 1000), "h:mm a")}
+                      </div>
+                    )}
+                  </>
+                ) : truck.state?.batch_id != null && !fleetMode && filter !== "unloaded" && (
+                  <div className="text-xs text-slate-400">Batch {truck.state.batch_id}</div>
+                )}
+
+                {chipDay != null && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span
+                      className={clsx(
+                        "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                        chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
+                      )}
+                    >
+                      Day {chipDay}
+                    </span>
+                  </div>
+                )}
+
+                {!fleetMode && filter === "oos" && status === "oos" && (() => {
+                  const cov = coveringTruckByRoute.get(truck.truck_number);
+                  const spareAsgn = spareAssignments.find((a) => a.covering_route_truck === truck.truck_number);
+                  const swap = routeSwaps.find((s) => s.route_truck === truck.truck_number);
+                  const isOpen = oosAssignOpen.has(truck.truck_number);
+
+                  if (cov) {
+                    return (
+                      <div
+                        className="mt-1 border-t border-slate-700 pt-2"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <div className="flex items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5">
+                            <span className="text-xs text-slate-400">Covered by</span>
+                            <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                              #{cov.num}
+                            </span>
+                            {cov.status && (
+                              <span className={clsx("badge text-[10px] py-0", STATUS_BG[cov.status], STATUS_BADGE_TEXT[cov.status])}>
+                                {STATUS_LABELS[cov.status]}
+                              </span>
+                            )}
+                          </div>
+                          <button
+                            className="rounded px-2 py-1 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                            disabled={returnSpare.isPending || deleteSwap.isPending}
+                            onClick={() => {
+                              if (spareAsgn) returnSpare.mutate(spareAsgn.id);
+                              else if (swap) deleteSwap.mutate({ id: swap.id, runDate });
+                            }}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (!isOpen) {
+                    return (
+                      <div className="mt-1 border-t border-slate-700 pt-2 text-center">
+                        <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
+                      </div>
+                    );
+                  }
+
+                  const sorted = [...(data ?? [])].sort((a, b) => a.truck_number - b.truck_number);
+                  const lastUsedNums = getSwapHistory(truck.truck_number);
+                  const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
+                  const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
+                  const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) === "off");
+                  const otherTrucks = sorted.filter((x) => {
+                    if (x.truck_type === "Spare") return false;
+                    const nextStatus = effectiveStatus(x, runDayNum, holidayLoad);
+                    return nextStatus !== "off" && nextStatus !== "oos";
+                  });
+
+                  return (
+                    <div
+                      className="mt-1 space-y-2 border-t border-slate-700 pt-2"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <div className="flex gap-1.5">
+                        <select
+                          className="input flex-1 text-xs"
+                          value={oosCardSelects[truck.truck_number] ?? ""}
+                          onChange={(e) => setOosCardSelects((p) => ({ ...p, [truck.truck_number]: e.target.value }))}
+                        >
+                          <option value="">— assign truck —</option>
+                          {lastUsed.length > 0 && (
+                            <optgroup label="Last Used">
+                              {lastUsed.map((x) => (
+                                <option key={x.truck_number} value={x.truck_number}>
+                                  #{x.truck_number} — {x.truck_type === "Spare" ? "Spare" : (x.state?.status ?? "dirty")}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {spareTrucks.length > 0 && (
+                            <optgroup label="Spare Trucks">
+                              {spareTrucks.map((x) => (
+                                <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {offTrucks.length > 0 && (
+                            <optgroup label={`Off — Day ${runDayNum}`}>
+                              {offTrucks.map((x) => (
+                                <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {otherTrucks.length > 0 && (
+                            <optgroup label="Other">
+                              {otherTrucks.map((x) => (
+                                <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} ({x.state?.status ?? "dirty"})</option>
+                              ))}
+                            </optgroup>
+                          )}
+                        </select>
+                        <button
+                          className="rounded-lg bg-green-700 px-3 text-xs font-semibold disabled:opacity-50"
+                          disabled={
+                            !oosCardSelects[truck.truck_number] ||
+                            assignSpare.isPending || createSwap.isPending
+                          }
+                          onClick={async () => {
+                            const pickedNum = Number(oosCardSelects[truck.truck_number]);
+                            const picked = (data ?? []).find((x) => x.truck_number === pickedNum);
+                            if (picked?.truck_type === "Spare") {
+                              await assignSpare.mutateAsync({
+                                run_date: runDate,
+                                spare_truck_number: pickedNum,
+                                covering_route_truck: truck.truck_number,
+                              });
+                            } else {
+                              await createSwap.mutateAsync({
+                                run_date: runDate,
+                                route_truck: truck.truck_number,
+                                load_on_truck: pickedNum,
+                                two_way: false,
+                              });
+                            }
+                            recordSwapHistory(truck.truck_number, pickedNum);
+                            setOosCardSelects((p) => { const next = { ...p }; delete next[truck.truck_number]; return next; });
+                            setOosAssignOpen((prev) => { const next = new Set(prev); next.delete(truck.truck_number); return next; });
+                          }}
+                        >
+                          {assignSpare.isPending || createSwap.isPending ? "…" : "Assign"}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {fleetMode && (
+                  <div className="mt-auto flex flex-col gap-2">
+                    {!multiSelect && !isReadOnly && status !== "oos" && (
+                      <select
+                        className="input min-h-[2.5rem] text-xs md:min-h-0"
+                        value={status}
+                        disabled={upsert.isPending}
+                        onClick={(e) => e.stopPropagation()}
+                        onChange={(e) => {
+                          const next = e.target.value as TruckStatus | "__outside__" | "__paperbay__" | "__unload_hold__" | "__clear_hold__";
+                          if (status === "off" && next === "loaded") {
+                            setPendingOffLoadTruck(truck);
+                            setPendingOffLoadRoute("");
+                            setPendingOffLoadError(null);
+                            e.currentTarget.value = status;
+                            return;
+                          }
+                          if (next === "__unload_hold__") {
+                            e.currentTarget.value = status;
+                            upsert.mutate({
+                              truck_number: truck.truck_number,
+                              run_date: runDate,
+                              priority_hold: true,
+                              wearers: truck.state?.wearers ?? 0,
+                            });
+                            return;
+                          }
+                          if (next === "__clear_hold__") {
+                            e.currentTarget.value = status;
+                            upsert.mutate({
+                              truck_number: truck.truck_number,
+                              run_date: runDate,
+                              priority_hold: false,
+                              wearers: truck.state?.wearers ?? 0,
+                            });
+                            return;
+                          }
+                          if (next === "__outside__") {
+                            e.currentTarget.value = status;
+                            startOutsideTimer(truck.truck_number);
+                            return;
+                          }
+                          if (next === "__paperbay__") {
+                            e.currentTarget.value = status;
+                            startPaperBayTimer(truck.truck_number);
+                            return;
+                          }
+                          if (next === "oos") {
+                            setPendingOosTruck(truck);
+                            e.currentTarget.value = status;
+                          } else {
+                            upsert.mutate({
+                              truck_number: truck.truck_number,
+                              run_date: runDate,
+                              status: next,
+                              wearers: truck.state?.wearers ?? 0,
+                            });
+                          }
+                        }}
+                      >
+                        {status === "off" && (
+                          <option value="off" disabled hidden>
+                            Off (scheduled)
+                          </option>
+                        )}
+                        {!truck.state?.priority_hold && (
+                          <option value="__unload_hold__">🚩 Unload &amp; Hold</option>
+                        )}
+                        {truck.state?.priority_hold && (
+                          <option value="__clear_hold__">🔓 Clear Hold</option>
+                        )}
+                        {outsideTimerEnabled && !outsideTimers.has(truck.truck_number) && !paperBayTimers.has(truck.truck_number) && (
+                          <option value="__outside__">⏱ Outside (20 min)</option>
+                        )}
+                        {paperBayEnabled && !paperBayTimers.has(truck.truck_number) && !outsideTimers.has(truck.truck_number) && (
+                          <option value="__paperbay__">📄 Paper Bay (25 min)</option>
+                        )}
+                        {FLEET_STATUS_OPTIONS.map((s) => (
+                          <option key={s} value={s}>
+                            {STATUS_LABELS[s]}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                    {status === "oos" && (
+                      <p className="text-xs text-slate-500 italic">Tap to remove OOS</p>
+                    )}
+                    {outsideTimerEnabled && outsideTimers.has(truck.truck_number) && (
+                      <div
+                        className="flex items-center gap-1.5 rounded-lg border border-orange-700/50 bg-orange-950/70 px-2 py-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-xs font-bold text-orange-300">
+                          ⏱ Outside {fmtCountdown(outsideCountdowns.get(truck.truck_number) ?? 0)}
+                        </span>
+                        <button
+                          type="button"
+                          className="ml-auto rounded px-2 py-1 text-xs font-semibold text-orange-500 transition-colors hover:text-orange-300 active:bg-orange-900/40"
+                          onClick={() => cancelOutsideTimer(truck.truck_number)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                    {paperBayEnabled && paperBayTimers.has(truck.truck_number) && (
+                      <div
+                        className="flex items-center gap-1.5 rounded-lg border border-violet-700/50 bg-violet-950/70 px-2 py-1.5"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span className="text-xs font-bold text-violet-300">
+                          📄 Paper Bay {fmtCountdown(paperBayCountdowns.get(truck.truck_number) ?? 0)}
+                        </span>
+                        <button
+                          type="button"
+                          className="ml-auto rounded px-2 py-1 text-xs font-semibold text-violet-500 transition-colors hover:text-violet-300 active:bg-violet-900/40"
+                          onClick={() => cancelPaperBayTimer(truck.truck_number)}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </AnimateCard>
+            );
+          };
+
+          const renderUnloadedSection = (
+            sectionKey: string,
+            title: string,
+            titleClassName: string,
+            sectionRows: TruckWithState[],
+          ) => {
+            if (sectionRows.length === 0) return null;
+            return (
+              <details
+                key={sectionKey}
+                open
+                className="group col-span-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/50"
+              >
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-900/80 px-4 py-3">
+                  <div className="min-w-0">
+                    <div className={clsx("text-xl font-black uppercase tracking-[0.3em] sm:text-2xl", titleClassName)}>
+                      {title}
+                    </div>
+                    <div className="text-xs font-medium text-slate-500">
+                      {sectionRows.length} truck{sectionRows.length !== 1 ? "s" : ""}
+                    </div>
+                  </div>
+                  <span className="text-lg text-slate-500 transition-transform group-open:rotate-180">⌄</span>
+                </summary>
+                <div className="border-t border-slate-800/80 p-3">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                    {sectionRows.map((truck, sectionIndex) => renderTruckCard(truck, sectionIndex))}
+                  </div>
+                </div>
+              </details>
+            );
+          };
+
+          if (!fleetMode && filter === "unloaded") {
+            return [
+              renderUnloadedSection("unloaded-running", `Day ${runDayNum}`, "text-emerald-400", unloadedRunningRows),
+              renderUnloadedSection("unloaded-spare", "Spare", "text-cyan-400", unloadedSpareRows),
+              renderUnloadedSection("unloaded-off", "Off", "text-slate-400", unloadedOffRows),
+            ];
+          }
+
           return rows.map((row, index) => {
             if ("__header" in row) {
               if (row.__header === "coverages") {
@@ -766,500 +1319,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 </div>
               );
             }
-            const t = row;
-            const status = effectiveStatus(t, runDayNum, holidayLoad);
-            // Day chips — only visible during holiday mode, only for load/unload views
-            const isUnloadView = filter === "dirty" || filter === "unloaded";
-            const isLoadView = filter === "loaded";
-            let chipDay: number | undefined;
-            let chipIsExtra = false;
-            if (isUnloadView && holidayUnload) {
-              chipDay = (t.scheduled_off_days ?? []).includes(runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
-              chipIsExtra = chipDay === unloadsDay2;
-            } else if (isLoadView && holidayLoad) {
-              const offDaysLoad = t.scheduled_off_days ?? [];
-              chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
-              chipIsExtra = chipDay === loadDay2;
-            }
-            // Off filter: color the number by the truck's unload-context status (e.g. green
-            // for unloaded, orange for dirty) instead of the muted "off" grey.
-            const numberColor =
-              status === "loaded"
-                ? "text-sky-300"
-                : !fleetMode && status === "off" && (filter === "off" || filter === "unloaded")
-                ? STATUS_TEXT[effectiveStatus(t, runUnloadsDay, holidayLoad)]
-                : fleetMode || filter === "unloaded"
-                ? STATUS_TEXT[status]
-                : "hover:text-blue-300";
-
-            return (
-            <AnimateCard key={t.truck_number} delay={index * 0.02} className={clsx("card cursor-pointer", fleetMode ? "p-4 flex flex-col gap-2 min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],               fleetMode && status === "oos" && !selectedTrucks.has(t.truck_number) && "opacity-50 grayscale",
-              fleetMode && t.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900", !fleetMode && (filter === "oos" ? oosAssignOpen.has(t.truck_number) : detailNum === t.truck_number) && "ring-2 ring-blue-500", "hover:ring-2 hover:ring-blue-500 transition-shadow", fleetMode && multiSelect && selectedTrucks.has(t.truck_number) && "ring-2 ring-blue-400")}
-              onClick={() => {
-                if (multiSelect) {
-                  setSelectedTrucks((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(t.truck_number)) next.delete(t.truck_number);
-                    else next.add(t.truck_number);
-                    return next;
-                  });
-                  return;
-                }
-                if (filter === "dirty" && !fleetMode && t.state?.status !== "oos") {
-                  if (batchingDisabled) {
-                    upsert.mutate({
-                      truck_number: t.truck_number,
-                      run_date: runDate,
-                      status: "unloaded",
-                      wearers: t.state?.wearers ?? 0,
-                    });
-                  } else {
-                    navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}`);
-                  }
-                } else if (filter === "unloaded" && !fleetMode) {
-                  if (t.state?.priority_hold) {
-                    setHoldAlertTruck(t);
-                    return;
-                  }
-                  // Off+unloaded trucks need coverage assignment before loading.
-                  // Route the click through the off-load modal instead of StartLoadModal.
-                  if (effectiveStatus(t, runDayNum, holidayLoad) === "off") {
-                    // Skip coverage prompt if a swap already exists for this route.
-                    const alreadyCovered = routeSwaps.some((s) => s.route_truck === t.truck_number);
-                    if (alreadyCovered) {
-                      setConfirmTruck(t);
-                    } else {
-                      setOffCoverageTruck(t);
-                      setOffCoverageLoadOn("");
-                      setOffCoverageError(null);
-                    }
-                  } else {
-                    setConfirmTruck(t);
-                  }
-                } else if (filter === "oos" && !fleetMode) {
-                  if (t.state?.priority_hold) {
-                    setHoldAlertTruck(t);
-                    return;
-                  }
-                  setOosAssignOpen((prev) => {
-                    const next = new Set(prev);
-                    if (next.has(t.truck_number)) next.delete(t.truck_number);
-                    else next.add(t.truck_number);
-                    return next;
-                  });
-                } else {
-                  setDetailNum(detailNum === t.truck_number ? null : t.truck_number);
-                }
-              }}
-            >
-              <div className="flex w-full flex-col gap-1">
-                <div className="flex w-full items-start justify-between gap-2">
-                  {/* Non-fleet: spare/swap covering truck shows which route it runs */}
-                  {!fleetMode && (t.state?.oos_spare_route != null || t.route_swap_route != null) ? (
-                    <div className="flex flex-col gap-0.5">
-                      <span className={clsx(
-                        "font-extrabold tracking-tight tabular-nums leading-none",
-                        filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                        numberColor,
-                      )}>
-                        {t.truck_number}
-                      </span>
-                      <span className="inline-flex items-center gap-1 self-start rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                        Cov. #{t.state?.oos_spare_route ?? t.route_swap_route}
-                      </span>
-                    </div>
-                  ) : (
-                    <div className="flex flex-col gap-0.5">
-                      <span className={clsx(
-                        "font-extrabold tracking-tight tabular-nums leading-none",
-                        fleetMode ? "text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                        numberColor,
-                      )}>
-                        {t.truck_number}
-                      </span>
-                    </div>
-                  )}
-                  <span className="flex min-h-[2.25rem] flex-col items-end justify-start gap-0.5">
-                    <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
-                      {STATUS_LABELS[status]}
-                    </span>
-                    {t.state?.priority_hold && (
-                      <span className="badge bg-red-700 text-white">Hold</span>
-                    )}
-                    {/* Fleet OOS: Cov badge + covering truck's raw status below OOS */}
-                    {fleetMode && status === "oos" && (() => {
-                      const cov = coveringTruckByRoute.get(t.truck_number);
-                      if (!cov) return <span className="text-[10px] font-semibold text-amber-400">Needs assignment</span>;
-                      const coveringTruck = data?.find((d) => d.truck_number === cov.num);
-                      const rawStatus = coveringTruck?.state?.status
-                        ? (coveringTruck.state.status as TruckStatus)
-                        : cov.status;
-                      return (
-                        <>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setDetailNum(cov.num); }}
-                            className="inline-flex items-center gap-1 rounded-full bg-sky-500 px-2 py-0.5 text-[10px] font-semibold text-white transition-colors hover:bg-sky-400"
-                          >
-                            Cov. #{cov.num}
-                          </button>
-                          {rawStatus && (
-                            <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white", rawStatus === "dirty" && "bg-red-600", rawStatus === "unloaded" && "bg-green-600", rawStatus === "loaded" && "bg-blue-600", rawStatus === "in_progress" && "bg-amber-500", rawStatus === "off" && "bg-slate-500", rawStatus === "oos" && "bg-slate-600", rawStatus === "shop" && "bg-purple-600", rawStatus === "spare" && "bg-cyan-700", rawStatus === "unfinished" && "bg-fuchsia-600")}>
-                              {STATUS_LABELS[rawStatus]}
-                            </span>
-                          )}
-                        </>
-                      );
-                    })()}
-                    {(fleetMode || filter === "off" || filter === "unloaded") && status === "off" && (t.state?.status === "dirty" || t.state?.status === "unloaded") && (
-                      <span className={clsx("badge", STATUS_BG[t.state.status as TruckStatus], STATUS_BADGE_TEXT[t.state.status as TruckStatus])}>
-                        {STATUS_LABELS[t.state.status as TruckStatus]}
-                      </span>
-                    )}
-                    {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                      <span
-                        className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
-                        title="Garments assigned"
-                      >
-                        <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
-                      </span>
-                    )}
-                  </span>
-                </div>
-                {fleetMode && (
-                  <div className="text-xs text-slate-400 space-y-0.5">
-                    <div>
-                      {t.truck_type}
-                      {t.truck_type === "Uniform" && t.uniform_size != null && ` · ${t.uniform_size}ft`}
-                      {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
-                    </div>
-                    {(() => {
-                      // Show single coverage badge — never duplicate
-                      if (status === "oos") {
-                        // Cov badge + covering status now shown in the right-side status column
-                        return null;
-                      }
-                      const cr = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
-                      if (cr != null) {
-                        return (
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setDetailNum(cr); }}
-                            className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer"
-                          >
-                            Cov. #{cr}
-                          </button>
-                        );
-                      }
-                      return null;
-                    })()}
-                    {t.state?.off_note?.toLowerCase().includes("ran special") && (
-                      <span className="text-amber-300 font-medium">Ran Special</span>
-                    )}
-                  </div>
-                )}
-                {!fleetMode && filter === "dirty" && t.state?.status !== "oos" && (
-                  <span className="flex w-full items-center justify-center gap-1 rounded bg-blue-600/20 px-2 py-1 text-xs font-semibold text-blue-300">
-                    {batchingDisabled ? "Mark Unloaded" : "Assign to Batch →"}
-                  </span>
-                )}
-              </div>
-              {!fleetMode && filter === "unloaded" && (
-                <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
-                </div>
-              )}
-              {filter === "loaded" ? (
-                <>
-                  <div className="text-xs text-slate-400">
-                    {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
-                  </div>
-                  {t.state?.load_finish_time && (
-                    <div className="mt-auto pt-1 text-xs text-slate-500">
-                      Done {format(new Date(t.state.load_finish_time * 1000), "h:mm a")}
-                    </div>
-                  )}
-                </>
-              ) : t.state?.batch_id != null && !fleetMode && filter !== "unloaded" && (
-                <div className="text-xs text-slate-400">Batch {t.state.batch_id}</div>
-              )}
-
-              {chipDay != null && (
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className={clsx(
-                    "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-                    chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
-                  )}>
-                    Day {chipDay}
-                  </span>
-                </div>
-              )}
-
-              {/* OOS view: inline assignment panel */}
-              {!fleetMode && filter === "oos" && status === "oos" && (() => {
-                const cov = coveringTruckByRoute.get(t.truck_number);
-                const spareAsgn = spareAssignments.find((a) => a.covering_route_truck === t.truck_number);
-                const swap = routeSwaps.find((s) => s.route_truck === t.truck_number);
-                const isOpen = oosAssignOpen.has(t.truck_number);
-
-                if (cov) {
-                  // Covered — show covering truck + remove
-                  return (
-                    <div
-                      className="mt-1 border-t border-slate-700 pt-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5">
-                          <span className="text-xs text-slate-400">Covered by</span>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                            #{cov.num}
-                          </span>
-                          {cov.status && (
-                            <span className={clsx("badge text-[10px] py-0", STATUS_BG[cov.status], STATUS_BADGE_TEXT[cov.status])}>
-                              {STATUS_LABELS[cov.status]}
-                            </span>
-                          )}
-                        </div>
-                        <button
-                          className="rounded px-2 py-1 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
-                          disabled={returnSpare.isPending || deleteSwap.isPending}
-                          onClick={() => {
-                            if (spareAsgn) returnSpare.mutate(spareAsgn.id);
-                            else if (swap) deleteSwap.mutate({ id: swap.id, runDate });
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </div>
-                    </div>
-                  );
-                }
-
-                if (!isOpen) {
-                  // Not covered, collapsed — show tap hint
-                  return (
-                    <div className="mt-1 border-t border-slate-700 pt-2 text-center">
-                      <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
-                    </div>
-                  );
-                }
-
-                // Not covered, expanded — show picker
-                const sorted = [...(data ?? [])].sort((a, b) => a.truck_number - b.truck_number);
-                const lastUsedNums = getSwapHistory(t.truck_number);
-                const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
-                const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
-                const offTrucks   = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) === "off");
-                const otherTrucks = sorted.filter((x) => {
-                  if (x.truck_type === "Spare") return false;
-                  const s = effectiveStatus(x, runDayNum, holidayLoad);
-                  return s !== "off" && s !== "oos";
-                });
-
-                return (
-                  <div
-                    className="mt-1 space-y-2 border-t border-slate-700 pt-2"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <div className="flex gap-1.5">
-                      <select
-                        className="input flex-1 text-xs"
-                        value={oosCardSelects[t.truck_number] ?? ""}
-                        onChange={(e) => setOosCardSelects((p) => ({ ...p, [t.truck_number]: e.target.value }))}
-                      >
-                        <option value="">— assign truck —</option>
-                        {lastUsed.length > 0 && (
-                          <optgroup label="Last Used">
-                            {lastUsed.map((x) => (
-                              <option key={x.truck_number} value={x.truck_number}>
-                                #{x.truck_number} — {x.truck_type === "Spare" ? "Spare" : (x.state?.status ?? "dirty")}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {spareTrucks.length > 0 && (
-                          <optgroup label="Spare Trucks">
-                            {spareTrucks.map((x) => (
-                              <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {offTrucks.length > 0 && (
-                          <optgroup label={`Off — Day ${runDayNum}`}>
-                            {offTrucks.map((x) => (
-                              <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {otherTrucks.length > 0 && (
-                          <optgroup label="Other">
-                            {otherTrucks.map((x) => (
-                              <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} ({x.state?.status ?? "dirty"})</option>
-                            ))}
-                          </optgroup>
-                        )}
-                      </select>
-                      <button
-                        className="rounded-lg bg-green-700 px-3 text-xs font-semibold disabled:opacity-50"
-                        disabled={
-                          !oosCardSelects[t.truck_number] ||
-                          assignSpare.isPending || createSwap.isPending
-                        }
-                        onClick={async () => {
-                          const pickedNum = Number(oosCardSelects[t.truck_number]);
-                          const picked = (data ?? []).find((x) => x.truck_number === pickedNum);
-                          if (picked?.truck_type === "Spare") {
-                            await assignSpare.mutateAsync({
-                              run_date: runDate,
-                              spare_truck_number: pickedNum,
-                              covering_route_truck: t.truck_number,
-                            });
-                          } else {
-                            await createSwap.mutateAsync({
-                              run_date: runDate,
-                              route_truck: t.truck_number,
-                              load_on_truck: pickedNum,
-                              two_way: false,
-                            });
-                          }
-                          recordSwapHistory(t.truck_number, pickedNum);
-                          setOosCardSelects((p) => { const n = { ...p }; delete n[t.truck_number]; return n; });
-                          setOosAssignOpen((prev) => { const next = new Set(prev); next.delete(t.truck_number); return next; });
-                        }}
-                      >
-                        {assignSpare.isPending || createSwap.isPending ? "…" : "Assign"}
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
-
-              {fleetMode && (
-                <div className="mt-auto flex flex-col gap-2">
-                  {!multiSelect && !isReadOnly && status !== "oos" && (
-                    <select
-                       className="input min-h-[2.5rem] text-xs md:min-h-0"
-                      value={status}
-                      disabled={upsert.isPending}
-                      onClick={(e) => e.stopPropagation()}
-                      onChange={(e) => {
-                        const next = e.target.value as TruckStatus | "__outside__" | "__paperbay__" | "__unload_hold__" | "__clear_hold__";
-                        if (status === "off" && next === "loaded") {
-                          setPendingOffLoadTruck(t);
-                          setPendingOffLoadRoute("");
-                          setPendingOffLoadError(null);
-                          e.currentTarget.value = status;
-                          return;
-                        }
-                        if (next === "__unload_hold__") {
-                          e.currentTarget.value = status;
-                          upsert.mutate({
-                            truck_number: t.truck_number,
-                            run_date: runDate,
-                            priority_hold: true,
-                            wearers: t.state?.wearers ?? 0,
-                          });
-                          return;
-                        }
-                        if (next === "__clear_hold__") {
-                          e.currentTarget.value = status;
-                          upsert.mutate({
-                            truck_number: t.truck_number,
-                            run_date: runDate,
-                            priority_hold: false,
-                            wearers: t.state?.wearers ?? 0,
-                          });
-                          return;
-                        }
-                        if (next === "__outside__") {
-                          e.currentTarget.value = status;
-                          startOutsideTimer(t.truck_number);
-                          return;
-                        }
-                        if (next === "__paperbay__") {
-                          e.currentTarget.value = status;
-                          startPaperBayTimer(t.truck_number);
-                          return;
-                        }
-                        if (next === "oos") {
-                          setPendingOosTruck(t);
-                          e.currentTarget.value = status; // revert visual selection
-                        } else {
-                          upsert.mutate({
-                            truck_number: t.truck_number,
-                            run_date: runDate,
-                            status: next,
-                            wearers: t.state?.wearers ?? 0,
-                          });
-                        }
-                      }}
-                    >
-                      {status === "off" && (
-                        <option value="off" disabled hidden>
-                          Off (scheduled)
-                        </option>
-                      )}
-                      {!t.state?.priority_hold && (
-                        <option value="__unload_hold__">🚩 Unload &amp; Hold</option>
-                      )}
-                      {t.state?.priority_hold && (
-                        <option value="__clear_hold__">🔓 Clear Hold</option>
-                      )}
-                      {outsideTimerEnabled && !outsideTimers.has(t.truck_number) && !paperBayTimers.has(t.truck_number) && (
-                        <option value="__outside__">⏱ Outside (20 min)</option>
-                      )}
-                      {paperBayEnabled && !paperBayTimers.has(t.truck_number) && !outsideTimers.has(t.truck_number) && (
-                        <option value="__paperbay__">📄 Paper Bay (25 min)</option>
-                      )}
-                      {FLEET_STATUS_OPTIONS.map((s) => (
-                        <option key={s} value={s}>
-                          {STATUS_LABELS[s]}
-                        </option>
-                      ))}
-                    </select>
-                  )}
-                  {status === "oos" && (
-                    <p className="text-xs text-slate-500 italic">Tap to remove OOS</p>
-                  )}
-                  {outsideTimerEnabled && outsideTimers.has(t.truck_number) && (
-                    <div
-                      className="flex items-center gap-1.5 rounded-lg border border-orange-700/50 bg-orange-950/70 px-2 py-1.5"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="text-xs font-bold text-orange-300">
-                        ⏱ Outside {fmtCountdown(outsideCountdowns.get(t.truck_number) ?? 0)}
-                      </span>
-                      <button
-                        type="button"
-                        className="ml-auto rounded px-2 py-1 text-xs font-semibold text-orange-500 transition-colors hover:text-orange-300 active:bg-orange-900/40"
-                        onClick={() => cancelOutsideTimer(t.truck_number)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                  {paperBayEnabled && paperBayTimers.has(t.truck_number) && (
-                    <div
-                      className="flex items-center gap-1.5 rounded-lg border border-violet-700/50 bg-violet-950/70 px-2 py-1.5"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <span className="text-xs font-bold text-violet-300">
-                        📄 Paper Bay {fmtCountdown(paperBayCountdowns.get(t.truck_number) ?? 0)}
-                      </span>
-                      <button
-                        type="button"
-                        className="ml-auto rounded px-2 py-1 text-xs font-semibold text-violet-500 transition-colors hover:text-violet-300 active:bg-violet-900/40"
-                        onClick={() => cancelPaperBayTimer(t.truck_number)}
-                      >
-                        Cancel
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </AnimateCard>
-          );
+            return renderTruckCard(row, index);
           });
         })()}
         {!isLoading && filtered.length === 0 && (

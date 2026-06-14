@@ -91,17 +91,17 @@ export default function TruckCard({
         </span>
       )}
       {showNotes && (
-        <div className="absolute bottom-2 right-2 z-20">
+        <div className="absolute left-2 top-2 z-20">
           <button
             type="button"
             onClick={(e) => { e.stopPropagation(); setNotePopoverOpen((o) => !o); }}
-            className="inline-flex items-center gap-1 rounded-md border border-violet-700/40 bg-violet-950/50 px-2 py-0.5 text-xs font-medium text-violet-300 transition-colors hover:bg-violet-900/40"
+            className="inline-flex items-center gap-1 rounded-md border border-violet-700/40 bg-violet-950/60 px-2 py-0.5 text-[11px] font-medium leading-none text-violet-300 transition-colors hover:bg-violet-900/50"
           >
             📝 {visibleNotes.length}
           </button>
           {notePopoverOpen && (
             <div
-              className="absolute bottom-full right-0 z-30 mb-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl"
+              className="absolute left-0 top-full z-30 mt-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="space-y-2">

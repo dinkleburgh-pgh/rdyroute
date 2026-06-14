@@ -65,19 +65,40 @@ export default function Load() {
       ),
     [board, loadDay, holidayLoad],
   );
-  // Ready = unloaded and scheduled for tomorrow.
-  const ready = useMemo(
-    () => loadTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true),
+  const loadCoveringSpares = useMemo(
+    () =>
+      loadTrucks.filter(
+        (t) => t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null),
+      ),
     [loadTrucks],
   );
+  const coveredLoadRoutes = useMemo(
+    () =>
+      new Set(
+        loadCoveringSpares.map((t) => (t.route_swap_route ?? t.state?.oos_spare_route) as number),
+      ),
+    [loadCoveringSpares],
+  );
+  const loadDisplayTrucks = useMemo(
+    () =>
+      loadTrucks.filter(
+        (t) => t.truck_type === "Spare" || !coveredLoadRoutes.has(t.truck_number),
+      ),
+    [loadTrucks, coveredLoadRoutes],
+  );
+  // Ready = unloaded and scheduled for tomorrow.
+  const ready = useMemo(
+    () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true),
+    [loadDisplayTrucks],
+  );
   const heldReady = useMemo(
-    () => loadTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold === true),
-    [loadTrucks],
+    () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold === true),
+    [loadDisplayTrucks],
   );
   // Loaded = physically loaded and scheduled for tomorrow.
   const loaded = useMemo(
-    () => loadTrucks.filter((t) => effectiveStatus(t, loadDay, holidayLoad) === "loaded"),
-    [loadTrucks, loadDay, holidayLoad],
+    () => loadDisplayTrucks.filter((t) => effectiveStatus(t, loadDay, holidayLoad) === "loaded"),
+    [loadDisplayTrucks, loadDay, holidayLoad],
   );
   // Sort variant for the "Loaded today" grid.
   const loadedSorted = useMemo(() => {
@@ -122,6 +143,7 @@ export default function Load() {
       if (t.truck_type !== "Dust") continue;
       const eff = effectiveStatus(t, loadDay, holidayLoad);
       if (eff === "loaded" || eff === "off") continue;
+      if (coveredLoadRoutes.has(t.truck_number)) continue;
       if (eff === "oos") {
         // Covering spare goes to sparesLeftTrucks; uncovered OOS still counts here
         if (!coveringSpareByRoute.has(t.truck_number) &&
@@ -133,13 +155,14 @@ export default function Load() {
       result.push(t);
     }
     return result;
-  }, [board, loadDay, holidayLoad, coveringSpareByRoute]);
+  }, [board, loadDay, holidayLoad, coveringSpareByRoute, coveredLoadRoutes]);
   const uniformsLeftTrucks = useMemo(() => {
     const result: TruckWithState[] = [];
     for (const t of board) {
       if (t.truck_type !== "Uniform") continue;
       const eff = effectiveStatus(t, loadDay, holidayLoad);
       if (eff === "loaded" || eff === "off") continue;
+      if (coveredLoadRoutes.has(t.truck_number)) continue;
       if (eff === "oos") {
         // Covering spare goes to sparesLeftTrucks; uncovered OOS still counts here
         if (!coveringSpareByRoute.has(t.truck_number) &&
@@ -151,7 +174,7 @@ export default function Load() {
       result.push(t);
     }
     return result;
-  }, [board, loadDay, holidayLoad, coveringSpareByRoute]);
+  }, [board, loadDay, holidayLoad, coveringSpareByRoute, coveredLoadRoutes]);
   // Covering spares (route swap or OOS assignment) that haven't been loaded yet.
   const sparesLeftTrucks = useMemo(() => {
     return board.filter((t) => {
@@ -385,32 +408,52 @@ export default function Load() {
         const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
         const statusLabel: Record<string, string> = { dirty: "Dirty", unloaded: "Unloaded", in_progress: "Loading" };
         const statusColor: Record<string, string> = { dirty: "text-red-400", unloaded: "text-emerald-400", in_progress: "text-amber-400" };
+        const statusBadgeColor: Record<string, string> = {
+          dirty: "bg-red-950/60 text-red-300 ring-red-900/80",
+          unloaded: "bg-emerald-950/60 text-emerald-300 ring-emerald-900/80",
+          in_progress: "bg-amber-950/60 text-amber-300 ring-amber-900/80",
+        };
         return (
           <div className="card animate-slide-down space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
               {statFilter === "dust" ? "Dusts" : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
             </p>
-            <div className="flex flex-wrap gap-2">
+            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
                 const st = t.state?.status ?? "dirty";
                 const cr = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
-                const heldLabel = t.state?.priority_hold ? (
-                  <span className="text-[10px] font-bold text-red-400">HOLD</span>
-                ) : null;
                 return (
-                  <span key={t.truck_number} className="inline-flex items-center gap-1.5 rounded-lg bg-slate-800 px-2.5 py-1 text-sm font-semibold">
-                    <span>#{t.truck_number}</span>
-                    <span className={clsx("text-xs", statusColor[st] ?? "text-slate-400")}>{statusLabel[st] ?? st}</span>
-                    {heldLabel}
-                    {cr != null && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                        Cov. #{cr}
+                  <span
+                    key={t.truck_number}
+                    className="flex min-h-[3.35rem] items-start justify-between rounded-lg border border-slate-700/70 bg-slate-800/80 px-2.5 py-1.5"
+                  >
+                    <span className="pt-0.5 text-lg font-extrabold tracking-tight tabular-nums text-slate-100">
+                      #{t.truck_number}
+                    </span>
+                    <span className="flex flex-col items-end gap-1">
+                      <span
+                        className={clsx(
+                          "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ring-1",
+                          statusBadgeColor[st] ?? "bg-slate-700/70 text-slate-300 ring-slate-600/80",
+                        )}
+                      >
+                        {statusLabel[st] ?? st}
                       </span>
-                    )}
+                      {cr != null && (
+                        <span className="inline-flex items-center rounded-full bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-sky-300 ring-1 ring-sky-700/40">
+                          Cov. #{cr}
+                        </span>
+                      )}
+                      {t.state?.priority_hold && (
+                        <span className="inline-flex items-center rounded-full bg-red-950/70 px-1.5 py-0.5 text-[10px] font-bold leading-none text-red-300 ring-1 ring-red-900/80">
+                          Hold
+                        </span>
+                      )}
+                    </span>
                   </span>
                 );
               })}
-              {trucks.length === 0 && <span className="text-sm text-slate-500">All clear!</span>}
+              {trucks.length === 0 && <span className="col-span-full text-sm text-slate-500">All clear!</span>}
             </div>
           </div>
         );

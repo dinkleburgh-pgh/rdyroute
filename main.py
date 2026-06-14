@@ -12,14 +12,16 @@ Interactive API docs: http://localhost:8000/docs
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+from pathlib import Path
 import time
 from collections import defaultdict
 
 from fastapi import FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, PlainTextResponse
 
 from database import Base, SessionLocal, engine, settings
-from routers import audit, auth, batches, communications, exports, fleet, load_durations, notes as notes_router, notices, route_swaps, settings as settings_router, shorts, spares, trucks, updates, ws as ws_router
+from routers import audit, auth, batches, communications, exports, fleet, load_durations, notes as notes_router, notices, notifications, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, updates, ws as ws_router
 from seed import run_startup_seed
 from backups import backup_loop
 
@@ -65,6 +67,11 @@ async def lifespan(app: FastAPI):
     except BaseException as _alembic_err:
         log.error("Alembic migration failed: %s — falling back to create_all()", _alembic_err)
         Base.metadata.create_all(bind=engine)
+        try:
+            _alembic_command.stamp(_alembic_cfg, "head")
+            log.warning("Alembic: stamped head after create_all() fallback")
+        except BaseException as _stamp_err:
+            log.error("Alembic stamp after create_all() failed: %s", _stamp_err)
 
     db = SessionLocal()
     try:
@@ -201,6 +208,22 @@ app.add_middleware(
 )
 
 # ---------------------------------------------------------------------------
+# `/api/*` compatibility shim
+# The dev frontend talks to the backend through Vite's `/api` proxy. When the
+# built frontend is served directly by FastAPI on the same origin, keep those
+# paths working by rewriting `/api/foo` -> `/foo` before routing.
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def _strip_api_prefix(request: Request, call_next) -> Response:
+    path = request.scope.get("path", "")
+    request.scope["readyroute_original_path"] = path
+    if path == "/api" or path.startswith("/api/"):
+        request.scope["path"] = path[4:] or "/"
+    return await call_next(request)
+
+
+# ---------------------------------------------------------------------------
 # Request timing + error logging middleware
 # ---------------------------------------------------------------------------
 
@@ -227,6 +250,17 @@ async def _log_requests(request: Request, call_next) -> Response:
         _req_log.warning("%s %s → %d  (%.0f ms)", request.method, path, status, ms)
     else:
         _req_log.debug("%s %s → %d  (%.0f ms)", request.method, path, status, ms)
+
+    original_path = str(request.scope.get("readyroute_original_path", request.url.path or ""))
+    content_type = str(response.headers.get("content-type", "")).lower()
+    if (
+        original_path == "/api"
+        or original_path.startswith("/api/")
+        or "application/json" in content_type
+    ):
+        response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+        response.headers["Pragma"] = "no-cache"
+        response.headers["Expires"] = "0"
     return response
 
 # ---------------------------------------------------------------------------
@@ -238,6 +272,7 @@ app.include_router(trucks.router)
 app.include_router(load_durations.router)
 app.include_router(batches.router)
 app.include_router(shorts.router)
+app.include_router(short_imports.router)
 app.include_router(audit.router)
 app.include_router(spares.router)
 app.include_router(route_swaps.router)
@@ -246,9 +281,45 @@ app.include_router(notices.router)
 app.include_router(notes_router.router)
 app.include_router(auth.router)
 app.include_router(settings_router.router)
+app.include_router(notifications.router)
 app.include_router(updates.router)
 app.include_router(ws_router.router)
 app.include_router(exports.router)
+
+
+# ---------------------------------------------------------------------------
+# Frontend static app (production build)
+# Serves frontend/dist on the same origin as the backend so service workers,
+# push, and API cookies all operate on one HTTPS origin when the backend is
+# exposed through a tunnel or reverse proxy.
+# ---------------------------------------------------------------------------
+
+_FRONTEND_DIST = Path(__file__).resolve().parent / "frontend" / "dist"
+
+
+def _frontend_file_response(request: Request, requested_path: str = "") -> Response:
+    original_path = str(request.scope.get("readyroute_original_path", ""))
+    if original_path == "/api" or original_path.startswith("/api/"):
+        return PlainTextResponse("API route not found", status_code=404)
+
+    if not _FRONTEND_DIST.exists():
+        return PlainTextResponse(
+            "Frontend build not found. Run `npm run build` in `frontend/` first.",
+            status_code=404,
+        )
+
+    clean = requested_path.lstrip("/").replace("\\", "/")
+    candidate = (_FRONTEND_DIST / clean).resolve() if clean else (_FRONTEND_DIST / "index.html").resolve()
+
+    try:
+        candidate.relative_to(_FRONTEND_DIST.resolve())
+    except ValueError:
+        return PlainTextResponse("Invalid path", status_code=400)
+
+    if clean and candidate.is_file():
+        return FileResponse(candidate)
+
+    return FileResponse(_FRONTEND_DIST / "index.html")
 
 
 # ---------------------------------------------------------------------------
@@ -354,3 +425,13 @@ def health_detail():
         "extra_dbs": extras,
         "last_backup": last_backup if last_backup else None,
     }
+
+
+@app.get("/", include_in_schema=False)
+def frontend_index(request: Request):
+    return _frontend_file_response(request)
+
+
+@app.get("/{full_path:path}", include_in_schema=False)
+def frontend_catchall(request: Request, full_path: str):
+    return _frontend_file_response(request, full_path)

@@ -33,6 +33,29 @@ export function effectiveStatus(
 }
 
 /**
+ * Returns the operational lifecycle status used by the board/sidebar when a
+ * truck is off for the next load day but still has work on the current unloads
+ * day. In that case, dirty/unloaded trucks stay visible in their real workflow
+ * bucket instead of disappearing under "off".
+ */
+export function effectiveWorkflowStatus(
+  t: TruckWithState,
+  loadDayNum: number,
+  holidayLoad = false,
+  unloadsDayNum?: number,
+  holidayUnload?: boolean,
+): TruckStatus {
+  const loadDayStatus = effectiveStatus(t, loadDayNum, holidayLoad);
+  if (unloadsDayNum !== undefined && loadDayStatus === "off") {
+    const raw = (t.state?.status ?? "dirty") as TruckStatus;
+    if (raw === "dirty" || raw === "unloaded") {
+      return effectiveStatus(t, unloadsDayNum, holidayUnload ?? holidayLoad);
+    }
+  }
+  return loadDayStatus;
+}
+
+/**
  * Builds a route-aware status count map for the sidebar / progress display.
  *
  * Rules:
@@ -64,19 +87,8 @@ export function buildRouteStatusCounts(
     spare: 0,
   };
 
-  // When an unloads day is provided (sidebar), dirty/unloaded trucks that were
-  // auto-off'd by the load day should be re-evaluated against the unloads day.
-  // This ensures trucks that ran today but don't load tomorrow still show as
-  // dirty/unloaded rather than being hidden under "off".
   function statusFor(t: TruckWithState): TruckStatus {
-    const s = effectiveStatus(t, loadDayNum, holidayLoad);
-    if (unloadsDayNum !== undefined && s === "off") {
-      const raw = (t.state?.status ?? "dirty") as TruckStatus;
-      if (raw === "dirty" || raw === "unloaded") {
-        return effectiveStatus(t, unloadsDayNum, holidayUnload ?? holidayLoad);
-      }
-    }
-    return s;
+    return effectiveWorkflowStatus(t, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload);
   }
 
   // First pass: identify which route numbers are currently OOS so covering

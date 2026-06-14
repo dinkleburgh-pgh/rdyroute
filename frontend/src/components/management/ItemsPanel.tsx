@@ -20,16 +20,21 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
   const [addLabel, setAddLabel] = useState("");
   const [addQty, setAddQty] = useState("1");
-  const [addCatNew, setAddCatNew] = useState("");
-  const [addCatIsNew, setAddCatIsNew] = useState(false);
+  const [extraCategories, setExtraCategories] = useState<string[]>([]);
+  const [newCategoryName, setNewCategoryName] = useState("");
 
   useEffect(() => { if (items) setDraft(items); }, [items]);
   const dirty = JSON.stringify(draft) !== JSON.stringify(items ?? []);
 
-  const categories = useMemo(() => {
+  const itemCategories = useMemo(() => {
     const s = new Set(draft.map((d) => d.category ?? "").filter(Boolean));
     return Array.from(s).sort();
   }, [draft]);
+
+  const categories = useMemo(() => {
+    const merged = new Set([...itemCategories, ...extraCategories.map((c) => c.trim()).filter(Boolean)]);
+    return Array.from(merged).sort();
+  }, [extraCategories, itemCategories]);
 
   const groups = useMemo(() => {
     const map = new Map<string, TrackedItem[]>();
@@ -38,10 +43,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(it);
     }
-    const named = Array.from(map.entries()).filter(([k]) => k !== "").sort(([a], [b]) => a.localeCompare(b));
+    const named = categories.map((category) => [category, map.get(category) ?? []] as [string, TrackedItem[]]);
     const uncategorised = map.get("") ?? [];
     return uncategorised.length > 0 ? [...named, ["", uncategorised] as [string, TrackedItem[]]] : named;
-  }, [draft]);
+  }, [categories, draft]);
 
   const visibleGroups = activeTab === "__all__"
     ? groups
@@ -77,10 +82,24 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   function addItemToCategory(cat: string) {
     const label = addLabel.trim();
-    const finalCat = addCatIsNew ? addCatNew.trim() : cat;
+    const finalCat = cat.trim();
     if (!label || draft.some((d) => d.label.toLowerCase() === label.toLowerCase())) return;
-    setDraft((d) => [...d, { label, qty_default: Math.max(1, parseInt(addQty || "1", 10)), category: finalCat || undefined }]);
-    setAddLabel(""); setAddQty("1"); setAddCatNew(""); setAddCatIsNew(false); setAddingToCategory(null);
+    if (!finalCat) return;
+    setDraft((d) => [...d, { label, qty_default: Math.max(1, parseInt(addQty || "1", 10)), category: finalCat }]);
+    setExtraCategories((current) => current.filter((category) => category !== finalCat));
+    setAddLabel(""); setAddQty("1"); setAddingToCategory(null);
+  }
+
+  function addCategory() {
+    const category = newCategoryName.trim();
+    if (!category) return;
+    if (categories.some((existing) => existing.toLowerCase() === category.toLowerCase())) return;
+    setExtraCategories((current) => [...current, category]);
+    setNewCategoryName("");
+    setActiveTab(category);
+    setAddingToCategory(category);
+    setAddLabel("");
+    setAddQty("1");
   }
 
   function applyBulkImport() {
@@ -115,7 +134,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Tracked Items</h3>
-          <p className="text-xs text-slate-500">{draft.length} item{draft.length !== 1 ? "s" : ""} across {groups.length} categor{groups.length !== 1 ? "ies" : "y"}</p>
+          <p className="text-xs text-slate-500">{draft.length} item{draft.length !== 1 ? "s" : ""} across {categories.length} categor{categories.length !== 1 ? "ies" : "y"}</p>
         </div>
         <div className="flex items-center gap-2">
           {dirty && <span className="text-xs font-medium text-amber-400">{unsavedCount} unsaved change{unsavedCount !== 1 ? "s" : ""}</span>}
@@ -141,9 +160,30 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       {draft.length === 0 && (
         <div className="rounded-lg border border-dashed border-slate-700 py-10 text-center">
           <p className="text-sm text-slate-500">No tracked items yet.</p>
-          <p className="mt-1 text-xs text-slate-600">Use "Bulk import" or add items below.</p>
+          <p className="mt-1 text-xs text-slate-600">Add a category first, then add items inside it.</p>
         </div>
       )}
+
+      <div className="card p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add category</p>
+        <div className="grid grid-cols-1 gap-2 sm:flex sm:items-end">
+          <div className="min-w-0 sm:min-w-[14rem] sm:flex-1">
+            <label className="label">Category name</label>
+            <input
+              className="input"
+              placeholder="New category"
+              value={newCategoryName}
+              disabled={disabled}
+              onChange={(e) => setNewCategoryName(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") addCategory(); }}
+            />
+          </div>
+          <button className="btn-primary w-full sm:w-auto" disabled={disabled || !newCategoryName.trim()} onClick={addCategory}>
+            Add category
+          </button>
+        </div>
+        <p className="mt-2 text-[11px] text-slate-500">New items are added from inside each category card.</p>
+      </div>
 
       {visibleGroups.map(([cat, groupItems]) => {
         const catItems = groupItems as TrackedItem[];
@@ -154,9 +194,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
               <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
                 {cat || "Uncategorised"}<span className="ml-1.5 font-normal text-slate-600">({catItems.length})</span>
               </span>
-              {!disabled && (
+              {!disabled && cat !== "" && (
                 <button className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
-                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddLabel(""); setAddQty("1"); setAddCatNew(""); setAddCatIsNew(false); }}>
+                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddLabel(""); setAddQty("1"); }}>
                   {isAdding ? "Cancel" : "+ Add item"}
                 </button>
               )}
@@ -210,39 +250,19 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
               })}
             </div>
 
-            {isAdding && !disabled && (
-              <div className="flex flex-wrap items-end gap-2 rounded-lg border border-slate-700 bg-slate-800/40 p-2.5">
-                <div className="min-w-0 flex-1">
+            {isAdding && !disabled && cat !== "" && (
+              <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-700 bg-slate-800/40 p-2.5 sm:flex sm:flex-wrap sm:items-end">
+                <div className="min-w-0 sm:min-w-[14rem] sm:flex-1">
                   <label className="label">Label</label>
                   <input className="input" placeholder="Item name" value={addLabel} autoFocus
                     onChange={(e) => setAddLabel(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") addItemToCategory(cat); if (e.key === "Escape") setAddingToCategory(null); }} />
                 </div>
-                {(activeTab === "__all__" || cat === "") && (
-                  addCatIsNew ? (
-                    <div className="w-36">
-                      <label className="label">New category</label>
-                      <input className="input" placeholder="Category name" autoFocus value={addCatNew}
-                        onChange={(e) => setAddCatNew(e.target.value)}
-                        onBlur={() => { if (!addCatNew.trim()) setAddCatIsNew(false); }} />
-                    </div>
-                  ) : (
-                    <div className="w-36">
-                      <label className="label">Category</label>
-                      <select className="input" value={cat}
-                        onChange={(e) => { if (e.target.value === "__new__") setAddCatIsNew(true); else setAddingToCategory(e.target.value); }}>
-                        <option value="">— none —</option>
-                        {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                        <option value="__new__">+ New category…</option>
-                      </select>
-                    </div>
-                  )
-                )}
-                <div className="w-20">
+                <div className="w-full sm:w-20">
                   <label className="label">Qty</label>
                   <input type="number" min={1} className="input" value={addQty} onChange={(e) => setAddQty(e.target.value)} />
                 </div>
-                <button className="btn-primary text-xs pb-1.5" disabled={!addLabel.trim()} onClick={() => addItemToCategory(cat)}>Add</button>
+                <button className="btn-primary w-full text-xs sm:w-auto sm:self-auto" disabled={!addLabel.trim()} onClick={() => addItemToCategory(cat)}>Add</button>
               </div>
             )}
           </div>
@@ -252,43 +272,6 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       <datalist id="items-category-datalist">
         {categories.map((c) => <option key={c} value={c} />)}
       </datalist>
-
-      {activeTab === "__all__" && (
-        <div className="card p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add new item</p>
-          <div className="flex flex-wrap items-end gap-2">
-            <div className="min-w-0 flex-1">
-              <label className="label">Label</label>
-              <input className="input" placeholder="Item name" value={addLabel} disabled={disabled}
-                onChange={(e) => setAddLabel(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") addItemToCategory(addCatIsNew ? addCatNew : addingToCategory ?? ""); }} />
-            </div>
-            {addCatIsNew ? (
-              <div className="w-40">
-                <label className="label">New category</label>
-                <input className="input" placeholder="Category name" value={addCatNew} disabled={disabled}
-                  onChange={(e) => setAddCatNew(e.target.value)} onBlur={() => { if (!addCatNew.trim()) setAddCatIsNew(false); }} />
-              </div>
-            ) : (
-              <div className="w-40">
-                <label className="label">Category</label>
-                <select className="input" value={addingToCategory ?? ""} disabled={disabled}
-                  onChange={(e) => { if (e.target.value === "__new__") { setAddCatIsNew(true); setAddingToCategory(null); } else setAddingToCategory(e.target.value); }}>
-                  <option value="">— none —</option>
-                  {categories.map((c) => <option key={c} value={c}>{c}</option>)}
-                  <option value="__new__">+ New category…</option>
-                </select>
-              </div>
-            )}
-            <div className="w-20">
-              <label className="label">Qty</label>
-              <input type="number" min={1} className="input" value={addQty} disabled={disabled} onChange={(e) => setAddQty(e.target.value)} />
-            </div>
-            <button className="btn-ghost" disabled={disabled || !addLabel.trim()}
-              onClick={() => addItemToCategory(addCatIsNew ? addCatNew : addingToCategory ?? "")}>Add</button>
-          </div>
-        </div>
-      )}
 
       <div className="flex items-center gap-2">
         <button className="btn-ghost text-xs" disabled={disabled} onClick={() => setImportOpen((v) => !v)}>

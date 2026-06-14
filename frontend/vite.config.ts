@@ -19,11 +19,16 @@ function getGitCommit(): string {
 
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")) as { version: string };
 const appVersion = process.env.VITE_APP_VERSION || pkg.version;
+const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000";
+const wsProxyTarget = process.env.VITE_WS_PROXY_TARGET || apiProxyTarget.replace(/^http/i, "ws");
 
 export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: "injectManifest",
+      srcDir: "src",
+      filename: "sw.js",
       registerType: "autoUpdate",
       includeAssets: ["icon.svg", "pwa-64x64.png", "pwa-192x192.png", "pwa-512x512.png", "apple-touch-icon-180x180.png"],
       manifest: {
@@ -43,25 +48,6 @@ export default defineConfig({
           { src: "maskable-icon-512x512.png", sizes: "512x512", type: "image/png", purpose: "maskable" },
           { src: "apple-touch-icon-180x180.png", sizes: "180x180", type: "image/png" },
         ],
-      },
-      workbox: {
-        // skipWaiting + clientsClaim make the new SW activate immediately.
-        // The app (main.tsx) listens for the resulting 'controllerchange' event
-        // and calls location.reload() so the new HTML + new JS chunks load
-        // together — this is what prevents blank pages after a deploy.
-        skipWaiting: true,
-        clientsClaim: true,
-        // Cache the app shell and all static assets
-        globPatterns: ["**/*.{js,css,html,ico,png,svg,woff2}"],
-        // Don't cache API or WebSocket traffic — handled at the app layer
-        navigateFallback: "index.html",
-        navigateFallbackDenylist: [/^\/api/, /^\/ws/],
-        // Do NOT cache API responses in the service worker.
-        // React Query + the offline queue already handle stale-while-revalidate
-        // and optimistic updates. Caching API responses in the SW creates a
-        // second layer of staleness that races with React Query and can silently
-        // serve stale board state for up to maxAgeSeconds after a network failure.
-        runtimeCaching: [],
       },
       devOptions: {
         // Keep disabled in dev — the module-type service worker interferes with
@@ -88,12 +74,12 @@ export default defineConfig({
     },
     proxy: {
       "/api": {
-        target: "http://127.0.0.1:8000",
+        target: apiProxyTarget,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ""),
       },
       "/ws": {
-        target: "ws://127.0.0.1:8000",
+        target: wsProxyTarget,
         ws: true,
       },
     },
