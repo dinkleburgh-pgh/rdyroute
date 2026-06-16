@@ -8,6 +8,18 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-16
+
+### Changed
+- **Load / unload counting unified** — sidebar progress, Load page progress, Day Overview progress, and "left" cards now use one coverage-aware route-slot model. Covered routes count once, the covering truck owns the slot, and covered OOS routes no longer inflate totals or leak into the wrong left-card bucket.
+- **README local-dev notes updated** — documented `run.ps1 -Restart`, `-Stop`, and `-NoBrowser`, plus the Windows-specific frontend startup behavior.
+
+### Fixed
+- **`run.ps1` frontend restart reliability** — frontend startup now prefers `npm.cmd`, waits for an actual HTTP response on `127.0.0.1:5180`, retries Vite once if it does not come up cleanly, and no longer aborts on raced `taskkill` cleanup for dead listener PIDs.
+- **Stray Vite crash artifact** — `frontend/vite.err` is now ignored and removed from the tracked tree.
+
+---
+
 ## [build.138] — 2026-06-08
 
 ### Added

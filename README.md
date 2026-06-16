@@ -48,6 +48,15 @@ Or use the convenience script:
 .\run.ps1
 ```
 
+Useful variants:
+```powershell
+.\run.ps1 -Restart
+.\run.ps1 -Stop
+.\run.ps1 -NoBrowser
+```
+
+`run.ps1` now verifies that both backend and frontend actually answer on `127.0.0.1:8000` and `127.0.0.1:5180`, retries Vite once if it does not come up cleanly, and prefers `npm.cmd` on Windows to avoid PowerShell command-resolution issues.
+
 The API is proxied through Vite: `localhost:5180/api` → `127.0.0.1:8000`.  
 Interactive API docs: `http://127.0.0.1:8000/docs`
 
@@ -126,6 +135,7 @@ frontend/
 - **Fleet page**: `/fleet` renders `<Board fleetMode />`. `Fleet.tsx` is not the fleet route.
 - **WatchFiles**: Creating `.py` files in the project root triggers a uvicorn reload. Write temp scripts outside the root or chain creation + deletion in one command.
 - **Backup DB**: Set `BACKUP_DATABASE_URL` in `.env` / `.env.production` to a comma-separated list of fallback/replica PostgreSQL URLs. The Connections panel in Settings → Advanced shows live latency and pool stats for each URL.
+- **Vite artifacts**: `frontend/vite.err` is a local crash artifact and is ignored. Do not commit it.
 
 ---
 

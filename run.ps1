@@ -66,6 +66,24 @@ function Write-Info  ([string]$m) { Write-Host "[INFO] $m"  -ForegroundColor Cya
 function Write-Warn2 ([string]$m) { Write-Host "[WARN] $m"  -ForegroundColor Yellow }
 function Write-Err   ([string]$m) { Write-Host "[ERROR] $m" -ForegroundColor Red }
 
+function Wait-HttpReady {
+    param(
+        [Parameter(Mandatory = $true)][string]$Url,
+        [int]$TimeoutSeconds = 20
+    )
+    $deadline = (Get-Date).AddSeconds($TimeoutSeconds)
+    while ((Get-Date) -lt $deadline) {
+        try {
+            $resp = Invoke-WebRequest -UseBasicParsing $Url -TimeoutSec 2 -ErrorAction Stop
+            if ($resp.StatusCode -ge 200 -and $resp.StatusCode -lt 500) {
+                return $true
+            }
+        } catch { }
+        Start-Sleep -Milliseconds 500
+    }
+    return $false
+}
+
 function Test-Pid {
     param([string]$PidFile, [string]$NameMatch)
     if (-not (Test-Path $PidFile)) { return $null }
@@ -156,7 +174,7 @@ function Clear-Port {
     $owners = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
     foreach ($o in $owners) {
         Write-Info "Killing stale $Label listener tree PID $($o.Pid) ($($o.ProcessName))..."
-        & taskkill.exe /F /T /PID $o.Pid 2>&1 | Out-Null
+        Invoke-TaskKill -ProcessId $o.Pid
         if ($LASTEXITCODE -ne 0) {
             try { Stop-Process -Id $o.Pid -Force -ErrorAction Stop } catch { Write-Warn2 "Could not kill PID $($o.Pid): $_" }
         }
@@ -170,7 +188,7 @@ function Clear-Port {
             $parent = Get-Process -Id $cim.ParentProcessId -ErrorAction SilentlyContinue
             if ($parent -and $parent.ProcessName -match 'python|node') {
                 Write-Info "Killing parent reload watcher PID $($parent.Id) ($($parent.ProcessName))..."
-                & taskkill.exe /F /T /PID $parent.Id 2>&1 | Out-Null
+                Invoke-TaskKill -ProcessId $parent.Id
             }
         }
     }
@@ -181,7 +199,7 @@ function Clear-Port {
         # One more aggressive sweep: kill ANY python.exe/node.exe still on the port
         foreach ($o in $still) {
             Write-Warn2 "Forcing kill on PID $($o.Pid) ($($o.ProcessName))..."
-            & taskkill.exe /F /T /PID $o.Pid 2>&1 | Out-Null
+            Invoke-TaskKill -ProcessId $o.Pid
         }
         Start-Sleep -Milliseconds 1000
         $still = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
@@ -199,7 +217,7 @@ function Clear-Port {
         }
         foreach ($p in $orphans) {
             Write-Info "Killing orphan $($p.Name) PID $($p.ProcessId)..."
-            & taskkill.exe /F /T /PID $p.ProcessId 2>&1 | Out-Null
+            Invoke-TaskKill -ProcessId $p.ProcessId
         }
         Start-Sleep -Milliseconds 1500
         $still = Get-PortListeners -Port $Port | Where-Object { $_.Pid -ne $AllowedPid }
@@ -225,6 +243,13 @@ function Resolve-Python {
     return $null
 }
 
+function Invoke-TaskKill {
+    param([int]$ProcessId)
+    try {
+        & cmd.exe /c "taskkill /F /T /PID $ProcessId >nul 2>nul" | Out-Null
+    } catch { }
+}
+
 # ---------------------------------------------------------------------------
 # Stop mode
 # ---------------------------------------------------------------------------
@@ -246,6 +271,28 @@ function Stop-Frontend {
             }
         }
     }
+}
+
+function Start-FrontendProcess {
+    param([string[]]$ArgumentList)
+    $npmCmdInfo = Get-Command npm.cmd -ErrorAction SilentlyContinue
+    $npmCmd = if ($npmCmdInfo) { $npmCmdInfo.Source } else { $null }
+    if (-not $npmCmd) {
+        throw "npm.cmd not found in PATH."
+    }
+
+    if (Test-Path $FrontendLog) { Remove-Item $FrontendLog -Force -ErrorAction SilentlyContinue }
+    if (Test-Path "$FrontendLog.err") { Remove-Item "$FrontendLog.err" -Force -ErrorAction SilentlyContinue }
+
+    $proc = Start-Process -FilePath $npmCmd `
+        -ArgumentList $ArgumentList `
+        -WorkingDirectory $FrontendDir `
+        -RedirectStandardOutput $FrontendLog `
+        -RedirectStandardError "$FrontendLog.err" `
+        -WindowStyle Hidden `
+        -PassThru
+    $proc.Id | Out-File -FilePath $FrontendPidF -Encoding ascii
+    return $proc
 }
 
 if ($Stop -or $Restart) {
@@ -329,7 +376,7 @@ if (-not $existing) {
 # Frontend (vite)
 # ---------------------------------------------------------------------------
 if (-not (Test-Path $FrontendDir)) {
-    Write-Warn2 "frontend/ not found — skipping frontend startup."
+    Write-Warn2 "frontend/ not found - skipping frontend startup."
 } else {
     $npm = Get-Command npm -ErrorAction SilentlyContinue
     if (-not $npm) {
@@ -360,20 +407,20 @@ if (-not (Test-Path $FrontendDir)) {
         if (-not $existingFE) {
             Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
             Write-Info "Starting Vite dev server on http://localhost:${FrontendPort}..."
-            $npmCmd = Join-Path (Split-Path $npm.Source -Parent) 'npm.cmd'
-            if (-not (Test-Path $npmCmd)) { $npmCmd = $npm.Source }
+            $frontendArgs = @('run', 'dev', '--', '--host', '127.0.0.1', '--port', $FrontendPort)
+            $proc = Start-FrontendProcess -ArgumentList $frontendArgs
+            $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
+            if ($proc.HasExited -or -not $frontendHealthy) {
+                Write-Warn2 "Primary Vite launch did not become healthy. Retrying once..."
+                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
+                if (Test-Path $FrontendPidF) { Remove-Item $FrontendPidF -Force -ErrorAction SilentlyContinue }
+                Start-Sleep -Seconds 1
+                $proc = Start-FrontendProcess -ArgumentList $frontendArgs
+                $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
+            }
 
-            $proc = Start-Process -FilePath $npmCmd `
-                -ArgumentList @('run', 'dev', '--', '--host', '--port', $FrontendPort) `
-                -WorkingDirectory $FrontendDir `
-                -RedirectStandardOutput $FrontendLog `
-                -RedirectStandardError "$FrontendLog.err" `
-                -WindowStyle Hidden `
-                -PassThru
-            $proc.Id | Out-File -FilePath $FrontendPidF -Encoding ascii
-            Start-Sleep -Seconds 3
-            if ($proc.HasExited) {
-                Write-Err "Frontend failed to start. Recent log:"
+            if ($proc.HasExited -or -not $frontendHealthy) {
+                Write-Err "Frontend failed to start cleanly. Recent log:"
                 if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
                 if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
             } else {
