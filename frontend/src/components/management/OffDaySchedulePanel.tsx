@@ -1,8 +1,11 @@
 import { useMemo, useState } from "react";
 import { useFleet } from "../../api/hooks";
+import { isScheduledOff } from "../../utils/truckStatus";
+import { workdayNumbers } from "../Clock";
 import clsx from "clsx";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
+const TYPE_SHORT: Record<string, string> = { Dust: "(D)", Uniform: "(U)" };
 
 export default function OffDaySchedulePanel() {
   const { data: fleet } = useFleet(false);
@@ -17,6 +20,13 @@ export default function OffDaySchedulePanel() {
       .filter((t) => t.truck_type !== "Spare")
       .sort((a, b) => a.truck_number - b.truck_number);
   }, [fleet]);
+
+  const todayDayNum = useMemo(() => workdayNumbers().loadDay, []);
+
+  const runningToday = useMemo(
+    () => rows.filter((t) => !isScheduledOff(t, todayDayNum)).length,
+    [rows, todayDayNum],
+  );
 
   const activeRow = pinnedRow ?? hoveredRow;
   const activeDay = pinnedDay ?? hoveredDay;
@@ -83,10 +93,10 @@ export default function OffDaySchedulePanel() {
                   onMouseLeave={() => setHoveredRow(null)}
                   onClick={() => togglePinRow(t.truck_number)}
                 >
-                  #{t.truck_number}
+                  #{t.truck_number} {TYPE_SHORT[t.truck_type] ?? ""}
                 </td>
                 {[1, 2, 3, 4, 5].map((day) => {
-                  const off = t.scheduled_off_days.includes(day);
+                  const off = isScheduledOff(t, day);
                   const highlight = off && isActive(t.truck_number, day);
                   return (
                     <td
@@ -111,7 +121,7 @@ export default function OffDaySchedulePanel() {
       </table>
       {rows.length > 0 && (
         <div className="border-t border-slate-800 px-3 py-1.5 text-[10px] text-slate-500">
-          {rows.length} route trucks shown
+          {runningToday} running Day {todayDayNum} · {rows.length} total route trucks
         </div>
       )}
     </div>

@@ -196,7 +196,8 @@ export default function RecoveryPanel() {
         <h3 className="text-sm font-semibold text-slate-200">Restore from ZIP backup</h3>
         <p className="text-xs text-slate-500">
           Upload a <span className="font-mono">readyroute_backup_*.zip</span> file exported from
-          Data &amp; Reports → Export &amp; Import. Restores load durations, audit entries, and fleet configuration.
+          Data &amp; Reports → Export &amp; Import. Restores the core operational snapshot including
+          fleet, truck states, shortages, batches, load durations, and any packaged activity history.
         </p>
         {importStatus && (
           <p className={`rounded px-3 py-2 text-sm ${

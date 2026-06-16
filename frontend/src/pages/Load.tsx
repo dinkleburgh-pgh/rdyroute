@@ -17,9 +17,12 @@ import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import {
   buildOperationalDayContext,
+  countLoaded,
+  countUnloadedFromContext,
   effectiveOperationalStatus,
   effectiveStatus,
   getOperationalTruckType,
+  isScheduledOff,
 } from "../utils/truckStatus";
 import { PaceBar, useElapsed } from "../components/LiveInProgress";
 import { DustGarmentIcon } from "../components/icons";
@@ -61,7 +64,7 @@ export default function Load() {
     [board],
   );
   const loadContext = useMemo(
-    () => buildOperationalDayContext(board, loadDay, holidayLoad),
+    () => buildOperationalDayContext(board, loadDay, holidayLoad, false),
     [board, loadDay, holidayLoad],
   );
   const loadDisplayTrucks = loadContext.activeTrucks;
@@ -137,16 +140,20 @@ export default function Load() {
   );
 
   const loadTotal = loadDisplayTrucks.length;
-  const loadDone = loaded.length;
+  const loadDone = useMemo(
+    () => countLoaded(board, loadDay, holidayLoad, unloadsDay, holidayUnload),
+    [board, loadDay, unloadsDay, holidayLoad, holidayUnload],
+  );
   const loadPct = loadTotal > 0 ? Math.round((loadDone / loadTotal) * 100) : 0;
 
   const unloadContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload),
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, true),
     [board, unloadsDay, holidayUnload],
   );
-  const unloadDone = unloadContext.activeTrucks.filter((t) =>
-    ["unloaded", "loaded"].includes(effectiveOperationalStatus(t, unloadsDay, holidayUnload)),
-  ).length;
+  const unloadDone = useMemo(
+    () => countUnloadedFromContext(unloadContext),
+    [unloadContext],
+  );
   const unloadPct =
     unloadContext.activeTrucks.length > 0
       ? Math.round((unloadDone / unloadContext.activeTrucks.length) * 100)
@@ -228,7 +235,7 @@ export default function Load() {
       (t) =>
         t.truck_type === "Dust" &&
         !(["off", "oos"] as string[]).includes(effectiveStatus(t, loadDay, holidayLoad)) &&
-        (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+        (holidayLoad || !isScheduledOff(t, loadDay)),
     )
     .sort((a, b) => a.truck_number - b.truck_number);
 

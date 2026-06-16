@@ -22,7 +22,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { effectiveStatus, effectiveWorkflowStatus, getSwapHistory, recordSwapHistory } from "../utils/truckStatus";
+import { effectiveStatus, effectiveWorkflowStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -375,18 +375,17 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
       if (!matchStatus) return false;
       if (t.truck_type === "Spare") {
-        // Show a spare card in a lifecycle-status filter only when it is
-        // actively covering an OOS route (the spare represents that route),
+        // Show a spare card in a lifecycle-status filter when it is
+        // actively covering an OOS or OFF route (the spare represents that
+        // route since the route truck is hidden from lifecycle filters),
         // or when the filter is "dirty" and the spare has dirty status,
         // or when the filter is "unloaded" and the spare is unloaded.
-        // Idle spares and spares assigned to non-OOS routes are hidden from
-        // other lifecycle filters (loaded, etc.) — the route
-        // truck's own card already represents the route.
         if (filter === "dirty" && (t.state?.status === "dirty" || t.state?.status === "unfinished" || t.state == null)) return true;
         if (filter === "unloaded" && t.state?.status === "unloaded") return true;
         const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
         if (coveredRoute == null) return false;
-        return truckStatusByNumber.get(coveredRoute) === "oos";
+        const coveredStatus = truckStatusByNumber.get(coveredRoute);
+        return coveredStatus === "oos";
       }
       return true;
     });
@@ -633,11 +632,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             let chipDay: number | undefined;
             let chipIsExtra = false;
             if (isUnloadView && holidayUnload) {
-              chipDay = (truck.scheduled_off_days ?? []).includes(runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
+              chipDay = isScheduledOff(truck, runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
               chipIsExtra = chipDay === unloadsDay2;
             } else if (isLoadView && holidayLoad) {
-              const offDaysLoad = truck.scheduled_off_days ?? [];
-              chipDay = (offDaysLoad.includes(runDayNum) || offDaysLoad.includes(loadNextDay)) ? loadDay2 : runDayNum;
+              chipDay = (isScheduledOff(truck, runDayNum) || isScheduledOff(truck, loadNextDay)) ? loadDay2 : runDayNum;
               chipIsExtra = chipDay === loadDay2;
             }
             const numberColor =

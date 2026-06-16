@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     shortage_sheet_ollama_timeout_seconds: int = 60
     shortage_sheet_llm_low_confidence_threshold: float = 0.82
     shortage_sheet_preprocess_max_image_side: int = 2400
+    production_sync_source_url: str = "https://rdyroute.app/api/exports"
+    production_sync_timeout_seconds: int = 180
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

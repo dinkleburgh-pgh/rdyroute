@@ -16,8 +16,8 @@ import type { AuthRole, TruckStatus, TruckWithState } from "../types";
 import {
   buildOperationalDayContext,
   buildRouteStatusCounts,
-  effectiveOperationalStatus,
-  effectiveStatus,
+  countLoaded,
+  countUnloadedFromContext,
 } from "../utils/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
@@ -193,22 +193,26 @@ export default function Layout() {
   // Load progress mirrors the Day Overview: denominator = route trucks scheduled
   // for load; a route counts as done when the route truck is loaded OR its covering spare is.
   const loadContext = useMemo(
-    () => buildOperationalDayContext(board ?? [], loadDayNum, holidayLoad),
+    () => buildOperationalDayContext(board ?? [], loadDayNum, holidayLoad, false),
     [board, loadDayNum, holidayLoad],
   );
   const totalScheduledLoad = loadContext.activeTrucks.length;
-  const loadedScheduled = loadContext.activeTrucks.filter(
-    (t) => effectiveOperationalStatus(t, loadDayNum, holidayLoad) === "loaded",
-  ).length;
+  // Match the board's loaded filter exactly — uses shared helper.
+  const loadedScheduled = useMemo(
+    () => countLoaded(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload),
+    [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload],
+  );
 
-  // Unload progress mirrors the Day Overview exactly.
+  // Unload progress uses its own day context. A truck counts as unloaded when
+  // its raw status is unloaded (or loaded, meaning it never needed unloading).
   const unloadContext = useMemo(
-    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload),
+    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, true),
     [board, unloadsDay, holidayUnload],
   );
-  const unloadedScheduled = unloadContext.activeTrucks.filter((t) =>
-    ["unloaded", "loaded"].includes(effectiveOperationalStatus(t, unloadsDay, holidayUnload)),
-  ).length;
+  const unloadedScheduled = useMemo(
+    () => countUnloadedFromContext(unloadContext),
+    [unloadContext],
+  );
 
   const loadedPct =
     totalScheduledLoad > 0
@@ -352,14 +356,14 @@ export default function Layout() {
                 clsx(
                   "relative flex w-full items-center justify-center rounded-md border px-3 py-2 text-sm font-medium transition-colors",
                   isActive
-                    ? "border-cyan-500 bg-cyan-950/60 text-cyan-300"
+                    ? "border-purple-500/50 bg-gradient-to-r from-purple-950/60 to-purple-900/30 text-purple-300"
                     : "border-slate-700 bg-slate-800 hover:bg-slate-700",
                 )
               }
             >
-              <span className="absolute left-2 h-3 w-3 rounded-full bg-cyan-400" />
+              <span className="absolute left-2 h-3 w-3 rounded-full bg-purple-400" />
               Day Overview
-              <span className="absolute right-2 rounded bg-cyan-800/60 px-1.5 py-0.5 text-xs font-semibold text-cyan-300">
+              <span className="absolute right-2 rounded bg-purple-800/60 px-1.5 py-0.5 text-xs font-semibold text-purple-300">
                 {(holidayLoad || holidayUnload) ? "Holiday" : `Day ${unloadsDay}`}
               </span>
             </NavLink>

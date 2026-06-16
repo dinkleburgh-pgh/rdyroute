@@ -17,6 +17,7 @@ import type {
   NotificationStatus,
   NoteType,
   PushSubscriptionRecord,
+  ProductionSyncResult,
   RouteSwap,
   RouteSwapLog,
   Shortage,
@@ -896,6 +897,16 @@ export function useUpsertSetting() {
     mutationFn: async ({ key, value }: { key: string; value: unknown }) =>
       (await api.put<AppSetting>(`/settings/${encodeURIComponent(key)}`, { value })).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["settings"] }),
+  });
+}
+
+export function useSyncProductionData() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => (await api.post<ProductionSyncResult>("/exports/dev/sync-production")).data,
+    onSuccess: async () => {
+      await qc.invalidateQueries();
+    },
   });
 }
 

@@ -23,7 +23,7 @@ import {
 } from "../../api/hooks";
 import { workdayNumbers } from "../../components/Clock";
 import type { TruckWithState } from "../../types";
-import { effectiveStatus, getSwapHistory, recordSwapHistory } from "../../utils/truckStatus";
+import { effectiveStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../../utils/truckStatus";
 
 export default function RunDayWizard({
   runDate,
@@ -53,16 +53,16 @@ export default function RunDayWizard({
   // Base = trucks scheduled to run that ship day normally.
   // Extra = trucks normally off for that ship day (added by holiday).
   const loadBase = board.filter(
-    (t) => t.truck_type !== "Spare" && !(t.scheduled_off_days ?? []).includes(loadDay),
+    (t) => t.truck_type !== "Spare" && !isScheduledOff(t, loadDay),
   ).length;
   const loadExtra = board.filter(
-    (t) => t.truck_type !== "Spare" && (t.scheduled_off_days ?? []).includes(loadDay),
+    (t) => t.truck_type !== "Spare" && isScheduledOff(t, loadDay),
   ).length;
   const unloadBase = board.filter(
-    (t) => t.truck_type !== "Spare" && !(t.scheduled_off_days ?? []).includes(unloadsDay),
+    (t) => t.truck_type !== "Spare" && !isScheduledOff(t, unloadsDay),
   ).length;
   const unloadExtra = board.filter(
-    (t) => t.truck_type !== "Spare" && (t.scheduled_off_days ?? []).includes(unloadsDay),
+    (t) => t.truck_type !== "Spare" && isScheduledOff(t, unloadsDay),
   ).length;
   const DAY_NAMES = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
   const upsert = useUpsertTruckState();
@@ -92,8 +92,8 @@ export default function RunDayWizard({
   const returningTrucks = board.filter(
     (t) =>
       t.truck_type !== "Spare" &&
-      t.scheduled_off_days.includes(prevDay) &&
-      !t.scheduled_off_days.includes(loadDay),
+      isScheduledOff(t, prevDay) &&
+      !isScheduledOff(t, loadDay),
   );
   const spareTrucks = board.filter((t) => t.truck_type === "Spare");
   const specialTrucks = [...returningTrucks, ...spareTrucks].filter(

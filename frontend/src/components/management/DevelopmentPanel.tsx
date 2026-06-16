@@ -1,27 +1,41 @@
 /**
  * Development tools — day-number override for holiday runs. Extracted from Settings.tsx.
  */
-import { useEffect, useState } from "react";
-import { useLoadDayOverride, useSetLoadDayOverride, useSetUnloadsDayOverride, useUnloadsDayOverride } from "../../api/hooks";
+import { useEffect, useMemo, useState } from "react";
+import { useLoadDayOverride, useSetLoadDayOverride, useSetUnloadsDayOverride, useSyncProductionData, useUnloadsDayOverride } from "../../api/hooks";
 import { todayIso } from "../../api/client";
 import { workdayNumbers } from "../../components/Clock";
+import ConfirmDialog from "../ConfirmDialog";
+import { useToast } from "../../contexts/ToastContext";
 import { FieldRow } from "./shared";
 
 const DAY_NAMES: Record<number, string> = { 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri" };
 
 export default function DevelopmentPanel() {
+  const toast = useToast();
   const [runDate, setRunDate] = useState(todayIso());
   const { data: loadOverride = null }    = useLoadDayOverride(runDate);
   const { data: unloadsOverride = null } = useUnloadsDayOverride(runDate);
   const setLoadOverride    = useSetLoadDayOverride();
   const setUnloadsOverride = useSetUnloadsDayOverride();
+  const syncProductionData = useSyncProductionData();
   const [draftLoad, setDraftLoad]       = useState("");
   const [draftUnloads, setDraftUnloads] = useState("");
+  const [confirmSyncOpen, setConfirmSyncOpen] = useState(false);
 
   useEffect(() => {
     setDraftLoad(loadOverride    != null ? String(loadOverride)    : "");
     setDraftUnloads(unloadsOverride != null ? String(unloadsOverride) : "");
   }, [loadOverride, unloadsOverride, runDate]);
+
+  const currentHost = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return window.location.hostname;
+  }, []);
+  const isLoopbackHost = useMemo(
+    () => currentHost === "localhost" || currentHost === "127.0.0.1" || currentHost === "::1",
+    [currentHost],
+  );
 
   const [yr, mo, dy] = runDate.split("-").map(Number);
   const computedNums = workdayNumbers(new Date(yr, mo - 1, dy, 12));
@@ -40,6 +54,22 @@ export default function DevelopmentPanel() {
     setUnloadsOverride.mutate({ runDate, value: null });
     setDraftLoad("");
     setDraftUnloads("");
+  }
+
+  function startProductionSync() {
+    syncProductionData.mutate(undefined, {
+      onSuccess: (result) => {
+        const runDateText = result.run_dates.length ? result.run_dates.join(", ") : "no run dates";
+        toast.success(`Synced local dev data from production for ${runDateText}.`);
+        if (result.warnings.length) {
+          toast.info(result.warnings[0]);
+        }
+      },
+      onError: (error: unknown) => {
+        const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+        toast.error(detail ?? "Production sync failed.");
+      },
+    });
   }
 
   return (
@@ -103,6 +133,81 @@ export default function DevelopmentPanel() {
           </button>
         </div>
       </div>
+
+      <div className="card space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-300">Production Mirror Sync</h3>
+          <p className="mt-1 text-xs text-slate-500">
+            Pulls the live production export into this local database so the dev app can inspect the day using real data.
+            This replaces the local operational snapshot and is hard-blocked unless the app is running on loopback.
+          </p>
+        </div>
+
+        <div className="grid gap-3 rounded-lg bg-slate-800/50 p-3 text-sm sm:grid-cols-3">
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Current host</p>
+            <p className="font-semibold text-white">{currentHost || "unknown"}</p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Sync allowed</p>
+            <p className={`font-semibold ${isLoopbackHost ? "text-emerald-300" : "text-amber-300"}`}>
+              {isLoopbackHost ? "Yes" : "No"}
+            </p>
+          </div>
+          <div>
+            <p className="mb-1 text-xs text-slate-500">Source</p>
+            <p className="truncate font-mono text-xs text-slate-300">
+              {syncProductionData.data?.source ?? "https://rdyroute.app/api/exports"}
+            </p>
+          </div>
+        </div>
+
+        {!isLoopbackHost && (
+          <div className="rounded-lg border border-amber-700 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
+            Disabled because this page is not running from localhost / 127.0.0.1 / ::1.
+          </div>
+        )}
+
+        {syncProductionData.data && (
+          <div className="rounded-lg border border-emerald-800/70 bg-emerald-950/20 px-3 py-3 text-xs text-emerald-200">
+            <p className="font-semibold text-emerald-300">Last sync summary</p>
+            <p className="mt-1">
+              Run dates: {syncProductionData.data.run_dates.length ? syncProductionData.data.run_dates.join(", ") : "none"}
+            </p>
+            <p className="mt-1">
+              Imported: {Object.entries(syncProductionData.data.summary).map(([key, value]) => `${value} ${key.replace(/_/g, " ")}`).join(", ")}
+            </p>
+            {syncProductionData.data.warnings.length > 0 && (
+              <p className="mt-1 text-amber-300">
+                Warnings: {syncProductionData.data.warnings.join(" · ")}
+              </p>
+            )}
+          </div>
+        )}
+
+        <div className="flex gap-2">
+          <button
+            className="btn-primary"
+            disabled={!isLoopbackHost || syncProductionData.isPending}
+            onClick={() => setConfirmSyncOpen(true)}
+          >
+            {syncProductionData.isPending ? "Syncing…" : "Sync from live production"}
+          </button>
+        </div>
+      </div>
+
+      <ConfirmDialog
+        open={confirmSyncOpen}
+        title="Replace local data with the live production snapshot?"
+        description="This overwrites the local operational tables used by development so you can inspect what happened in production. Production itself will not be modified."
+        confirmLabel={syncProductionData.isPending ? "Syncing…" : "Sync now"}
+        busy={syncProductionData.isPending}
+        onConfirm={() => {
+          setConfirmSyncOpen(false);
+          startProductionSync();
+        }}
+        onCancel={() => setConfirmSyncOpen(false)}
+      />
     </div>
   );
 }

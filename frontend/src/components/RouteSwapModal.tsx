@@ -10,7 +10,7 @@ import { useState, useMemo } from "react";
 import { todayIso } from "../api/client";
 import { useBoard, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useHolidayLoad, useRouteSwapLog } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
-import { effectiveStatus } from "../utils/truckStatus";
+import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import type { TruckWithState, RouteSwap } from "../types";
 
 // ---- component -------------------------------------------------------------
@@ -65,7 +65,7 @@ export default function RouteSwapModal({ onClose }: Props) {
       t.truck_type !== "Spare" &&
       effectiveStatus(t, loadDay, holidayLoad) === "oos" &&
       !swapRouteSet.has(t.truck_number) &&
-      (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+      (holidayLoad || !isScheduledOff(t, loadDay)),
     )
     .sort((a, b) => a.truck_number - b.truck_number);
 
@@ -85,7 +85,7 @@ export default function RouteSwapModal({ onClose }: Props) {
   const routeOptions = sorted.filter(
     (t) =>
       t.truck_type !== "Spare" &&
-      (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+      (holidayLoad || !isScheduledOff(t, loadDay)),
   );
 
   // Load On options: all trucks (grouped), including OOS trucks

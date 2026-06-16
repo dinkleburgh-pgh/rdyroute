@@ -25,11 +25,72 @@ export function effectiveStatus(
   if (
     !holidayMode &&
     t.truck_type !== "Spare" &&
-    t.scheduled_off_days.includes(dayNum) &&
+    isScheduledOff(t, dayNum) &&
     (raw === "dirty" || raw === "unloaded")
   )
     return "off";
   return raw;
+}
+
+/**
+ * Pure schedule check — is this truck assigned off on this day, regardless
+ * of current operational status? Used for planning views (OffDaySchedulePanel,
+ * day assignment filtering). Not affected by holiday mode.
+ */
+export function isScheduledOff(truck: { scheduled_off_days: number[] }, dayNum: number): boolean {
+  return (truck.scheduled_off_days ?? []).includes(dayNum);
+}
+
+/**
+ * Status-aware off-day check — matches the logic inside effectiveStatus.
+ * Returns true only for route trucks (not spares) that are scheduled off
+ * AND haven't entered an active workflow (status is dirty or unloaded).
+ * Holiday mode disables the check entirely.
+ */
+export function isOffDay(truck: TruckWithState, dayNum: number, holidayMode = false): boolean {
+  if (holidayMode) return false;
+  if (truck.truck_type === "Spare") return false;
+  if (!(truck.scheduled_off_days ?? []).includes(dayNum)) return false;
+  const raw = (truck.state?.status ?? "dirty") as TruckStatus;
+  return raw === "dirty" || raw === "unloaded";
+}
+
+/**
+ * Count of loaded trucks matching the sidebar/board "loaded" filter.
+ * Route trucks: effectiveWorkflowStatus === "loaded".
+ * Spare trucks: only counted when covering an OOS route and loaded.
+ */
+export function countLoaded(
+  board: TruckWithState[],
+  loadDayNum: number,
+  holidayLoad: boolean,
+  unloadsDayNum: number,
+  holidayUnload: boolean,
+): number {
+  const statusByNumber = new Map<number, TruckStatus>(
+    board.map((t) => [t.truck_number, effectiveStatus(t, loadDayNum, holidayLoad)] as [number, TruckStatus]),
+  );
+  return board.filter((t) => {
+    const s = effectiveWorkflowStatus(t, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload);
+    if (s !== "loaded") return false;
+    if (t.truck_type !== "Spare") return true;
+    const coveredRoute = getCoverageRouteNumber(t);
+    if (coveredRoute == null) return false;
+    const coveredStatus = statusByNumber.get(coveredRoute);
+    return coveredStatus === "oos";
+  }).length;
+}
+
+/**
+ * Count of unloaded trucks from an already-built unload OperationalDayContext.
+ * A truck counts as unloaded when its raw status is "unloaded" or "loaded"
+ * (loaded means it unloaded previously and already moved to load workflow).
+ */
+export function countUnloadedFromContext(ctx: OperationalDayContext): number {
+  return ctx.activeTrucks.filter((t) => {
+    const raw = (t.state?.status ?? "dirty") as TruckStatus;
+    return raw === "unloaded" || raw === "loaded";
+  }).length;
 }
 
 export function getCoverageRouteNumber(t: TruckWithState): number | null {
@@ -162,6 +223,7 @@ export function buildOperationalDayContext(
   trucks: TruckWithState[],
   dayNum: number,
   holidayMode = false,
+  includeOffDayCoverage = false,
 ): OperationalDayContext {
   const routeTruckByNumber = new Map<number, TruckWithState>();
   for (const truck of trucks) {
@@ -177,7 +239,7 @@ export function buildOperationalDayContext(
       const coveredTruck = routeTruckByNumber.get(coveredRoute);
       if (
         coveredTruck &&
-        (holidayMode || !coveredTruck.scheduled_off_days.includes(dayNum))
+        (holidayMode || !isScheduledOff(coveredTruck, dayNum))
       ) {
         coveredRouteNumbers.add(coveredRoute);
       }
@@ -189,17 +251,14 @@ export function buildOperationalDayContext(
     const coveredRoute = getCoverageRouteNumber(truck);
     if (coveredRoute != null) {
       const coveredTruck = routeTruckByNumber.get(coveredRoute);
-      if (
-        coveredTruck &&
-        (holidayMode || !coveredTruck.scheduled_off_days.includes(dayNum))
-      ) {
+      if (coveredTruck && (holidayMode || includeOffDayCoverage || !isScheduledOff(coveredTruck, dayNum))) {
         activeTrucks.push(truck);
       }
       continue;
     }
 
     if (truck.truck_type === "Spare") continue;
-    if (!holidayMode && truck.scheduled_off_days.includes(dayNum)) continue;
+    if (!holidayMode && isScheduledOff(truck, dayNum)) continue;
     if (coveredRouteNumbers.has(truck.truck_number)) continue;
     activeTrucks.push(truck);
   }

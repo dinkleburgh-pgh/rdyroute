@@ -54,7 +54,8 @@ export default function ExportImportPanel() {
       <div className="card">
         <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-300">Backup package</h3>
         <p className="mb-3 text-xs text-slate-500">
-          A single ZIP archive containing all tables — load durations, truck states, audit entries, shortages, and batches.
+          A single ZIP archive containing the core operational snapshot — fleet, load durations,
+          truck states, audit entries, shortages, batches, and packaged activity history.
         </p>
         <button className="btn-primary" onClick={() => downloadFile("/exports/backup.zip")}>
           Download history backup package

@@ -17,7 +17,7 @@ import {
   useSpareAssignments,
 } from "../../api/hooks";
 import { workdayNumbers } from "../../components/Clock";
-import { effectiveStatus, getSwapHistory, recordSwapHistory } from "../../utils/truckStatus";
+import { effectiveStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../../utils/truckStatus";
 import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS } from "./constants";
 
 const STATUS_BORDER = { loaded: "border-l-blue-600", in_progress: "border-l-amber-500", unloaded: "border-l-green-600" } as const;
@@ -43,7 +43,7 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
   const oosRoutes = useMemo(
     () => data.filter((t) => {
       if (!t.is_oos && (t.state?.status ?? "dirty") !== "oos") return false;
-      if (!holidayLoad && (t.scheduled_off_days ?? []).includes(loadDayNum)) return false;
+      if (!holidayLoad && isScheduledOff(t, loadDayNum)) return false;
       return true;
     }),
     [data, loadDayNum, holidayLoad],
@@ -60,8 +60,8 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
     [swaps],
   );
 
-  const spareByNumber = useMemo(
-    () => new Map(data.filter((t) => t.truck_type === "Spare").map((t) => [t.truck_number, t])),
+  const truckByNumber = useMemo(
+    () => new Map(data.map((t) => [t.truck_number, t])),
     [data],
   );
 
@@ -143,11 +143,11 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
               const assignment = assignmentByRoute.get(t.truck_number);
               const swap = !assignment ? swapByRoute.get(t.truck_number) : undefined;
               const coveringTruckNum = assignment?.spare_truck_number ?? swap?.load_on_truck;
-              const spareTruck = coveringTruckNum != null ? spareByNumber.get(coveringTruckNum) : undefined;
-              const spareStatus = spareTruck?.state?.status as TruckStatus | undefined;
-              const spareActive = spareStatus === "loaded" || spareStatus === "in_progress";
+              const coveringTruck = coveringTruckNum != null ? truckByNumber.get(coveringTruckNum) : undefined;
+              const coveringStatus = coveringTruck?.state?.status as TruckStatus | undefined;
+              const coveringActive = coveringStatus === "loaded" || coveringStatus === "in_progress";
               const isCovered = assignment != null || swap != null;
-              const borderKey = spareStatus && spareStatus in STATUS_BORDER ? spareStatus as keyof typeof STATUS_BORDER : undefined;
+              const borderKey = coveringStatus && coveringStatus in STATUS_BORDER ? coveringStatus as keyof typeof STATUS_BORDER : undefined;
               return (
                 <motion.div
                   key={t.truck_number}
@@ -170,9 +170,9 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
                           <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-3 py-1 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
                             Cov. #{coveringTruckNum}
                           </span>
-                          {spareStatus && (
-                            <span className={clsx("badge", STATUS_BG[spareStatus], STATUS_BADGE_TEXT[spareStatus])}>
-                              {STATUS_LABELS[spareStatus]}
+                          {coveringStatus && (
+                            <span className={clsx("badge", STATUS_BG[coveringStatus], STATUS_BADGE_TEXT[coveringStatus])}>
+                              {STATUS_LABELS[coveringStatus]}
                             </span>
                           )}
                         </>
@@ -180,7 +180,7 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
                         <span className="text-xs text-amber-400">Needs assignment</span>
                       )}
                     </div>
-                    {isCovered && !spareActive ? (
+                    {isCovered && !coveringActive ? (
                       <button
                         className="rounded px-2 py-1 text-xs text-red-400 hover:text-red-300 transition-colors"
                         disabled={returnSpare.isPending || deleteSwap.isPending}

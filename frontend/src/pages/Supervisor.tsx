@@ -15,7 +15,7 @@ import {
 import { todayIso } from "../api/client";
 import type { TruckStatus, TruckWithState } from "../types";
 import { useAuth } from "../contexts/AuthContext";
-import { effectiveStatus } from "../utils/truckStatus";
+import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
 import AnimateCard from "../components/AnimateCard";
 
@@ -103,7 +103,7 @@ export default function Supervisor() {
       .filter((t) =>
         t.truck_type !== "Spare" &&
         effectiveStatus(t, loadDay, holidayLoad) === "oos" &&
-        (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
+        (holidayLoad || !isScheduledOff(t, loadDay)),
       )
       .sort((a, b) => a.truck_number - b.truck_number),
     [board, loadDay, holidayLoad],
