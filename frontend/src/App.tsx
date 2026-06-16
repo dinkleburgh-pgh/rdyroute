@@ -21,6 +21,7 @@ import Batches from "./pages/Batches";
 import Shorts from "./pages/Shorts";
 import Audit from "./pages/Audit";
 import Trends from "./pages/Trends";
+import TrendDetail from "./pages/trends/TrendDetail";
 import Management from "./pages/Settings";
 import Communications from "./pages/Communications";
 import Supervisor from "./pages/Supervisor";
@@ -61,6 +62,7 @@ const router = createBrowserRouter([
       { path: "shorts", element: <Shorts /> },
       { path: "audit", element: <Audit /> },
       { path: "trends", element: <Trends /> },
+      { path: "trends/:metric", element: <TrendDetail /> },
       { path: "management", element: <Management /> },
       { path: "communications", element: <Communications /> },
       { path: "notes", element: <NotesBoard /> },

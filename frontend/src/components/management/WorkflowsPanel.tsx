@@ -15,6 +15,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       outside_timer_minutes: Number(map.get("outside_timer_minutes") ?? 20),
       paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
       paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
+      arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
     }),
     [map],
@@ -103,6 +104,19 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             className="input ml-2 w-16"
           />
           <span className="text-xs text-slate-500">min</span>
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Arrived tracking"
+        hint="Adds a development-only Arrived quick action so fleet can timestamp when a truck parks back in the yard."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.arrived_tracking_enabled}
+            onChange={(e) => setForm({ ...form, arrived_tracking_enabled: e.target.checked })}
+          />
+          Enable Arrived quick action
         </label>
       </FieldRow>
       <FieldRow

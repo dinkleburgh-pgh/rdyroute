@@ -4,6 +4,7 @@ SQLAlchemy ORM models derived from the V1 Streamlit application data structures.
 Entity map:
   Truck              — fleet member record (number, type, active flag)
   TruckState         — one row per (truck, run_date); tracks live operational status
+  ActivityEvent      — append-only Truck Ops+ activity feed for debugging/history
   LoadDuration       — historical load-time record used for pace calculations
   Shortage           — shortage items recorded per truck per run-date
   AuditEntry         — items removed / flagged during audit workflow
@@ -55,6 +56,12 @@ class TruckStatus(str, enum.Enum):
     off = "off"
     oos = "oos"
     spare = "spare"
+
+
+class TruckStateSource(str, enum.Enum):
+    auto = "auto"
+    wizard = "wizard"
+    workflow = "workflow"
 
 
 class TruckType(str, enum.Enum):
@@ -156,6 +163,12 @@ class TruckState(Base):
     has_dust_garment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Priority unload + hold — truck flagged for urgent unload; once unloaded it holds the load workflow
     priority_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Follow-up check required even while the truck continues its normal lifecycle
+    needs_checked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # Driver parked / truck arrived back in the yard for this run-date
+    arrived_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # Who last established the current-day row shape
+    state_source: Mapped[str] = mapped_column(String(16), nullable=False, default=TruckStateSource.auto.value)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
@@ -406,6 +419,33 @@ class BatchHistory(Base):
     recorded_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+
+
+# ---------------------------------------------------------------------------
+# Activity Events
+# ---------------------------------------------------------------------------
+
+class ActivityEvent(Base):
+    """Append-only Truck Ops+ activity history for operational debugging."""
+    __tablename__ = "activity_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    occurred_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False, index=True
+    )
+    actor_type: Mapped[str] = mapped_column(String(16), nullable=False, default="system", index=True)
+    actor_username: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    actor_display_name: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    actor_role: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    event_family: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    run_date: Mapped[date | None] = mapped_column(Date, nullable=True, index=True)
+    truck_number: Mapped[int | None] = mapped_column(Integer, nullable=True, index=True)
+    summary: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    status_before: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    status_after: Mapped[str | None] = mapped_column(String(32), nullable=True, index=True)
+    diff_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    context_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
 
 
 # ---------------------------------------------------------------------------

@@ -11,6 +11,8 @@ export type TruckStatus =
   | "oos"
   | "spare";
 
+export type TruckStateSource = "auto" | "wizard" | "workflow";
+
 export type TruckType = "Uniform" | "Dust" | "Spare";
 
 export type AuthRole =
@@ -22,6 +24,9 @@ export type AuthRole =
   | "loader"
   | "unloader"
   | "guest";
+
+export type ActivityActorType = "user" | "system";
+export type ActivityEventFamily = "state" | "batch" | "coverage" | "setup" | "recovery" | "system";
 
 export interface Truck {
   id: number;
@@ -52,6 +57,9 @@ export interface TruckState {
   oos_spare_route: number | null;
   has_dust_garment: boolean;
   priority_hold: boolean;
+  needs_checked: boolean;
+  arrived_at: number | null;
+  state_source: TruckStateSource;
   updated_at: string;
 }
 
@@ -291,6 +299,31 @@ export interface RouteSwapLog {
   route_truck: number;
   load_on_truck: number;
   created_at: string;
+}
+
+export interface ActivityEvent {
+  id: number;
+  occurred_at: string;
+  actor_type: ActivityActorType;
+  actor_username: string | null;
+  actor_display_name: string | null;
+  actor_role: AuthRole | null;
+  event_family: ActivityEventFamily;
+  event_type: string;
+  run_date: string | null;
+  truck_number: number | null;
+  summary: string;
+  status_before: string | null;
+  status_after: string | null;
+  diff_json: Record<string, unknown>;
+  context_json: Record<string, unknown>;
+}
+
+export interface ActivityEventPage {
+  items: ActivityEvent[];
+  total: number;
+  limit: number;
+  offset: number;
 }
 
 export type AuthRequestStatus = "pending" | "approved" | "denied";

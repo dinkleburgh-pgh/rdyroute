@@ -22,6 +22,7 @@ import {
 import { todayIso, publicBase } from "../api/client";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import PageHeader from "../components/PageHeader";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -573,26 +574,31 @@ export default function NotesBoard() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
+      className="flex min-h-0 flex-col"
     >
-    <div className="space-y-5 p-3 md:p-6">
-      {/* Header */}
-      <div className="flex flex-wrap items-end gap-4">
-        <h2 className="text-2xl font-semibold">Truck Notes</h2>
-        <div className="flex flex-wrap gap-2 text-xs">
-          <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.constant)}>
-            {totalConstant} Always
-          </span>
-          <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.workday)}>
-            {totalWorkday} Workday
-          </span>
-          <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.one_off)}>
-            {totalOneOff} Set Until...
-          </span>
-          <span className="rounded-full bg-slate-800 px-2.5 py-0.5 font-semibold text-slate-300">
-            {totalActive} Active
-          </span>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Workflow"
+        title="Truck Notes"
+        subtitle="Manage standing notes, workday instructions, and one-off reminders by truck."
+        actions={
+          <div className="flex flex-wrap justify-center gap-2 text-xs md:justify-end">
+            <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.constant)}>
+              {totalConstant} Always
+            </span>
+            <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.workday)}>
+              {totalWorkday} Workday
+            </span>
+            <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.one_off)}>
+              {totalOneOff} Set Until...
+            </span>
+            <span className="rounded-full bg-slate-800 px-2.5 py-0.5 font-semibold text-slate-300">
+              {totalActive} Active
+            </span>
+          </div>
+        }
+      />
+
+      <div className="space-y-5 p-3 md:p-6">
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
@@ -663,7 +669,7 @@ export default function NotesBoard() {
           ))}
         </div>
       )}
-    </div>
+      </div>
     </motion.div>
   );
 }

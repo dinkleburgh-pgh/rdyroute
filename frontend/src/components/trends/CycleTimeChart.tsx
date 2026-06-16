@@ -17,6 +17,7 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Filler);
 interface Props {
   data: CycleDailyPoint[] | undefined;
   isLoading: boolean;
+  onViewDetails?: () => void;
 }
 
 function fmtDuration(s: number): string {
@@ -25,13 +26,14 @@ function fmtDuration(s: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-export default function CycleTimeChart({ data, isLoading }: Props) {
+export default function CycleTimeChart({ data, isLoading, onViewDetails }: Props) {
   return (
     <TrendChartCard
       title="Cycle Time"
       subtitle="Avg time trucks spent in load workflow per day"
       isLoading={isLoading}
       isEmpty={!isLoading && (!data || data.length === 0)}
+      onViewDetails={onViewDetails}
     >
       {data && data.length > 0 && (
         <motion.div className="h-64" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

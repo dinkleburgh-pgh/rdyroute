@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, type FormEvent, type KeyboardEvent } from 
 import { motion } from "framer-motion";
 import { useMessages, useSendMessage, useDeleteMessage } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
+import PageHeader from "../components/PageHeader";
 
 import { format, parseISO } from "date-fns";
 
@@ -114,9 +115,12 @@ export default function Communications() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-slate-800 px-4 py-3">
-        <h2 className="text-lg font-semibold text-white">Communications</h2>
-      </div>
+      <PageHeader
+        eyebrow="Team"
+        title="Communications"
+        subtitle="Share shift updates, keep the team aligned, and track channel conversations."
+        className="shrink-0"
+      />
 
       {/* Channel tabs */}
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-800 bg-slate-950 px-3 py-2">

@@ -4,9 +4,11 @@
  */
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
+import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
 import Stat from "./Stat";
 import StatusEditor from "./StatusEditor";
 import FleetTruckEditor from "./FleetTruckEditor";
+import { format } from "date-fns";
 
 export default function TruckDetailModal({
   truck,
@@ -54,6 +56,9 @@ export default function TruckDetailModal({
             {truck.state?.priority_hold && (
               <p className="mt-0.5 text-xs font-semibold text-red-400">Hold — Do Not Load</p>
             )}
+            {truck.state?.needs_checked && (
+              <p className="mt-0.5 text-xs font-semibold text-amber-400">Needs Checked</p>
+            )}
           </div>
           <div className="flex-1 flex justify-end">
             <button className="btn-ghost" onClick={onClose}>
@@ -85,6 +90,12 @@ export default function TruckDetailModal({
               label="OOS covers route"
               value={truck.state?.oos_spare_route ?? "—"}
             />
+            <Stat
+              label="Arrived"
+              value={truck.state?.arrived_at ? format(new Date(truck.state.arrived_at * 1000), "PPpp") : "—"}
+            />
+            <Stat label="State source" value={truck.state?.state_source ?? "—"} />
+            <Stat label="Needs checked" value={truck.state?.needs_checked ? "Yes" : "No"} />
           </section>
 
           {(truck.state?.off_note || truck.state?.shop_note) && (
@@ -150,6 +161,8 @@ export default function TruckDetailModal({
               </ul>
             )}
           </section>
+
+          <TruckActivityTimeline truckNumber={truck.truck_number} />
         </div>
       </div>
     </div>

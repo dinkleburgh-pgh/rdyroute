@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { format } from "date-fns";
 import {
@@ -15,11 +15,17 @@ import {
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
-import { effectiveStatus } from "../utils/truckStatus";
+import {
+  buildOperationalDayContext,
+  effectiveOperationalStatus,
+  effectiveStatus,
+  getOperationalTruckType,
+} from "../utils/truckStatus";
 import { PaceBar, useElapsed } from "../components/LiveInProgress";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 
 /**
@@ -54,38 +60,11 @@ export default function Load() {
     () => board.find((t) => t.state?.status === "in_progress"),
     [board],
   );
-  // Trucks scheduled for tomorrow's load (respects holidayLoad): route trucks + covering spares.
-  const loadTrucks = useMemo(
-    () =>
-      board.filter(
-        (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-          (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay) ||
-           t.route_swap_route != null || t.state?.oos_spare_route != null),
-      ),
+  const loadContext = useMemo(
+    () => buildOperationalDayContext(board, loadDay, holidayLoad),
     [board, loadDay, holidayLoad],
   );
-  const loadCoveringSpares = useMemo(
-    () =>
-      loadTrucks.filter(
-        (t) => t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null),
-      ),
-    [loadTrucks],
-  );
-  const coveredLoadRoutes = useMemo(
-    () =>
-      new Set(
-        loadCoveringSpares.map((t) => (t.route_swap_route ?? t.state?.oos_spare_route) as number),
-      ),
-    [loadCoveringSpares],
-  );
-  const loadDisplayTrucks = useMemo(
-    () =>
-      loadTrucks.filter(
-        (t) => t.truck_type === "Spare" || !coveredLoadRoutes.has(t.truck_number),
-      ),
-    [loadTrucks, coveredLoadRoutes],
-  );
+  const loadDisplayTrucks = loadContext.activeTrucks;
   // Ready = unloaded and scheduled for tomorrow.
   const ready = useMemo(
     () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true),
@@ -97,7 +76,7 @@ export default function Load() {
   );
   // Loaded = physically loaded and scheduled for tomorrow.
   const loaded = useMemo(
-    () => loadDisplayTrucks.filter((t) => effectiveStatus(t, loadDay, holidayLoad) === "loaded"),
+    () => loadDisplayTrucks.filter((t) => effectiveOperationalStatus(t, loadDay, holidayLoad) === "loaded"),
     [loadDisplayTrucks, loadDay, holidayLoad],
   );
   // Sort variant for the "Loaded today" grid.
@@ -126,69 +105,28 @@ export default function Load() {
     return arr;
   }, [loaded, loadedSort]);
 
-  // Route-aware "not yet loaded" computation � mirrors Board/Sidebar logic.
-  // Covering spares (route_swap_route set) stand in for their OOS route truck.
-  const coveringSpareByRoute = useMemo(
+  const notYetLoadedTrucks = useMemo(
     () =>
-      new Map(
-        board
-          .filter((t) => t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null))
-          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
+      loadDisplayTrucks.filter(
+        (t) => effectiveOperationalStatus(t, loadDay, holidayLoad) !== "loaded",
       ),
-    [board],
+    [loadDisplayTrucks, loadDay, holidayLoad],
   );
   const dustsLeftTrucks = useMemo(() => {
-    const result: TruckWithState[] = [];
-    for (const t of board) {
-      if (t.truck_type !== "Dust") continue;
-      const eff = effectiveStatus(t, loadDay, holidayLoad);
-      if (eff === "loaded" || eff === "off") continue;
-      if (coveredLoadRoutes.has(t.truck_number)) continue;
-      if (eff === "oos") {
-        // Covering spare goes to sparesLeftTrucks; uncovered OOS still counts here
-        if (!coveringSpareByRoute.has(t.truck_number) &&
-            (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay))) {
-          result.push(t);
-        }
-        continue;
-      }
-      result.push(t);
-    }
-    return result;
-  }, [board, loadDay, holidayLoad, coveringSpareByRoute, coveredLoadRoutes]);
+    return notYetLoadedTrucks.filter(
+      (t) => getOperationalTruckType(t, loadContext.routeTruckByNumber) === "Dust",
+    );
+  }, [notYetLoadedTrucks, loadContext.routeTruckByNumber]);
   const uniformsLeftTrucks = useMemo(() => {
-    const result: TruckWithState[] = [];
-    for (const t of board) {
-      if (t.truck_type !== "Uniform") continue;
-      const eff = effectiveStatus(t, loadDay, holidayLoad);
-      if (eff === "loaded" || eff === "off") continue;
-      if (coveredLoadRoutes.has(t.truck_number)) continue;
-      if (eff === "oos") {
-        // Covering spare goes to sparesLeftTrucks; uncovered OOS still counts here
-        if (!coveringSpareByRoute.has(t.truck_number) &&
-            (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay))) {
-          result.push(t);
-        }
-        continue;
-      }
-      result.push(t);
-    }
-    return result;
-  }, [board, loadDay, holidayLoad, coveringSpareByRoute, coveredLoadRoutes]);
-  // Covering spares (route swap or OOS assignment) that haven't been loaded yet.
+    return notYetLoadedTrucks.filter(
+      (t) => getOperationalTruckType(t, loadContext.routeTruckByNumber) === "Uniform",
+    );
+  }, [notYetLoadedTrucks, loadContext.routeTruckByNumber]);
   const sparesLeftTrucks = useMemo(() => {
-    return board.filter((t) => {
-      if (t.truck_type !== "Spare") return false;
-      const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route;
-      if (coveredRoute == null) return false;
-      // Don't count the spare if the route it covers isn't running on the load day
-      if (!holidayLoad) {
-        const routeTruck = board.find((r) => r.truck_number === coveredRoute);
-        if (routeTruck && (routeTruck.scheduled_off_days ?? []).includes(loadDay)) return false;
-      }
-      return effectiveStatus(t, loadDay, holidayLoad) !== "loaded";
-    });
-  }, [board, loadDay, holidayLoad]);
+    return notYetLoadedTrucks.filter(
+      (t) => getOperationalTruckType(t, loadContext.routeTruckByNumber) === "Spare",
+    );
+  }, [notYetLoadedTrucks, loadContext.routeTruckByNumber]);
   const dustsLeft = dustsLeftTrucks.length;
   const uniformsLeft = uniformsLeftTrucks.length;
   const sparesLeft = sparesLeftTrucks.length;
@@ -198,69 +136,20 @@ export default function Load() {
     [dustsLeftTrucks, uniformsLeftTrucks, sparesLeftTrucks],
   );
 
-  // Load progress mirrors RunDay.tsx exactly.
-  const loadRouteTrucks = useMemo(
-    () => loadTrucks.filter((t) => t.truck_type !== "Spare"),
-    [loadTrucks],
-  );
-  const loadedSpareRoutes = useMemo(
-    () =>
-      new Set(
-        board
-          .filter(
-            (t) =>
-              t.truck_type === "Spare" &&
-              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-              effectiveStatus(t, loadDay, holidayLoad) === "loaded",
-          )
-          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
-      ),
-    [board, loadDay, holidayLoad],
-  );
-  const loadTotal = loadRouteTrucks.length;
-  const loadDone = loadRouteTrucks.filter(
-    (t) =>
-      effectiveStatus(t, loadDay, holidayLoad) === "loaded" ||
-      loadedSpareRoutes.has(t.truck_number),
-  ).length;
+  const loadTotal = loadDisplayTrucks.length;
+  const loadDone = loaded.length;
   const loadPct = loadTotal > 0 ? Math.round((loadDone / loadTotal) * 100) : 0;
 
-  // Unload progress mirrors RunDay.tsx exactly.
-  const unloadTrucks = useMemo(
-    () =>
-      board.filter(
-        (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-          (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
-      ),
+  const unloadContext = useMemo(
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload),
     [board, unloadsDay, holidayUnload],
   );
-  const unloadRouteTrucks = useMemo(
-    () => unloadTrucks.filter((t) => t.truck_type !== "Spare"),
-    [unloadTrucks],
-  );
-  const unloadedSpareRoutes = useMemo(
-    () =>
-      new Set(
-        board
-          .filter(
-            (t) =>
-              t.truck_type === "Spare" &&
-              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-              ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)),
-          )
-          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
-      ),
-    [board, unloadsDay, holidayUnload],
-  );
-  const unloadDone = unloadRouteTrucks.filter(
-    (t) =>
-      ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)) ||
-      unloadedSpareRoutes.has(t.truck_number),
+  const unloadDone = unloadContext.activeTrucks.filter((t) =>
+    ["unloaded", "loaded"].includes(effectiveOperationalStatus(t, unloadsDay, holidayUnload)),
   ).length;
   const unloadPct =
-    unloadRouteTrucks.length > 0
-      ? Math.round((unloadDone / unloadRouteTrucks.length) * 100)
+    unloadContext.activeTrucks.length > 0
+      ? Math.round((unloadDone / unloadContext.activeTrucks.length) * 100)
       : 0;
 
   const anyInProgress = Boolean(inProgress);
@@ -345,10 +234,12 @@ export default function Load() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
-      <div className="flex items-end justify-between gap-4">
-        <h2 className="text-2xl font-semibold">Load</h2>
-        <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
-      </div>
+      <PageHeader
+        eyebrow="Workflow"
+        title="Load"
+        subtitle="Start loading, finish routes, and track pace for the next run day."
+        actions={<PaceBadge avgSeconds={pace?.avg_seconds ?? null} />}
+      />
 
       {/* Dust Garments � read-only, set from Setup Day */}
       <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 px-4 py-3">
@@ -462,7 +353,7 @@ export default function Load() {
       {/* Load / Unload progress */}
       <div className="card space-y-2">
         <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} color="bg-blue-500" />
-        <ProgressRow label="Unload" done={unloadDone} total={unloadRouteTrucks.length} pct={unloadPct} color="bg-emerald-500" />
+        <ProgressRow label="Unload" done={unloadDone} total={unloadContext.activeTrucks.length} pct={unloadPct} color="bg-emerald-500" />
       </div>
 
       {/* On Hold */}
@@ -473,33 +364,16 @@ export default function Load() {
           </h3>
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
             {heldReady.map((t, index) => {
-              const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
               return (
                 <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.0}>
-                  <div className="card relative flex flex-col gap-1 min-h-[7.5rem] p-4 cursor-not-allowed opacity-50">
-                    <div className="flex items-start justify-between gap-1">
-                      <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-red-300">
-                        {t.truck_number}
-                      </span>
-                      <span className="flex flex-col items-end gap-0.5">
-                        <span className="badge bg-red-700 text-white">HOLD</span>
-                        {coverRoute != null && (
-                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                            Cov. #{coverRoute}
-                          </span>
-                        )}
-                        {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                          <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-1" title="Dust garment">
-                            <DustGarmentIcon className="h-5 w-5 text-amber-300" />
-                          </span>
-                        )}
-                      </span>
-                    </div>
-                    <div className="text-xs text-slate-400">
-                      {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
-                    </div>
-                    <div className="mt-auto pt-1 text-[11px] font-semibold text-red-400">Clear in Fleet</div>
-                  </div>
+                  <LoadWorkflowCard
+                    truck={t}
+                    accent="text-red-300"
+                    statusLabel="HOLD"
+                    statusClassName="bg-red-700 text-white"
+                    footer={<span className="text-[11px] font-semibold text-red-400">Clear in Fleet</span>}
+                    disabled
+                  />
                 </AnimateCard>
               );
             })}
@@ -520,7 +394,6 @@ export default function Load() {
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
           {ready.map((t, index) => {
             const disabled = anyInProgress || busy === t.truck_number;
-            const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
             return (
               <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.02}>
               <button
@@ -528,37 +401,22 @@ export default function Load() {
                 disabled={disabled}
                 onClick={() => setConfirmLoadTruck(t)}
                 className={clsx(
-                  "card relative flex flex-col gap-1 text-left transition-all duration-150 min-h-[7.5rem] p-4",
+                  "w-full text-left transition-all duration-150",
                   disabled
                     ? "cursor-not-allowed opacity-50"
-                    : "hover:ring-2 hover:ring-emerald-500 active:scale-[0.98]",
+                    : "active:scale-[0.98]",
                 )}
                 title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
               >
-                <div className="flex items-start justify-between gap-1">
-                  <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-emerald-300">
-                    {t.truck_number}
-                  </span>
-                  <span className="flex flex-col items-end gap-0.5">
-                    <span className="badge bg-emerald-700 text-white">Unloaded</span>
-                    {coverRoute != null && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                        Cov. #{coverRoute}
-                      </span>
-                    )}
-                    {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-1" title="Dust garment">
-                        <DustGarmentIcon className="h-5 w-5 text-amber-300" />
-                      </span>
-                    )}
-                  </span>
-                </div>
-                <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
-                </div>
-                {t.state?.wearers ? (
-                  <div className="mt-auto pt-1 text-xs text-slate-500">{t.state.wearers} wearers</div>
-                ) : null}
+                <LoadWorkflowCard
+                  truck={t}
+                  accent="text-emerald-300"
+                  statusLabel="Unloaded"
+                  statusClassName="bg-emerald-700 text-white"
+                  footer={t.state?.wearers ? <span className="text-xs text-slate-500">{t.state.wearers} wearers</span> : null}
+                  interactive={!disabled}
+                  ringClassName="hover:ring-emerald-500"
+                />
               </button>
               </AnimateCard>
             );
@@ -608,45 +466,28 @@ export default function Load() {
         </div>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]">
           {loadedSorted.map((t, idx) => {
-            const coverRoute = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
             return (
-              <AnimateCard key={t.truck_number} delay={idx * 0.03} className="card relative space-y-2 min-h-[7.5rem] p-4 hover:ring-2 hover:ring-blue-500 transition-shadow">
-                {loadedSort === "order" && (
-                  <span className="absolute -left-1.5 -top-1.5 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-900 px-1 text-[10px] font-bold text-blue-300 ring-1 ring-blue-500/60">
-                    {idx + 1}
-                  </span>
-                )}
-                <div className="flex items-start justify-between gap-1">
-                  <span className="text-4xl font-extrabold tracking-tight tabular-nums leading-none text-sky-300">
-                    {t.truck_number}
-                  </span>
-                  <span className="flex flex-col items-end gap-0.5">
-                    <span className="inline-flex items-center gap-1">
-                      <span className="badge bg-blue-600 text-white">Loaded</span>
-                      {t.state?.priority_hold && (
-                        <span className="badge bg-red-700 text-white">Hold</span>
-                      )}
+              <AnimateCard key={t.truck_number} delay={idx * 0.03}>
+                <div className="relative">
+                  {loadedSort === "order" && (
+                    <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-900 px-1 text-[10px] font-bold text-blue-300 ring-1 ring-blue-500/60">
+                      {idx + 1}
                     </span>
-                    {coverRoute != null && (
-                      <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                        Cov. #{coverRoute}
+                  )}
+                  <LoadWorkflowCard
+                    truck={t}
+                    accent="text-sky-300"
+                    statusLabel="Loaded"
+                    statusClassName="bg-blue-600 text-white"
+                    footer={t.state?.load_finish_time ? (
+                      <span className="text-xs text-slate-500">
+                        Done {format(new Date(t.state.load_finish_time * 1000), "h:mm a")}
                       </span>
-                    )}
-                    {t.truck_type === "Dust" && t.state?.has_dust_garment && (
-                      <span className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-1" title="Dust garment">
-                        <DustGarmentIcon className="h-5 w-5 text-amber-300" />
-                      </span>
-                    )}
-                  </span>
+                    ) : null}
+                    interactive
+                    ringClassName="hover:ring-blue-500"
+                  />
                 </div>
-                <div className="text-xs text-slate-400">
-                  {t.truck_type}{t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
-                </div>
-                {t.state?.load_finish_time && (
-                  <div className="mt-auto pt-1 text-xs text-slate-500">
-                    Done {format(new Date(t.state.load_finish_time * 1000), "h:mm a")}
-                  </div>
-                )}
               </AnimateCard>
             );
           })}
@@ -744,6 +585,77 @@ function PaceBadge({ avgSeconds }: { avgSeconds: number | null }) {
       30-day avg:{" "}
       <span className="font-semibold text-slate-200">{formatDuration(avgSeconds)}</span>
     </span>
+  );
+}
+
+function LoadWorkflowCard({
+  truck,
+  accent,
+  statusLabel,
+  statusClassName,
+  footer,
+  disabled = false,
+  interactive = false,
+  ringClassName = "hover:ring-blue-500",
+}: {
+  truck: TruckWithState;
+  accent: string;
+  statusLabel: string;
+  statusClassName: string;
+  footer?: ReactNode;
+  disabled?: boolean;
+  interactive?: boolean;
+  ringClassName?: string;
+}) {
+  const coverRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+  return (
+    <div
+      className={clsx(
+        "card relative flex min-h-[4.5rem] flex-col gap-1 p-2 md:min-h-[10rem] md:gap-2 md:p-4",
+        interactive && "hover:ring-2 transition-shadow",
+        interactive && ringClassName,
+        disabled && "cursor-not-allowed opacity-50",
+      )}
+    >
+      <div className="flex w-full flex-col gap-0.5 md:gap-1">
+        <div className="flex w-full items-start justify-between gap-2">
+          <div className="flex min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
+            <span className={clsx("font-extrabold tracking-tight tabular-nums leading-none text-2xl md:text-5xl", accent)}>
+              {truck.truck_number}
+            </span>
+          </div>
+          <span className="flex min-h-[1.5rem] flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
+            <span className={clsx("badge", statusClassName)}>{statusLabel}</span>
+            {truck.state?.priority_hold && statusLabel !== "HOLD" && (
+              <span className="badge bg-red-700 text-white">Hold</span>
+            )}
+            {truck.state?.needs_checked && (
+              <span className="badge bg-amber-700 text-white">Needs Checked</span>
+            )}
+            {coverRoute != null && (
+              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40">
+                → Cov. #{coverRoute}
+              </span>
+            )}
+            {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
+              <span
+                className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
+                title="Dust garment"
+              >
+                <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+              </span>
+            )}
+          </span>
+        </div>
+        <div className="text-[10px] text-slate-400 space-y-0.5 md:text-xs">
+          <div>
+            {truck.truck_type}
+            {truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
+          </div>
+        </div>
+      </div>
+      {footer ? <div className="mt-auto pt-1">{footer}</div> : null}
+    </div>
   );
 }
 

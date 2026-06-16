@@ -1,6 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
-import { motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import clsx from "clsx";
+import { useSearchParams } from "react-router-dom";
 import { useSettings } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
 import type { AppSetting } from "../types";
@@ -19,11 +20,14 @@ import RecoveryPanel from "../components/management/RecoveryPanel";
 import ResetsPanel from "../components/management/ResetsPanel";
 import FleetManagementPanel from "../components/management/FleetManagementPanel";
 import BulkStatusPanel from "../components/management/BulkStatusPanel";
+import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
 import NoticesPanel from "../components/management/NoticesPanel";
 import ItemsPanel from "../components/management/ItemsPanel";
 import ExportImportPanel from "../components/management/ExportImportPanel";
 import PDFReportsPanel from "../components/management/PDFReportsPanel";
 import DriverQRPanel from "../components/management/DriverQRPanel";
+import TruckOpsActivityPanel from "../components/management/TruckOpsActivityPanel";
+import PageHeader from "../components/PageHeader";
 import { ShortsWorkspace } from "./Shorts";
 
 /**
@@ -38,6 +42,7 @@ type Category =
   | "communications"
   | "users"
   | "fleet_mgmt"
+  | "off_day_schedule"
   | "bulk_status"
   | "advanced"
   | "updates"
@@ -49,6 +54,7 @@ type Category =
   | "items"
   | "roles"
   | "activity"
+  | "history_activity"
   | "export_import"
   | "pdf_reports"
   | "driver_qr"
@@ -68,7 +74,7 @@ interface CardGroup {
   /** Subtle background tint class, e.g. "bg-sky-950/30" */
   bgTint: string;
   adminOnly?: true;
-  tabs: { id: Category; label: string }[];
+  tabs: { id: Category; label: string; adminOnly?: true }[];
 }
 
 const CARD_GROUPS: CardGroup[] = [
@@ -95,7 +101,7 @@ const CARD_GROUPS: CardGroup[] = [
       { id: "users",    label: "Users" },
       { id: "requests", label: "Requests" },
       { id: "roles",    label: "Role Access" },
-      { id: "activity", label: "Activity" },
+      { id: "activity", label: "Access Activity" },
     ],
   },
   {
@@ -129,9 +135,10 @@ const CARD_GROUPS: CardGroup[] = [
     bgTint: "bg-teal-950/35",
     adminOnly: true,
     tabs: [
-      { id: "fleet_mgmt",  label: "Fleet" },
-      { id: "bulk_status", label: "Bulk Status" },
-      { id: "driver_qr",   label: "Driver QR Codes" },
+      { id: "fleet_mgmt",       label: "Fleet" },
+      { id: "off_day_schedule", label: "Off Day Schedule" },
+      { id: "bulk_status",      label: "Bulk Status" },
+      { id: "driver_qr",        label: "Driver QR Codes" },
     ],
   },
   {
@@ -179,21 +186,51 @@ const CARD_GROUPS: CardGroup[] = [
     mobileDesc: "Import and reports",
     borderColor: "border-l-emerald-500",
     bgTint: "bg-emerald-950/35",
-    adminOnly: true,
     tabs: [
-      { id: "export_import", label: "Export & Import" },
-      { id: "pdf_reports",   label: "PDF Reports" },
+      { id: "history_activity", label: "History & Activity" },
+      { id: "export_import", label: "Export & Import", adminOnly: true },
+      { id: "pdf_reports",   label: "PDF Reports", adminOnly: true },
     ],
   },
 ];
 
 export default function Management() {
   const { user } = useAuth();
+  const [searchParams] = useSearchParams();
   const isAdmin = user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor";
   const isPrivileged = isAdmin || user?.role === "lead" || user?.role === "atl";
   const [activeGroup, setActiveGroup] = useState<GroupId | null>(null);
   const [activeTab, setActiveTab] = useState<Category>("colors");
   const { data, isLoading } = useSettings();
+  const requestedTruckNumber = useMemo(() => {
+    const raw = searchParams.get("truck");
+    if (!raw) return null;
+    const parsed = Number(raw);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
+  }, [searchParams]);
+  const requestedRunDate = searchParams.get("runDate");
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const requestedGroup = searchParams.get("group") as GroupId | null;
+    const requestedTab = searchParams.get("tab") as Category | null;
+    if (!requestedGroup && !requestedTab) return;
+    const groupFromTab = requestedTab
+      ? CARD_GROUPS.find((group) => group.tabs.some((tab) => tab.id === requestedTab))?.id ?? null
+      : null;
+    const nextGroup = requestedGroup ?? groupFromTab;
+    if (!nextGroup) return;
+    const groupDef = CARD_GROUPS.find((group) => group.id === nextGroup);
+    if (!groupDef) return;
+    const visibleTabs = groupDef.tabs.filter((tab) => isAdmin || !tab.adminOnly);
+    if (visibleTabs.length === 0) return;
+    const nextTab = requestedTab && visibleTabs.some((tab) => tab.id === requestedTab)
+      ? requestedTab
+      : visibleTabs[0].id;
+    setActiveGroup(nextGroup);
+    setActiveTab(nextTab);
+  }, [isAdmin, searchParams]);
+
 
   const map = useMemo(() => {
     const m = new Map<string, unknown>();
@@ -203,12 +240,23 @@ export default function Management() {
 
   if (!isPrivileged) {
     return (
-      <div className="p-6">
-        <h2 className="text-2xl font-semibold">Management</h2>
-        <p className="mt-4 text-sm text-slate-400">
-          Access is restricted to Fleet / Supervisor / Lead / ATL roles.
-        </p>
-      </div>
+      <motion.div
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.35 }}
+        className="flex min-h-0 flex-col"
+      >
+        <PageHeader
+          eyebrow="Admin Tools"
+          title="Management"
+          subtitle="Settings, reports, imports, and operational controls."
+        />
+        <div className="p-6">
+          <p className="text-sm text-slate-400">
+            Access is restricted to Fleet / Supervisor / Lead / ATL roles.
+          </p>
+        </div>
+      </motion.div>
     );
   }
 
@@ -219,6 +267,15 @@ export default function Management() {
   const activeGroupDef = activeGroup
     ? CARD_GROUPS.find((g) => g.id === activeGroup) ?? null
     : null;
+  const activeTabs = activeGroupDef
+    ? activeGroupDef.tabs.filter((tab) => isAdmin || !tab.adminOnly)
+    : [];
+
+  useEffect(() => {
+    if (activeGroupDef && panelRef.current) {
+      panelRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  }, [activeGroupDef]);
 
   function renderPanel() {
     if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
@@ -237,10 +294,12 @@ export default function Management() {
       case "short_imports":  return <ShortsWorkspace />;
       case "roles":          return <RoleAccessPanel />;
       case "activity":       return <ActivityPanel />;
+      case "history_activity": return <TruckOpsActivityPanel initialTruckNumber={requestedTruckNumber} initialRunDate={requestedRunDate} />;
       case "recovery":       return <RecoveryPanel />;
       case "resets":         return <ResetsPanel />;
-      case "fleet_mgmt":     return <FleetManagementPanel />;
-      case "bulk_status":    return <BulkStatusPanel />;
+      case "fleet_mgmt":       return <FleetManagementPanel />;
+      case "off_day_schedule": return <OffDaySchedulePanel />;
+      case "bulk_status":      return <BulkStatusPanel />;
       case "driver_qr":      return <DriverQRPanel />;
       case "export_import":  return <ExportImportPanel />;
       case "pdf_reports":    return <PDFReportsPanel />;
@@ -253,9 +312,14 @@ export default function Management() {
       initial={{ opacity: 0, y: 12 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
+      className="flex min-h-0 flex-col"
     >
-    <div className="space-y-4 p-3 md:p-6">
-      <h2 className="text-2xl font-semibold">Management</h2>
+      <PageHeader
+        eyebrow="Admin Tools"
+        title="Management"
+        subtitle="Settings, user access, reports, and workflow controls in one place."
+      />
+      <div className="space-y-4 p-3 md:p-6">
 
       {/* Card group grid */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 sm:gap-3">
@@ -274,7 +338,8 @@ export default function Management() {
                   setActiveGroup(null);
                 } else {
                   setActiveGroup(group.id);
-                  setActiveTab(group.tabs[0].id);
+                  const nextVisibleTabs = group.tabs.filter((tab) => isAdmin || !tab.adminOnly);
+                  setActiveTab(nextVisibleTabs[0].id);
                 }
               }}
               className={clsx(
@@ -286,7 +351,7 @@ export default function Management() {
             >
               <p className="text-sm font-bold text-white sm:text-base">{group.label}</p>
               <p className="mt-1 text-xs leading-snug text-slate-300 sm:hidden">{group.mobileDesc}</p>
-              <p className="mt-1.5 hidden text-sm text-slate-300 sm:block">{group.desc}</p>
+              <p className="mt-1.5 hidden truncate text-sm text-slate-300 sm:block">{group.desc}</p>
             </motion.button>
           );
         })}
@@ -294,30 +359,40 @@ export default function Management() {
 
       {/* Sub-tab bar + panel (shown when a card is active) */}
       {activeGroupDef && (
-        <div>
-          <div className="-mx-3 overflow-x-auto border-b border-slate-800 px-3 sm:mx-0 sm:px-0">
-            <div className="flex min-w-max gap-1">
-            {activeGroupDef.tabs.map((tab) => (
-              <button
-                key={tab.id}
-                type="button"
-                onClick={() => setActiveTab(tab.id)}
-                className={clsx(
-                  "whitespace-nowrap rounded-t-md px-3 py-2 text-xs font-medium transition-colors sm:px-4 sm:text-sm",
-                  activeTab === tab.id
-                    ? "border-b-2 border-blue-500 bg-slate-900/50 text-blue-300"
-                    : "text-slate-400 hover:bg-slate-900/40 hover:text-slate-200",
-                )}
-              >
-                {tab.label}
-              </button>
-            ))}
-            </div>
-          </div>
-          <div className="mt-4">{renderPanel()}</div>
+        <div ref={panelRef}>
+          <AnimatePresence mode="wait">
+            <motion.div
+              key={activeGroupDef.id}
+              initial={{ opacity: 0, y: -8 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -8 }}
+              transition={{ duration: 0.2 }}
+            >
+              <div className="-mx-3 overflow-x-auto border-b border-slate-800 px-3 sm:mx-0 sm:px-0">
+                <div className="flex min-w-max gap-1">
+                {activeTabs.map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={clsx(
+                      "whitespace-nowrap rounded-t-md px-3 py-2 text-xs font-medium transition-colors sm:px-4 sm:text-sm",
+                      activeTab === tab.id
+                        ? "border-b-2 border-blue-500 bg-slate-900/50 text-blue-300"
+                        : "text-slate-400 hover:bg-slate-900/40 hover:text-slate-200",
+                    )}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+                </div>
+              </div>
+              <div className="mt-4">{renderPanel()}</div>
+            </motion.div>
+          </AnimatePresence>
         </div>
       )}
-    </div>
+      </div>
     </motion.div>
   );
 }

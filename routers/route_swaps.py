@@ -15,13 +15,15 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import select, delete
 from sqlalchemy.orm import Session
 
+from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import RouteSwap, RouteSwapLog, TruckState, TruckStatus
+from models import RouteSwap, RouteSwapLog, TruckState, TruckStateSource, TruckStatus, User
 from notification_service import (
     coverage_assigned_notification,
     coverage_removed_notification,
     dispatch_notification,
 )
+from routers.auth import get_current_user
 from schemas import RouteSwapCreate, RouteSwapOut, RouteSwapLogOut
 
 router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
@@ -46,6 +48,7 @@ def create_swap(
     payload: RouteSwapCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create a route swap assignment.  If two_way=True, also creates the
@@ -125,10 +128,6 @@ def create_swap(
             )
         created.append(_upsert(payload.load_on_truck, payload.route_truck))
 
-    db.commit()
-    for row in created:
-        db.refresh(row)
-
     # Append to swap log (append-only history that survives future deletions)
     for row in created:
         db.add(RouteSwapLog(
@@ -136,11 +135,11 @@ def create_swap(
             route_truck=row.route_truck,
             load_on_truck=row.load_on_truck,
         ))
-    db.commit()
 
     # Activate covering trucks: if a load_on_truck is still in "spare" (idle)
     # status, move it to "dirty" so it appears in the unload workflow.
     load_on_trucks = {row.load_on_truck for row in created}
+    before_state_by_num: dict[int, dict[str, object] | None] = {}
     for truck_num in load_on_trucks:
         st = db.scalars(
             select(TruckState).where(
@@ -148,15 +147,73 @@ def create_swap(
                 TruckState.run_date == payload.run_date,
             )
         ).first()
+        before_state_by_num[truck_num] = snapshot_truck_state(st)
         if st is None:
-            db.add(TruckState(
+            st = TruckState(
                 truck_number=truck_num,
                 run_date=payload.run_date,
                 status=TruckStatus.dirty,
-            ))
-        elif st.status == TruckStatus.spare:
-            st.status = TruckStatus.dirty
+                state_source=TruckStateSource.workflow.value,
+            )
+            db.add(st)
+        else:
+            if st.status == TruckStatus.spare:
+                st.status = TruckStatus.dirty
+            st.state_source = TruckStateSource.workflow.value
+    truck_state_changes = []
+    for truck_num in load_on_trucks:
+        state = db.scalars(
+            select(TruckState).where(
+                TruckState.truck_number == truck_num,
+                TruckState.run_date == payload.run_date,
+            )
+        ).first()
+        truck_state_changes.append(
+            {
+                "truck_number": truck_num,
+                "truck_state": build_field_diff(before_state_by_num.get(truck_num), snapshot_truck_state(state)),
+            }
+        )
+
+    related_trucks = {
+        number
+        for row in created
+        for number in (row.route_truck, row.load_on_truck)
+    }
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="coverage",
+        event_type="route_swap_created",
+        run_date=payload.run_date,
+        truck_number=payload.load_on_truck if len(load_on_trucks) == 1 else None,
+        summary=(
+            f"Created two-way route swap {payload.route_truck} ↔ {payload.load_on_truck}"
+            if payload.two_way
+            else f"Assigned truck {payload.load_on_truck} to cover route {payload.route_truck}"
+        ),
+        diff_json={
+            "swaps": [
+                {
+                    "route_truck": row.route_truck,
+                    "load_on_truck": row.load_on_truck,
+                    "previous_load_on_truck": previous_load_on_by_route.get(row.route_truck),
+                }
+                for row in created
+            ],
+            "truck_state_changes": truck_state_changes,
+        },
+        context_json=add_related_truck_context(
+            {
+                "two_way": payload.two_way,
+                "route_swap_ids": [row.id for row in created if row.id is not None],
+            },
+            related_trucks,
+        ),
+    )
     db.commit()
+    for row in created:
+        db.refresh(row)
 
     for row in created:
         background_tasks.add_task(
@@ -181,6 +238,7 @@ def delete_swap(
         description="Also delete the reciprocal row if a two-way swap exists",
     ),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Delete a single swap row.  Pass also_reciprocal=true to also clear the
@@ -197,6 +255,7 @@ def delete_swap(
             covering_truck=row.load_on_truck,
         )
     ]
+    reciprocal = None
 
     if also_reciprocal:
         # Find the reciprocal: route_truck == this row's load_on_truck AND load_on_truck == this row's route_truck
@@ -217,6 +276,34 @@ def delete_swap(
             )
             db.delete(reciprocal)
 
+    related_trucks = {row.route_truck, row.load_on_truck}
+    if also_reciprocal and reciprocal:
+        related_trucks.update({reciprocal.route_truck, reciprocal.load_on_truck})
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="coverage",
+        event_type="route_swap_removed",
+        run_date=row.run_date,
+        truck_number=row.load_on_truck,
+        summary=(
+            f"Removed route swap {row.route_truck} → {row.load_on_truck}"
+            + (" with reciprocal pair" if also_reciprocal and reciprocal else "")
+        ),
+        diff_json={
+            "removed_swaps": [
+                {"route_truck": row.route_truck, "load_on_truck": row.load_on_truck},
+                *(
+                    [{"route_truck": reciprocal.route_truck, "load_on_truck": reciprocal.load_on_truck}]
+                    if also_reciprocal and reciprocal else []
+                ),
+            ],
+        },
+        context_json=add_related_truck_context(
+            {"also_reciprocal": also_reciprocal},
+            related_trucks,
+        ),
+    )
     db.delete(row)
     db.commit()
     for event in removed_notifications:
@@ -228,10 +315,33 @@ def clear_all_swaps(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Remove all route swap assignments for a run date."""
     rows = db.scalars(select(RouteSwap).where(RouteSwap.run_date == run_date)).all()
-    db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date))
+    related_trucks = {
+        number
+        for row in rows
+        for number in (row.route_truck, row.load_on_truck)
+    }
+    if rows:
+        append_activity_event(
+            db,
+            actor_user=current_user,
+            event_family="coverage",
+            event_type="route_swaps_cleared",
+            run_date=run_date,
+            summary=f"Cleared {len(rows)} route swap(s) for {run_date}",
+            diff_json={
+                "removed_swaps": [
+                    {"route_truck": row.route_truck, "load_on_truck": row.load_on_truck}
+                    for row in rows
+                ],
+            },
+            context_json=add_related_truck_context({"swap_count": len(rows)}, related_trucks),
+        )
+    for row in rows:
+        db.delete(row)
     db.commit()
     for row in rows:
         background_tasks.add_task(

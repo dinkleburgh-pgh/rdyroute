@@ -314,6 +314,14 @@ function InProgressCard({
                 {dayLabel}
               </span>
             )}
+            <div className="mt-2 flex flex-col items-center gap-1.5">
+              <Link
+                to={`/audit?truck=${truck.truck_number}`}
+                className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700"
+              >
+                Audit
+              </Link>
+            </div>
           </div>
 
           <div className="w-px self-stretch bg-slate-700/50" />
@@ -326,12 +334,20 @@ function InProgressCard({
                 <p className="font-black leading-none text-sky-400" style={{ fontSize: "3.5rem" }}>
                   #{nextUp}
                 </p>
-                <button
-                  className="mt-2 rounded-lg border border-sky-700/60 bg-sky-950/40 px-3 py-1 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-900/40"
-                  onClick={() => setPickerOpen((o) => !o)}
-                >
-                  {pickerOpen ? "Close" : "Change"}
-                </button>
+                <div className="mt-2 flex flex-col items-center gap-1.5">
+                  <Link
+                    to={`/audit?truck=${nextUp}`}
+                    className="rounded-lg border border-sky-700/60 bg-sky-950/40 px-4 py-1.5 text-sm font-semibold text-sky-300 hover:bg-sky-900/40"
+                  >
+                    Audit
+                  </Link>
+                  <button
+                    className="rounded-lg border border-sky-700/60 bg-sky-950/40 px-4 py-1.5 text-sm font-semibold text-sky-300 hover:bg-sky-900/40"
+                    onClick={() => setPickerOpen((o) => !o)}
+                  >
+                    {pickerOpen ? "Close" : "Change"}
+                  </button>
+                </div>
               </>
             ) : (
               <>
@@ -376,28 +392,6 @@ function InProgressCard({
           {busy ? "Finishing…" : "Finish Loading"}
         </button>
 
-        {/* Audit + Next Up audit buttons */}
-        <div className="grid grid-cols-2 gap-2">
-          <Link
-            to={`/audit?truck=${truck.truck_number}`}
-            className="block rounded-xl border border-slate-700 bg-slate-800/60 py-3 text-center text-sm font-semibold transition-colors hover:bg-slate-700"
-          >
-            Audit #{truck.truck_number}
-          </Link>
-          <Link
-            to={nextUp != null ? `/audit?truck=${nextUp}` : "/audit"}
-            className={clsx(
-              "block rounded-xl border py-3 text-center text-sm font-semibold transition-colors",
-              nextUp != null
-                ? "border-slate-700 bg-slate-800/60 text-slate-300 hover:bg-slate-700"
-                : "pointer-events-none border-slate-800 bg-slate-900/40 text-slate-600",
-            )}
-            aria-disabled={nextUp == null}
-          >
-            Audit Next Up
-          </Link>
-        </div>
-
         {/* Divider */}
         <div className="border-t border-slate-800" />
 
@@ -410,15 +404,38 @@ function InProgressCard({
           onBack={() => {}}
         />
 
-        {/* Next Up picker — expanded inline */}
+        {/* Next Up picker — modal dialog */}
         {pickerOpen && (
-          <div className="border-t border-slate-800 pt-4">
-            <NextUpPanel
-              runDate={runDate}
-              nextUp={nextUp}
-              unloaded={unloaded}
-              anyInProgress={true}
-            />
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+            onClick={() => setPickerOpen(false)}
+          >
+            <div
+              className="flex w-full max-w-lg flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
+              style={{ maxHeight: "90vh" }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
+                <h3 className="text-base font-bold tracking-wide">Set Next Up</h3>
+                <button
+                  onClick={() => setPickerOpen(false)}
+                  className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                >
+                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+              <div className="overflow-y-auto p-5">
+                <NextUpPanel
+                  runDate={runDate}
+                  nextUp={nextUp}
+                  unloaded={unloaded}
+                  anyInProgress={true}
+                  onPick={() => setPickerOpen(false)}
+                />
+              </div>
+            </div>
           </div>
         )}
       </div>
@@ -435,11 +452,13 @@ function NextUpPanel({
   nextUp,
   unloaded,
   anyInProgress,
+  onPick,
 }: {
   runDate: string;
   nextUp: number | null;
   unloaded: TruckWithState[];
   anyInProgress: boolean;
+  onPick?: () => void;
 }) {
   const setNext = useSetNextUp(runDate);
   const clearNext = useClearNextUp(runDate);
@@ -499,28 +518,48 @@ function NextUpPanel({
         <p className="text-center text-xs text-slate-500">No Unloaded trucks available.</p>
       ) : (
         <>
-          <label className="label">Select next up</label>
-          <select
-            className="input mb-2"
-            value={pick ?? ""}
-            onChange={(e) => setPick(e.target.value ? parseInt(e.target.value, 10) : null)}
-          >
-            {options.map((n) => (
-              <option key={n} value={n}>Truck #{n}</option>
-            ))}
-          </select>
+          <p className="text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
+            Unloaded trucks ready to load
+          </p>
+          <div className="flex flex-wrap justify-center gap-1.5">
+            {options.map((n) => {
+              const selected = pick === n;
+              return (
+                <button
+                  key={n}
+                  onClick={() => setPick(n)}
+                  className={clsx(
+                    "rounded-lg border px-3 py-2 text-sm font-bold transition-colors",
+                    selected
+                      ? "border-emerald-500 bg-emerald-600 text-white"
+                      : "border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-600 hover:bg-slate-700",
+                  )}
+                >
+                  #{n}
+                </button>
+              );
+            })}
+          </div>
           <div className="grid grid-cols-2 gap-2">
             <button
               className="btn-primary"
               disabled={pick == null || setNext.isPending}
-              onClick={() => pick != null && setNext.mutate(pick)}
+              onClick={() => {
+                if (pick != null) {
+                  setNext.mutate(pick);
+                  onPick?.();
+                }
+              }}
             >
               Set Next Up
             </button>
             <button
               className="btn-ghost"
               disabled={nextUp == null || clearNext.isPending}
-              onClick={() => clearNext.mutate()}
+              onClick={() => {
+                clearNext.mutate();
+                onPick?.();
+              }}
             >
               Clear Next Up
             </button>

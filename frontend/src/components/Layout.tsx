@@ -13,7 +13,12 @@ import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
 import { OfflineIndicator } from "./OfflineIndicator";
 import type { AuthRole, TruckStatus, TruckWithState } from "../types";
-import { buildRouteStatusCounts, effectiveStatus } from "../utils/truckStatus";
+import {
+  buildOperationalDayContext,
+  buildRouteStatusCounts,
+  effectiveOperationalStatus,
+  effectiveStatus,
+} from "../utils/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
 
@@ -52,19 +57,34 @@ const STATUS_ORDER: TruckStatus[] = [
   "oos",
 ];
 
-const PRIMARY_NAV = [
+const SIDEBAR_PRIMARY_NAV = [
   { to: "/unload", label: "Unload" },
   { to: "/load", label: "Load" },
   { to: "/fleet", label: "Fleet" },
   { to: "/communications", label: "Communications" },
 ];
 
-const SECONDARY_NAV = [
+const SIDEBAR_SECONDARY_NAV = [
   { to: "/shorts", label: "Short sheet" },
   { to: "/notes", label: "Notes" },
   { to: "/trends", label: "Trends" },
   { to: "/audit", label: "Audit" },
   { to: "/management", label: "Management" },
+];
+
+const MOBILE_PRIMARY_NAV = [
+  { to: "/shorts", label: "Short Sheet" },
+  { to: "/audit", label: "Audit" },
+  { to: "/communications", label: "Communications" },
+  { to: "/management", label: "Management" },
+];
+
+const MOBILE_SECONDARY_NAV = [
+  { to: "/unload", label: "Unload" },
+  { to: "/load", label: "Load" },
+  { to: "/fleet", label: "Fleet" },
+  { to: "/notes", label: "Notes" },
+  { to: "/trends", label: "Trends" },
 ];
 
 // Mirrors V1 ROLE_SCREEN_ACCESS — which nav links each role can see.
@@ -170,75 +190,24 @@ export default function Layout() {
     ).length,
     [board],
   );
-
   // Load progress mirrors the Day Overview: denominator = route trucks scheduled
   // for load; a route counts as done when the route truck is loaded OR its covering spare is.
-  const loadTrucksForProgress = useMemo(
-    () =>
-      (board ?? []).filter(
-        (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-          (holidayLoad || !(t.scheduled_off_days ?? []).includes(loadDay)),
-      ),
-    [board, loadDay, holidayLoad],
-  );
-  const loadedSpareRoutes = useMemo(
-    () =>
-      new Set(
-        (board ?? [])
-          .filter(
-            (t) =>
-              t.truck_type === "Spare" &&
-              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-              effectiveStatus(t, loadDayNum, holidayLoad) === "loaded",
-          )
-          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
-      ),
+  const loadContext = useMemo(
+    () => buildOperationalDayContext(board ?? [], loadDayNum, holidayLoad),
     [board, loadDayNum, holidayLoad],
   );
-  const loadRouteTrucks = useMemo(
-    () => loadTrucksForProgress.filter((t) => t.truck_type !== "Spare"),
-    [loadTrucksForProgress],
-  );
-  const totalScheduledLoad = loadRouteTrucks.length;
-  const loadedScheduled = loadRouteTrucks.filter(
-    (t) =>
-      effectiveStatus(t, loadDayNum, holidayLoad) === "loaded" ||
-      loadedSpareRoutes.has(t.truck_number),
+  const totalScheduledLoad = loadContext.activeTrucks.length;
+  const loadedScheduled = loadContext.activeTrucks.filter(
+    (t) => effectiveOperationalStatus(t, loadDayNum, holidayLoad) === "loaded",
   ).length;
 
   // Unload progress mirrors the Day Overview exactly.
-  const unloadTrucksForProgress = useMemo(
-    () =>
-      (board ?? []).filter(
-        (t) =>
-          (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-          (holidayUnload || !(t.scheduled_off_days ?? []).includes(unloadsDay)),
-      ),
+  const unloadContext = useMemo(
+    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload),
     [board, unloadsDay, holidayUnload],
   );
-  const unloadedSpareRoutes = useMemo(
-    () =>
-      new Set(
-        (board ?? [])
-          .filter(
-            (t) =>
-              t.truck_type === "Spare" &&
-              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-              ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)),
-          )
-          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
-      ),
-    [board, unloadsDay, holidayUnload],
-  );
-  const unloadRouteTrucks = useMemo(
-    () => unloadTrucksForProgress.filter((t) => t.truck_type !== "Spare"),
-    [unloadTrucksForProgress],
-  );
-  const unloadedScheduled = unloadRouteTrucks.filter(
-    (t) =>
-      ["unloaded", "loaded"].includes(effectiveStatus(t, unloadsDay, holidayUnload)) ||
-      unloadedSpareRoutes.has(t.truck_number),
+  const unloadedScheduled = unloadContext.activeTrucks.filter((t) =>
+    ["unloaded", "loaded"].includes(effectiveOperationalStatus(t, unloadsDay, holidayUnload)),
   ).length;
 
   const loadedPct =
@@ -254,8 +223,8 @@ export default function Layout() {
     [board],
   );
   const unloadedPct =
-    unloadRouteTrucks.length > 0
-      ? Math.round((unloadedScheduled / unloadRouteTrucks.length) * 100)
+    unloadContext.activeTrucks.length > 0
+      ? Math.round((unloadedScheduled / unloadContext.activeTrucks.length) * 100)
       : 0;
 
   const DISPLAY_ROLE_OVERRIDE: Record<string, { label: string; cls: string }> = {
@@ -265,8 +234,10 @@ export default function Layout() {
   const roleLabel = roleOverride?.label ?? user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
   const roleBadgeCls = roleOverride?.cls ?? ROLE_BADGE[(user?.role ?? "guest") as AuthRole] ?? ROLE_BADGE.guest;
   const allowed = ROLE_NAV_ACCESS[(user?.role ?? "guest") as AuthRole] ?? new Set<string>();
-  const primaryNav = PRIMARY_NAV.filter((i) => allowed.has(i.to));
-  const secondaryNav = SECONDARY_NAV.filter((i) => allowed.has(i.to));
+  const sidebarPrimaryNav = SIDEBAR_PRIMARY_NAV.filter((i) => allowed.has(i.to));
+  const sidebarSecondaryNav = SIDEBAR_SECONDARY_NAV.filter((i) => allowed.has(i.to));
+  const mobilePrimaryNav = MOBILE_PRIMARY_NAV.filter((i) => allowed.has(i.to));
+  const mobileSecondaryNav = MOBILE_SECONDARY_NAV.filter((i) => allowed.has(i.to));
   const shiftName = currentShift().name;
   const loadBadgeText = `L${loadDay}${holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}`;
   const unloadBadgeText = `U${unloadsDay}${holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}`;
@@ -303,10 +274,10 @@ export default function Layout() {
               "block w-full rounded-md border px-3 py-2 text-center text-sm font-semibold transition-colors",
               wizardDone
                 ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                : "animate-pulse border-amber-500/80 bg-amber-950/30 text-amber-300 hover:bg-amber-950/50",
+                : "border-amber-500/80 bg-amber-950/30 text-amber-300 hover:bg-amber-950/50",
             )}
           >
-            {wizardDone ? "Setup Day" : "Setup Day — needs to run!"}
+            {wizardDone ? "Setup Day" : "Setup Day (optional override)"}
           </button>
 
           {canManageSwaps && (
@@ -337,7 +308,7 @@ export default function Layout() {
 
           {/* Primary action buttons */}
           <div className="space-y-2 pt-2">
-            {primaryNav.map((item) => {
+            {sidebarPrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
               return (
@@ -424,7 +395,7 @@ export default function Layout() {
             <ProgressRow
               label="Unload"
               current={unloadedScheduled}
-              total={unloadRouteTrucks.length}
+              total={unloadContext.activeTrucks.length}
               pct={unloadedPct}
             />
           </div>
@@ -433,7 +404,7 @@ export default function Layout() {
 
           {/* Secondary navigation */}
           <div className="space-y-2">
-            {secondaryNav.map((item) => (
+            {sidebarSecondaryNav.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
@@ -533,7 +504,7 @@ export default function Layout() {
       </div>
 
       {/* Mobile bottom nav — primary workflow actions + More drawer */}
-      {primaryNav.length > 0 && (
+      {mobilePrimaryNav.length > 0 && (
         <>
           {/* More drawer — slides up from bottom nav */}
           {moreOpen && (
@@ -550,7 +521,7 @@ export default function Layout() {
                   </button>
                 </div>
                 <div className="grid grid-cols-3 gap-1 px-3">
-                  {secondaryNav.filter((i) => allowed.has(i.to)).map((item) => (
+                  {mobileSecondaryNav.map((item) => (
                     <NavLink
                       key={item.to}
                       to={item.to}
@@ -585,7 +556,7 @@ export default function Layout() {
           )}
 
           <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-800 bg-slate-900 md:hidden">
-            {primaryNav.map((item) => {
+            {mobilePrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
               return (
@@ -594,7 +565,7 @@ export default function Layout() {
                   to={item.to}
                   className={({ isActive }) =>
                     clsx(
-                      "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
+                      "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
                       isActive ? "text-blue-400" : "text-slate-500",
                     )
                   }
@@ -614,18 +585,18 @@ export default function Layout() {
               );
             })}
             {/* More button — only show if user has secondary nav items */}
-            {secondaryNav.some((i) => allowed.has(i.to)) && (
+            {mobileSecondaryNav.length > 0 && (
               <button
                 onClick={() => setMoreOpen((v) => !v)}
                 className={clsx(
-                  "relative flex flex-1 flex-col items-center justify-center gap-0.5 py-2.5 text-[11px] font-semibold transition-colors",
+                  "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
                   moreOpen ? "text-blue-400" : "text-slate-500",
                 )}
               >
                 More
                 <span className={clsx(
                   "absolute top-1.5 right-1/4 h-1 w-1 rounded-full transition-opacity",
-                  secondaryNav.some((i) => allowed.has(i.to) && location.pathname === i.to)
+                  mobileSecondaryNav.some((i) => location.pathname === i.to)
                     ? "bg-blue-400 opacity-100"
                     : "opacity-0",
                 )} />

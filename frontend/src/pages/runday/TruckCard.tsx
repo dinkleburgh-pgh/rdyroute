@@ -90,6 +90,11 @@ export default function TruckCard({
           Day {dayNum}
         </span>
       )}
+      {t.state?.needs_checked && (
+        <span className="rounded-full bg-amber-900/60 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
+          Needs Checked
+        </span>
+      )}
       {showNotes && (
         <div className="absolute left-2 top-2 z-20">
           <button

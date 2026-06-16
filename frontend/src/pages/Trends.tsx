@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAuditAnomalies,
   useAuditByRoute,
@@ -17,6 +18,7 @@ import {
 } from "../api/hooks";
 import "../components/trends/chartSetup";
 import TrendsHeader from "../components/trends/TrendsHeader";
+import TrendTabBar from "../components/trends/TrendTabBar";
 import KpiSection from "../components/trends/KpiSection";
 import DailyVolumeChart from "../components/trends/DailyVolumeChart";
 import ComparisonChart from "../components/trends/ComparisonChart";
@@ -31,6 +33,9 @@ import ShortageVolumeChart from "../components/trends/ShortageVolumeChart";
 import AnomalyPanel from "../components/trends/AnomalyPanel";
 
 export default function Trends() {
+  const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const tab = params.get("tab") || "overview";
   const [days, setDays] = useState(14);
   const [swapDays, setSwapDays] = useState(30);
 
@@ -49,7 +54,6 @@ export default function Trends() {
   const { data: truckAnomalies } = useTruckAnomalies(90);
   const { data: auditAnomalies } = useAuditAnomalies(90);
 
-  // Sync swapDays when days changes (swap range should be >= trend range)
   useEffect(() => {
     if (swapDays < days) setSwapDays(days);
   }, [days, swapDays]);
@@ -96,6 +100,17 @@ export default function Trends() {
       .sort((a, b) => b.value - a.value);
   }, [shortageByCat]);
 
+  function setTab(id: string) {
+    const next = new URLSearchParams(params);
+    if (id === "overview") next.delete("tab");
+    else next.set("tab", id);
+    setParams(next, { replace: true });
+  }
+
+  function viewDetails(metric: string) {
+    navigate(`/trends/${metric}`);
+  }
+
   return (
     <div className="space-y-4 p-3 md:p-6">
       <TrendsHeader
@@ -105,82 +120,90 @@ export default function Trends() {
         isLoading={summaryLoading}
       />
 
-      <KpiSection summary={summary} isLoading={summaryLoading} />
+      <TrendTabBar active={tab} onChange={setTab} />
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
-        <div className="lg:col-span-2">
-          <DailyVolumeChart data={daily} isLoading={dailyLoading} />
-        </div>
-        <div>
-          <InsightsPanel
-            summary={summary}
-            topTrucks={topTrucks}
-            topRoutes={topRoutes}
-            swapCount={swapLog.length}
-            swapDays={swapDays}
-            isLoading={summaryLoading}
+      {tab === "overview" && (
+        <>
+          <KpiSection summary={summary} isLoading={summaryLoading} />
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+            <div className="lg:col-span-2">
+              <DailyVolumeChart data={daily} isLoading={dailyLoading} onViewDetails={() => viewDetails("volume")} />
+            </div>
+            <div>
+              <InsightsPanel
+                summary={summary}
+                topTrucks={topTrucks}
+                topRoutes={topRoutes}
+                swapCount={swapLog.length}
+                swapDays={swapDays}
+                isLoading={summaryLoading}
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <TopNCard
+              title="Top Trucks"
+              subtitle="Highest total quantity removed"
+              rows={topTrucks}
+            />
+            <TopNCard
+              title="Top Items"
+              subtitle="Most frequently removed items"
+              rows={topItems}
+              accentColor="bg-violet-500"
+            />
+            <TopNCard
+              title="Top Routes"
+              subtitle="Routes with highest volume"
+              rows={topRoutes}
+              accentColor="bg-emerald-500"
+            />
+          </div>
+
+          <RouteCoverageTable data={swapLog} isLoading={swapLoading} />
+        </>
+      )}
+
+      {tab === "load-ops" && (
+        <>
+          <ComparisonChart data={comparison} isLoading={comparisonLoading} onViewDetails={() => viewDetails("volume")} />
+
+          <LoadPaceChart data={paceData} isLoading={paceLoading} onViewDetails={() => viewDetails("pace")} />
+
+          <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+            <CompletionRateChart data={completionData} isLoading={completionLoading} onViewDetails={() => viewDetails("completion")} />
+            <CycleTimeChart data={cycleData} isLoading={cycleLoading} onViewDetails={() => viewDetails("cycle")} />
+          </div>
+        </>
+      )}
+
+      {tab === "shortages" && (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="md:col-span-2">
+            <ShortageVolumeChart data={shortageDaily} isLoading={shortageDailyLoading} onViewDetails={() => viewDetails("shortages")} />
+          </div>
+          <TopNCard
+            title="Top Shortage Items"
+            subtitle="Most shorted categories"
+            rows={topShortageItems}
+            accentColor="bg-amber-500"
           />
         </div>
-      </div>
+      )}
 
-      <ComparisonChart data={comparison} isLoading={comparisonLoading} />
+      {tab === "staffing" && (
+        <>
+          <WearersChart data={wearersData} isLoading={wearersLoading} onViewDetails={() => viewDetails("wearers")} />
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <TopNCard
-          title="Top Trucks"
-          subtitle="Highest total quantity removed"
-          rows={topTrucks}
-        />
-        <TopNCard
-          title="Top Items"
-          subtitle="Most frequently removed items"
-          rows={topItems}
-          accentColor="bg-violet-500"
-        />
-        <TopNCard
-          title="Top Routes"
-          subtitle="Routes with highest volume"
-          rows={topRoutes}
-          accentColor="bg-emerald-500"
-        />
-      </div>
-
-      <RouteCoverageTable data={swapLog} isLoading={swapLoading} />
-
-      {/* ── Load Operations ──────────────────────────────────────────────── */}
-
-      <LoadPaceChart data={paceData} isLoading={paceLoading} />
-
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <CompletionRateChart data={completionData} isLoading={completionLoading} />
-        <CycleTimeChart data={cycleData} isLoading={cycleLoading} />
-      </div>
-
-      {/* ── Shortages ────────────────────────────────────────────────────── */}
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <div className="md:col-span-2">
-          <ShortageVolumeChart data={shortageDaily} isLoading={shortageDailyLoading} />
-        </div>
-        <TopNCard
-          title="Top Shortage Items"
-          subtitle="Most shorted categories"
-          rows={topShortageItems}
-          accentColor="bg-amber-500"
-        />
-      </div>
-
-      {/* ── Staffing ─────────────────────────────────────────────────────── */}
-
-      <WearersChart data={wearersData} isLoading={wearersLoading} />
-
-      {/* ── Anomalies ────────────────────────────────────────────────────── */}
-
-      <AnomalyPanel
-        truckAnomalies={truckAnomalies}
-        auditAnomalies={auditAnomalies}
-        isLoading={false}
-      />
+          <AnomalyPanel
+            truckAnomalies={truckAnomalies}
+            auditAnomalies={auditAnomalies}
+            isLoading={false}
+          />
+        </>
+      )}
     </div>
   );
 }

@@ -21,9 +21,10 @@ from fastapi.responses import FileResponse, Response, StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from activity_log import activity_event_to_dict, apply_activity_filters
 from database import get_db
-from models import AuditEntry, Batch, BatchHistory, LoadDuration, Shortage, Truck, TruckState
-from routers.auth import require_admin
+from models import ActivityEvent, AuditEntry, Batch, BatchHistory, LoadDuration, Shortage, Truck, TruckState
+from routers.auth import require_admin, require_management_access
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
@@ -161,6 +162,37 @@ def export_shortages(
     ]
     fname = f"shortages{'_' + str(run_date) if run_date else ''}.json"
     return _json_response(data, fname)
+
+
+@router.get("/activity-events.json")
+def export_activity_events(
+    run_date: date | None = Query(default=None),
+    truck_number: int | None = Query(default=None, ge=1, le=999),
+    actor_username: str | None = Query(default=None),
+    event_family: str | None = Query(default=None),
+    event_type: str | None = Query(default=None),
+    status_before: str | None = Query(default=None),
+    status_after: str | None = Query(default=None),
+    q: str | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _viewer=Depends(require_management_access),
+) -> Response:
+    rows = db.scalars(
+        apply_activity_filters(
+            select(ActivityEvent),
+            run_date=run_date,
+            truck_number=truck_number,
+            actor_username=actor_username,
+            event_family=event_family,
+            event_type=event_type,
+            status_before=status_before,
+            status_after=status_after,
+            q=q,
+        ).order_by(ActivityEvent.occurred_at.desc(), ActivityEvent.id.desc())
+    ).all()
+    data = [activity_event_to_dict(row) for row in rows]
+    suffix = str(run_date) if run_date else "all"
+    return _json_response(data, f"activity_events_{suffix}.json")
 
 
 # ---------------------------------------------------------------------------

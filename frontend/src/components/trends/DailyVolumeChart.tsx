@@ -17,15 +17,17 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Filler);
 interface Props {
   data: TrendDailyPoint[] | undefined;
   isLoading: boolean;
+  onViewDetails?: () => void;
 }
 
-export default function DailyVolumeChart({ data, isLoading }: Props) {
+export default function DailyVolumeChart({ data, isLoading, onViewDetails }: Props) {
   return (
     <TrendChartCard
       title="Daily Audit Volume"
       subtitle="Items removed per day"
       isLoading={isLoading}
       isEmpty={!isLoading && (!data || data.length === 0)}
+      onViewDetails={onViewDetails}
     >
       {data && data.length > 0 && (
         <motion.div className="h-64" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

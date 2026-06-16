@@ -167,7 +167,7 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
                       <span className={clsx("badge", STATUS_BG["oos"])}>OOS</span>
                       {isCovered ? (
                         <>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-3 py-1 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
                             Cov. #{coveringTruckNum}
                           </span>
                           {spareStatus && (

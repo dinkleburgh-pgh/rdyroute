@@ -16,13 +16,15 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import SpareAssignment, TruckState, TruckStatus
+from models import SpareAssignment, TruckState, TruckStateSource, TruckStatus, User
 from notification_service import (
     coverage_assigned_notification,
     coverage_removed_notification,
     dispatch_notification,
 )
+from routers.auth import get_current_user
 from schemas import SpareAssignCreate, SpareAssignOut, SpareAssignReturn
 
 router = APIRouter(prefix="/spares", tags=["spares"])
@@ -45,6 +47,7 @@ def assign_spare(
     payload: SpareAssignCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     # Prevent double-assignment of the same spare on the same date
     existing = db.scalars(
@@ -69,6 +72,7 @@ def assign_spare(
             TruckState.run_date == payload.run_date,
         )
     ).first()
+    before_snapshot = snapshot_truck_state(spare_state)
     if spare_state is None:
         spare_state = TruckState(
             truck_number=payload.spare_truck_number,
@@ -76,6 +80,7 @@ def assign_spare(
             status=TruckStatus.dirty,
             wearers=0,
             oos_spare_route=payload.covering_route_truck,
+            state_source=TruckStateSource.workflow.value,
         )
         db.add(spare_state)
     else:
@@ -84,6 +89,28 @@ def assign_spare(
         if spare_state.status in (TruckStatus.spare, TruckStatus.dirty):
             spare_state.status = TruckStatus.dirty
         spare_state.oos_spare_route = payload.covering_route_truck
+        spare_state.state_source = TruckStateSource.workflow.value
+
+    after_snapshot = snapshot_truck_state(spare_state)
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="coverage",
+        event_type="spare_assigned",
+        run_date=payload.run_date,
+        truck_number=payload.spare_truck_number,
+        summary=f"Assigned spare truck {payload.spare_truck_number} to cover route {payload.covering_route_truck}",
+        status_before=before_snapshot.get("status") if before_snapshot else None,
+        status_after=after_snapshot.get("status") if after_snapshot else None,
+        diff_json={
+            "covering_route_truck": payload.covering_route_truck,
+            "truck_state": build_field_diff(before_snapshot, after_snapshot),
+        },
+        context_json=add_related_truck_context(
+            {"covering_route_truck": payload.covering_route_truck},
+            [payload.spare_truck_number, payload.covering_route_truck],
+        ),
+    )
 
     db.commit()
     db.refresh(row)
@@ -104,6 +131,7 @@ def return_spare(
     background_tasks: BackgroundTasks,
     payload: SpareAssignReturn | None = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     row = db.get(SpareAssignment, assignment_id)
     if row is None:
@@ -120,9 +148,33 @@ def return_spare(
             TruckState.run_date == row.run_date,
         )
     ).first()
+    before_snapshot = snapshot_truck_state(spare_state)
     if spare_state is not None:
         spare_state.status = TruckStatus.dirty
         spare_state.oos_spare_route = None
+        spare_state.state_source = TruckStateSource.workflow.value
+
+    after_snapshot = snapshot_truck_state(spare_state)
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="coverage",
+        event_type="spare_returned",
+        run_date=row.run_date,
+        truck_number=row.spare_truck_number,
+        summary=f"Returned spare truck {row.spare_truck_number} from route {row.covering_route_truck}",
+        status_before=before_snapshot.get("status") if before_snapshot else None,
+        status_after=after_snapshot.get("status") if after_snapshot else None,
+        diff_json={
+            "covering_route_truck": row.covering_route_truck,
+            "returned_at": row.returned_at,
+            "truck_state": build_field_diff(before_snapshot, after_snapshot),
+        },
+        context_json=add_related_truck_context(
+            {"covering_route_truck": row.covering_route_truck},
+            [row.spare_truck_number, row.covering_route_truck],
+        ),
+    )
 
     db.commit()
     db.refresh(row)
@@ -142,6 +194,7 @@ def delete_assignment(
     assignment_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     row = db.get(SpareAssignment, assignment_id)
     if row is None:
@@ -150,6 +203,39 @@ def delete_assignment(
         run_date=row.run_date,
         route_truck=row.covering_route_truck,
         covering_truck=row.spare_truck_number,
+    )
+    spare_state = db.scalars(
+        select(TruckState).where(
+            TruckState.truck_number == row.spare_truck_number,
+            TruckState.run_date == row.run_date,
+        )
+    ).first()
+    before_snapshot = snapshot_truck_state(spare_state)
+    if spare_state is not None:
+        spare_state.oos_spare_route = None
+        spare_state.state_source = TruckStateSource.workflow.value
+        if not row.returned:
+            spare_state.status = TruckStatus.dirty
+    after_snapshot = snapshot_truck_state(spare_state)
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="coverage",
+        event_type="spare_assignment_deleted",
+        run_date=row.run_date,
+        truck_number=row.spare_truck_number,
+        summary=f"Deleted spare assignment {row.spare_truck_number} → route {row.covering_route_truck}",
+        status_before=before_snapshot.get("status") if before_snapshot else None,
+        status_after=after_snapshot.get("status") if after_snapshot else None,
+        diff_json={
+            "covering_route_truck": row.covering_route_truck,
+            "returned": row.returned,
+            "truck_state": build_field_diff(before_snapshot, after_snapshot),
+        },
+        context_json=add_related_truck_context(
+            {"covering_route_truck": row.covering_route_truck, "returned": row.returned},
+            [row.spare_truck_number, row.covering_route_truck],
+        ),
     )
     db.delete(row)
     db.commit()

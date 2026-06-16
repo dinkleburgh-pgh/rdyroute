@@ -22,6 +22,7 @@ import { todayIso } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type { Shortage, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 
 // ---------------------------------------------------------------------------
@@ -32,16 +33,18 @@ const TOP_PALETTE: Record<string, string> = {
   "3x10":  "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",
   "3x5":   "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
   "4x6":   "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800",
-  "Paper": "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
-  "Bulk":  "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
+  "Paper":    "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
+  "Bulk":     "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
+  "Hygiene":  "bg-gradient-to-b from-cyan-600 to-cyan-900 ring-1 ring-cyan-400/20 hover:from-cyan-500 hover:to-cyan-800",
 };
 
 const CAT_CHIP_COLORS: Record<string, string> = {
   "3x10":  "bg-sky-900/40 text-sky-300 hover:bg-sky-800/60",
   "3x5":   "bg-violet-900/40 text-violet-300 hover:bg-violet-800/60",
   "4x6":   "bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60",
-  "Paper": "bg-orange-900/40 text-orange-300 hover:bg-orange-800/60",
-  "Bulk":  "bg-rose-900/40 text-rose-300 hover:bg-rose-800/60",
+  "Paper":    "bg-orange-900/40 text-orange-300 hover:bg-orange-800/60",
+  "Bulk":     "bg-rose-900/40 text-rose-300 hover:bg-rose-800/60",
+  "Hygiene":  "bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60",
 };
 
 const SUB_PALETTE: Record<string, string> = {
@@ -236,7 +239,9 @@ function HierarchyPicker({
 
   function confirmLog() {
     if (!pending) return;
-    const qty = Math.max(1, parseInt(qtyInput, 10) || 1);
+    const raw = Math.max(1, parseInt(qtyInput, 10) || 1);
+    const sel = items.find((i) => i.label === pending.detail && topCatOf(i) === pending.category);
+    const qty = sel?.pack_size ? raw * sel.pack_size : raw;
     onLog(pending.category, pending.detail, qty);
     setPending(null);
     setQtyInput("");
@@ -391,37 +396,55 @@ function HierarchyPicker({
       {/* Current level choices */}
       {pending !== null ? (
         <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-400">Quantity shorted</span>
-            <input
-              ref={qtyRef}
-              type="number"
-              inputMode="numeric"
-              min={1}
-              className="input w-full text-2xl font-black"
-              placeholder="1"
-              value={qtyInput}
-              onChange={(e) => setQtyInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") confirmLog(); }}
-            />
-          </label>
-          <div className="mt-4 flex gap-3">
-            <button
-              type="button"
-              onClick={confirmLog}
-              disabled={isPending}
-              className="flex-1 rounded-xl bg-amber-600 px-4 py-3 text-base font-black text-white shadow hover:bg-amber-500 active:scale-95 transition disabled:opacity-50"
-            >
-              Log
-            </button>
-            <button
-              type="button"
-              onClick={() => { setPending(null); setQtyInput(""); }}
-              className="rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
-            >
-              Cancel
-            </button>
-          </div>
+          {(() => {
+            const sel = items.find((i) => i.label === pending.detail && topCatOf(i) === pending.category);
+            const unitLabel = sel?.unit_label;
+            const packSize = sel?.pack_size;
+            const qtyNum = Math.max(1, parseInt(qtyInput, 10) || 1);
+            const pieceCount = packSize ? qtyNum * packSize : null;
+            return (
+              <>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-slate-400">
+                    {unitLabel ? `Qty (${unitLabel}s)` : "Quantity shorted"}
+                  </span>
+                  <input
+                    ref={qtyRef}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    className="input w-full text-2xl font-black"
+                    placeholder="1"
+                    value={qtyInput}
+                    onChange={(e) => setQtyInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") confirmLog(); }}
+                  />
+                </label>
+                {pieceCount != null && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    = {pieceCount} {qtyNum === 1 ? "piece" : "pieces"}
+                  </p>
+                )}
+                <div className="mt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={confirmLog}
+                    disabled={isPending}
+                    className="flex-1 rounded-xl bg-amber-600 px-4 py-3 text-base font-black text-white shadow hover:bg-amber-500 active:scale-95 transition disabled:opacity-50"
+                  >
+                    Log
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPending(null); setQtyInput(""); }}
+                    className="rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </div>
       ) : topCat === null ? (
         <div className="space-y-2">
@@ -774,41 +797,47 @@ export function ShortsWorkspace() {
       className="flex h-full flex-col"
     >
       {/* Page header */}
-      <div className="flex flex-wrap items-center gap-3 border-b border-slate-800 px-3 py-3 md:px-6">
-        <h2 className="text-xl font-semibold text-slate-100">Shortages</h2>
-        <select
-          className="input py-1 text-sm"
-          value={runDate}
-          onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
-        >
-          <option value={todayIso()}>Today</option>
-          {shortDates.map((d) => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
-        <div className="ml-auto flex rounded-lg border border-slate-800 bg-slate-900/70 p-1">
-          <button
-            type="button"
-            onClick={() => setViewMode("log")}
-            className={clsx(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition",
-              viewMode === "log" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
-            )}
-          >
-            Log shortages
-          </button>
-          <button
-            type="button"
-            onClick={() => setViewMode("imports")}
-            className={clsx(
-              "rounded-md px-3 py-1.5 text-sm font-medium transition",
-              viewMode === "imports" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
-            )}
-          >
-            Import sheets
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        eyebrow="Workflow"
+        title="Short Sheet"
+        subtitle="Log route shortages or review imported sheet data for verification."
+        actions={
+          <>
+            <select
+              className="input min-w-[8.5rem] py-1.5 text-sm"
+              value={runDate}
+              onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
+            >
+              <option value={todayIso()}>Today</option>
+              {shortDates.map((d) => (
+                <option key={d} value={d}>{d}</option>
+              ))}
+            </select>
+            <div className="flex rounded-lg border border-slate-800 bg-slate-900/70 p-1">
+              <button
+                type="button"
+                onClick={() => setViewMode("log")}
+                className={clsx(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  viewMode === "log" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
+                )}
+              >
+                Log shortages
+              </button>
+              <button
+                type="button"
+                onClick={() => setViewMode("imports")}
+                className={clsx(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  viewMode === "imports" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
+                )}
+              >
+                Import sheets
+              </button>
+            </div>
+          </>
+        }
+      />
 
       {viewMode === "imports" ? (
         <div className="p-3 md:p-6">

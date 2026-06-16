@@ -18,11 +18,12 @@ Business logic preserved from V1:
 from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, select, tuple_
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
+from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
 from database import get_db
-from models import RouteSwap, Truck, TruckState, User
+from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin
 from schemas import (
@@ -39,9 +40,173 @@ from ws_manager import manager
 
 router = APIRouter(prefix="/trucks", tags=["trucks"])
 
-# Statuses that represent a truck that is not running and should carry forward
-# automatically to the next day if no new state row exists.
 _PERSISTENT_STATUSES = {"off", "oos", "shop"}
+
+
+def _ship_day_number(value: date) -> int:
+    weekday = value.weekday()  # Mon=0 .. Sun=6
+    if 0 <= weekday <= 4:
+        return weekday + 1
+    return 1
+
+
+def _load_day_number(run_date: date) -> int:
+    return _ship_day_number(run_date + timedelta(days=1))
+
+
+def _ran_special(note: str | None) -> bool:
+    return "ran special" in (note or "").lower()
+
+
+def _ensure_day_initialized(run_date: date, db: Session) -> None:
+    source_key = f"day_setup_source_{run_date}"
+    if db.get(AppSetting, source_key) is not None:
+        return
+
+    trucks = db.scalars(
+        select(Truck).where(Truck.is_active == True).order_by(Truck.truck_number)
+    ).all()
+    if not trucks:
+        db.add(AppSetting(key=source_key, value="auto"))
+        db.commit()
+        return
+
+    load_day_num = _load_day_number(run_date)
+    prev_run_date = db.scalar(
+        select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
+    )
+
+    prev_states_by_num: dict[int, TruckState] = {}
+    prev_loaded_on = set[int]()
+    prev_spares_used = set[int]()
+    if prev_run_date is not None:
+        prev_states_by_num = {
+            row.truck_number: row
+            for row in db.scalars(
+                select(TruckState).where(TruckState.run_date == prev_run_date)
+            ).all()
+        }
+        prev_loaded_on = {
+            row.load_on_truck
+            for row in db.scalars(
+                select(RouteSwap).where(RouteSwap.run_date == prev_run_date)
+            ).all()
+        }
+        prev_spares_used = {
+            row.spare_truck_number
+            for row in db.scalars(
+                select(SpareAssignment).where(
+                    SpareAssignment.run_date == prev_run_date,
+                    SpareAssignment.returned == False,
+                )
+            ).all()
+        }
+
+    today_states = {
+        row.truck_number: row
+        for row in db.scalars(
+            select(TruckState).where(TruckState.run_date == run_date)
+        ).all()
+    }
+    seeded_truck_numbers: list[int] = []
+    status_counts: dict[str, int] = {}
+
+    for truck in trucks:
+        if truck.truck_number in today_states:
+            continue
+
+        prior = prev_states_by_num.get(truck.truck_number)
+        scheduled_off_today = (
+            truck.truck_type != "Spare" and load_day_num in (truck.scheduled_off_days or [])
+        )
+        used_yesterday = False
+        needs_checked = False
+        off_note = ""
+        shop_note = ""
+        oos_spare_route = None
+        has_dust_garment = False
+        priority_hold = False
+        batch_id = None
+        wearers = 0
+        load_day_value = load_day_num
+        status = TruckStatus.unloaded
+
+        if prior is not None:
+            needs_checked = bool(getattr(prior, "needs_checked", False)) or _ran_special(prior.off_note)
+            if _ran_special(prior.off_note):
+                off_note = prior.off_note or ""
+            shop_note = prior.shop_note or ""
+            used_yesterday = (
+                prior.status in {TruckStatus.loaded, TruckStatus.in_progress}
+                or truck.truck_number in prev_loaded_on
+                or truck.truck_number in prev_spares_used
+            )
+
+            if prior.status == TruckStatus.unfinished:
+                status = TruckStatus.unfinished
+            elif prior.status in {TruckStatus.oos, TruckStatus.shop}:
+                status = prior.status
+            elif scheduled_off_today:
+                status = TruckStatus.off
+            elif used_yesterday:
+                status = TruckStatus.dirty
+            elif prior.status in {TruckStatus.off, TruckStatus.unloaded, TruckStatus.spare, TruckStatus.dirty}:
+                status = TruckStatus.unloaded
+            else:
+                status = TruckStatus.unloaded
+        else:
+            status = TruckStatus.off if scheduled_off_today else TruckStatus.unloaded
+
+        if prior is None and scheduled_off_today:
+            off_note = ""
+        if truck.truck_type == "Spare" and truck.truck_number not in prev_spares_used and not used_yesterday:
+            status = TruckStatus.unloaded
+
+        row = TruckState(
+            truck_number=truck.truck_number,
+            run_date=run_date,
+            status=status,
+            wearers=wearers,
+            batch_id=batch_id,
+            load_day_num=load_day_value,
+            load_start_time=None,
+            load_finish_time=None,
+            load_duration_seconds=None,
+            off_note=off_note,
+            shop_note=shop_note,
+            oos_spare_route=oos_spare_route,
+            has_dust_garment=has_dust_garment,
+            priority_hold=priority_hold,
+            needs_checked=needs_checked,
+            state_source=TruckStateSource.auto.value,
+        )
+        db.add(row)
+        seeded_truck_numbers.append(truck.truck_number)
+        status_key = row.status.value if hasattr(row.status, "value") else str(row.status)
+        status_counts[status_key] = status_counts.get(status_key, 0) + 1
+
+    db.add(AppSetting(key=source_key, value="auto"))
+    append_activity_event(
+        db,
+        actor_type="system",
+        event_family="system",
+        event_type="day_auto_initialized",
+        run_date=run_date,
+        summary=f"Auto-initialized {len(seeded_truck_numbers)} trucks for {run_date}",
+        diff_json={
+            "seeded_count": len(seeded_truck_numbers),
+            "status_counts": status_counts,
+        },
+        context_json=add_related_truck_context(
+            {
+                "day_setup_source": "auto",
+                "seeded_count": len(seeded_truck_numbers),
+                "status_counts": status_counts,
+            },
+            seeded_truck_numbers,
+        ),
+    )
+    db.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -54,16 +219,8 @@ def get_board(
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
-    """
-    Return all active fleet trucks joined with their state for *run_date*.
-
-    - Trucks with a state row for run_date are returned as-is.
-    - Trucks with no state row today that had a *persistent* status (off/oos/shop)
-      on their most recent prior day are returned with that status so it carries
-      forward automatically.
-    - All other trucks with no state row are returned with state=null (treated
-      as 'dirty' by the frontend).
-    """
+    """Return all active fleet trucks joined with their explicit state for *run_date*."""
+    _ensure_day_initialized(run_date, db)
     trucks = db.scalars(
         select(Truck).where(Truck.is_active == True).order_by(Truck.truck_number)
     ).all()
@@ -76,60 +233,6 @@ def get_board(
         ).all()
     }
 
-    # For trucks with no today-state, fetch their most recent prior persistent state.
-    # Combine into one query using (truck_number, max_date) tuple join instead of
-    # two separate round-trips.
-    missing_nums = [t.truck_number for t in trucks if t.truck_number not in states_by_num]
-    if missing_nums:
-        subq = (
-            select(
-                TruckState.truck_number,
-                func.max(TruckState.run_date).label("max_date"),
-            )
-            .where(TruckState.truck_number.in_(missing_nums))
-            .where(TruckState.run_date < run_date)
-            .group_by(TruckState.truck_number)
-            .subquery()
-        )
-        prev_states = db.scalars(
-            select(TruckState).join(
-                subq,
-                (TruckState.truck_number == subq.c.truck_number)
-                & (TruckState.run_date == subq.c.max_date),
-            )
-        ).all()
-        for s in prev_states:
-            if s.status in _PERSISTENT_STATUSES:
-                states_by_num[s.truck_number] = s
-
-        # Carry forward "unloaded" for idle Spare trucks whose garments
-        # are still clean (never went out on a route).
-        truck_by_num = {t.truck_number: t for t in trucks}
-        unloaded_spare_candidates = [
-            s for s in prev_states
-            if s.status == "unloaded"
-            and states_by_num.get(s.truck_number) is None
-            and truck_by_num.get(s.truck_number) is not None
-            and truck_by_num[s.truck_number].truck_type == "Spare"
-            and not s.oos_spare_route
-        ]
-        if unloaded_spare_candidates:
-            spare_nums = [c.truck_number for c in unloaded_spare_candidates]
-            spare_dates = list({c.run_date for c in unloaded_spare_candidates})
-            covered = {
-                (rs.load_on_truck, rs.run_date)
-                for rs in db.scalars(
-                    select(RouteSwap).where(
-                        RouteSwap.run_date.in_(spare_dates),
-                        RouteSwap.load_on_truck.in_(spare_nums),
-                    )
-                ).all()
-            }
-            for s in unloaded_spare_candidates:
-                if (s.truck_number, s.run_date) not in covered:
-                    states_by_num[s.truck_number] = s
-
-    # Fetch route swaps and trucks + states all in parallel via the same connection.
     route_swaps = db.scalars(
         select(RouteSwap).where(RouteSwap.run_date == run_date)
     ).all()
@@ -205,8 +308,17 @@ def create_truck_state(
     if payload.status and payload.status.value == "in_progress":
         _assert_no_other_in_progress(truck_number, payload.run_date, db)
 
-    row = TruckState(**payload.model_dump())
+    row_payload = payload.model_dump()
+    row_payload["state_source"] = payload.state_source or TruckStateSource.workflow.value
+    row = TruckState(**row_payload)
     db.add(row)
+    append_truck_state_activity(
+        db,
+        actor_user=_user,
+        before_state=None,
+        after_state=row,
+        context_json={"source": "direct_write"},
+    )
     db.commit()
     db.refresh(row)
     if row.priority_hold:
@@ -250,7 +362,28 @@ def update_truck_state(
 
     previous_status = row.status
     previous_hold = row.priority_hold
+    before_state = TruckState(**{
+        "truck_number": row.truck_number,
+        "run_date": row.run_date,
+        "status": row.status,
+        "wearers": row.wearers,
+        "batch_id": row.batch_id,
+        "load_day_num": row.load_day_num,
+        "load_start_time": row.load_start_time,
+        "load_finish_time": row.load_finish_time,
+        "load_duration_seconds": row.load_duration_seconds,
+        "off_note": row.off_note,
+        "shop_note": row.shop_note,
+        "oos_spare_route": row.oos_spare_route,
+        "has_dust_garment": row.has_dust_garment,
+        "priority_hold": row.priority_hold,
+        "needs_checked": row.needs_checked,
+        "arrived_at": row.arrived_at,
+        "state_source": row.state_source,
+    })
     updates = payload.model_dump(exclude_unset=True)
+    if "state_source" not in updates:
+        updates["state_source"] = TruckStateSource.workflow.value
 
     if updates.get("status") and updates["status"].value == "in_progress":
         _assert_no_other_in_progress(truck_number, run_date, db)
@@ -258,6 +391,13 @@ def update_truck_state(
     for field, value in updates.items():
         setattr(row, field, value)
 
+    append_truck_state_activity(
+        db,
+        actor_user=_user,
+        before_state=before_state,
+        after_state=row,
+        context_json={"source": "direct_write"},
+    )
     db.commit()
     db.refresh(row)
     if not previous_hold and row.priority_hold:
@@ -296,6 +436,7 @@ def reset_workday(
     3. Deletes all Batch rows for the date
     4. Deletes per-date AppSetting keys:
          wizard_completed_<date>
+         day_setup_source_<date>
          holiday_mode_<date>
          holiday_load_<date>
          holiday_unload_<date>
@@ -303,6 +444,15 @@ def reset_workday(
     from models import AppSetting, Batch  # local import avoids circular
 
     date_str = str(run_date)
+    state_truck_numbers = db.scalars(
+        select(TruckState.truck_number).where(TruckState.run_date == run_date)
+    ).all()
+    route_swap_count = db.scalar(
+        select(func.count(RouteSwap.id)).where(RouteSwap.run_date == run_date)
+    ) or 0
+    batch_count = db.scalar(
+        select(func.count(Batch.id)).where(Batch.run_date == run_date)
+    ) or 0
 
     # 1. Truck states
     deleted_states = db.execute(
@@ -318,6 +468,7 @@ def reset_workday(
     # 4. Per-date settings
     setting_keys = [
         f"wizard_completed_{date_str}",
+        f"day_setup_source_{date_str}",
         f"holiday_mode_{date_str}",
         f"holiday_load_{date_str}",
         f"holiday_unload_{date_str}",
@@ -327,6 +478,24 @@ def reset_workday(
         if setting:
             db.delete(setting)
 
+    append_activity_event(
+        db,
+        actor_user=_admin,
+        event_family="recovery",
+        event_type="workday_reset",
+        run_date=run_date,
+        summary=f"Reset workday for {run_date}",
+        diff_json={
+            "states_cleared": deleted_states,
+            "route_swaps_cleared": route_swap_count,
+            "batches_cleared": batch_count,
+            "settings_cleared": setting_keys,
+        },
+        context_json=add_related_truck_context(
+            {"setting_keys": setting_keys, "route_swap_count": route_swap_count, "batch_count": batch_count},
+            state_truck_numbers,
+        ),
+    )
     db.commit()
 
     background_tasks.add_task(
@@ -355,25 +524,47 @@ def selective_reset(
 
     date_str = str(run_date)
     result: dict = {"run_date": date_str, "cleared": []}
+    related_truck_numbers: list[int] = []
+    diff_payload: dict[str, object] = {}
 
     if truck_states:
+        related_truck_numbers.extend(
+            db.scalars(select(TruckState.truck_number).where(TruckState.run_date == run_date)).all()
+        )
         deleted = db.execute(
             delete(TruckState).where(TruckState.run_date == run_date)
         ).rowcount
         result["states_cleared"] = deleted
+        diff_payload["states_cleared"] = deleted
         result["cleared"].append("truck_states")
+        for key in [
+            f"wizard_completed_{date_str}",
+            f"day_setup_source_{date_str}",
+        ]:
+            setting = db.get(AppSetting, key)
+            if setting:
+                db.delete(setting)
 
     if batches:
-        db.execute(delete(Batch).where(Batch.run_date == run_date))
+        batch_deleted = db.execute(delete(Batch).where(Batch.run_date == run_date)).rowcount
+        diff_payload["batches_cleared"] = batch_deleted
         result["cleared"].append("batches")
 
     if route_swaps:
-        db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date))
+        related_truck_numbers.extend(
+            db.scalars(select(RouteSwap.route_truck).where(RouteSwap.run_date == run_date)).all()
+        )
+        related_truck_numbers.extend(
+            db.scalars(select(RouteSwap.load_on_truck).where(RouteSwap.run_date == run_date)).all()
+        )
+        route_swap_deleted = db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date)).rowcount
+        diff_payload["route_swaps_cleared"] = route_swap_deleted
         result["cleared"].append("route_swaps")
 
     if day_flags:
         for key in [
             f"wizard_completed_{date_str}",
+            f"day_setup_source_{date_str}",
             f"holiday_mode_{date_str}",
             f"holiday_load_{date_str}",
             f"holiday_unload_{date_str}",
@@ -382,7 +573,21 @@ def selective_reset(
             if setting:
                 db.delete(setting)
         result["cleared"].append("day_flags")
+        diff_payload["day_flags_cleared"] = True
 
+    append_activity_event(
+        db,
+        actor_user=_admin,
+        event_family="recovery",
+        event_type="selective_reset",
+        run_date=run_date,
+        summary=f"Selective reset cleared {', '.join(result['cleared']) or 'nothing'} for {run_date}",
+        diff_json=diff_payload,
+        context_json=add_related_truck_context(
+            {"cleared": list(result["cleared"])},
+            related_truck_numbers,
+        ),
+    )
     db.commit()
 
     if truck_states or batches or route_swaps:
@@ -425,12 +630,23 @@ def bulk_update_status(
         )
     ).all()
     previous_status_by_num = {row.truck_number: row.status for row in rows}
+    changed_rows: list[dict[str, object]] = []
 
     # Update trucks that already have a state row
     for row in rows:
+        previous_status = row.status.value if hasattr(row.status, "value") else str(row.status)
         row.status = validated_status
+        row.state_source = TruckStateSource.workflow.value
+        current_status = validated_status.value if hasattr(validated_status, "value") else str(validated_status)
+        if previous_status != current_status:
+            changed_rows.append(
+                {
+                    "truck_number": row.truck_number,
+                    "status": {"before": previous_status, "after": current_status},
+                }
+            )
 
-    # Create state rows for trucks that have none (they appear as 'dirty' via null state)
+    # Create state rows for trucks that have none
     existing_nums = {row.truck_number for row in rows}
     for num in truck_numbers:
         if num not in existing_nums:
@@ -439,8 +655,33 @@ def bulk_update_status(
                 run_date=run_date,
                 status=validated_status,
                 wearers=0,
+                state_source=TruckStateSource.workflow.value,
             ))
+            changed_rows.append(
+                {
+                    "truck_number": num,
+                    "status": {"before": None, "after": validated_status.value},
+                }
+            )
 
+    if changed_rows:
+        append_activity_event(
+            db,
+            actor_user=_user,
+            event_family="state",
+            event_type="bulk_truck_status_changed",
+            run_date=run_date,
+            summary=f"Bulk set {len(changed_rows)} truck(s) to {validated_status.value}",
+            status_after=validated_status.value,
+            diff_json={
+                "changed_count": len(changed_rows),
+                "truck_changes": changed_rows,
+            },
+            context_json=add_related_truck_context(
+                {"new_status": validated_status.value},
+                [item["truck_number"] for item in changed_rows],
+            ),
+        )
     db.commit()
     background_tasks.add_task(
         manager.broadcast,

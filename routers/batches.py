@@ -16,8 +16,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy import select, delete, func
 from sqlalchemy.orm import Session
 
+from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import Batch, BatchHistory, TruckState, TruckStatus
+from models import Batch, BatchHistory, TruckState, TruckStateSource, TruckStatus, User
+from routers.auth import get_current_user
 from schemas import BatchAssign, BatchHistoryCreate, BatchHistoryOut, BatchOut, BatchSummary, BatchTruck
 from ws_manager import manager
 
@@ -78,7 +80,12 @@ def get_batch(
 
 
 @router.post("/assign", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
-def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def assign_truck_to_batch(
+    payload: BatchAssign,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     """
     Assign a truck to a batch for a run-date.
     If the truck is already assigned to another batch on the same date, it is
@@ -86,6 +93,13 @@ def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTask
     Enforces V1's BATCH_CAP=400 wearers per batch.
     """
     _validate_batch_number(payload.batch_number)
+
+    existing_assignment = db.scalars(
+        select(Batch).where(
+            Batch.run_date == payload.run_date,
+            Batch.truck_number == payload.truck_number,
+        )
+    ).first()
 
     # Remove any existing assignment for this truck on this date
     db.execute(
@@ -128,6 +142,7 @@ def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTask
             TruckState.run_date == payload.run_date,
         )
     ).first()
+    before_snapshot = snapshot_truck_state(state)
     if state is None:
         state = TruckState(
             truck_number=payload.truck_number,
@@ -135,6 +150,7 @@ def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTask
             status=TruckStatus.unloaded,
             wearers=payload.wearers,
             batch_id=payload.batch_number,
+            state_source=TruckStateSource.workflow.value,
         )
         db.add(state)
     else:
@@ -142,6 +158,41 @@ def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTask
             state.status = TruckStatus.unloaded
         state.wearers = payload.wearers
         state.batch_id = payload.batch_number
+        state.state_source = TruckStateSource.workflow.value
+
+    after_snapshot = snapshot_truck_state(state)
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="batch",
+        event_type="batch_assigned",
+        run_date=payload.run_date,
+        truck_number=payload.truck_number,
+        summary=(
+            f"Assigned truck {payload.truck_number} to batch {payload.batch_number}"
+            + (
+                f" from batch {existing_assignment.batch_number}"
+                if existing_assignment and existing_assignment.batch_number != payload.batch_number
+                else ""
+            )
+        ),
+        status_before=before_snapshot.get("status") if before_snapshot else None,
+        status_after=after_snapshot.get("status") if after_snapshot else None,
+        diff_json={
+            "batch_number": payload.batch_number,
+            "previous_batch_number": existing_assignment.batch_number if existing_assignment else None,
+            "wearers": payload.wearers,
+            "truck_state": build_field_diff(before_snapshot, after_snapshot),
+        },
+        context_json=add_related_truck_context(
+            {
+                "batch_number": payload.batch_number,
+                "previous_batch_number": existing_assignment.batch_number if existing_assignment else None,
+                "wearers": payload.wearers,
+            },
+            [payload.truck_number],
+        ),
+    )
 
     db.commit()
     db.refresh(row)
@@ -156,37 +207,116 @@ def assign_truck_to_batch(payload: BatchAssign, background_tasks: BackgroundTask
 def remove_truck_from_batch(
     batch_number: int,
     truck_number: int,
+    background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     _validate_batch_number(batch_number)
-    deleted = db.execute(
-        delete(Batch).where(
+    assignment = db.scalars(
+        select(Batch).where(
             Batch.run_date == run_date,
             Batch.batch_number == batch_number,
             Batch.truck_number == truck_number,
         )
-    ).rowcount
-    if deleted == 0:
+    ).first()
+    if assignment is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Assignment not found")
+    state = db.scalars(
+        select(TruckState).where(
+            TruckState.run_date == run_date,
+            TruckState.truck_number == truck_number,
+        )
+    ).first()
+    before_snapshot = snapshot_truck_state(state)
+    if state is not None and state.batch_id == batch_number:
+        state.batch_id = None
+        state.state_source = TruckStateSource.workflow.value
+    after_snapshot = snapshot_truck_state(state)
+    db.delete(assignment)
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="batch",
+        event_type="batch_removed",
+        run_date=run_date,
+        truck_number=truck_number,
+        summary=f"Removed truck {truck_number} from batch {batch_number}",
+        status_before=before_snapshot.get("status") if before_snapshot else None,
+        status_after=after_snapshot.get("status") if after_snapshot else None,
+        diff_json={
+            "batch_number": batch_number,
+            "truck_state": build_field_diff(before_snapshot, after_snapshot),
+        },
+        context_json=add_related_truck_context({"batch_number": batch_number}, [truck_number]),
+    )
     db.commit()
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},
+    )
 
 
 @router.delete("/{batch_number}", status_code=status.HTTP_204_NO_CONTENT)
 def clear_batch(
     batch_number: int,
+    background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     """Remove all truck assignments from a batch for a run-date."""
     _validate_batch_number(batch_number)
-    db.execute(
-        delete(Batch).where(
+    assignments = db.scalars(
+        select(Batch).where(
             Batch.run_date == run_date,
             Batch.batch_number == batch_number,
         )
+    ).all()
+    truck_numbers = [row.truck_number for row in assignments]
+    states = db.scalars(
+        select(TruckState).where(
+            TruckState.run_date == run_date,
+            TruckState.truck_number.in_(truck_numbers),
+        )
+    ).all() if truck_numbers else []
+    before_by_num = {state.truck_number: snapshot_truck_state(state) for state in states}
+    for state in states:
+        if state.batch_id == batch_number:
+            state.batch_id = None
+            state.state_source = TruckStateSource.workflow.value
+    truck_changes = [
+        {
+            "truck_number": state.truck_number,
+            "truck_state": build_field_diff(before_by_num.get(state.truck_number), snapshot_truck_state(state)),
+        }
+        for state in states
+    ]
+    for row in assignments:
+        db.delete(row)
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="batch",
+        event_type="batch_cleared",
+        run_date=run_date,
+        summary=f"Cleared batch {batch_number} ({len(truck_numbers)} truck(s))",
+        diff_json={
+            "batch_number": batch_number,
+            "assignment_count": len(truck_numbers),
+            "truck_changes": truck_changes,
+        },
+        context_json=add_related_truck_context(
+            {"batch_number": batch_number, "assignment_count": len(truck_numbers)},
+            truck_numbers,
+        ),
     )
     db.commit()
+    if truck_numbers:
+        background_tasks.add_task(
+            manager.broadcast,
+            {"type": "truck_state_updated", "run_date": str(run_date)},
+        )
 
 
 # ---------------------------------------------------------------------------

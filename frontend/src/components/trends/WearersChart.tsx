@@ -17,15 +17,17 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Filler);
 interface Props {
   data: WearersDailyPoint[] | undefined;
   isLoading: boolean;
+  onViewDetails?: () => void;
 }
 
-export default function WearersChart({ data, isLoading }: Props) {
+export default function WearersChart({ data, isLoading, onViewDetails }: Props) {
   return (
     <TrendChartCard
       title="Average Wearers"
       subtitle="Avg wearers per truck (loaded only) per day"
       isLoading={isLoading}
       isEmpty={!isLoading && (!data || data.length === 0)}
+      onViewDetails={onViewDetails}
     >
       {data && data.length > 0 && (
         <motion.div className="h-64" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

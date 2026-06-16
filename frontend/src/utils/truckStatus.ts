@@ -4,7 +4,7 @@
  * Keep pure (no React, no hooks) so it can be imported anywhere.
  */
 
-import type { TruckStatus, TruckWithState } from "../types";
+import type { TruckStatus, TruckType, TruckWithState } from "../types";
 
 /**
  * Returns the effective display status for a truck on a given day.
@@ -30,6 +30,22 @@ export function effectiveStatus(
   )
     return "off";
   return raw;
+}
+
+export function getCoverageRouteNumber(t: TruckWithState): number | null {
+  return t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+}
+
+export function effectiveOperationalStatus(
+  t: TruckWithState,
+  dayNum: number,
+  holidayMode = false,
+): TruckStatus {
+  if (t.is_oos) return "oos";
+  if (getCoverageRouteNumber(t) != null) {
+    return (t.state?.status ?? "dirty") as TruckStatus;
+  }
+  return effectiveStatus(t, dayNum, holidayMode);
 }
 
 /**
@@ -88,6 +104,10 @@ export function buildRouteStatusCounts(
   };
 
   function statusFor(t: TruckWithState): TruckStatus {
+    const coveredRoute = getCoverageRouteNumber(t);
+    if (coveredRoute != null) {
+      return effectiveOperationalStatus(t, loadDayNum, holidayLoad);
+    }
     return effectiveWorkflowStatus(t, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload);
   }
 
@@ -130,6 +150,76 @@ export function buildRouteStatusCounts(
   }
 
   return out;
+}
+
+export interface OperationalDayContext {
+  activeTrucks: TruckWithState[];
+  coveredRouteNumbers: Set<number>;
+  routeTruckByNumber: Map<number, TruckWithState>;
+}
+
+export function buildOperationalDayContext(
+  trucks: TruckWithState[],
+  dayNum: number,
+  holidayMode = false,
+): OperationalDayContext {
+  const routeTruckByNumber = new Map<number, TruckWithState>();
+  for (const truck of trucks) {
+    if (truck.truck_type !== "Spare") {
+      routeTruckByNumber.set(truck.truck_number, truck);
+    }
+  }
+
+  const coveredRouteNumbers = new Set<number>();
+  for (const truck of trucks) {
+    const coveredRoute = getCoverageRouteNumber(truck);
+    if (coveredRoute != null) {
+      const coveredTruck = routeTruckByNumber.get(coveredRoute);
+      if (
+        coveredTruck &&
+        (holidayMode || !coveredTruck.scheduled_off_days.includes(dayNum))
+      ) {
+        coveredRouteNumbers.add(coveredRoute);
+      }
+    }
+  }
+
+  const activeTrucks: TruckWithState[] = [];
+  for (const truck of trucks) {
+    const coveredRoute = getCoverageRouteNumber(truck);
+    if (coveredRoute != null) {
+      const coveredTruck = routeTruckByNumber.get(coveredRoute);
+      if (
+        coveredTruck &&
+        (holidayMode || !coveredTruck.scheduled_off_days.includes(dayNum))
+      ) {
+        activeTrucks.push(truck);
+      }
+      continue;
+    }
+
+    if (truck.truck_type === "Spare") continue;
+    if (!holidayMode && truck.scheduled_off_days.includes(dayNum)) continue;
+    if (coveredRouteNumbers.has(truck.truck_number)) continue;
+    activeTrucks.push(truck);
+  }
+
+  return {
+    activeTrucks,
+    coveredRouteNumbers,
+    routeTruckByNumber,
+  };
+}
+
+export function getOperationalTruckType(
+  t: TruckWithState,
+  routeTruckByNumber: Map<number, TruckWithState>,
+): TruckType {
+  const coveredRoute = getCoverageRouteNumber(t);
+  if (coveredRoute != null) {
+    return routeTruckByNumber.get(coveredRoute)?.truck_type ?? t.truck_type;
+  }
+  return t.truck_type;
 }
 
 // ---------------------------------------------------------------------------

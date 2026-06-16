@@ -4,6 +4,7 @@ import { useAssignBatch, useBoard, useBatchSummary, useSettings, useUpsertTruckS
 import { todayIso } from "../api/client";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 
@@ -78,6 +79,16 @@ export default function Unload() {
     () =>
       allTrucks.filter(
         (t) => t.state?.status === "unloaded" && !recentlyUnloaded.has(t.truck_number),
+      ),
+    [allTrucks, recentlyUnloaded],
+  );
+  const needsChecked = useMemo(
+    () =>
+      allTrucks.filter(
+        (t) =>
+          t.state?.needs_checked === true &&
+          (t.state?.status === "dirty" || t.state?.status === "unfinished" || t.state == null) &&
+          !recentlyUnloaded.has(t.truck_number),
       ),
     [allTrucks, recentlyUnloaded],
   );
@@ -194,6 +205,9 @@ export default function Unload() {
               </motion.span>
             )}
             <span className="badge bg-status-dirty">Dirty</span>
+            {t.state?.needs_checked && (
+              <span className="badge bg-amber-700 text-white">Needs Checked</span>
+            )}
           </div>
         </div>
 
@@ -311,7 +325,11 @@ export default function Unload() {
 
   return (
     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-6 p-3 md:p-6">
-      <h2 className="text-2xl font-semibold">Unload</h2>
+      <PageHeader
+        eyebrow="Workflow"
+        title="Unload"
+        subtitle="Work dirty and unfinished trucks into unloaded status and batch them when needed."
+      />
 
       {/* ── Requests ─────────────────────────────────────────────────── */}
       {requested.length > 0 && (
@@ -321,6 +339,18 @@ export default function Unload() {
           </h3>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
             {requested.map((t, index) => renderDirtyCard(t, index))}
+          </div>
+        </section>
+      )}
+
+      {/* ── Needs Checked ─────────────────────────────────────────────── */}
+      {needsChecked.length > 0 && (
+        <section>
+          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-400">
+            Needs Checked ({needsChecked.length})
+          </h3>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
+            {needsChecked.map((t, index) => renderDirtyCard(t, index))}
           </div>
         </section>
       )}
@@ -363,7 +393,12 @@ export default function Unload() {
                       </span>
                     )}
                   </div>
-                  <span className="badge bg-status-unfinished mt-0.5 shrink-0">Unfinished</span>
+                  <span className="flex flex-col items-end gap-1 mt-0.5 shrink-0">
+                    <span className="badge bg-status-unfinished">Unfinished</span>
+                    {t.state?.needs_checked && (
+                      <span className="badge bg-amber-700 text-white">Needs Checked</span>
+                    )}
+                  </span>
                 </div>
 
                 {/* Primary action + overflow */}
@@ -418,8 +453,13 @@ export default function Unload() {
         </h3>
         <div className="flex flex-wrap gap-2">
           {unloaded.map((t) => (
-            <span key={t.truck_number} className="badge bg-status-unloaded">
+            <span key={t.truck_number} className="inline-flex items-center gap-1 rounded-full bg-status-unloaded px-3 py-1 text-xs font-semibold text-white">
               #{t.truck_number}
+              {t.state?.needs_checked && (
+                <span className="rounded-full bg-amber-900/70 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
+                  Check
+                </span>
+              )}
             </span>
           ))}
           {unloaded.length === 0 && (

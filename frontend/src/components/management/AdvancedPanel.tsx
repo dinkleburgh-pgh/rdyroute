@@ -12,6 +12,8 @@ const WELL_KNOWN_KEYS = new Set([
   "batching_disabled",
   "batch_no_cap",
   "outside_timer_enabled",
+  "paper_bay_enabled",
+  "arrived_tracking_enabled",
   "note_cards_enabled",
   "communications_censor_words",
   "update_deploy_command",

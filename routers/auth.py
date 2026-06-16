@@ -193,6 +193,13 @@ _SHORTS_ACCESS_ROLES = frozenset({
     AuthRole.supervisor,
     AuthRole.lead,
 })
+_MANAGEMENT_ACCESS_ROLES = frozenset({
+    AuthRole.admin,
+    AuthRole.fleet,
+    AuthRole.atl,
+    AuthRole.supervisor,
+    AuthRole.lead,
+})
 
 
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
@@ -203,6 +210,12 @@ def require_admin(current_user: User = Depends(get_current_user)) -> User:
 
 def require_shorts_access(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in _SHORTS_ACCESS_ROLES:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
+    return current_user
+
+
+def require_management_access(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role not in _MANAGEMENT_ACCESS_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
     return current_user
 

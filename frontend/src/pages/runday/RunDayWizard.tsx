@@ -18,6 +18,7 @@ import {
   useSetHolidayMode,
   useSetHolidayUnload,
   useSetWizardCompleted,
+  useUpsertSetting,
   useUpsertTruckState,
 } from "../../api/hooks";
 import { workdayNumbers } from "../../components/Clock";
@@ -69,6 +70,8 @@ export default function RunDayWizard({
   const [notesText, setNotesText] = useState<string | null>(null);
   const setDailyNotes = useSetDailyNotes();
   const setWizardCompleted = useSetWizardCompleted();
+  const upsertSetting = useUpsertSetting();
+  const [workflowSkipped, setWorkflowSkipped] = useState(0);
 
   const dustTrucks = board.filter((t) => t.truck_type === "Dust");
   const [dustSelected, setDustSelected] = useState<Set<number>>(
@@ -84,7 +87,7 @@ export default function RunDayWizard({
   // Per-OOS-truck "load on" selections (auto-saved when set)
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
-  const { loadDay: todayLoad } = workdayNumbers();
+  const { loadDay: todayLoad } = workdayNumbers(new Date(`${runDate}T12:00:00`));
   const prevDay = todayLoad === 1 ? 5 : todayLoad - 1;
   const returningTrucks = board.filter(
     (t) =>
@@ -96,6 +99,10 @@ export default function RunDayWizard({
   const specialTrucks = [...returningTrucks, ...spareTrucks].filter(
     (t, i, arr) => arr.findIndex((x) => x.truck_number === t.truck_number) === i,
   );
+  const canWizardMutateTruck = (t: TruckWithState) =>
+    (t.state?.state_source ?? "auto") !== "workflow";
+  const editableDustTrucks = dustTrucks.filter(canWizardMutateTruck);
+  const editableSpecialTrucks = specialTrucks.filter(canWizardMutateTruck);
   const [absentSelected, setAbsentSelected] = useState<Set<number>>(new Set());
 
   function toggleDust(num: number) {
@@ -117,12 +124,14 @@ export default function RunDayWizard({
   }
 
   async function saveDustAndAdvance() {
+    setWorkflowSkipped(dustTrucks.length - editableDustTrucks.length);
     await Promise.all(
-      dustTrucks.map((t) =>
+      editableDustTrucks.map((t) =>
         upsert.mutateAsync({
           truck_number: t.truck_number,
           run_date: runDate,
           has_dust_garment: dustSelected.has(t.truck_number),
+          state_source: "wizard",
         }),
       ),
     );
@@ -159,10 +168,22 @@ export default function RunDayWizard({
 
   async function saveAbsentAndAdvance() {
     const tasks: Promise<unknown>[] = [];
+    let skipped = 0;
 
     // Absent trucks: mark dirty (they weren't pushed yesterday)
     for (const num of absentSelected) {
-      tasks.push(upsert.mutateAsync({ truck_number: num, run_date: runDate, status: "dirty" }));
+      const truck = specialTrucks.find((t) => t.truck_number === num);
+      if (!truck) continue;
+      if (!canWizardMutateTruck(truck)) {
+        skipped += 1;
+        continue;
+      }
+      tasks.push(upsert.mutateAsync({
+        truck_number: num,
+        run_date: runDate,
+        status: "dirty",
+        state_source: "wizard",
+      }));
     }
 
     // Non-absent returning trucks: auto-set to unloaded.
@@ -170,16 +191,27 @@ export default function RunDayWizard({
     // loaded/pushed the day before, so they return in an unloaded state.
     for (const t of returningTrucks) {
       if (!absentSelected.has(t.truck_number)) {
-        tasks.push(upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, status: "unloaded" }));
+        if (!canWizardMutateTruck(t)) {
+          skipped += 1;
+          continue;
+        }
+        tasks.push(upsert.mutateAsync({
+          truck_number: t.truck_number,
+          run_date: runDate,
+          status: "unloaded",
+          state_source: "wizard",
+        }));
       }
     }
 
     await Promise.all(tasks);
+    setWorkflowSkipped((prev) => prev + skipped);
     setStep(5);
   }
 
   async function saveNotesAndFinish() {
     await setDailyNotes.mutateAsync({ runDate, notes: notesText ?? dailyNotes });
+    await upsertSetting.mutateAsync({ key: `day_setup_source_${runDate}`, value: "wizard" });
     await setWizardCompleted.mutateAsync(runDate);
     onClose();
   }
@@ -342,11 +374,11 @@ export default function RunDayWizard({
             <div className="space-y-4">
               <p className="text-center text-xl font-extrabold text-slate-100">Select dust trucks with garments</p>
               <p className="text-center text-xs text-slate-400">Select which dust trucks have garments today.</p>
-              {dustTrucks.length === 0 ? (
+              {editableDustTrucks.length === 0 ? (
                 <p className="text-center text-sm text-slate-500">No dust trucks in fleet.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {dustTrucks.map((t) => (
+                  {editableDustTrucks.map((t) => (
                     <button
                       key={t.truck_number}
                       className={clsx(
@@ -361,6 +393,11 @@ export default function RunDayWizard({
                     </button>
                   ))}
                 </div>
+              )}
+              {dustTrucks.length !== editableDustTrucks.length && (
+                <p className="text-center text-xs text-amber-400">
+                  {dustTrucks.length - editableDustTrucks.length} dust truck(s) already changed by workflow and will not be overridden.
+                </p>
               )}
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(1)}>Back</button>
@@ -608,11 +645,11 @@ export default function RunDayWizard({
             <div className="space-y-4">
               <p className="text-center text-xl font-extrabold text-slate-100">What trucks are NOT here?</p>
               <p className="text-center text-xs text-slate-400">Select returning or spare trucks that are absent today.</p>
-              {specialTrucks.length === 0 ? (
+              {editableSpecialTrucks.length === 0 ? (
                 <p className="text-center text-sm text-slate-500">No returning or spare trucks found.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
-                  {specialTrucks.map((t) => (
+                  {editableSpecialTrucks.map((t) => (
                     <button
                       key={t.truck_number}
                       className={clsx(
@@ -628,6 +665,11 @@ export default function RunDayWizard({
                   ))}
                 </div>
               )}
+              {specialTrucks.length !== editableSpecialTrucks.length && (
+                <p className="text-center text-xs text-amber-400">
+                  {specialTrucks.length - editableSpecialTrucks.length} truck(s) already moved in workflow and will be left alone.
+                </p>
+              )}
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(3)}>Back</button>
                 <button className="flex-1 btn-primary text-sm" disabled={upsert.isPending} onClick={saveAbsentAndAdvance}>Save & Continue</button>
@@ -640,6 +682,11 @@ export default function RunDayWizard({
           {step === 5 && (
             <div className="space-y-4">
               <p className="text-center text-xl font-extrabold text-slate-100">Add any notes about today.</p>
+              {workflowSkipped > 0 && (
+                <div className="rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
+                  Wizard override skipped {workflowSkipped} truck(s) because they were already touched by downstream workflow.
+                </div>
+              )}
               <textarea
                 className="input w-full resize-none text-sm"
                 rows={4}

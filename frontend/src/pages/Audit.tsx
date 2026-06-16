@@ -8,7 +8,7 @@ import { useState, useMemo, useRef, useEffect, type FormEvent } from "react";
 import { motion } from "framer-motion";
 import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
-import { useSearchParams } from "react-router-dom";
+import { useSearchParams, useNavigate } from "react-router-dom";
 import {
   auditPhotoFileUrl,
   useAuditByRoute,
@@ -26,6 +26,7 @@ import {
 import { todayIso } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type { AuditEntry, TruckWithState } from "../types";
+import PageHeader from "../components/PageHeader";
 
 // ---------------------------------------------------------------------------
 // TruckPicker
@@ -159,17 +160,27 @@ const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
       label: color, qty_default: 1, category: size,
     }))
   ),
-  ...["C-PULL", "DRC (AIRLAID)", "BROWN HW", "SIG HW", "SIG Z-FOLD", "SIG DUAL TP", "JRT", "B&V TP", "B&V Z-FOLD"].map((l) => ({
+  ...["C-PULL", "DRC (AIRLAID)", "BROWN HW", "SIG HW", "SIG Z-FOLD", "SIG DUAL TP", "B&V TP", "B&V Z-FOLD"].map((l) => ({
     label: l, qty_default: 1, category: "Paper",
+  })),
+  ...[{ label: "JRT", unit_label: "Case", pack_size: 12 }].map((l) => ({
+    label: l.label, qty_default: 1, category: "Paper", unit_label: l.unit_label, pack_size: l.pack_size,
   })),
   ...["White", "Black", "Red", "Green", "Blue", "Denim"].map((l) => ({
     label: l, qty_default: 1, category: "Bulk > Aprons",
+    ...(l === "White" ? { unit_label: "Bag", pack_size: 10 } : {}),
   })),
   ...['WET MOP', '24"', '36"', '46"', '60"'].map((l) => ({
     label: l, qty_default: 1, category: "Bulk > Dust Mops",
   })),
-  ...["Grid/Terry", "Glass", "Regular", "Premium", "Small Ink", "Large Ink", "Napkins", "Red Shop", "White Shop", "Fender Covers"].map((l) => ({
-    label: l, qty_default: 1, category: "Bulk > Towels",
+  ...[
+    { label: "Grid/Terry", unit_label: "Bag", pack_size: 20 },
+    { label: "Red Shop", unit_label: "Bundle", pack_size: 50 },
+    { label: "White Shop", unit_label: "Bundle", pack_size: 50 },
+    ...["Glass", "Regular", "Premium", "Small Ink", "Large Ink", "Napkins", "Fender Covers"].map((l) => ({ label: l }) as { label: string; unit_label?: string; pack_size?: number }),
+  ].map((l) => ({
+    label: l.label, qty_default: 1, category: "Bulk > Towels",
+    ...(l.unit_label ? { unit_label: l.unit_label, pack_size: l.pack_size! } : {}),
   })),
 ];
 
@@ -181,8 +192,9 @@ const TOP_PALETTE: Record<string, string> = {
   "3x10":  "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",
   "3x5":   "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
   "4x6":   "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800",
-  "Paper": "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
-  "Bulk":  "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
+  "Paper":    "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
+  "Bulk":     "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
+  "Hygiene":  "bg-gradient-to-b from-cyan-600 to-cyan-900 ring-1 ring-cyan-400/20 hover:from-cyan-500 hover:to-cyan-800",
 };
 const SUB_PALETTE: Record<string, string> = {
   Aprons:      "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
@@ -240,7 +252,9 @@ function HierarchyPicker({
 
   function confirmLog() {
     if (!pendingItem) return;
-    const qty = Math.max(1, parseInt(qtyInput, 10) || 1);
+    const raw = Math.max(1, parseInt(qtyInput, 10) || 1);
+    const sel = items.find((i) => i.label === pendingItem);
+    const qty = sel?.pack_size ? raw * sel.pack_size : raw;
     onLog(pendingItem, qty);
     setPending(null);
     setQtyInput("");
@@ -389,37 +403,55 @@ function HierarchyPicker({
       {/* Current level choices */}
       {pendingItem !== null ? (
         <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
-          <label className="block">
-            <span className="mb-1 block text-xs font-semibold text-slate-400">Quantity</span>
-            <input
-              ref={qtyRef}
-              type="number"
-              inputMode="numeric"
-              min={1}
-              className="input w-full text-2xl font-black"
-              placeholder="1"
-              value={qtyInput}
-              onChange={(e) => setQtyInput(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") confirmLog(); }}
-            />
-          </label>
-          <div className="mt-4 flex gap-3">
-            <button
-              type="button"
-              onClick={confirmLog}
-              disabled={isPending}
-              className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-base font-black text-white shadow hover:bg-emerald-500 active:scale-95 transition disabled:opacity-50"
-            >
-              Log
-            </button>
-            <button
-              type="button"
-              onClick={() => { setPending(null); setQtyInput(""); }}
-              className="rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
-            >
-              Cancel
-            </button>
-          </div>
+          {(() => {
+            const sel = items.find((i) => i.label === pendingItem);
+            const unitLabel = sel?.unit_label;
+            const packSize = sel?.pack_size;
+            const qtyNum = Math.max(1, parseInt(qtyInput, 10) || 1);
+            const pieceCount = packSize ? qtyNum * packSize : null;
+            return (
+              <>
+                <label className="block">
+                  <span className="mb-1 block text-xs font-semibold text-slate-400">
+                    {unitLabel ? `Qty (${unitLabel}s)` : "Quantity"}
+                  </span>
+                  <input
+                    ref={qtyRef}
+                    type="number"
+                    inputMode="numeric"
+                    min={1}
+                    className="input w-full text-2xl font-black"
+                    placeholder="1"
+                    value={qtyInput}
+                    onChange={(e) => setQtyInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") confirmLog(); }}
+                  />
+                </label>
+                {pieceCount != null && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    = {pieceCount} {qtyNum === 1 ? "piece" : "pieces"}
+                  </p>
+                )}
+                <div className="mt-4 flex gap-3">
+                  <button
+                    type="button"
+                    onClick={confirmLog}
+                    disabled={isPending}
+                    className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-base font-black text-white shadow hover:bg-emerald-500 active:scale-95 transition disabled:opacity-50"
+                  >
+                    Log
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { setPending(null); setQtyInput(""); }}
+                    className="rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </>
+            );
+          })()}
         </div>
       ) : topCat === null ? (
         <div className="space-y-2">
@@ -692,6 +724,7 @@ function ItemLogger({
 // ---------------------------------------------------------------------------
 
 export default function Audit() {
+  const navigate = useNavigate();
   const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
   const [searchParams]               = useSearchParams();
@@ -743,9 +776,11 @@ export default function Audit() {
       className="flex min-h-0 flex-col"
     >
       {/* Page header */}
-      <div className="flex items-center justify-center gap-3 border-b border-slate-800 px-3 py-3 md:justify-start md:px-6">
-        <h2 className="text-3xl font-black text-slate-100 md:text-xl md:font-semibold">Audit</h2>
-      </div>
+      <PageHeader
+        eyebrow="Workflow"
+        title="Audit"
+        subtitle="Review route item counts, track truck audits, and manage supporting photos."
+      />
 
       {/* Main content */}
       {selectedTruck === null ? (
@@ -778,7 +813,7 @@ export default function Audit() {
           truck={selectedTruck}
           entries={truckEntries}
           runDate={runDate}
-          onBack={() => setSelected(null)}
+          onBack={() => navigate(-1)}
           recentRemoved={recentRemoved}
         />
       )}

@@ -4,6 +4,7 @@ import { api, todayIso } from "./client";
 import * as offlineQueue from "./offlineQueue";
 import type {
   AppSetting,
+  ActivityEventPage,
   AuditEntry,
   AuthRequestRecord,
   AuthRole,
@@ -28,6 +29,7 @@ import type {
   TokenResponse,
   Truck,
   TruckNote,
+  TruckStateSource,
   TruckStatus,
   TruckWithState,
   User,
@@ -145,6 +147,7 @@ export function useUpsertTruckState() {
       truck_number: number;
       run_date: string;
       status?: TruckStatus;
+      state_source?: TruckStateSource | null;
       wearers?: number;
       batch_id?: number | null;
       load_start_time?: number | null;
@@ -155,8 +158,14 @@ export function useUpsertTruckState() {
       oos_spare_route?: number | null;
       has_dust_garment?: boolean | null;
       priority_hold?: boolean | null;
+      needs_checked?: boolean | null;
+      arrived_at?: number | null;
     }) => {
-      const { truck_number, run_date, ...patch } = args;
+      const { truck_number, run_date, state_source, ...rest } = args;
+      const patch = {
+        ...rest,
+        state_source: state_source ?? "workflow",
+      };
       // Try PUT first; if no row exists yet, create one
       try {
         const { data } = await api.put(
@@ -207,6 +216,9 @@ export function useUpsertTruckState() {
               oos_spare_route: null,
               has_dust_garment: false,
               priority_hold: false,
+              needs_checked: false,
+              arrived_at: null,
+              state_source: "workflow" as TruckStateSource,
               updated_at: new Date().toISOString(),
             };
             return {
@@ -223,7 +235,10 @@ export function useUpsertTruckState() {
                 ...(vars.shop_note          !== undefined && { shop_note: vars.shop_note ?? "" }),
                 ...(vars.oos_spare_route    !== undefined && { oos_spare_route: vars.oos_spare_route }),
                 ...(vars.has_dust_garment   !== undefined && { has_dust_garment: vars.has_dust_garment ?? false }),
-                ...(vars.priority_hold    !== undefined && { priority_hold: vars.priority_hold ?? false }),
+                ...(vars.priority_hold      !== undefined && { priority_hold: vars.priority_hold ?? false }),
+                ...(vars.needs_checked      !== undefined && { needs_checked: vars.needs_checked ?? false }),
+                ...(vars.arrived_at         !== undefined && { arrived_at: vars.arrived_at }),
+                ...(vars.state_source       !== undefined && vars.state_source !== null && { state_source: vars.state_source }),
               },
             };
           });
@@ -284,7 +299,10 @@ export function useRemoveTruckFromBatch() {
       api.delete(`/batches/${args.batch_number}/trucks/${args.truck_number}`, {
         params: { run_date: args.run_date },
       }),
-    onSuccess: (_d, vars) => qc.invalidateQueries({ queryKey: ["batches", vars.run_date] }),
+    onSuccess: (_d, vars) => {
+      qc.invalidateQueries({ queryKey: ["batches", vars.run_date] });
+      qc.invalidateQueries({ queryKey: ["board", vars.run_date] });
+    },
   });
 }
 
@@ -399,6 +417,53 @@ export function useRouteSwapLog(days = 30) {
   });
 }
 
+export function useActivityEvents(filters?: {
+  runDate?: string;
+  truckNumber?: number;
+  actorUsername?: string;
+  eventFamily?: string;
+  eventType?: string;
+  statusBefore?: string;
+  statusAfter?: string;
+  q?: string;
+  limit?: number;
+  offset?: number;
+}) {
+  return useQuery({
+    queryKey: [
+      "activity-events",
+      filters?.runDate ?? null,
+      filters?.truckNumber ?? null,
+      filters?.actorUsername ?? null,
+      filters?.eventFamily ?? null,
+      filters?.eventType ?? null,
+      filters?.statusBefore ?? null,
+      filters?.statusAfter ?? null,
+      filters?.q ?? "",
+      filters?.limit ?? 50,
+      filters?.offset ?? 0,
+    ],
+    queryFn: async () =>
+      (
+        await api.get<ActivityEventPage>("/activity/events", {
+          params: {
+            run_date: filters?.runDate || undefined,
+            truck_number: filters?.truckNumber || undefined,
+            actor_username: filters?.actorUsername || undefined,
+            event_family: filters?.eventFamily || undefined,
+            event_type: filters?.eventType || undefined,
+            status_before: filters?.statusBefore || undefined,
+            status_after: filters?.statusAfter || undefined,
+            q: filters?.q || undefined,
+            limit: filters?.limit ?? 50,
+            offset: filters?.offset ?? 0,
+          },
+        })
+      ).data,
+    staleTime: 5_000,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Shorts
 // ---------------------------------------------------------------------------
@@ -457,10 +522,9 @@ export function useCreateShortage() {
         throw err;
       }
     },
-    onSuccess: (data) => {
-      // Skip cache invalidation for queued items; sync will handle it on reconnect
-      if (data && "queued" in (data as object)) return;
-      qc.invalidateQueries({ queryKey: ["shorts"] });
+    onSuccess: () => {
+      // Realtime handled by WebSocket broadcast; offline flush handles queued items.
+      // 30s staleTime on useShortages is fallback.
     },
   });
 }
@@ -470,7 +534,7 @@ export function useUpdateShortage() {
   return useMutation({
     mutationFn: async ({ id, ...payload }: { id: number; quantity?: number; item_category?: string; item_detail?: string }) =>
       (await api.patch<Shortage>(`/shorts/${id}`, payload)).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["shorts"] }),
+    onSuccess: () => { /* WebSocket handles invalidation */ },
   });
 }
 
@@ -478,7 +542,7 @@ export function useDeleteShortage() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (id: number) => { await api.delete(`/shorts/${id}`); },
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["shorts"] }),
+    onSuccess: () => { /* WebSocket handles invalidation */ },
   });
 }
 
@@ -1813,11 +1877,16 @@ export interface TrackedItem {
   qty_default: number;
   /** Optional grouping category shown in the Audit form and ItemsPanel */
   category?: string;
+  /** Display label for the pack unit (e.g. "Case", "Bag", "Bundle") */
+  unit_label?: string;
+  /** Number of individual pieces per pack unit (e.g. 12 for JRT case) */
+  pack_size?: number;
 }
 
 export function useTrackedItems() {
   return useQuery({
     queryKey: ["tracked-items"],
+    staleTime: 5 * 60 * 1000,
     queryFn: async (): Promise<TrackedItem[]> => {
       try {
         const { data } = await api.get<AppSetting>("/settings/tracked_items_map");
@@ -1829,6 +1898,8 @@ export function useTrackedItems() {
               label,
               qty_default: Number(m.qty_default) || 1,
               category: typeof m.category === "string" ? m.category : undefined,
+              unit_label: typeof m.unit_label === "string" ? m.unit_label : undefined,
+              pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
             };
           });
         }
@@ -1846,13 +1917,15 @@ export function useUpdateTrackedItems() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (items: TrackedItem[]) => {
-      const map: Record<string, { qty_default: number; category?: string }> = {};
+      const map: Record<string, { qty_default: number; category?: string; unit_label?: string; pack_size?: number }> = {};
       for (const it of items) {
         const label = it.label.trim();
         if (!label) continue;
         map[label] = {
           qty_default: Math.max(1, Math.round(it.qty_default || 1)),
           ...(it.category?.trim() ? { category: it.category.trim() } : {}),
+          ...(it.unit_label?.trim() ? { unit_label: it.unit_label.trim() } : {}),
+          ...(it.pack_size != null && it.pack_size > 0 ? { pack_size: it.pack_size } : {}),
         };
       }
       return (

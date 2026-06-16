@@ -45,6 +45,7 @@ export default function StatusEditor({
               run_date: runDate,
               status: val as TruckStatus,
               wearers: truck.state?.wearers ?? 0,
+              ...(val === "loaded" ? { load_finish_time: Date.now() / 1000 } : {}),
             });
           }}
         >
@@ -63,6 +64,32 @@ export default function StatusEditor({
           ? "Disable OOS above to change status."
           : "Manual override — workflow pages drive normal transitions."}
       </p>
+      <div className="mt-3 flex items-center justify-between gap-2 rounded-md border border-amber-700/30 bg-amber-950/20 px-3 py-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-amber-300">Needs checked</p>
+          <p className="text-[11px] text-slate-400">Follow-up flag that does not change lifecycle status.</p>
+        </div>
+        <button
+          type="button"
+          disabled={upsert.isPending}
+          className={clsx(
+            "rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50",
+            truck.state?.needs_checked
+              ? "bg-amber-600 text-slate-950 hover:bg-amber-500"
+              : "bg-slate-800 text-slate-200 hover:bg-slate-700",
+          )}
+          onClick={() =>
+            upsert.mutate({
+              truck_number: truck.truck_number,
+              run_date: runDate,
+              needs_checked: !truck.state?.needs_checked,
+              wearers: truck.state?.wearers ?? 0,
+            })
+          }
+        >
+          {truck.state?.needs_checked ? "Checked flag on" : "Mark needs checked"}
+        </button>
+      </div>
     </section>
   );
 }

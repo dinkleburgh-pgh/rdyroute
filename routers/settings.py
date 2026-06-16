@@ -7,12 +7,13 @@ read/write settings via these endpoints.
 """
 
 from collections.abc import Callable
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from activity_log import append_activity_event
 from database import get_db
 from models import AppSetting, User
 from routers.auth import get_current_user, require_admin
@@ -29,6 +30,7 @@ KNOWN_KEYS = {
     "batch_no_cap",
     "outside_timer_enabled",
     "paper_bay_enabled",
+    "arrived_tracking_enabled",
     "note_cards_enabled",
     "tracked_items_map",
     "communications_censor_words",
@@ -60,6 +62,7 @@ _USER_READABLE_KEYS = {
     "batch_no_cap",
     "outside_timer_enabled",
     "paper_bay_enabled",
+    "arrived_tracking_enabled",
     "note_cards_enabled",
     "tracked_items_map",
 }
@@ -101,6 +104,50 @@ def _is_user_writable(key: str, user: User) -> bool:
         owner = key[len(_USER_WRITABLE_PREFIX):]
         return owner == user.username
     return False
+
+
+def _setting_activity_payload(key: str, before: object, after: object) -> dict[str, object] | None:
+    run_date_value = None
+    for prefix in (
+        "day_setup_source_",
+        "wizard_completed_",
+        "holiday_mode_",
+        "holiday_load_",
+        "holiday_unload_",
+    ):
+        if key.startswith(prefix):
+            try:
+                run_date_value = date.fromisoformat(key[len(prefix):])
+            except ValueError:
+                run_date_value = None
+            break
+
+    if key.startswith("day_setup_source_"):
+        return {
+            "event_family": "setup",
+            "event_type": "day_setup_source_changed",
+            "run_date": run_date_value,
+            "summary": f"Setup source for {run_date_value or key} set to {after}",
+        }
+    if key.startswith("wizard_completed_"):
+        return {
+            "event_family": "setup",
+            "event_type": "setup_day_completion_changed",
+            "run_date": run_date_value,
+            "summary": (
+                f"Setup Day marked complete for {run_date_value or key}"
+                if after is True else
+                f"Setup Day completion cleared for {run_date_value or key}"
+            ),
+        }
+    if key.startswith(("holiday_mode_", "holiday_load_", "holiday_unload_")):
+        return {
+            "event_family": "setup",
+            "event_type": "holiday_flag_changed",
+            "run_date": run_date_value,
+            "summary": f"{key.split('_')[0].capitalize()} flag updated for {run_date_value or key}",
+        }
+    return None
 
 @router.get("", response_model=list[SettingOut])
 def list_settings(
@@ -156,11 +203,24 @@ def upsert_setting(
     if current_user.role not in _ADMIN_ROLES and not _is_user_writable(key, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     setting = db.get(AppSetting, key)
+    before_value = setting.value if setting is not None else None
     if setting is None:
         setting = AppSetting(key=key, value=payload.value)
         db.add(setting)
     else:
         setting.value = payload.value
+    activity_payload = _setting_activity_payload(key, before_value, payload.value)
+    if activity_payload is not None and before_value != payload.value:
+        append_activity_event(
+            db,
+            actor_user=current_user,
+            event_family=str(activity_payload["event_family"]),
+            event_type=str(activity_payload["event_type"]),
+            run_date=activity_payload.get("run_date"),
+            summary=str(activity_payload["summary"]),
+            diff_json={"setting_key": key, "before": before_value, "after": payload.value},
+            context_json={"setting_key": key},
+        )
     db.commit()
     db.refresh(setting)
     return setting

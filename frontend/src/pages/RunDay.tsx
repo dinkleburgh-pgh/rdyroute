@@ -17,7 +17,11 @@ import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckNote, TruckStatus, TruckWithState } from "../types";
-import { effectiveStatus } from "../utils/truckStatus";
+import {
+  buildOperationalDayContext,
+  effectiveOperationalStatus,
+  effectiveStatus,
+} from "../utils/truckStatus";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
 import TruckCard from "./runday/TruckCard";
 import RunDayWizard from "./runday/RunDayWizard";
@@ -125,33 +129,15 @@ export default function RunDay() {
     [board, loadDay, holidayLoad],
   );
 
-  // Unload progress counts ROUTES, not trucks (same as Load). A spare covering
-  // an OOS truck's route returns to unload in that route's slot.
-  const unloadRouteTrucks = useMemo(
-    () => unloadTrucks.filter((t) => t.truck_type !== "Spare"),
-    [unloadTrucks],
+  const unloadContext = useMemo(
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload),
+    [board, unloadsDay, holidayUnload],
   );
-  const unloadedSpareRoutes = useMemo(
-    () =>
-      new Set(
-        unloadTrucks
-          .filter(
-            (t) =>
-              t.truck_type === "Spare" &&
-              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-              isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)),
-          )
-          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
-      ),
-    [unloadTrucks, unloadsDay, holidayUnload],
-  );
-  const unloadTotal = unloadRouteTrucks.length;
-  const unloadDone = unloadRouteTrucks.filter(
-    (t) =>
-      isUnloadDone(effectiveStatus(t, unloadsDay, holidayUnload)) ||
-      unloadedSpareRoutes.has(t.truck_number),
+  const unloadTotal = unloadContext.activeTrucks.length;
+  const unloadDone = unloadContext.activeTrucks.filter((t) =>
+    isUnloadDone(effectiveOperationalStatus(t, unloadsDay, holidayUnload)),
   ).length;
-  const unloadSpareCount = unloadTrucks.length - unloadRouteTrucks.length;
+  const unloadSpareCount = unloadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
 
   // On holiday, two days' worth of routes are loaded/unloaded in one shift.
   // The "second" day is the PREVIOUS ship day (Mon → Fri wraps back).
@@ -161,34 +147,15 @@ export default function RunDay() {
   // are both treated as the Day 3 catch-up batch in holiday load mode.
   const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
 
-  // Load progress counts ROUTES, not trucks. A spare covering an OOS truck's
-  // route fills the same slot — it must not double-count against the total,
-  // and a loaded spare marks its covered route as done.
-  const loadRouteTrucks = useMemo(
-    () => loadTrucks.filter((t) => t.truck_type !== "Spare"),
-    [loadTrucks],
+  const loadContext = useMemo(
+    () => buildOperationalDayContext(board, loadDay, holidayLoad),
+    [board, loadDay, holidayLoad],
   );
-  const loadedSpareRoutes = useMemo(
-    () =>
-      new Set(
-        loadTrucks
-          .filter(
-            (t) =>
-              t.truck_type === "Spare" &&
-              (t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-              isLoadDone(effectiveStatus(t, loadDay, holidayLoad)),
-          )
-          .map((t) => (t.route_swap_route ?? t.state!.oos_spare_route) as number),
-      ),
-    [loadTrucks, loadDay, holidayLoad],
-  );
-  const loadTotal = loadRouteTrucks.length;
-  const loadDone = loadRouteTrucks.filter(
-    (t) =>
-      isLoadDone(effectiveStatus(t, loadDay, holidayLoad)) ||
-      loadedSpareRoutes.has(t.truck_number),
+  const loadTotal = loadContext.activeTrucks.length;
+  const loadDone = loadContext.activeTrucks.filter((t) =>
+    isLoadDone(effectiveOperationalStatus(t, loadDay, holidayLoad)),
   ).length;
-  const loadSpareCount = loadTrucks.length - loadRouteTrucks.length;
+  const loadSpareCount = loadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
 
   // Map from route truck number → the truck covering its route today.
   // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND

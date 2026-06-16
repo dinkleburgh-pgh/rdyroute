@@ -5,6 +5,7 @@
 import type { ReactNode } from "react";
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
+import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
 import { STATUS_LABELS } from "./constants";
 
 import { format } from "date-fns";
@@ -46,6 +47,7 @@ export default function TruckDetailPanel({
     { label: "Duration", value: fmtDuration(truck.state?.load_duration_seconds) },
     { label: "Started", value: fmtTime(truck.state?.load_start_time) },
     { label: "Finished", value: fmtTime(truck.state?.load_finish_time) },
+    { label: "Arrived", value: fmtTime(truck.state?.arrived_at) },
     { label: "Status", value: STATUS_LABELS[status] ?? status },
   ];
 
@@ -146,6 +148,8 @@ export default function TruckDetailPanel({
             </ul>
           </div>
         )}
+
+        <TruckActivityTimeline truckNumber={truck.truck_number} />
       </div>
     </div>
   );

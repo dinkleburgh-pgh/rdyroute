@@ -18,9 +18,10 @@ ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Legend, Filler
 interface Props {
   data: TrendComparison | undefined;
   isLoading: boolean;
+  onViewDetails?: () => void;
 }
 
-export default function ComparisonChart({ data, isLoading }: Props) {
+export default function ComparisonChart({ data, isLoading, onViewDetails }: Props) {
   const current = data?.current ?? [];
   const prior = data?.prior ?? [];
 
@@ -34,6 +35,7 @@ export default function ComparisonChart({ data, isLoading }: Props) {
       subtitle="Current vs prior period — daily audit volume"
       isLoading={isLoading}
       isEmpty={!isLoading && current.length === 0 && prior.length === 0}
+      onViewDetails={onViewDetails}
     >
       {labels.length > 0 && (
         <motion.div className="h-56" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

@@ -18,15 +18,17 @@ ChartJS.register(CategoryScale, LinearScale, LineElement, PointElement, Tooltip,
 interface Props {
   data: CompletionDailyPoint[] | undefined;
   isLoading: boolean;
+  onViewDetails?: () => void;
 }
 
-export default function CompletionRateChart({ data, isLoading }: Props) {
+export default function CompletionRateChart({ data, isLoading, onViewDetails }: Props) {
   return (
     <TrendChartCard
       title="Completion Rate"
       subtitle="% of scheduled trucks loaded per day"
       isLoading={isLoading}
       isEmpty={!isLoading && (!data || data.length === 0)}
+      onViewDetails={onViewDetails}
     >
       {data && data.length > 0 && (
         <motion.div className="h-64" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

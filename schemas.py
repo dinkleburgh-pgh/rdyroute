@@ -6,11 +6,15 @@ Each section mirrors a SQLAlchemy model in models.py.
 from __future__ import annotations
 
 from datetime import date, datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from models import AuditSource, AuthRequestStatus, AuthRole, NoteType, TruckStatus, TruckType
+
+TruckStateSource = Literal["auto", "wizard", "workflow"]
+ActivityActorType = Literal["user", "system"]
+ActivityEventFamily = Literal["state", "batch", "coverage", "setup", "recovery", "system"]
 
 
 # ---------------------------------------------------------------------------
@@ -74,6 +78,9 @@ class TruckStateCreate(BaseModel):
     oos_spare_route: int | None = None
     has_dust_garment: bool = False
     priority_hold: bool = False
+    needs_checked: bool = False
+    arrived_at: float | None = None
+    state_source: TruckStateSource | None = None
 
 
 class TruckStateUpdate(BaseModel):
@@ -89,6 +96,9 @@ class TruckStateUpdate(BaseModel):
     oos_spare_route: int | None = None
     has_dust_garment: bool | None = None
     priority_hold: bool | None = None
+    needs_checked: bool | None = None
+    arrived_at: float | None = None
+    state_source: TruckStateSource | None = None
 
 
 class TruckStateOut(_OrmBase):
@@ -107,6 +117,9 @@ class TruckStateOut(_OrmBase):
     oos_spare_route: int | None
     has_dust_garment: bool
     priority_hold: bool = False
+    needs_checked: bool = False
+    arrived_at: float | None = None
+    state_source: TruckStateSource
     updated_at: datetime
 
 
@@ -122,6 +135,35 @@ class TruckWithState(_OrmBase):
     qr_token: str | None = None
     state: TruckStateOut | None = None
     route_swap_route: int | None = None  # set when this truck is the load_on_truck in a route swap
+
+
+# ---------------------------------------------------------------------------
+# Activity Events
+# ---------------------------------------------------------------------------
+
+class ActivityEventOut(_OrmBase):
+    id: int
+    occurred_at: datetime
+    actor_type: ActivityActorType
+    actor_username: str | None = None
+    actor_display_name: str | None = None
+    actor_role: AuthRole | None = None
+    event_family: ActivityEventFamily
+    event_type: str
+    run_date: date | None = None
+    truck_number: int | None = None
+    summary: str
+    status_before: str | None = None
+    status_after: str | None = None
+    diff_json: dict[str, Any] = Field(default_factory=dict)
+    context_json: dict[str, Any] = Field(default_factory=dict)
+
+
+class ActivityEventPageOut(BaseModel):
+    items: list[ActivityEventOut]
+    total: int
+    limit: int
+    offset: int
 
 
 # ---------------------------------------------------------------------------
