@@ -714,7 +714,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       else next.add(truck.truck_number);
                       return next;
                     });
-                  } else if (fleetMode && window.innerWidth < 768) {
+                  } else if (fleetMode) {
                     setMobileActionTruck(truck);
                   } else {
                     setDetailNum(detailNum === truck.truck_number ? null : truck.truck_number);
@@ -1030,108 +1030,6 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
                 {fleetMode && (
                   <div className="mt-auto hidden md:flex md:flex-col md:gap-2">
-                    {!multiSelect && !isReadOnly && status !== "oos" && (
-                      <select
-                        className="input min-h-[2.5rem] text-xs md:min-h-0"
-                        value={status}
-                        disabled={upsert.isPending}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) => {
-                          const next = e.target.value as TruckStatus | "__outside__" | "__paperbay__" | "__unload_hold__" | "__clear_hold__" | "__arrived__" | "__clear_arrived__";
-                          if (status === "off" && next === "loaded") {
-                            setPendingOffLoadTruck(truck);
-                            setPendingOffLoadRoute("");
-                            setPendingOffLoadError(null);
-                            e.currentTarget.value = status;
-                            return;
-                          }
-                          if (next === "__unload_hold__") {
-                            e.currentTarget.value = status;
-                            upsert.mutate({
-                              truck_number: truck.truck_number,
-                              run_date: runDate,
-                              priority_hold: true,
-                              wearers: truck.state?.wearers ?? 0,
-                            });
-                            return;
-                          }
-                          if (next === "__clear_hold__") {
-                            e.currentTarget.value = status;
-                            upsert.mutate({
-                              truck_number: truck.truck_number,
-                              run_date: runDate,
-                              priority_hold: false,
-                              wearers: truck.state?.wearers ?? 0,
-                            });
-                            return;
-                          }
-                          if (next === "__outside__") {
-                            e.currentTarget.value = status;
-                            triggerOutsideTimer(truck.truck_number);
-                            return;
-                          }
-                          if (next === "__paperbay__") {
-                            e.currentTarget.value = status;
-                            triggerPaperBayTimer(truck.truck_number);
-                            return;
-                          }
-                          if (next === "__arrived__") {
-                            e.currentTarget.value = status;
-                            markArrived(truck);
-                            return;
-                          }
-                          if (next === "__clear_arrived__") {
-                            e.currentTarget.value = status;
-                            clearArrived(truck);
-                            return;
-                          }
-                          if (next === "oos") {
-                            setPendingOosTruck(truck);
-                            e.currentTarget.value = status;
-                          } else {
-                            upsert.mutate({
-                              truck_number: truck.truck_number,
-                              run_date: runDate,
-                              status: next,
-                              wearers: truck.state?.wearers ?? 0,
-                              ...(next === "loaded" ? { load_finish_time: Date.now() / 1000 } : {}),
-                            });
-                          }
-                        }}
-                      >
-                        {status === "off" && (
-                          <option value="off" disabled hidden>
-                            Off (scheduled)
-                          </option>
-                        )}
-                        {!truck.state?.priority_hold && (
-                          <option value="__unload_hold__">🚩 Unload &amp; Hold</option>
-                        )}
-                        {truck.state?.priority_hold && (
-                          <option value="__clear_hold__">🔓 Clear Hold</option>
-                        )}
-                        {outsideTimerEnabled && !outsideTimers.has(truck.truck_number) && !paperBayTimers.has(truck.truck_number) && (
-                          <option value="__outside__">⏱ Outside ({outsideTimerMinutes ?? 20} min)</option>
-                        )}
-                        {paperBayEnabled && !paperBayTimers.has(truck.truck_number) && !outsideTimers.has(truck.truck_number) && (
-                          <option value="__paperbay__">📄 Paper Bay ({paperBayTimerMinutes ?? 25} min)</option>
-                        )}
-                        {arrivedTrackingEnabled && !truck.state?.arrived_at && (
-                          <option value="__arrived__">📍 Arrived</option>
-                        )}
-                        {arrivedTrackingEnabled && !!truck.state?.arrived_at && (
-                          <option value="__clear_arrived__">🧹 Clear Arrived</option>
-                        )}
-                        {FLEET_STATUS_OPTIONS.map((s) => (
-                          <option key={s} value={s}>
-                            {STATUS_LABELS[s]}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    {status === "oos" && (
-                      <p className="text-xs text-slate-500 italic">Tap to remove OOS</p>
-                    )}
                     {outsideTimerEnabled && outsideTimers.has(truck.truck_number) && (
                       <div
                         className="flex items-center gap-1.5 rounded-lg border border-orange-700/50 bg-orange-950/70 px-2 py-1.5"
@@ -1494,6 +1392,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           }}
           arrivedEnabled={arrivedTrackingEnabled}
           arrivedAt={mobileActionTruck.state?.arrived_at}
+          needsChecked={mobileActionTruck.state?.needs_checked === true}
           outsideEnabled={outsideTimerEnabled}
           outsideActive={outsideTimers.has(mobileActionTruck.truck_number)}
           outsideMinutes={outsideTimerMinutes ?? 20}

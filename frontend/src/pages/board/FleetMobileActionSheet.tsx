@@ -20,6 +20,7 @@ export default function FleetMobileActionSheet({
   onManageTruck,
   arrivedEnabled,
   arrivedAt,
+  needsChecked,
   outsideEnabled,
   outsideActive,
   outsideMinutes,
@@ -41,6 +42,7 @@ export default function FleetMobileActionSheet({
   onManageTruck: () => void;
   arrivedEnabled: boolean;
   arrivedAt?: number | null;
+  needsChecked: boolean;
   outsideEnabled: boolean;
   outsideActive: boolean;
   outsideMinutes: number;
@@ -155,6 +157,24 @@ export default function FleetMobileActionSheet({
                   🚩 Unload &amp; Hold
                 </button>
               )}
+              <button
+                type="button"
+                disabled={upsert.isPending}
+                onClick={() => {
+                  upsert.mutate({
+                    truck_number: truck.truck_number,
+                    run_date: runDate,
+                    needs_checked: !needsChecked,
+                    wearers: truck.state?.wearers ?? 0,
+                  });
+                  onClose();
+                }}
+                className={needsChecked
+                  ? "rounded-md border border-amber-600/50 bg-amber-900/40 px-3 py-2 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-900/60"
+                  : "rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"}
+              >
+                {needsChecked ? "✅ Clear Checked" : "🔍 Needs Checked"}
+              </button>
               {arrivedEnabled && arrivedActive && (
                 <div className="flex items-center gap-2 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-3 py-2 text-xs font-semibold text-emerald-300">
                   <span>

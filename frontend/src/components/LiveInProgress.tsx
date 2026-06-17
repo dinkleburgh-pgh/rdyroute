@@ -16,10 +16,6 @@ import { ShortageLogger } from "../pages/Shorts";
 import { todayIso } from "../api/client";
 import type { TruckNote, TruckWithState } from "../types";
 
-/**
- * Live "In Progress" panel. Rendered on /board?status=in_progress.
- * All content lives in a single card: identity row → pace bar → Finish Loading → shortages.
- */
 export function LiveInProgress({ runDate }: { runDate: string }) {
   const { data: board } = useBoard(runDate);
   const { data: nextUp } = useNextUp(runDate);
@@ -33,32 +29,61 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
     () => (board ?? []).filter((t) => t.state?.status === "unloaded"),
     [board],
   );
+  const loadedToday = useMemo(
+    () => (board ?? []).filter((t) => t.state?.status === "loaded" && t.state?.load_finish_time != null),
+    [board],
+  );
 
   if (!inProgress) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-4 p-[22px_26px_40px]">
         <div className="card flex flex-col items-center justify-center py-10 text-center">
-          <p className="text-lg font-semibold text-blue-300">No truck currently in progress.</p>
-          <p className="mt-1 text-sm text-slate-500">Set a next-up truck and start it to begin loading.</p>
+          <p className="text-lg font-semibold text-st-loaded">No truck currently in progress.</p>
+          <p className="mt-1 text-sm text-ink-muted">Set a next-up truck and start it to begin loading.</p>
         </div>
         <NextUpPanel runDate={runDate} nextUp={nextUp ?? null} unloaded={unloaded} anyInProgress={false} />
       </div>
     );
   }
 
+  const dayNum = inProgress.state?.load_day_num ?? null;
+
   return (
-    <InProgressCard
-      truck={inProgress}
-      paceAvgSeconds={pace?.avg_seconds ?? null}
-      runDate={runDate}
-      nextUp={nextUp ?? null}
-      unloaded={unloaded}
-    />
+    <div className="p-[22px_26px_40px]">
+      {/* Eyebrow header */}
+      <div className="mb-[18px]">
+        <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
+          <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+          Live
+        </span>
+      </div>
+
+      <div className="grid gap-4 items-start" style={{ gridTemplateColumns: "minmax(0,1.7fr) minmax(0,1fr)" }}>
+        {/* Left column */}
+        <div className="space-y-4">
+          <InProgressHero
+            truck={inProgress}
+            paceAvgSeconds={pace?.avg_seconds ?? null}
+            runDate={runDate}
+            nextUp={nextUp ?? null}
+            unloaded={unloaded}
+            loadedToday={loadedToday}
+          />
+        </div>
+
+        {/* Right column */}
+        <div className="space-y-4">
+          <SessionStats inProgress={inProgress} unloaded={unloaded} loadedToday={loadedToday} paceAvgSeconds={pace?.avg_seconds ?? null} />
+          <NextUpPanel runDate={runDate} nextUp={nextUp ?? null} unloaded={unloaded} anyInProgress={true} />
+          <RecentFinishes loadedToday={loadedToday} />
+        </div>
+      </div>
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// PaceBar — full-width rectangular progress bar (replaces circular arc)
+// PaceBar — exported for Load.tsx
 // ---------------------------------------------------------------------------
 
 export function PaceBar({
@@ -75,15 +100,15 @@ export function PaceBar({
     : 0;
 
   const barColor =
-    paceAvgSeconds == null ? "#475569"   // no data — slate-600
-    : pct >= 1             ? "#ef4444"   // over pace — red
-    : pct >= 0.85          ? "#f97316"   // warning — orange
-    :                        "#f59e0b";  // on pace — amber
+    paceAvgSeconds == null ? "#475569"
+    : pct >= 1             ? "#ef4444"
+    : pct >= 0.85          ? "#f97316"
+    :                        "#f59e0b";
 
   return (
     <div
-      className="relative w-full overflow-hidden rounded-full bg-slate-800"
-      style={{ height }}
+      className="relative w-full overflow-hidden rounded-full"
+      style={{ height, background: "#1c2434" }}
     >
       {paceAvgSeconds != null && (
         <div
@@ -100,7 +125,7 @@ export function PaceBar({
 }
 
 // ---------------------------------------------------------------------------
-// Elapsed hook — shared ticker used by ElapsedTimer and InProgressCard
+// Elapsed hook — shared ticker
 // ---------------------------------------------------------------------------
 
 export function useElapsed(startSec: number | null): number {
@@ -135,10 +160,10 @@ export function ElapsedTimer({
   const onPace = pct == null ? null : pct < 1;
 
   const timerColor =
-    pct == null   ? "text-slate-200"
-    : pct >= 1    ? "text-red-400"
+    pct == null   ? "text-ink"
+    : pct >= 1    ? "text-st-dirty"
     : pct >= 0.85 ? "text-orange-400"
-    :               "text-amber-300";
+    :               "text-st-inprogress";
 
   const paceLabel =
     paceAvgSeconds == null ? null
@@ -147,19 +172,17 @@ export function ElapsedTimer({
       : `+${formatDuration(elapsed - paceAvgSeconds)} over · avg ${formatDuration(paceAvgSeconds)}`;
 
   const paceLabelColor =
-    onPace == null ? "text-slate-500"
-    : onPace       ? "text-emerald-400"
-    :                "text-red-400";
+    onPace == null ? "text-ink-muted"
+    : onPace       ? "text-st-unloaded"
+    :                "text-st-dirty";
 
-  // Fixed dimensions so Load.tsx still gets a consistent block
   const w = size;
   const h = Math.round(size * 0.55);
 
   return (
     <div className="flex w-full flex-col gap-2" style={{ maxWidth: w }}>
-      {/* Time + pace side by side */}
       <div className="flex items-baseline justify-between">
-        <span className={clsx("font-mono font-black tabular-nums leading-none", timerColor)}
+        <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none", timerColor)}
           style={{ fontSize: Math.round(size * 0.22) }}>
           {startSec ? formatDuration(elapsed) : "—"}
         </span>
@@ -169,7 +192,6 @@ export function ElapsedTimer({
           </span>
         )}
       </div>
-      {/* Bar */}
       <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={Math.round(size * 0.055)} />
     </div>
   );
@@ -180,9 +202,9 @@ export function ElapsedTimer({
 // ---------------------------------------------------------------------------
 
 const NOTE_CARD: Record<TruckNote["note_type"], { border: string; bg: string; chip: string; label: string }> = {
-  constant: { border: "border-blue-700/40", bg: "bg-blue-950/30", chip: "bg-blue-900/60 text-blue-300 border border-blue-700/40", label: "Constant" },
-  workday:  { border: "border-violet-700/40", bg: "bg-violet-950/30", chip: "bg-violet-900/60 text-violet-300 border border-violet-700/40", label: "Workday" },
-  one_off:  { border: "border-amber-700/40", bg: "bg-amber-950/30", chip: "bg-amber-900/60 text-amber-300 border border-amber-700/40", label: "One-off" },
+  constant: { border: "border-st-loaded/30", bg: "bg-st-loaded/10", chip: "bg-st-loaded/25 text-st-loaded", label: "Constant" },
+  workday:  { border: "border-st-shop/30", bg: "bg-st-shop/10", chip: "bg-st-shop/25 text-st-shop", label: "Workday" },
+  one_off:  { border: "border-st-inprogress/30", bg: "bg-st-inprogress/10", chip: "bg-st-inprogress/25 text-st-inprogress", label: "One-off" },
 };
 
 function TruckNotesPanel({ truckNumber, loadDayNum }: { truckNumber: number; loadDayNum: number | null }) {
@@ -201,8 +223,8 @@ function TruckNotesPanel({ truckNumber, loadDayNum }: { truckNumber: number; loa
         return (
           <div key={n.id} className={clsx("rounded-xl border px-4 py-3", s.border, s.bg)}>
             <div className="flex items-start gap-3">
-              <span className={clsx("mt-0.5 shrink-0 rounded px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>{n.note_type === "workday" ? `Day ${n.workday_num}` : s.label}</span>
-              <span className="text-sm leading-snug text-slate-200">{n.body}</span>
+              <span className={clsx("mt-0.5 shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>{n.note_type === "workday" ? `Day ${n.workday_num}` : s.label}</span>
+              <span className="text-sm leading-snug text-ink">{n.body}</span>
             </div>
           </div>
         );
@@ -212,23 +234,130 @@ function TruckNotesPanel({ truckNumber, loadDayNum }: { truckNumber: number; loa
 }
 
 // ---------------------------------------------------------------------------
-// InProgressCard — single unified card: identity → bar → finish → shortages
+// Session stats
+// ---------------------------------------------------------------------------
+
+function SessionStats({
+  inProgress: _inProgress,
+  unloaded,
+  loadedToday,
+  paceAvgSeconds,
+}: {
+  inProgress: TruckWithState;
+  unloaded: TruckWithState[];
+  loadedToday: TruckWithState[];
+  paceAvgSeconds: number | null;
+}) {
+  const loadedCount = loadedToday.length;
+  const remaining = unloaded.length;
+  // +1 for the current in-progress truck
+  const scheduledTotal = loadedCount + remaining + 1;
+
+  const onPacePct = paceAvgSeconds != null && loadedCount > 0
+    ? Math.round(
+        loadedToday.filter(
+          (t) => t.state?.load_duration_seconds != null && t.state.load_duration_seconds <= paceAvgSeconds,
+        ).length / loadedCount * 100,
+      )
+    : null;
+
+  const stats = [
+    { label: "Loaded Today", value: loadedCount, sub: `of ${scheduledTotal} scheduled`, color: "#3b82f6" },
+    { label: "Avg Pace",     value: paceAvgSeconds ? formatDuration(paceAvgSeconds) : "—", sub: "30-day average", color: "#22c55e" },
+    { label: "Remaining",    value: remaining, sub: "still to load", color: "#f59e0b" },
+    { label: "On Pace",      value: onPacePct != null ? `${onPacePct}%` : "—", sub: "finishes today", color: "#06b6d4" },
+  ];
+
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {stats.map((s) => (
+        <div
+          key={s.label}
+          className="rounded-xl border px-4 py-3 shadow-inset-top"
+          style={{
+            background: `rgba(${parseInt(s.color.slice(1,3),16)},${parseInt(s.color.slice(3,5),16)},${parseInt(s.color.slice(5,7),16)},0.10)`,
+            borderColor: `${s.color}40`,
+          }}
+        >
+          <p className="text-[26px] font-mono font-black tabular-nums tracking-[-0.02em] leading-none" style={{ color: s.color }}>{s.value}</p>
+          <p className="mt-0.5 text-[11px] font-semibold uppercase tracking-wide" style={{ color: s.color, opacity: 0.7 }}>{s.label}</p>
+          <p className="mt-0.5 text-[10px] text-ink-faint">{s.sub}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Recent Finishes
+// ---------------------------------------------------------------------------
+
+function RecentFinishes({ loadedToday }: { loadedToday: TruckWithState[] }) {
+  const finishes = useMemo(
+    () =>
+      [...loadedToday]
+        .filter((t) => t.state?.load_finish_time != null)
+        .sort((a, b) => (b.state?.load_finish_time ?? 0) - (a.state?.load_finish_time ?? 0))
+        .slice(0, 5),
+    [loadedToday],
+  );
+
+  return (
+    <div className="card space-y-3">
+      <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Recent Finishes</h4>
+      {finishes.length === 0 ? (
+        <p className="text-xs text-ink-faint">No finishes yet.</p>
+      ) : (
+        <div className="space-y-2">
+          {finishes.map((t) => {
+            const finish = t.state?.load_finish_time;
+            const start = t.state?.load_start_time;
+            const duration = finish && start ? Math.round(finish - start) : null;
+            const isSlow = duration != null && duration >= 900;
+            return (
+              <div key={t.truck_number} className="flex items-center justify-between rounded-lg bg-surface-2 px-3 py-2">
+                <span className="font-mono font-bold tabular-nums text-sm text-ink">#{t.truck_number}</span>
+                <div className="flex items-center gap-3 text-xs">
+                  {finish && (
+                    <span className="text-ink-muted">
+                      {new Date(finish * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                    </span>
+                  )}
+                  {duration != null && (
+                    <span className={clsx("font-mono tabular-nums font-medium", isSlow ? "text-st-dirty" : "text-st-unloaded")}>
+                      {formatDuration(duration)}
+                    </span>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InProgressHero — main left-column card
 // ---------------------------------------------------------------------------
 
 const DAY_NAMES = ["", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 
-function InProgressCard({
+function InProgressHero({
   truck,
   paceAvgSeconds,
   runDate,
   nextUp,
   unloaded,
+  loadedToday,
 }: {
   truck: TruckWithState;
   paceAvgSeconds: number | null;
   runDate: string;
   nextUp: number | null;
   unloaded: TruckWithState[];
+  loadedToday: TruckWithState[];
 }) {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -247,21 +376,21 @@ function InProgressCard({
   const onPace = pct == null ? null : pct < 1;
 
   const timerColor =
-    pct == null   ? "text-slate-200"
-    : pct >= 1    ? "text-red-400"
-    : pct >= 0.85 ? "text-orange-400"
-    :               "text-amber-300";
+    pct == null   ? "text-ink"
+    : pct >= 1    ? "#fb7185"
+    : pct >= 0.85 ? "#fb923c"
+    :               "#fbbf5c";
+
+  const paceLabelColor =
+    onPace == null ? "text-ink-muted"
+    : onPace       ? "text-st-unloaded"
+    :                "text-st-dirty";
 
   const paceLabel =
     paceAvgSeconds == null ? null
     : onPace
       ? `on pace · avg ${formatDuration(paceAvgSeconds)}`
       : `+${formatDuration(elapsed - paceAvgSeconds)} over · avg ${formatDuration(paceAvgSeconds)}`;
-
-  const paceLabelColor =
-    onPace == null ? "text-slate-500"
-    : onPace       ? "text-emerald-400"
-    :                "text-red-400";
 
   async function finishLoading() {
     setBusy(true);
@@ -294,67 +423,58 @@ function InProgressCard({
   }
 
   return (
-    <section className="card overflow-hidden space-y-0 p-0">
-      {/* Amber pulse bar at very top */}
-      <div className="h-1 w-full animate-pulse bg-amber-500/70" />
+    <section
+      className="overflow-hidden rounded-xl border shadow-hero"
+      style={{ borderColor: "rgba(245,158,11,0.45)", background: "#161d2b" }}
+    >
+      {/* Amber pulse strip */}
+      <div className="h-[3px] w-full animate-pulse" style={{ background: "#f59e0b" }} />
 
-      <div className="space-y-5 p-4 md:p-6">
-
-        {/* Row 1: Current Truck | divider | Next Up — mirroring Load page */}
+      <div className="p-4 space-y-4">
+        {/* Current Truck / Next Up row */}
         <div className="flex items-start gap-4">
-          {/* Current Truck */}
           <div className="flex-1 text-center">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Current Truck</p>
-            <p className="font-black leading-none text-amber-300" style={{ fontSize: "3.5rem" }}>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Current Truck</p>
+            <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none" style={{ color: "#fbbf5c" }}>
               #{truck.truck_number}
             </p>
             {dayLabel && (
-              <span className="mt-2 inline-flex items-center gap-1.5 rounded-full border border-emerald-700/50 bg-emerald-950/40 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
-                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
+              <span className="mt-2 inline-flex items-center gap-1.5 rounded-pill border border-st-unloaded/50 bg-st-unloaded/10 px-2.5 py-0.5 text-xs font-semibold text-st-unloaded">
+                <span className="h-1.5 w-1.5 rounded-full bg-st-unloaded" />
                 {dayLabel}
               </span>
             )}
-            <div className="mt-2 flex flex-col items-center gap-1.5">
-              <Link
-                to={`/audit?truck=${truck.truck_number}`}
-                className="rounded-lg border border-slate-700 bg-slate-800 px-4 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-700"
-              >
-                Audit
-              </Link>
-            </div>
           </div>
 
-          <div className="w-px self-stretch bg-slate-700/50" />
+          <div className="w-px self-stretch bg-hairline" />
 
-          {/* Next Up */}
           <div className="flex-1 text-center">
-            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">Next Up</p>
+            <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Next Up</p>
             {nextUp != null ? (
               <>
-                <p className="font-black leading-none text-sky-400" style={{ fontSize: "3.5rem" }}>
+                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none" style={{ color: "#7dd3fc" }}>
                   #{nextUp}
                 </p>
-                <div className="mt-2 flex flex-col items-center gap-1.5">
-                  <Link
-                    to={`/audit?truck=${nextUp}`}
-                    className="rounded-lg border border-sky-700/60 bg-sky-950/40 px-4 py-1.5 text-sm font-semibold text-sky-300 hover:bg-sky-900/40"
-                  >
-                    Audit
-                  </Link>
-                  <button
-                    className="rounded-lg border border-sky-700/60 bg-sky-950/40 px-4 py-1.5 text-sm font-semibold text-sky-300 hover:bg-sky-900/40"
-                    onClick={() => setPickerOpen((o) => !o)}
-                  >
-                    {pickerOpen ? "Close" : "Change"}
-                  </button>
-                </div>
+                {paceAvgSeconds != null && (
+                  <div className="mt-1.5 text-xs text-ink-muted">
+                    avg <span className="text-ink font-mono tabular-nums">{formatDuration(paceAvgSeconds)}</span>
+                  </div>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  className="mt-2 rounded-lg border border-sky-700/40 bg-sky-950/50 px-3 py-1 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-900/50"
+                >
+                  Change
+                </button>
               </>
             ) : (
               <>
-                <p className="font-black leading-none text-slate-600" style={{ fontSize: "3.5rem" }}>—</p>
+                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none text-ink-faint">—</p>
                 <button
-                  className="mt-2 rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"
-                  onClick={() => setPickerOpen((o) => !o)}
+                  type="button"
+                  onClick={() => setPickerOpen(true)}
+                  className="mt-2 rounded-lg border border-hairline bg-surface-2 px-3 py-1 text-xs font-semibold text-ink-muted transition-colors hover:bg-surface"
                 >
                   Set Next Up
                 </button>
@@ -363,13 +483,12 @@ function InProgressCard({
           </div>
         </div>
 
-        {/* Truck notes */}
-        <TruckNotesPanel truckNumber={truck.truck_number} loadDayNum={dayNum} />
-
-        {/* Timer — centered, matching Load page */}
+        {/* Timer */}
         <div className="flex flex-col items-center gap-2 py-1">
-          <span className={clsx("font-mono font-black tabular-nums leading-none", timerColor)}
-            style={{ fontSize: "3.5rem" }}>
+          <span
+            className="font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-[56px]"
+            style={{ color: timerColor }}
+          >
             {formatDuration(elapsed)}
           </span>
           {paceLabel && (
@@ -382,63 +501,75 @@ function InProgressCard({
         {/* Full-width pace bar */}
         <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
 
-        {/* Finish Loading immediately below bar */}
-        <button
-          type="button"
-          onClick={finishLoading}
-          disabled={busy}
-          className="w-full rounded-xl bg-emerald-600 py-4 text-lg font-bold tracking-wide text-white shadow-sm transition-colors hover:bg-emerald-500 active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {busy ? "Finishing…" : "Finish Loading"}
-        </button>
-
-        {/* Divider */}
-        <div className="border-t border-slate-800" />
-
-        {/* Shortages inline */}
-        <ShortageLogger
-          inline
-          truck={truck}
-          shorts={shorts}
-          runDate={runDate}
-          onBack={() => {}}
-        />
-
-        {/* Next Up picker — modal dialog */}
-        {pickerOpen && (
-          <div
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-            onClick={() => setPickerOpen(false)}
+        {/* Action buttons */}
+        <div className="flex gap-3">
+          <button
+            type="button"
+            onClick={finishLoading}
+            disabled={busy}
+            className="flex-1 rounded-xl py-4 text-lg font-bold text-white shadow transition-colors disabled:opacity-50"
+            style={{ background: "#16a34a" }}
           >
-            <div
-              className="flex w-full max-w-lg flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-              style={{ maxHeight: "90vh" }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
-                <h3 className="text-base font-bold tracking-wide">Set Next Up</h3>
-                <button
-                  onClick={() => setPickerOpen(false)}
-                  className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-slate-200"
-                >
-                  <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-              <div className="overflow-y-auto p-5">
-                <NextUpPanel
-                  runDate={runDate}
-                  nextUp={nextUp}
-                  unloaded={unloaded}
-                  anyInProgress={true}
-                  onPick={() => setPickerOpen(false)}
-                />
-              </div>
+            {busy ? "Finishing…" : "Finish Loading"}
+          </button>
+          <Link
+            to={`/audit?truck=${truck.truck_number}`}
+            className="flex items-center justify-center rounded-xl border px-6 py-4 text-sm font-semibold transition-colors"
+            style={{ borderColor: "rgba(255,255,255,0.06)", color: "#cdd6e2" }}
+          >
+            Audit
+          </Link>
+        </div>
+
+        {/* Truck Notes */}
+        <TruckNotesPanel truckNumber={truck.truck_number} loadDayNum={dayNum} />
+
+        {/* Log Shortages */}
+        <div className="border-t border-hairline pt-4">
+          <ShortageLogger
+            inline
+            truck={truck}
+            shorts={shorts}
+            runDate={runDate}
+            onBack={() => {}}
+          />
+        </div>
+      </div>
+
+      {/* Next Up picker modal */}
+      {pickerOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setPickerOpen(false)}
+        >
+          <div
+            className="flex w-full max-w-lg flex-col rounded-xl border border-hairline bg-surface shadow-card"
+            style={{ maxHeight: "90vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
+              <h3 className="text-base font-bold tracking-wide">Set Next Up</h3>
+              <button
+                onClick={() => setPickerOpen(false)}
+                className="rounded-md p-1 text-ink-muted hover:bg-surface-2 hover:text-ink"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <NextUpPanel
+                runDate={runDate}
+                nextUp={nextUp}
+                unloaded={unloaded}
+                anyInProgress={true}
+                onPick={() => setPickerOpen(false)}
+              />
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -447,11 +578,50 @@ function InProgressCard({
 // Next Up panel
 // ---------------------------------------------------------------------------
 
+function QueueRow({
+  truck,
+  index,
+  isNext,
+  onSelect,
+}: {
+  truck: TruckWithState;
+  index: number;
+  isNext: boolean;
+  onSelect: () => void;
+}) {
+  const coverRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+  const parts: string[] = [truck.truck_type];
+  if (truck.state?.batch_id != null) parts.push(`Batch ${truck.state.batch_id}`);
+  if (coverRoute != null) parts.push(`Cov. #${coverRoute}`);
+  const meta = parts.join(" · ");
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className={clsx(
+        "flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left transition-colors",
+        isNext
+          ? "border border-sky-700/40 bg-sky-950/50"
+          : "border border-transparent bg-surface-2 hover:bg-surface",
+      )}
+    >
+      <span className="w-4 shrink-0 text-center text-[11px] font-bold tabular-nums text-ink-faint">{index + 1}</span>
+      <span className="font-mono tabular-nums text-sm font-bold text-ink">#{truck.truck_number}</span>
+      <span className="flex-1 truncate text-[11px] text-ink-muted">{meta}</span>
+      {isNext && (
+        <span className="shrink-0 rounded-pill bg-sky-900/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
+          NEXT
+        </span>
+      )}
+    </button>
+  );
+}
+
 function NextUpPanel({
   runDate,
   nextUp,
   unloaded,
-  anyInProgress,
+  anyInProgress: _anyInProgress,
   onPick,
 }: {
   runDate: string;
@@ -462,109 +632,54 @@ function NextUpPanel({
 }) {
   const setNext = useSetNextUp(runDate);
   const clearNext = useClearNextUp(runDate);
-  const upsert = useUpsertTruckState();
-  const [pick, setPick] = useState<number | null>(null);
 
   const options = useMemo(
-    () => unloaded.map((t) => t.truck_number).sort((a, b) => a - b),
+    () => [...unloaded].sort((a, b) => a.truck_number - b.truck_number),
     [unloaded],
   );
 
-  useEffect(() => {
-    if (pick == null) {
-      setPick(nextUp ?? options[0] ?? null);
-    } else if (pick != null && !options.includes(pick) && pick !== nextUp) {
-      setPick(options[0] ?? null);
-    }
-  }, [nextUp, options, pick]);
-
-  const nextStillAvailable = nextUp != null && options.includes(nextUp);
-
-  async function startNextUp() {
-    if (nextUp == null || anyInProgress) return;
-    const truck = unloaded.find((t) => t.truck_number === nextUp);
-    if (!truck) return;
-    const nowSec = Date.now() / 1000;
-    await upsert.mutateAsync({
-      truck_number: nextUp,
-      run_date: runDate,
-      status: "in_progress",
-      wearers: truck.state?.wearers ?? 0,
-      load_start_time: nowSec,
-      load_finish_time: null,
-      load_duration_seconds: null,
-    });
-    await clearNext.mutateAsync();
-  }
+  const nextStillAvailable = nextUp != null && options.some((t) => t.truck_number === nextUp);
 
   return (
-    <div className="space-y-3">
-      <h3 className="text-center text-base font-bold tracking-wide">Next up queue</h3>
+    <div className="card space-y-3">
+      <div className="flex items-center justify-between">
+        <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Next-Up Queue</h4>
+        {options.length > 0 && (
+          <span className="text-[11px] text-ink-faint">{options.length} ready</span>
+        )}
+      </div>
 
-      {/* Only show a warning if the set next-up is no longer valid */}
       {nextUp != null && !nextStillAvailable && (
-        <p className="rounded-md border border-red-800/60 bg-red-950/40 px-3 py-2 text-sm text-red-200">
-          Truck #{nextUp} is no longer Unloaded — clear or pick another.
-        </p>
-      )}
-
-      {nextUp != null && anyInProgress && (
-        <p className="text-center text-xs text-amber-400">
-          Finish the in-progress truck before starting Next Up.
+        <p className="rounded-md border border-st-dirty/30 bg-st-dirty/10 px-3 py-2 text-xs text-st-dirty">
+          Truck #{nextUp} is no longer Unloaded — pick another.
         </p>
       )}
 
       {options.length === 0 ? (
-        <p className="text-center text-xs text-slate-500">No Unloaded trucks available.</p>
+        <p className="text-center text-xs text-ink-faint">No Unloaded trucks available.</p>
       ) : (
-        <>
-          <p className="text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Unloaded trucks ready to load
-          </p>
-          <div className="flex flex-wrap justify-center gap-1.5">
-            {options.map((n) => {
-              const selected = pick === n;
-              return (
-                <button
-                  key={n}
-                  onClick={() => setPick(n)}
-                  className={clsx(
-                    "rounded-lg border px-3 py-2 text-sm font-bold transition-colors",
-                    selected
-                      ? "border-emerald-500 bg-emerald-600 text-white"
-                      : "border-slate-700 bg-slate-800 text-slate-200 hover:border-slate-600 hover:bg-slate-700",
-                  )}
-                >
-                  #{n}
-                </button>
-              );
-            })}
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              className="btn-primary"
-              disabled={pick == null || setNext.isPending}
-              onClick={() => {
-                if (pick != null) {
-                  setNext.mutate(pick);
-                  onPick?.();
-                }
-              }}
-            >
-              Set Next Up
-            </button>
-            <button
-              className="btn-ghost"
-              disabled={nextUp == null || clearNext.isPending}
-              onClick={() => {
-                clearNext.mutate();
-                onPick?.();
-              }}
-            >
-              Clear Next Up
-            </button>
-          </div>
-        </>
+        <div className="space-y-1">
+          {options.map((truck, i) => (
+            <QueueRow
+              key={truck.truck_number}
+              truck={truck}
+              index={i}
+              isNext={truck.truck_number === nextUp}
+              onSelect={() => { setNext.mutate(truck.truck_number); onPick?.(); }}
+            />
+          ))}
+        </div>
+      )}
+
+      {nextUp != null && (
+        <button
+          type="button"
+          className="btn-ghost w-full text-xs"
+          disabled={clearNext.isPending}
+          onClick={() => { clearNext.mutate(); onPick?.(); }}
+        >
+          Clear Next Up
+        </button>
       )}
     </div>
   );
@@ -581,23 +696,3 @@ export function formatDuration(totalSeconds: number): string {
   }
   return `${m.toString().padStart(2, "0")}:${sec.toString().padStart(2, "0")}`;
 }
-
-
-/**
- * Live "In Progress" page (V1 parity):
- *
- *   CURRENT TRUCK #N        ELAPSED TIME 00:46
- *   LOAD DAY · Day 2 (Tue)
- *   [ Set Next Up ]
- *   [ Audit Next Up ]
- *
- *   Select Shortages
- *   [3x10] [3x5] [4x6]
- *   [Paper] [Bulk] [Recents]
- *
- *   [        Audit         ]
- *   [    FINISH LOADING    ]
- *
- * Rendered on /board?status=in_progress. Pulls the single in-progress truck
- * from the board and drives the load-completion flow.
- */

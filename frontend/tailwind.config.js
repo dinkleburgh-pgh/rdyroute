@@ -13,8 +13,26 @@ export default {
         },
       },
       colors: {
-        // Default status colors. Dynamic overrides are injected at runtime
-        // by StatusColorApplier in App.tsx via the status_badge_colors setting.
+        app:        "#07090d",
+        surface:    "#161d2b",
+        "surface-2":"#141a27",
+        "surface-3":"#111722",
+        track:      "#1c2434",
+        ink:        "#f2f6fb",
+        "ink-soft": "#cdd6e2",
+        "ink-muted":"#8a96a8",
+        "ink-faint":"#7a8698",
+        accent:     "#3b82f6",
+        "st-dirty":       "#ef4444",
+        "st-unfinished":  "#d946ef",
+        "st-shop":        "#8b5cf6",
+        "st-inprogress":  "#f59e0b",
+        "st-unloaded":    "#22c55e",
+        "st-loaded":      "#3b82f6",
+        "st-off":         "#64748b",
+        "st-oos":         "#6b7a90",
+        "st-spare":       "#06b6d4",
+        // Legacy status colors — keep for backward compat
         status: {
           dirty:      "#dc2626",
           unfinished: "#c026d3",
@@ -26,6 +44,21 @@ export default {
           oos:        "#475569",
           spare:      "#0e7490",
         },
+      },
+      fontFamily: {
+        sans: ["'IBM Plex Sans'", "system-ui", "-apple-system", "sans-serif"],
+        mono: ["'IBM Plex Mono'", "ui-monospace", "monospace"],
+      },
+      borderColor: {
+        hairline: "rgba(255,255,255,0.06)",
+      },
+      boxShadow: {
+        "inset-top": "inset 0 1px 0 rgba(255,255,255,0.04)",
+        card: "0 6px 18px -12px rgba(0,0,0,0.7)",
+        hero: "0 12px 34px -18px rgba(245,158,11,0.5)",
+      },
+      borderRadius: {
+        pill: "999px",
       },
     },
   },

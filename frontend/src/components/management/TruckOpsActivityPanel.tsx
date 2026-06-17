@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { api } from "../../api/client";
 import { useActivityEvents } from "../../api/hooks";
 import ActivityEventCard from "../activity/ActivityEventCard";
+import { groupActivityEvents, ActivityGroup } from "../activity/TruckActivityTimeline";
 import { useToast } from "../../contexts/ToastContext";
 
 const FAMILY_FILTERS = [
@@ -221,9 +222,15 @@ export default function TruckOpsActivityPanel({
         </div>
       ) : (
         <div className="space-y-3">
-          {items.map((event) => (
-            <ActivityEventCard key={event.id} event={event} />
-          ))}
+          {groupActivityEvents(items).map((item) =>
+            "events" in item && item.events.length > 1 ? (
+              <ActivityGroup key={item.key} group={item} compact={false} />
+            ) : "events" in item ? (
+              <ActivityEventCard key={item.events[0].id} event={item.events[0]} />
+            ) : (
+              <ActivityEventCard key={item.id} event={item} />
+            )
+          )}
         </div>
       )}
     </div>

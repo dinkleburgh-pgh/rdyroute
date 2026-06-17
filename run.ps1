@@ -407,7 +407,7 @@ if (-not (Test-Path $FrontendDir)) {
         if (-not $existingFE) {
             Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
             Write-Info "Starting Vite dev server on http://localhost:${FrontendPort}..."
-            $frontendArgs = @('run', 'dev', '--', '--host', '127.0.0.1', '--port', $FrontendPort)
+            $frontendArgs = @('run', 'dev', '--', '--host', '0.0.0.0', '--port', $FrontendPort)
             $proc = Start-FrontendProcess -ArgumentList $frontendArgs
             $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
             if ($proc.HasExited -or -not $frontendHealthy) {

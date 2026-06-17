@@ -5,6 +5,47 @@
  * which previously each declared their own copy of the same luminance math.
  */
 
+export const STATUS_META: Record<string, { label: string; color: string }> = {
+  dirty:       { label: "Dirty",       color: "#ef4444" },
+  unfinished:  { label: "Unfinished",  color: "#d946ef" },
+  shop:        { label: "Shop",        color: "#8b5cf6" },
+  in_progress: { label: "In Progress", color: "#f59e0b" },
+  unloaded:    { label: "Unloaded",    color: "#22c55e" },
+  loaded:      { label: "Loaded",      color: "#3b82f6" },
+  off:         { label: "Off",         color: "#64748b" },
+  oos:         { label: "OOS",         color: "#6b7a90" },
+  spare:       { label: "Spare",       color: "#06b6d4" },
+};
+
+export type TruckStatus = keyof typeof STATUS_META;
+
+function rgbParts(hex: string): [number, number, number] {
+  const n = hex.replace("#", "");
+  return [parseInt(n.slice(0, 2), 16), parseInt(n.slice(2, 4), 16), parseInt(n.slice(4, 6), 16)];
+}
+
+export function hexA(hex: string, a: number): string {
+  const [r, g, b] = rgbParts(hex);
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+export function lighten(hex: string, t: number): string {
+  let [r, g, b] = rgbParts(hex);
+  r = Math.round(r + (255 - r) * t);
+  g = Math.round(g + (255 - g) * t);
+  b = Math.round(b + (255 - b) * t);
+  return `rgb(${r},${g},${b})`;
+}
+
+export function statusBadge(status: string) {
+  const c = STATUS_META[status]?.color ?? "#64748b";
+  return {
+    background: hexA(c, 0.13),
+    border: `1px solid ${hexA(c, 0.30)}`,
+    color: lighten(c, 0.32),
+  };
+}
+
 /**
  * Returns true when a given hex color is light enough that dark text reads
  * better on top of it. Uses WCAG relative-luminance.

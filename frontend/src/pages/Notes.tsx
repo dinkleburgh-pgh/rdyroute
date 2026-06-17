@@ -11,7 +11,7 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import { QRCodeSVG } from "qrcode.react";
 import { useBoard } from "../api/hooks";
-import { AlertTriangleIcon, ChevronRightIcon } from "../components/icons";
+import { ChevronRightIcon } from "../components/icons";
 import {
   useCreateNote,
   useDeleteNote,
@@ -448,8 +448,8 @@ function TruckNotePanel({
               {visible.length}
             </span>
           )}
-          <AlertTriangleIcon
-            className={clsx("ml-auto h-4 w-4 shrink-0 text-slate-500 transition-transform", isOpen && "rotate-180")}
+          <ChevronRightIcon
+            className={clsx("ml-auto h-4 w-4 shrink-0 text-ink-muted transition-transform", isOpen && "rotate-90")}
           />
         </button>
         {/* QR code button — only for non-spare trucks that have a token */}

@@ -8,30 +8,44 @@ import { format, parseISO } from "date-fns";
 
 const CHANNELS = ["Team"];
 
-const ROLE_STYLE: Record<string, string> = {
-  admin:      "bg-red-950 text-red-300 ring-1 ring-red-700/50",
-  fleet:      "bg-cyan-950 text-cyan-300 ring-1 ring-cyan-700/50",
-  lead:       "bg-blue-950 text-blue-300 ring-1 ring-blue-700/50",
-  atl:        "bg-orange-950 text-orange-300 ring-1 ring-orange-700/50",
-  supervisor: "bg-purple-950 text-purple-300 ring-1 ring-purple-700/50",
-  loader:     "bg-green-950 text-green-300 ring-1 ring-green-700/50",
-  unloader:   "bg-teal-950 text-teal-300 ring-1 ring-teal-700/50",
-  guest:      "bg-slate-800 text-slate-400 ring-1 ring-slate-600/50",
+const ROLE_COLORS: Record<string, string> = {
+  admin:      "#ef4444",
+  fleet:      "#06b6d4",
+  lead:       "#a855f7",
+  atl:        "#f97316",
+  supervisor: "#a855f7",
+  loader:     "#22c55e",
+  unloader:   "#14b8a6",
+  guest:      "#64748b",
 };
 
 const ADMIN_ROLES = new Set(["admin", "fleet", "atl", "lead", "supervisor"]);
 
-const DISPLAY_OVERRIDE: Record<string, { label: string; cls: string }> = {
-  nate: { label: "lead", cls: "bg-purple-950 text-purple-300 ring-1 ring-purple-700/50" },
+const DISPLAY_OVERRIDE: Record<string, { label: string; color: string }> = {
+  nate: { label: "lead", color: "#a855f7" },
 };
 
 function RoleBadge({ role, username }: { role?: string | null; username?: string }) {
   if (!role) return null;
   const override = username ? DISPLAY_OVERRIDE[username] : undefined;
   const label = override ? override.label : role;
-  const cls = override ? override.cls : ROLE_STYLE[role] ?? ROLE_STYLE.guest;
+  const color = override ? override.color : (ROLE_COLORS[role] ?? ROLE_COLORS.guest);
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-bold uppercase tracking-wider ${cls}`}>
+    <span
+      style={{
+        display: "inline-flex",
+        alignItems: "center",
+        padding: "1px 8px",
+        borderRadius: "999px",
+        fontSize: "9.5px",
+        fontWeight: 700,
+        letterSpacing: "0.06em",
+        textTransform: "uppercase",
+        background: color + "1a",
+        border: `1px solid ${color}33`,
+        color: color,
+      }}
+    >
       {label}
     </span>
   );
@@ -40,7 +54,7 @@ function RoleBadge({ role, username }: { role?: string | null; username?: string
 function DeleteButton({ onClick }: { onClick: () => void }) {
   return (
     <button
-      className="shrink-0 rounded p-1 text-slate-600 hover:bg-slate-800 hover:text-red-400 transition-colors"
+      className="shrink-0 rounded p-1 text-ink-faint hover:bg-surface-2 hover:text-red-400 transition-colors"
       onClick={onClick}
       title="Delete message"
     >
@@ -123,16 +137,21 @@ export default function Communications() {
       />
 
       {/* Channel tabs */}
-      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-slate-800 bg-slate-950 px-3 py-2">
+      <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline bg-[#0b0f17] px-3 py-2">
         {CHANNELS.map((c) => (
           <button
             key={c}
             onClick={() => setChannel(c)}
             className={`shrink-0 rounded-full px-3.5 py-1.5 text-sm font-medium transition-colors ${
               channel === c
-                ? "bg-blue-600 text-white"
-                : "text-slate-400 hover:bg-slate-800 hover:text-slate-200"
+                ? "text-[#7cc4ff]"
+                : "text-ink-muted hover:bg-surface-2 hover:text-ink-soft"
             }`}
+            style={
+              channel === c
+                ? { background: "rgba(56,189,248,0.12)", border: "1px solid rgba(56,189,248,0.22)" }
+                : { border: "1px solid transparent" }
+            }
           >
             #{c}
           </button>
@@ -140,12 +159,12 @@ export default function Communications() {
       </div>
 
       {/* Message list */}
-      <div ref={listRef} className="flex-1 overflow-y-auto px-3 py-4 md:px-5">
+      <div ref={listRef} className="flex-1 overflow-y-auto px-[26px] py-[18px]">
         {isLoading && (
-          <p className="py-10 text-center text-sm text-slate-500">Loading…</p>
+          <p className="py-10 text-center text-sm text-ink-faint">Loading…</p>
         )}
         {!isLoading && messages.length === 0 && (
-          <p className="py-10 text-center text-sm text-slate-500">
+          <p className="py-10 text-center text-sm text-ink-faint">
             No messages in #{channel} yet.
           </p>
         )}
@@ -154,9 +173,9 @@ export default function Communications() {
           <div key={day}>
             {/* Day separator */}
             <div className="my-4 flex items-center gap-3">
-              <div className="h-px flex-1 bg-slate-800" />
-              <span className="shrink-0 text-xs font-medium text-slate-500">{day}</span>
-              <div className="h-px flex-1 bg-slate-800" />
+              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.07)" }} />
+              <span className="shrink-0 text-[11.5px] font-medium text-ink-faint">{day}</span>
+              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.07)" }} />
             </div>
 
             {msgs.map((m, idx) => {
@@ -184,11 +203,11 @@ export default function Communications() {
                   {/* Metadata header — only on first message in a run */}
                   {!isContinuation && (
                     <div className={`mb-1 flex items-center gap-1.5 ${isMe ? "flex-row-reverse" : ""}`}>
-                      <span className={`text-sm font-semibold leading-none ${isMe ? "text-blue-300" : "text-slate-200"}`}>
+                      <span className={`text-[13.5px] font-semibold leading-none ${isMe ? "text-[#7cc4ff]" : "text-ink"}`}>
                         {m.username}
                       </span>
                       <RoleBadge role={m.sender_role} username={m.username} />
-                      <span className="text-[10px] text-slate-500 leading-none">
+                      <span className="text-[10px] text-ink-faint leading-none">
                         {timeStr(m.sent_at)}
                       </span>
                       {canDelete && hoveredId === m.id && (
@@ -204,16 +223,16 @@ export default function Communications() {
                     <div
                       className={[
                         "rounded-2xl px-3.5 py-2 text-base leading-relaxed break-words",
-                        // Pointed corner on the header side for first-in-run messages
                         !isContinuation && isMe  ? "rounded-tr-sm" : "",
                         !isContinuation && !isMe ? "rounded-tl-sm" : "",
-                        m.is_deleted
-                          ? "bg-slate-800/50 italic text-slate-500"
-                          : isMe
-                          ? "bg-blue-600 text-white"
-                          : "bg-slate-800 text-slate-100",
                       ].filter(Boolean).join(" ")}
-                      style={{ wordBreak: "break-word" }}
+                      style={
+                        m.is_deleted
+                          ? { background: "rgba(255,255,255,0.03)", fontStyle: "italic", color: "#7a8698" }
+                          : isMe
+                          ? { background: "#2563eb", color: "#fff" }
+                          : { background: "#1d2636", border: "1px solid rgba(255,255,255,0.08)", color: "#cdd6e2" }
+                      }
                     >
                       {m.is_deleted ? "[deleted]" : m.message}
                     </div>
@@ -233,16 +252,28 @@ export default function Communications() {
       </div>
 
       {/* Input area */}
-      <div className="relative z-50 shrink-0 border-t border-slate-800 bg-slate-950 px-3 py-3 md:px-5">
+      <div className="relative z-50 shrink-0 border-t border-hairline bg-[#0b0f17] px-[26px] py-[14px]">
         <form onSubmit={onSend} className="flex items-end gap-2">
           <textarea
-            className="input flex-1 resize-none leading-relaxed"
             rows={1}
             placeholder={`Message #${channel}…`}
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            style={{ maxHeight: "8rem", overflowY: "auto" }}
+            style={{
+              flex: 1,
+              resize: "none",
+              maxHeight: "8rem",
+              overflowY: "auto",
+              background: "#1d2636",
+              border: "1px solid rgba(255,255,255,0.08)",
+              borderRadius: "12px",
+              fontSize: "14px",
+              color: "#cdd6e2",
+              padding: "10px 14px",
+              lineHeight: "1.5",
+              outline: "none",
+            }}
             onInput={(e) => {
               const el = e.currentTarget;
               el.style.height = "auto";
@@ -250,19 +281,29 @@ export default function Communications() {
             }}
           />
           <button
-            className="btn-primary shrink-0"
             type="submit"
             disabled={send.isPending || !text.trim()}
+            style={{
+              flexShrink: 0,
+              background: "linear-gradient(135deg,#3b82f6,#2563eb)",
+              color: "#fff",
+              borderRadius: "12px",
+              padding: "11px 22px",
+              fontSize: "14px",
+              fontWeight: 600,
+              border: "none",
+              cursor: send.isPending || !text.trim() ? "not-allowed" : "pointer",
+              opacity: send.isPending || !text.trim() ? 0.5 : 1,
+              transition: "opacity 0.15s",
+            }}
           >
             Send
           </button>
         </form>
-        <p className="mt-1.5 text-[10px] text-slate-600">
+        <p className="mt-1.5 font-mono text-[10px] text-ink-faint">
           Enter to send · Shift+Enter for new line
         </p>
       </div>
     </div>
   );
 }
-
-

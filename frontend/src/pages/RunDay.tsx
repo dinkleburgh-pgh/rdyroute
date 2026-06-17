@@ -132,11 +132,15 @@ export default function RunDay() {
     [board, loadDay, holidayLoad],
   );
 
+  const unloadScheduleContext = useMemo(
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false),
+    [board, unloadsDay, holidayUnload],
+  );
+  const unloadTotal = unloadScheduleContext.activeTrucks.length;
   const unloadContext = useMemo(
     () => buildOperationalDayContext(board, unloadsDay, holidayUnload, true),
     [board, unloadsDay, holidayUnload],
   );
-  const unloadTotal = unloadContext.activeTrucks.length;
   const unloadDone = useMemo(
     () => countUnloadedFromContext(unloadContext),
     [unloadContext],
@@ -386,6 +390,7 @@ export default function RunDay() {
                   coveringSpare={coveringTruck}
                   dayNum={truckLoadDay}
                   isExtraDay={truckLoadDay === loadDay2}
+
                   notes={notesByTruck.get(t.truck_number)}
                 />
               );

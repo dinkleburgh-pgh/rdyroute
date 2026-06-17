@@ -118,7 +118,7 @@ const ROLE_BADGE: Record<AuthRole, string> = {
   supervisor: "bg-purple-950 text-purple-300 ring-1 ring-purple-700/50",
   loader:     "bg-green-950 text-green-300 ring-1 ring-green-700/50",
   unloader:   "bg-teal-950 text-teal-300 ring-1 ring-teal-700/50",
-  guest:      "bg-slate-800 text-slate-400 ring-1 ring-slate-600/50",
+  guest:      "bg-surface-2 text-ink-faint ring-1 ring-hairline",
 };
 
 function BuildInfo() {
@@ -134,12 +134,12 @@ function BuildInfo() {
     return format(d, "PP");
   })();
   return (
-    <div className="pt-2 text-center text-[10px] leading-tight text-slate-500">
+    <div className="pt-2 text-center text-[10px] leading-tight text-ink-faint">
       <p>
         ReadyRoute V2 · {isDev ? "dev" : version}
       </p>
       {(shortCommit || dateLabel) && !isDev && (
-        <p className="text-slate-600">
+        <p className="text-ink-faint/60">
           {shortCommit}
           {shortCommit && dateLabel ? " · " : ""}
           {dateLabel}
@@ -183,13 +183,17 @@ export default function Layout() {
     [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload],
   );
 
+  // Hold count for nav badges — priority_hold trucks on the Unload page.
   const holdCount = useMemo(
-    () => (board ?? []).filter((t) =>
-      t.state?.priority_hold === true &&
-      (t.state?.status === "dirty" || t.state == null)
-    ).length,
+    () =>
+      (board ?? []).filter(
+        (t) =>
+          t.state?.priority_hold === true &&
+          (t.state?.status === "dirty" || t.state == null),
+      ).length,
     [board],
   );
+
   // Load progress mirrors the Day Overview: denominator = route trucks scheduled
   // for load; a route counts as done when the route truck is loaded OR its covering spare is.
   const loadContext = useMemo(
@@ -203,8 +207,14 @@ export default function Layout() {
     [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload],
   );
 
-  // Unload progress uses its own day context. A truck counts as unloaded when
-  // its raw status is unloaded (or loaded, meaning it never needed unloading).
+  // Unload denominator = routes scheduled to run today (not off, not replaced by spare).
+  // Numerator = routes that have been unloaded. Two contexts: schedule context (no off-day
+  // spare coverage) for the total; work context (with off-day coverage) for done count.
+  const unloadScheduleContext = useMemo(
+    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, false),
+    [board, unloadsDay, holidayUnload],
+  );
+  const totalScheduledUnload = unloadScheduleContext.activeTrucks.length;
   const unloadContext = useMemo(
     () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, true),
     [board, unloadsDay, holidayUnload],
@@ -227,8 +237,8 @@ export default function Layout() {
     [board],
   );
   const unloadedPct =
-    unloadContext.activeTrucks.length > 0
-      ? Math.round((unloadedScheduled / unloadContext.activeTrucks.length) * 100)
+    totalScheduledUnload > 0
+      ? Math.round((unloadedScheduled / totalScheduledUnload) * 100)
       : 0;
 
   const DISPLAY_ROLE_OVERRIDE: Record<string, { label: string; cls: string }> = {
@@ -247,7 +257,7 @@ export default function Layout() {
   const unloadBadgeText = `U${unloadsDay}${holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}`;
 
   return (
-    <div className="flex h-screen bg-slate-950 text-slate-100">
+    <div className="flex h-screen bg-app text-ink-soft">
 
       {/* Offline / pending-sync indicator */}
       <div className="fixed inset-x-0 top-0 z-50 md:pl-64">
@@ -265,20 +275,20 @@ export default function Layout() {
       {/* Sidebar */}
       <aside
         className={clsx(
-          "fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 flex-col border-r border-slate-800 bg-slate-900 transition-transform duration-200 ease-in-out",
+          "fixed inset-y-0 left-0 z-30 flex w-64 shrink-0 flex-col border-r border-hairline bg-[#0e1320] transition-transform duration-200 ease-in-out",
           "md:static md:translate-x-0",
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex-1 space-y-3 overflow-y-auto p-4">
+        <div className="flex-1 space-y-3 overflow-y-auto p-[14px]">
           {/* Setup Day button */}
           <button
             onClick={() => nav("/?setup=1")}
             className={clsx(
-              "block w-full rounded-md border px-3 py-2 text-center text-sm font-semibold transition-colors",
+              "block w-full rounded-[10px] border px-3 py-2 text-center text-sm font-medium transition-colors",
               wizardDone
-                ? "border-slate-700 bg-slate-800 text-slate-200 hover:bg-slate-700"
-                : "border-amber-500/80 bg-amber-950/30 text-amber-300 hover:bg-amber-950/50",
+                ? "border-hairline bg-surface text-ink-soft hover:bg-surface-2"
+                : "border-[rgba(245,158,11,0.30)] bg-[rgba(245,158,11,0.08)] text-[#fbbf5c] hover:bg-[rgba(245,158,11,0.15)]",
             )}
           >
             {wizardDone ? "Setup Day" : "Setup Day (optional override)"}
@@ -287,22 +297,30 @@ export default function Layout() {
           {canManageSwaps && (
             <button
               onClick={() => setSwapModalOpen(true)}
-              className="block w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-center text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700"
+              className="block w-full rounded-[10px] border border-hairline bg-surface px-3 py-2 text-center text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
             >
               Route Swaps
             </button>
           )}
 
           {/* Workday context */}
-          <div className="rounded-md bg-slate-950/60 px-3 py-2 text-center text-xs leading-tight">
-            <p className="font-semibold text-slate-300">Workday</p>
-            <p className="text-slate-200">{todayLong()}</p>
-            <p className="mt-1 font-semibold text-slate-300">Shift</p>
-            <p className="text-slate-200">{currentShift().label} · {currentShift().hours}</p>
-            <p className="mt-1 font-semibold text-slate-300">Load</p>
-            <p className="text-slate-200">Day {loadDay}{holidayLoad ? ` + ${loadDay === 5 ? 1 : loadDay + 1}` : ""}</p>
-            <p className="mt-1 font-semibold text-slate-300">Unloads</p>
-            <p className="text-slate-200">Day {unloadsDay}{holidayUnload ? ` + ${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}</p>
+          <div className="rounded-xl border border-hairline bg-[#121826] p-[11px] grid grid-cols-2 gap-[9px_8px]">
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-ink-faint/80">Workday</p>
+              <p className="mt-0.5 text-xs font-semibold text-ink-soft">{todayLong()}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-ink-faint/80">Shift</p>
+              <p className="mt-0.5 text-xs font-semibold text-ink-soft">{currentShift().label} · {currentShift().hours}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#7cc4ff]">Load</p>
+              <p className="mt-0.5 font-mono text-xs font-semibold text-ink-soft">Day {loadDay}{holidayLoad ? ` + ${loadDay === 5 ? 1 : loadDay + 1}` : ""}</p>
+            </div>
+            <div>
+              <p className="text-[9px] font-semibold uppercase tracking-[0.1em] text-[#5eead4]">Unload</p>
+              <p className="mt-0.5 font-mono text-xs font-semibold text-ink-soft">Day {unloadsDay}{holidayUnload ? ` + ${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}</p>
+            </div>
           </div>
 
           {/* Clock */}
@@ -311,7 +329,7 @@ export default function Layout() {
           </div>
 
           {/* Primary action buttons */}
-          <div className="space-y-2 pt-2">
+          <div className="space-y-[6px] pt-2">
             {sidebarPrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
@@ -321,8 +339,10 @@ export default function Layout() {
                   to={item.to}
                   className={({ isActive }) =>
                     clsx(
-                      "relative flex items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors",
-                      isActive ? "ring-2 ring-blue-500" : "hover:bg-slate-700",
+                      "relative flex items-center justify-center rounded-[10px] border px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "border-[rgba(59,130,246,0.34)] bg-[rgba(59,130,246,0.14)] text-[#7cc4ff]"
+                        : "border-hairline bg-surface text-[#aab4c4] hover:bg-surface-2",
                     )
                   }
                 >
@@ -342,28 +362,28 @@ export default function Layout() {
             })}
           </div>
 
-          <hr className="border-slate-800" />
+          <hr className="border-hairline" />
 
           {/* Live status counters */}
-          <p className="text-center text-xs font-semibold uppercase tracking-wide text-slate-400">
-            Live status
+          <p className="text-center text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+            Live Status
           </p>
-          <div className="space-y-2">
+          <div className="space-y-[4px]">
             <NavLink
               to="/"
               end
               className={({ isActive }) =>
                 clsx(
-                  "relative flex w-full items-center justify-center rounded-md border px-3 py-2 text-sm font-medium transition-colors",
+                  "relative flex w-full items-center justify-center rounded-[10px] border px-3 py-2 text-sm font-medium transition-colors",
                   isActive
-                    ? "border-purple-500/50 bg-gradient-to-r from-purple-950/60 to-purple-900/30 text-purple-300"
-                    : "border-slate-700 bg-slate-800 hover:bg-slate-700",
+                    ? "border-[rgba(139,92,246,0.32)] bg-[rgba(139,92,246,0.14)] text-[#c4b5fd]"
+                    : "border-hairline bg-surface text-[#aab4c4] hover:bg-surface-2",
                 )
               }
             >
               <span className="absolute left-2 h-3 w-3 rounded-full bg-purple-400" />
               Day Overview
-              <span className="absolute right-2 rounded bg-purple-800/60 px-1.5 py-0.5 text-xs font-semibold text-purple-300">
+              <span className="absolute right-2 rounded bg-[rgba(167,139,250,0.16)] px-1.5 py-0.5 text-xs font-semibold text-[#c4b5fd]">
                 {(holidayLoad || holidayUnload) ? "Holiday" : `Day ${unloadsDay}`}
               </span>
             </NavLink>
@@ -371,7 +391,7 @@ export default function Layout() {
               <button
                 key={s}
                 onClick={() => nav(`/board?status=${s}`)}
-                className="relative flex w-full items-center justify-center rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-sm font-medium transition-colors hover:bg-slate-700"
+                className="relative flex w-full items-center justify-center rounded-[9px] border border-hairline bg-[#141a27] px-3 py-1.5 text-sm font-medium text-[#aab4c4] transition-colors hover:bg-surface-2"
               >
                 <span className={clsx(
                   "absolute left-2 h-3 w-3 rounded-full",
@@ -379,11 +399,11 @@ export default function Layout() {
                   s === "in_progress" && counts[s] > 0 && "animate-pulse",
                 )} />
                 {STATUS_LABEL[s]}
-                <span className="absolute right-2 text-slate-300">
+                <span className="absolute right-2 text-ink-muted">
                   {s === "in_progress"
                     ? inProgressTruck
-                      ? <span className="text-yellow-300 text-base font-bold">#{inProgressTruck.truck_number}</span>
-                      : "None"
+                      ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{inProgressTruck.truck_number}</span>
+                      : <span className="text-ink-faint">None</span>
                     : counts[s]}
                 </span>
               </button>
@@ -391,31 +411,34 @@ export default function Layout() {
           </div>
 
           {/* Load / Unload progress */}
-          <div className="space-y-2 rounded-md border border-slate-800 bg-slate-950/60 p-3">
-            <p className="text-center text-xs font-semibold uppercase tracking-wide text-emerald-300">
-              Load/Unload Progress
+          <div className="flex flex-col gap-[10px] rounded-xl border border-hairline bg-[#121826] p-[11px]">
+            <p className="text-center text-[10px] font-semibold uppercase tracking-[0.12em] text-[#5eead4]">
+              Load / Unload Progress
             </p>
-            <ProgressRow label="Load" current={loadedScheduled} total={totalScheduledLoad} pct={loadedPct} />
+            <ProgressRow label="Load" current={loadedScheduled} total={totalScheduledLoad} pct={loadedPct} color="#3b82f6" />
             <ProgressRow
               label="Unload"
               current={unloadedScheduled}
-              total={unloadContext.activeTrucks.length}
+              total={totalScheduledUnload}
               pct={unloadedPct}
+              color="#22c55e"
             />
           </div>
 
-          <hr className="border-slate-800" />
+          <hr className="border-hairline" />
 
           {/* Secondary navigation */}
-          <div className="space-y-2">
+          <div className="grid grid-cols-2 gap-[6px]">
             {sidebarSecondaryNav.map((item) => (
               <NavLink
                 key={item.to}
                 to={item.to}
                 className={({ isActive }) =>
                   clsx(
-                    "block rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-center text-sm font-medium transition-colors",
-                    isActive ? "ring-2 ring-blue-500" : "hover:bg-slate-700",
+                    "rounded-[9px] border border-hairline px-2 py-2 text-center text-xs font-medium transition-colors",
+                    isActive
+                      ? "bg-[rgba(59,130,246,0.13)] text-[#7cc4ff]"
+                      : "bg-surface text-[#aab4c4] hover:bg-surface-2",
                   )
                 }
               >
@@ -424,14 +447,14 @@ export default function Layout() {
             ))}
           </div>
 
-          <hr className="border-slate-800" />
+          <hr className="border-hairline" />
 
           {/* User block */}
-          <div className="rounded-md bg-slate-950/60 px-3 py-2 text-center text-xs">
-            <p className="text-slate-400">Signed in as:</p>
-            <p className="font-semibold text-slate-100">{user?.username}</p>
+          <div className="rounded-xl border border-hairline bg-[#121826] p-[10px] text-center text-xs">
+            <p className="text-ink-faint">Signed in as</p>
+            <p className="text-sm font-bold text-ink">{user?.username}</p>
             <div className="mt-1 flex justify-center">
-              <span className={`inline-flex items-center rounded-full px-2.5 py-0.5 text-[11px] font-bold uppercase tracking-wider ${roleBadgeCls}`}>
+              <span className={`inline-flex items-center rounded-pill px-[10px] py-[2px] text-[10px] font-bold uppercase tracking-[0.08em] ${roleBadgeCls}`}>
                 {roleLabel}
               </span>
             </div>
@@ -453,40 +476,40 @@ export default function Layout() {
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* App top bar — mobile shows hamburger + brand, all sizes show clock/shift/day badges */}
-        <header className="sticky top-0 z-10 flex items-center gap-2 border-b border-slate-800 bg-slate-900 px-3 py-2">
+        <header className="sticky top-0 z-10 flex h-[54px] items-center gap-2 border-b border-hairline bg-[rgba(13,18,28,0.7)] backdrop-blur px-[22px]">
           <button
             type="button"
             aria-label="Open menu"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-slate-400 hover:bg-slate-800 hover:text-slate-100 md:hidden"
+            className="rounded-md p-1.5 text-ink-faint hover:bg-surface hover:text-ink md:hidden"
           >
             <Menu className="h-6 w-6" />
           </button>
-          <span className="hidden min-[380px]:inline truncate text-sm font-semibold text-slate-200 md:hidden">ReadyRoute</span>
-          <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1 text-[11px] md:hidden">
-            <span className="shrink-0 font-mono tabular-nums text-[11px] text-slate-200"><Clock compact /></span>
-            <span className="inline-flex shrink-0 items-center rounded-md border border-violet-800/60 bg-violet-950/50 px-1.5 py-1 font-semibold text-violet-300">
+          <span className="hidden min-[380px]:inline truncate text-sm font-semibold text-ink-soft md:hidden">ReadyRoute</span>
+          <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1 md:hidden">
+            <span className="shrink-0 font-mono tabular-nums text-xs text-ink-soft"><Clock compact /></span>
+            <span className="inline-flex shrink-0 items-center rounded-[9px] border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-[11px] py-[4px] text-xs font-semibold text-[#c4b5fd]">
               {shiftName}
             </span>
-            <span className="inline-flex shrink-0 items-center rounded-md border border-blue-800/60 bg-blue-950/50 px-1.5 py-1 font-semibold text-blue-300">
+            <span className="inline-flex shrink-0 items-center rounded-[9px] border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-[11px] py-[4px] text-xs font-semibold text-[#93c5fd]">
               {loadBadgeText}
             </span>
-            <span className="inline-flex shrink-0 items-center rounded-md border border-emerald-800/60 bg-emerald-950/50 px-1.5 py-1 font-semibold text-emerald-300">
+            <span className="inline-flex shrink-0 items-center rounded-[9px] border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-[11px] py-[4px] text-xs font-semibold text-[#6ee7b7]">
               {unloadBadgeText}
             </span>
           </div>
           <div className="ml-auto hidden items-center gap-2 text-xs md:flex">
-            <span className="font-mono"><Clock compact /></span>
-            <span className="inline-flex items-center gap-1 rounded-md border border-violet-800/60 bg-violet-950/50 px-2 py-1 font-semibold text-violet-300">
-              <span className="text-[10px] uppercase tracking-wider text-violet-400/70">Shift</span>
+            <span className="font-mono text-[13px] text-ink-soft"><Clock compact /></span>
+            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-[11px] py-[4px] font-semibold text-[#c4b5fd]">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#8b6fd1]">Shift</span>
               {shiftName}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-md border border-blue-800/60 bg-blue-950/50 px-2 py-1 font-semibold text-blue-300">
-              <span className="text-[10px] uppercase tracking-wider text-blue-400/70">Load</span>
+            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-[11px] py-[4px] font-semibold text-[#93c5fd]">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#5a8fd6]">Load</span>
               Day {loadDay}{holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-md border border-emerald-800/60 bg-emerald-950/50 px-2 py-1 font-semibold text-emerald-300">
-              <span className="text-[10px] uppercase tracking-wider text-emerald-400/70">Unload</span>
+            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-[11px] py-[4px] font-semibold text-[#6ee7b7]">
+              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#4f9e84]">Unload</span>
               Day {unloadsDay}{holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}
             </span>
           </div>
@@ -517,10 +540,10 @@ export default function Layout() {
                 className="fixed inset-0 z-30 bg-black/50 md:hidden"
                 onClick={() => setMoreOpen(false)}
               />
-              <div className="fixed bottom-12 inset-x-0 z-40 rounded-t-xl border-t border-slate-800 bg-slate-900 pb-2 shadow-xl md:hidden">
+              <div className="fixed bottom-12 inset-x-0 z-40 rounded-t-xl border-t border-hairline bg-[#0e1320] pb-2 shadow-xl md:hidden">
                 <div className="flex items-center justify-between px-4 py-3">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">More</p>
-                  <button onClick={() => setMoreOpen(false)} className="text-slate-500 hover:text-slate-300">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">More</p>
+                  <button onClick={() => setMoreOpen(false)} className="text-ink-faint hover:text-ink-soft">
                     <X className="h-5 w-5" />
                   </button>
                 </div>
@@ -534,32 +557,32 @@ export default function Layout() {
                         clsx(
                           "flex flex-col items-center justify-center rounded-lg px-2 py-3 text-[11px] font-semibold transition-colors",
                           isActive
-                            ? "bg-blue-600/20 text-blue-400"
-                            : "text-slate-400 hover:bg-slate-800 hover:text-slate-200",
+                            ? "bg-[rgba(59,130,246,0.20)] text-blue-400"
+                            : "text-ink-faint hover:bg-surface hover:text-ink-soft",
                         )
                       }
                     >
                       {item.label}
                     </NavLink>
-            ))}
-            {holdCount > 0 && (
-              <button
-                onClick={() => nav(`/board?status=hold`)}
-                className="ml-4 relative flex w-[calc(100%-1rem)] items-center justify-center rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-amber-950/40"
-              >
-                <span className="absolute left-2 h-3 w-3 rounded-full bg-amber-500 animate-pulse" />
-                Hold
-                <span className="absolute right-2 rounded bg-amber-800/60 px-1.5 py-0.5 text-xs font-semibold text-amber-300">
-                  {holdCount}
-                </span>
-              </button>
-            )}
-          </div>
+              ))}
+              {holdCount > 0 && (
+                <button
+                  onClick={() => nav(`/board?status=hold`)}
+                  className="ml-4 relative flex w-[calc(100%-1rem)] items-center justify-center rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-1.5 text-sm font-medium transition-colors hover:bg-amber-950/40"
+                >
+                  <span className="absolute left-2 h-3 w-3 rounded-full bg-amber-500 animate-pulse" />
+                  Hold
+                  <span className="absolute right-2 rounded bg-amber-800/60 px-1.5 py-0.5 text-xs font-semibold text-amber-300">
+                    {holdCount}
+                  </span>
+                </button>
+              )}
+            </div>
               </div>
             </>
           )}
 
-          <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-slate-800 bg-slate-900 md:hidden">
+          <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-hairline bg-[#0e1320] md:hidden">
             {mobilePrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
@@ -570,7 +593,7 @@ export default function Layout() {
                   className={({ isActive }) =>
                     clsx(
                       "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
-                      isActive ? "text-blue-400" : "text-slate-500",
+                      isActive ? "text-blue-400" : "text-ink-faint",
                     )
                   }
                 >
@@ -594,7 +617,7 @@ export default function Layout() {
                 onClick={() => setMoreOpen((v) => !v)}
                 className={clsx(
                   "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
-                  moreOpen ? "text-blue-400" : "text-slate-500",
+                  moreOpen ? "text-blue-400" : "text-ink-faint",
                 )}
               >
                 More
@@ -621,22 +644,24 @@ function ProgressRow({
   current,
   total,
   pct,
+  color = "#3b82f6",
 }: {
   label: string;
   current: number;
   total: number;
   pct: number;
+  color?: string;
 }) {
   return (
     <div>
-      <div className="flex items-center justify-between text-xs">
-        <span className="font-semibold text-slate-200">{label}</span>
-        <span className="text-slate-400">
-          {current}/{total} ({pct}%)
+      <div className="mb-[5px] flex items-center justify-between text-[11.5px]">
+        <span className="font-semibold text-ink-soft">{label}</span>
+        <span className="font-mono text-ink-muted">
+          {current}/{total}
         </span>
       </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
-        <div className="h-full bg-emerald-500 transition-all" style={{ width: `${pct}%` }} />
+      <div className="mt-[4px] h-[3px] w-full overflow-hidden rounded-full bg-[rgba(255,255,255,0.06)]">
+        <div className="h-full transition-all" style={{ width: `${pct}%`, backgroundColor: color }} />
       </div>
     </div>
   );

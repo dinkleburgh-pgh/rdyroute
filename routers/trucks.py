@@ -75,6 +75,10 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     prev_run_date = db.scalar(
         select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
     )
+    # Load-day number for the previous run date — used to determine whether a
+    # truck with prior status "unloaded" was scheduled off that day (and therefore
+    # didn't run a route) vs. was active and dispatched (and came back dirty).
+    prev_load_day_num = _load_day_number(prev_run_date) if prev_run_date is not None else None
 
     prev_states_by_num: dict[int, TruckState] = {}
     prev_loaded_on = set[int]()
@@ -150,7 +154,20 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 status = TruckStatus.off
             elif used_yesterday:
                 status = TruckStatus.dirty
-            elif prior.status in {TruckStatus.off, TruckStatus.unloaded, TruckStatus.spare, TruckStatus.dirty}:
+            elif prior.status == TruckStatus.dirty:
+                # Truck was dirty yesterday and not yet processed — carry forward as dirty.
+                # It's physically at the dock waiting to be unloaded; do not reset to unloaded.
+                status = TruckStatus.dirty
+            elif prior.status == TruckStatus.unloaded and truck.truck_type != "Spare":
+                # Non-spare was unloaded yesterday. Whether it ran depends on its schedule:
+                # - Scheduled off yesterday → it didn't dispatch → stays unloaded (ready to load)
+                # - NOT scheduled off yesterday → it ran its route → came back dirty
+                prev_sched_off = (
+                    prev_load_day_num is not None
+                    and prev_load_day_num in (truck.scheduled_off_days or [])
+                )
+                status = TruckStatus.unloaded if prev_sched_off else TruckStatus.dirty
+            elif prior.status in {TruckStatus.off, TruckStatus.unloaded, TruckStatus.spare}:
                 status = TruckStatus.unloaded
             else:
                 status = TruckStatus.unloaded
@@ -160,7 +177,9 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
         if prior is None and scheduled_off_today:
             off_note = ""
         if truck.truck_type == "Spare" and truck.truck_number not in prev_spares_used and not used_yesterday:
-            status = TruckStatus.unloaded
+            # Only reset to unloaded if the spare wasn't already carrying a dirty state forward.
+            if prior is None or prior.status != TruckStatus.dirty:
+                status = TruckStatus.unloaded
 
         row = TruckState(
             truck_number=truck.truck_number,

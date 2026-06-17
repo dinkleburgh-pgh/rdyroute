@@ -21,7 +21,7 @@ export default function PageHeader({
   return (
     <div
       className={clsx(
-        "border-b border-slate-800 bg-[radial-gradient(circle_at_top_left,_rgba(56,189,248,0.16),_transparent_34%),linear-gradient(180deg,rgba(2,6,23,0.98),rgba(15,23,42,0.94))] px-3 py-3 md:px-6 md:py-4",
+        "border-b border-hairline bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.10),transparent_36%),linear-gradient(180deg,rgba(2,6,23,0.6),rgba(15,23,42,0.4))] px-3 py-3 md:px-6 md:py-4",
         className,
       )}
     >
@@ -33,22 +33,25 @@ export default function PageHeader({
       >
         <div className="min-w-0">
           {eyebrow && (
-            <span className="inline-flex rounded-full border border-cyan-500/20 bg-cyan-500/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.22em] text-cyan-200/80">
+            <span
+              className="hidden md:inline-flex rounded-pill border px-[10px] py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#7cc4ff]"
+              style={{ borderColor: "rgba(56,189,248,0.22)", background: "rgba(56,189,248,0.10)" }}
+            >
               {eyebrow}
             </span>
           )}
-          <h2 className="mt-2 bg-gradient-to-r from-white via-slate-100 to-cyan-300 bg-clip-text text-3xl font-black leading-none tracking-tight text-transparent md:text-[1.75rem]">
+          <h2 className="mt-2 text-3xl font-black leading-none tracking-tight text-ink md:text-[1.75rem]">
             {title}
           </h2>
           {subtitle && (
-            <p className="mt-1.5 max-w-2xl text-sm text-slate-400">
+            <p className="mt-1.5 hidden max-w-2xl text-[13.5px] text-ink-muted md:block">
               {subtitle}
             </p>
           )}
         </div>
 
         {actions && (
-          <div className="flex w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center md:w-auto md:min-w-0 md:justify-end">
+          <div className="hidden w-full flex-col gap-2 sm:flex-row sm:flex-wrap sm:justify-center md:flex md:w-auto md:min-w-0 md:justify-end">
             {actions}
           </div>
         )}

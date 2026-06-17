@@ -40,15 +40,6 @@
   to   { opacity: 1; transform: translateX(0); }
 }
 
-/* Scale the entire UI proportionally on non-mobile screens.
-   At 1920px wide the root font stays at the default 16px.
-   Smaller/larger viewports scale linearly so the layout looks identical. */
-@media (min-width: 1024px) {
-  html {
-    font-size: calc(100vw / 120);
-  }
-}
-
 /* Global custom scrollbars */
 * {
   scrollbar-width: thin;
@@ -94,7 +85,7 @@
     @apply btn bg-red-600 text-white hover:bg-red-500;
   }
   .card {
-    @apply rounded-lg border border-slate-800 bg-slate-900 p-4 shadow;
+    @apply rounded-xl border border-hairline bg-surface p-4 shadow-inset-top shadow-card;
   }
   .input {
     @apply w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm
@@ -104,6 +95,6 @@
     @apply mb-1 block text-xs font-medium uppercase tracking-wide text-slate-400;
   }
   .badge {
-    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-semibold text-white whitespace-nowrap;
+    @apply inline-flex items-center rounded-pill px-2 py-0.5 text-[10px] font-semibold whitespace-nowrap;
   }
 }
