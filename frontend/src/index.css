@@ -3,6 +3,9 @@
 @tailwind utilities;
 
 @layer base {
+  html {
+    font-size: 14px;
+  }
   body {
     @apply min-h-screen font-sans antialiased;
   }
