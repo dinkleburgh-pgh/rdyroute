@@ -26,6 +26,7 @@ def _now() -> datetime:
 @router.get("", response_model=list[NoticeOut])
 def list_notices(
     active_only: bool = Query(default=True),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = select(Notice).order_by(Notice.created_at.desc())

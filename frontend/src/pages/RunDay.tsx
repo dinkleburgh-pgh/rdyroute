@@ -20,7 +20,6 @@ import type { TruckNote, TruckStatus, TruckWithState } from "../types";
 import {
   buildOperationalDayContext,
   countLoaded,
-  countUnloadedFromContext,
   effectiveOperationalStatus,
   effectiveStatus,
   isScheduledOff,
@@ -132,20 +131,35 @@ export default function RunDay() {
     [board, loadDay, holidayLoad],
   );
 
-  const unloadScheduleContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false),
+  // Count trucks that actually dispatched today (loaded to run on unloadsDay).
+  // Excludes: pure spare trucks without a route assignment, trucks scheduled off,
+  // and trucks in shop/oos status that never ran their route.
+  // OOS trucks covered by a spare are excluded (the spare is included instead).
+  const unloadActiveTrucks = useMemo(
+    () =>
+      board.filter((t) => {
+        if (
+          t.truck_type === "Spare" &&
+          t.route_swap_route == null &&
+          t.state?.oos_spare_route == null
+        )
+          return false;
+        if (!holidayUnload && isScheduledOff(t, unloadsDay)) return false;
+        const raw = (t.state?.status ?? "dirty") as TruckStatus;
+        return raw !== "shop" && raw !== "oos";
+      }),
     [board, unloadsDay, holidayUnload],
   );
-  const unloadTotal = unloadScheduleContext.activeTrucks.length;
-  const unloadContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, true),
-    [board, unloadsDay, holidayUnload],
-  );
+  const unloadTotal = unloadActiveTrucks.length;
   const unloadDone = useMemo(
-    () => countUnloadedFromContext(unloadContext),
-    [unloadContext],
+    () =>
+      unloadActiveTrucks.filter((t) => {
+        const raw = (t.state?.status ?? "dirty") as TruckStatus;
+        return raw === "unloaded" || raw === "loaded";
+      }).length,
+    [unloadActiveTrucks],
   );
-  const unloadSpareCount = unloadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
+  const unloadSpareCount = unloadActiveTrucks.filter((t) => t.truck_type === "Spare").length;
 
   // On holiday, two days' worth of routes are loaded/unloaded in one shift.
   // The "second" day is the PREVIOUS ship day (Mon → Fri wraps back).
@@ -191,14 +205,24 @@ export default function RunDay() {
           onClose={() => setWizardOpen(false)}
         />
       )}
-      <div className="space-y-6 p-4 md:p-6">
-      {/* Page header */}
-      <div className="text-center">
-        <h2 className="text-3xl font-black tracking-tight text-indigo-400">Day Overview</h2>
-        <p className="mx-auto mt-1.5 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-0.5 text-xs font-semibold text-slate-300">
-          {runDate}
-        </p>
+      {/* Page header — matches PageHeader component style */}
+      <div className="border-b border-hairline bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.10),transparent_36%),linear-gradient(180deg,rgba(2,6,23,0.6),rgba(15,23,42,0.4))] px-3 py-3 md:px-6 md:py-4">
+        <div>
+          <span
+            className="hidden md:inline-flex rounded-pill border px-[10px] py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#7cc4ff]"
+            style={{ borderColor: "rgba(56,189,248,0.22)", background: "rgba(56,189,248,0.10)" }}
+          >
+            Operations
+          </span>
+          <h2 className="mt-2 text-3xl font-black leading-none tracking-tight text-indigo-400 md:text-[1.75rem]">
+            Day Overview
+          </h2>
+          <p className="mt-1.5 text-[13.5px] text-ink-muted">
+            {runDate} · Unload Day {unloadsDay} · Load Day {loadDay}
+          </p>
+        </div>
       </div>
+      <div className="space-y-6 p-4 md:p-6">
 
       {/* Shift Handoff Notes */}
       {(dailyNotes || canEditNotes) && (
@@ -380,7 +404,7 @@ export default function RunDay() {
                 : effectiveStatus(t, loadDay, holidayLoad);
               const truckLoadDay = holidayLoad
                 ? (isScheduledOff(t, loadDay) || isScheduledOff(t, loadNextDay)) ? loadDay2 : loadDay
-                : loadDay;
+                  : loadDay;
               return (
                 <TruckCard
                   key={t.truck_number}

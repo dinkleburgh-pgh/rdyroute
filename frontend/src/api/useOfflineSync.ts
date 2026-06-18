@@ -52,8 +52,16 @@ export function useOfflineSync(): OfflineSyncState {
 
           // Track which query keys need invalidation
           if (item.type === "create_shortage") invalidatedKeys.add("shorts");
-        } catch {
-          // Leave failed items in the queue; will retry on next online event
+        } catch (err: unknown) {
+          // 4xx errors are permanent client errors — discard the item and continue
+          const status =
+            (err as { response?: { status?: number } })?.response?.status;
+          if (status !== undefined && status >= 400 && status < 500) {
+            console.warn("[offlineSync] discarding permanently-rejected item", item.id, status);
+            await offlineQueue.remove(item.id);
+            continue;
+          }
+          // Network error or 5xx — stop replaying; retry on next online event
           break;
         }
       }

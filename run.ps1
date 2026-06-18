@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Start the ReadyRoute V2 stack (FastAPI backend + Vite/React frontend).
 
@@ -62,9 +62,43 @@ $FrontendSentinel = Join-Path $LogDir 'frontend.sentinel'  # watchdog monitors t
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-function Write-Info  ([string]$m) { Write-Host "[INFO] $m"  -ForegroundColor Cyan }
-function Write-Warn2 ([string]$m) { Write-Host "[WARN] $m"  -ForegroundColor Yellow }
-function Write-Err   ([string]$m) { Write-Host "[ERROR] $m" -ForegroundColor Red }
+function Write-Info  ([string]$m) { Write-Host "  $m"  -ForegroundColor Cyan }
+function Write-Warn2 ([string]$m) { Write-Host "  $m"  -ForegroundColor Yellow }
+function Write-Err   ([string]$m) { Write-Host "  $m" -ForegroundColor Red }
+
+function Write-Banner {
+    $w = 58
+    $line = [string]::new([char]0x2500, $w)
+    Write-Host ""
+    Write-Host "  $([char]0x250C)$line$([char]0x2510)" -ForegroundColor DarkBlue
+    Write-Host "  $([char]0x2502)$((' ' * $w))$([char]0x2502)" -ForegroundColor DarkBlue
+    Write-Host "  $([char]0x2502)$('  ReadyRoute V2'.PadRight($w))$([char]0x2502)" -ForegroundColor Blue
+    Write-Host "  $([char]0x2502)$('  Warehouse Dock Management System'.PadRight($w))$([char]0x2502)" -ForegroundColor DarkCyan
+    Write-Host "  $([char]0x2502)$((' ' * $w))$([char]0x2502)" -ForegroundColor DarkBlue
+    Write-Host "  $([char]0x2514)$line$([char]0x2518)" -ForegroundColor DarkBlue
+    Write-Host ""
+}
+
+function Write-Step ([string]$icon, [string]$label, [string]$value = '') {
+    if ($value) {
+        Write-Host "  $icon  " -NoNewline -ForegroundColor DarkCyan
+        Write-Host "$label " -NoNewline -ForegroundColor Gray
+        Write-Host $value -ForegroundColor White
+    } else {
+        Write-Host "  $icon  " -NoNewline -ForegroundColor DarkCyan
+        Write-Host $label -ForegroundColor Gray
+    }
+}
+
+function Write-Ok ([string]$label, [string]$value = '') {
+    Write-Host "  $([char]0x2714)  " -NoNewline -ForegroundColor Green
+    Write-Host "$label " -NoNewline -ForegroundColor Gray
+    Write-Host $value -ForegroundColor White
+}
+
+function Write-Divider {
+    Write-Host "  $([string]::new([char]0x2500, 58))" -ForegroundColor DarkGray
+}
 
 function Wait-HttpReady {
     param(
@@ -295,10 +329,19 @@ function Start-FrontendProcess {
     return $proc
 }
 
+Write-Banner
+
 if ($Stop -or $Restart) {
+    Write-Step "$([char]0x25A0)" "Stopping services..."
     Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
     Stop-Frontend
-    if ($Stop) { return }
+    if ($Stop) {
+        Write-Host ""
+        Write-Ok "All services stopped."
+        Write-Host ""
+        return
+    }
+    Write-Host ""
 }
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -306,6 +349,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 # ---------------------------------------------------------------------------
 # Python venv + deps
 # ---------------------------------------------------------------------------
+Write-Step "$([char]0x25B6)" "Python environment"
 $VenvPy = Join-Path $VenvDir 'Scripts\python.exe'
 
 if (-not (Test-Path $VenvPy)) {
@@ -319,26 +363,26 @@ if (-not (Test-Path $VenvPy)) {
     if (-not (Test-Path $VenvPy)) { Write-Err "venv creation failed."; exit 1 }
 }
 
-Write-Info "Using $(& $VenvPy --version 2>&1)"
+$pyVersion = (& $VenvPy --version 2>&1).ToString().Trim()
+Write-Ok "Python ready" $pyVersion
 
-Write-Info "Upgrading pip tooling..."
+Write-Step "$([char]0x25B6)" "Installing dependencies..."
 & $VenvPy -m pip install --upgrade pip setuptools wheel | Out-Null
 
 if (Test-Path 'requirements.txt') {
-    Write-Info "Installing Python requirements..."
-    & $VenvPy -m pip install --upgrade -r requirements.txt
+    & $VenvPy -m pip install --upgrade -r requirements.txt | Out-Null
+    Write-Ok "Python packages installed"
 } else {
-    Write-Warn2 "requirements.txt not found. Skipping Python deps."
+    Write-Warn2 "requirements.txt not found — skipping Python deps."
 }
 
 # ---------------------------------------------------------------------------
 # Backend (uvicorn)
 # ---------------------------------------------------------------------------
+Write-Divider
+Write-Step "$([char]0x25B6)" "Backend" "FastAPI + uvicorn  :$BackendPort"
 $existing = Test-Pid -PidFile $BackendPid
 if ($existing) {
-    # Confirm the process is actually serving — a stale PID (e.g. leftover from
-    # a previous session while Docker now owns the port) would otherwise skip
-    # port cleanup and leave the backend unreachable.
     $healthy = $false
     try {
         $null = Invoke-RestMethod "http://${BackendHost}:${BackendPort}/health" -TimeoutSec 2 -ErrorAction Stop
@@ -346,16 +390,16 @@ if ($existing) {
     } catch { }
 
     if ($healthy) {
-        Write-Info "Backend already running (PID $($existing.Id)) — http://${BackendHost}:${BackendPort}"
+        Write-Ok "Already running" "PID $($existing.Id)  http://${BackendHost}:${BackendPort}"
     } else {
-        Write-Warn2 "Backend PID $($existing.Id) alive but not responding — restarting..."
+        Write-Warn2 "PID $($existing.Id) alive but not responding — restarting..."
         Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
         $existing = $null
     }
 }
 if (-not $existing) {
     Clear-Port -Label 'backend (uvicorn)' -Port ([int]$BackendPort)
-    Write-Info "Starting FastAPI backend on http://${BackendHost}:${BackendPort}..."
+    Write-Info "Launching uvicorn..."
     $backendArgs = @('-m', 'uvicorn', 'main:app', '--host', $BackendHost, '--port', $BackendPort, '--reload')
     $proc = Start-Process -FilePath $VenvPy -ArgumentList $backendArgs `
         -WorkingDirectory $PSScriptRoot `
@@ -369,23 +413,26 @@ if (-not $existing) {
         if (Test-Path "$BackendLog.err") { Get-Content "$BackendLog.err" -Tail 40 }
         exit 1
     }
-    Write-Info "Backend started (PID $($proc.Id)). Log: $BackendLog"
+    Write-Ok "Backend started" "PID $($proc.Id)  http://${BackendHost}:${BackendPort}"
 }
 
 # ---------------------------------------------------------------------------
 # Frontend (vite)
 # ---------------------------------------------------------------------------
+Write-Divider
+Write-Step "$([char]0x25B6)" "Frontend" "React + Vite  :$FrontendPort"
 if (-not (Test-Path $FrontendDir)) {
-    Write-Warn2 "frontend/ not found - skipping frontend startup."
+    Write-Warn2 "frontend/ not found — skipping frontend startup."
 } else {
     $npm = Get-Command npm -ErrorAction SilentlyContinue
     if (-not $npm) {
         Write-Warn2 "npm not found in PATH. Install Node.js LTS to run the frontend."
     } else {
         if (-not (Test-Path (Join-Path $FrontendDir 'node_modules'))) {
-            Write-Info "Installing frontend npm dependencies (this may take a minute)..."
+            Write-Info "Installing npm dependencies (first run, may take a minute)..."
             Push-Location $FrontendDir
-            try { & $npm.Source install } finally { Pop-Location }
+            try { & $npm.Source install | Out-Null } finally { Pop-Location }
+            Write-Ok "npm packages installed"
         }
 
         $existingFE = Test-Pid -PidFile $FrontendPidF
@@ -397,21 +444,21 @@ if (-not (Test-Path $FrontendDir)) {
             } catch { }
 
             if ($feHealthy) {
-                Write-Info "Frontend already running (PID $($existingFE.Id)) - http://localhost:${FrontendPort}"
+                Write-Ok "Already running" "PID $($existingFE.Id)  http://localhost:${FrontendPort}"
             } else {
-                Write-Warn2 "Frontend PID $($existingFE.Id) alive but port $FrontendPort not responding - restarting..."
+                Write-Warn2 "PID $($existingFE.Id) alive but port $FrontendPort not responding — restarting..."
                 Stop-Frontend
                 $existingFE = $null
             }
         }
         if (-not $existingFE) {
             Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
-            Write-Info "Starting Vite dev server on http://localhost:${FrontendPort}..."
+            Write-Info "Launching Vite dev server..."
             $frontendArgs = @('run', 'dev', '--', '--host', '0.0.0.0', '--port', $FrontendPort)
             $proc = Start-FrontendProcess -ArgumentList $frontendArgs
             $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
             if ($proc.HasExited -or -not $frontendHealthy) {
-                Write-Warn2 "Primary Vite launch did not become healthy. Retrying once..."
+                Write-Warn2 "Vite didn't respond in time — retrying once..."
                 try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
                 if (Test-Path $FrontendPidF) { Remove-Item $FrontendPidF -Force -ErrorAction SilentlyContinue }
                 Start-Sleep -Seconds 1
@@ -424,7 +471,7 @@ if (-not (Test-Path $FrontendDir)) {
                 if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
                 if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
             } else {
-                Write-Info "Frontend started (PID $($proc.Id)). Log: $FrontendLog"
+                Write-Ok "Frontend started" "PID $($proc.Id)  http://localhost:${FrontendPort}"
             }
         }
     }
@@ -435,12 +482,21 @@ if (-not (Test-Path $FrontendDir)) {
 # ---------------------------------------------------------------------------
 $frontendUrl = "http://localhost:$FrontendPort"
 $backendUrl  = "http://${BackendHost}:${BackendPort}"
+
+Write-Divider
 Write-Host ""
-Write-Info "ReadyRoute V2 is up:"
-Write-Info "  Frontend : $frontendUrl"
-Write-Info "  Backend  : $backendUrl   (docs: $backendUrl/docs)"
-Write-Info "Logs in    : $LogDir"
-Write-Info "Stop with  : .\run.ps1 -Stop"
+Write-Host "  $([char]0x2713)  " -NoNewline -ForegroundColor Green
+Write-Host "ReadyRoute V2 is running" -ForegroundColor White
+Write-Host ""
+Write-Host "    App    " -NoNewline -ForegroundColor DarkGray
+Write-Host $frontendUrl -ForegroundColor Cyan
+Write-Host "    API    " -NoNewline -ForegroundColor DarkGray
+Write-Host "$backendUrl/docs" -ForegroundColor DarkCyan
+Write-Host "    Logs   " -NoNewline -ForegroundColor DarkGray
+Write-Host $LogDir -ForegroundColor DarkGray
+Write-Host "    Stop   " -NoNewline -ForegroundColor DarkGray
+Write-Host ".\run.ps1 -Stop" -ForegroundColor DarkGray
+Write-Host ""
 
 if (-not $NoBrowser) {
     try {

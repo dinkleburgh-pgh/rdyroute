@@ -19,20 +19,9 @@ import {
   countLoaded,
   countUnloadedFromContext,
 } from "../utils/truckStatus";
+import { STATUS_LABELS } from "../constants/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
-
-const STATUS_LABEL: Record<TruckStatus, string> = {
-  dirty: "Dirty",
-  unfinished: "Unfinished",
-  shop: "Shop",
-  in_progress: "In Progress",
-  unloaded: "Unloaded",
-  loaded: "Loaded",
-  off: "OFF",
-  oos: "OOS / HOLD",
-  spare: "SPARE / COV",
-};
 
 const STATUS_DOT: Record<TruckStatus, string> = {
   dirty: "bg-status-dirty",
@@ -69,6 +58,8 @@ const SIDEBAR_SECONDARY_NAV = [
   { to: "/notes", label: "Notes" },
   { to: "/trends", label: "Trends" },
   { to: "/audit", label: "Audit" },
+  { to: "/fleet-schedule", label: "Fleet Schedule" },
+  { to: "/verify-short-sheet", label: "Verify Shorts" },
   { to: "/management", label: "Management" },
 ];
 
@@ -89,11 +80,11 @@ const MOBILE_SECONDARY_NAV = [
 
 // Mirrors V1 ROLE_SCREEN_ACCESS — which nav links each role can see.
 const ROLE_NAV_ACCESS: Record<AuthRole, Set<string>> = {
-  admin: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  fleet: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  atl: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  supervisor: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
+  admin: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management"]),
+  fleet: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management"]),
+  atl: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management"]),
+  supervisor: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management"]),
+  lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management"]),
   loader: new Set(["/load", "/communications", "/audit"]),
   unloader: new Set(["/unload", "/communications"]),
   guest: new Set<string>(),
@@ -398,7 +389,7 @@ export default function Layout() {
                   STATUS_DOT[s],
                   s === "in_progress" && counts[s] > 0 && "animate-pulse",
                 )} />
-                {STATUS_LABEL[s]}
+                {STATUS_LABELS[s]}
                 <span className="absolute right-2 text-ink-muted">
                   {s === "in_progress"
                     ? inProgressTruck
@@ -435,7 +426,7 @@ export default function Layout() {
                 to={item.to}
                 className={({ isActive }) =>
                   clsx(
-                    "rounded-[9px] border border-hairline px-2 py-2 text-center text-xs font-medium transition-colors",
+                    "flex min-h-[36px] items-center justify-center rounded-[9px] border border-hairline px-2 py-1 text-center text-xs font-medium leading-tight transition-colors",
                     isActive
                       ? "bg-[rgba(59,130,246,0.13)] text-[#7cc4ff]"
                       : "bg-surface text-[#aab4c4] hover:bg-surface-2",

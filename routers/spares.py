@@ -34,6 +34,7 @@ router = APIRouter(prefix="/spares", tags=["spares"])
 def list_assignments(
     run_date: date = Query(...),
     returned: bool | None = Query(default=None, description="Filter by return status"),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = select(SpareAssignment).where(SpareAssignment.run_date == run_date)

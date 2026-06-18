@@ -4,6 +4,7 @@
  */
 import type { ReactNode } from "react";
 import type { TruckStatus } from "../../types";
+import { STATUS_LABELS } from "../../constants/truckStatus";
 
 // ---------------------------------------------------------------------------
 // Value coercion helpers (settings come back as `unknown`)
@@ -79,14 +80,4 @@ export const DEFAULT_BADGE_COLORS: Record<TruckStatus, string> = {
   spare: "#a855f7",
 };
 
-export const STATUS_LABELS: Record<TruckStatus, string> = {
-  dirty: "Dirty",
-  unfinished: "Unfinished",
-  shop: "Shop",
-  in_progress: "In Progress",
-  unloaded: "Unloaded",
-  loaded: "Loaded",
-  off: "Off",
-  oos: "OOS",
-  spare: "Spare",
-};
+export { STATUS_LABELS };

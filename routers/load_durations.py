@@ -17,7 +17,8 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import LoadDuration
+from routers.auth import get_current_user
+from models import LoadDuration, User
 from schemas import LoadDurationCreate, LoadDurationOut, PaceDailyPoint
 
 router = APIRouter(prefix="/load-durations", tags=["load-durations"])
@@ -32,6 +33,7 @@ def list_durations(
     run_date: date | None = Query(default=None),
     truck_number: int | None = Query(default=None),
     days_back: int = Query(default=_DEFAULT_LOOKBACK_DAYS, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     cutoff = date.today() - timedelta(days=days_back)
@@ -44,7 +46,7 @@ def list_durations(
 
 
 @router.post("", response_model=LoadDurationOut, status_code=status.HTTP_201_CREATED)
-def record_duration(payload: LoadDurationCreate, db: Session = Depends(get_db)):
+def record_duration(payload: LoadDurationCreate, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = LoadDuration(**payload.model_dump())
     db.add(row)
     db.commit()
@@ -55,6 +57,7 @@ def record_duration(payload: LoadDurationCreate, db: Session = Depends(get_db)):
 @router.get("/pace-average")
 def pace_average(
     lookback_days: int = Query(default=_DEFAULT_LOOKBACK_DAYS, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -82,6 +85,7 @@ def pace_average(
 def purge_abnormal(
     min_seconds: int = Query(default=120, ge=1),
     max_seconds: int = Query(default=1800, le=86400),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -106,6 +110,7 @@ def purge_abnormal(
 @router.get("/trends/daily", response_model=list[PaceDailyPoint])
 def load_pace_daily_trend(
     days_back: int = Query(default=14, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Per-day average load duration over the last N days (excluding <30s / >7200s)."""

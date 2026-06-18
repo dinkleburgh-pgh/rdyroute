@@ -15,11 +15,13 @@ from sqlalchemy.orm import Session
 
 from activity_log import append_activity_event
 from database import get_db
-from models import AppSetting, User
+from models import AppSetting, AuthRole, User
 from routers.auth import get_current_user, require_admin
 from schemas import SettingOut, SettingUpsert
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+_ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
 
 # ---------------------------------------------------------------------------
 # Well-known setting keys (informational; not enforced at the API boundary)
@@ -155,8 +157,6 @@ def list_settings(
     current_user: User = Depends(get_current_user),
 ):
     all_settings = db.scalars(select(AppSetting).order_by(AppSetting.key)).all()
-    from models import AuthRole
-    _ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
     if current_user.role in _ADMIN_ROLES:
         return all_settings
     # Non-admins only see the user-readable subset
@@ -173,8 +173,6 @@ def get_setting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from models import AuthRole
-    _ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
     if current_user.role not in _ADMIN_ROLES:
         if key not in _USER_READABLE_KEYS and not _is_user_writable(key, current_user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
@@ -198,8 +196,6 @@ def upsert_setting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from models import AuthRole
-    _ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
     if current_user.role not in _ADMIN_ROLES and not _is_user_writable(key, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     setting = db.get(AppSetting, key)

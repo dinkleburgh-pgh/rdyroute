@@ -42,6 +42,7 @@ from models import (
     Truck,
     TruckNote,
     TruckState,
+    User,
 )
 from routers.auth import require_admin, require_management_access
 
@@ -488,7 +489,7 @@ def _fetch_remote_bytes(url: str, *, timeout_seconds: int, accept: str | None = 
 # ---------------------------------------------------------------------------
 
 @router.get("/load-durations.json")
-def export_load_durations(db: Session = Depends(get_db)) -> Response:
+def export_load_durations(_admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> Response:
     rows = db.scalars(
         select(LoadDuration).order_by(LoadDuration.run_date, LoadDuration.truck_number)
     ).all()
@@ -508,6 +509,7 @@ def export_load_durations(db: Session = Depends(get_db)) -> Response:
 @router.get("/truck-states.json")
 def export_truck_states(
     run_date: date | None = Query(default=None, description="Defaults to today if omitted"),
+    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     effective_date = run_date or date.today()
@@ -542,6 +544,7 @@ def export_truck_states(
 @router.get("/audit-entries.json")
 def export_audit_entries(
     run_date: date | None = Query(default=None),
+    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     q = select(AuditEntry).order_by(
@@ -574,6 +577,7 @@ def export_audit_entries(
 @router.get("/shortages.json")
 def export_shortages(
     run_date: date | None = Query(default=None),
+    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     q = select(Shortage).order_by(
@@ -634,7 +638,7 @@ def export_activity_events(
 # ---------------------------------------------------------------------------
 
 @router.get("/backup.zip")
-def download_backup(db: Session = Depends(get_db)) -> StreamingResponse:
+def download_backup(_admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> StreamingResponse:
     """Download a ZIP archive containing all exportable data as JSON files."""
     buf = io.BytesIO()
 

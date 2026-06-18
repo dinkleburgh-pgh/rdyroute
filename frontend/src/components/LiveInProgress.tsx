@@ -11,15 +11,18 @@ import {
   useShortages,
   useTruckNotes,
   useUpsertTruckState,
+  useHolidayLoad,
 } from "../api/hooks";
 import { ShortageLogger } from "../pages/Shorts";
 import { todayIso } from "../api/client";
+import { buildOperationalDayContext } from "../utils/truckStatus";
 import type { TruckNote, TruckWithState } from "../types";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
   const { data: board } = useBoard(runDate);
   const { data: nextUp } = useNextUp(runDate);
   const { data: pace } = usePaceAverage(30);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
 
   const inProgress = useMemo(
     () => (board ?? []).find((t) => t.state?.status === "in_progress") ?? null,
@@ -34,14 +37,22 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
     [board],
   );
 
+  const loadDay = inProgress?.state?.load_day_num ?? null;
+  const scheduledTotal = useMemo(
+    () =>
+      loadDay != null
+        ? buildOperationalDayContext(board ?? [], loadDay, holidayLoad, false).activeTrucks.length
+        : 0,
+    [board, loadDay, holidayLoad],
+  );
+
   if (!inProgress) {
     return (
-      <div className="space-y-4 p-[22px_26px_40px]">
+      <div className="p-4 sm:p-[22px_26px_40px]">
         <div className="card flex flex-col items-center justify-center py-10 text-center">
           <p className="text-lg font-semibold text-st-loaded">No truck currently in progress.</p>
           <p className="mt-1 text-sm text-ink-muted">Set a next-up truck and start it to begin loading.</p>
         </div>
-        <NextUpPanel runDate={runDate} nextUp={nextUp ?? null} unloaded={unloaded} anyInProgress={false} />
       </div>
     );
   }
@@ -49,16 +60,16 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
   const dayNum = inProgress.state?.load_day_num ?? null;
 
   return (
-    <div className="p-[22px_26px_40px]">
-      {/* Eyebrow header */}
-      <div className="mb-[18px]">
+    <div className="p-4 sm:p-[22px_26px_40px]">
+      {/* Eyebrow header — hidden on mobile (shown in PageHeader instead) */}
+      <div className="mb-[18px] hidden md:block">
         <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
           <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
           Live
         </span>
       </div>
 
-      <div className="grid gap-4 items-start" style={{ gridTemplateColumns: "minmax(0,1.7fr) minmax(0,1fr)" }}>
+      <div className="grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         {/* Left column */}
         <div className="space-y-4">
           <InProgressHero
@@ -73,8 +84,7 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
 
         {/* Right column */}
         <div className="space-y-4">
-          <SessionStats inProgress={inProgress} unloaded={unloaded} loadedToday={loadedToday} paceAvgSeconds={pace?.avg_seconds ?? null} />
-          <NextUpPanel runDate={runDate} nextUp={nextUp ?? null} unloaded={unloaded} anyInProgress={true} />
+          <SessionStats inProgress={inProgress} unloaded={unloaded} loadedToday={loadedToday} paceAvgSeconds={pace?.avg_seconds ?? null} scheduledTotal={scheduledTotal} />
           <RecentFinishes loadedToday={loadedToday} />
         </div>
       </div>
@@ -242,16 +252,16 @@ function SessionStats({
   unloaded,
   loadedToday,
   paceAvgSeconds,
+  scheduledTotal,
 }: {
   inProgress: TruckWithState;
   unloaded: TruckWithState[];
   loadedToday: TruckWithState[];
   paceAvgSeconds: number | null;
+  scheduledTotal: number;
 }) {
   const loadedCount = loadedToday.length;
-  const remaining = unloaded.length;
-  // +1 for the current in-progress truck
-  const scheduledTotal = loadedCount + remaining + 1;
+  const remaining = Math.max(0, scheduledTotal - loadedCount - 1);
 
   const onPacePct = paceAvgSeconds != null && loadedCount > 0
     ? Math.round(
@@ -435,7 +445,7 @@ function InProgressHero({
         <div className="flex items-start gap-4">
           <div className="flex-1 text-center">
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Current Truck</p>
-            <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none" style={{ color: "#fbbf5c" }}>
+            <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[46px] sm:text-[58px] leading-none" style={{ color: "#fbbf5c" }}>
               #{truck.truck_number}
             </p>
             {dayLabel && (
@@ -452,7 +462,7 @@ function InProgressHero({
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Next Up</p>
             {nextUp != null ? (
               <>
-                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none" style={{ color: "#7dd3fc" }}>
+                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[46px] sm:text-[58px] leading-none" style={{ color: "#7dd3fc" }}>
                   #{nextUp}
                 </p>
                 {paceAvgSeconds != null && (
@@ -470,7 +480,7 @@ function InProgressHero({
               </>
             ) : (
               <>
-                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none text-ink-faint">—</p>
+                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[46px] sm:text-[58px] leading-none text-ink-faint">—</p>
                 <button
                   type="button"
                   onClick={() => setPickerOpen(true)}
@@ -486,7 +496,7 @@ function InProgressHero({
         {/* Timer */}
         <div className="flex flex-col items-center gap-2 py-1">
           <span
-            className="font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-[56px]"
+            className="font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-[44px] sm:text-[56px]"
             style={{ color: timerColor }}
           >
             {formatDuration(elapsed)}

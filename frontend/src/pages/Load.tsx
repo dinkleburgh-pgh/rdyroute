@@ -25,6 +25,7 @@ import {
   isScheduledOff,
 } from "../utils/truckStatus";
 import { PaceBar, useElapsed } from "../components/LiveInProgress";
+import { ChevronDown } from "lucide-react";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
@@ -49,6 +50,7 @@ export default function Load() {
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
   const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
+  const [dustCollapsed, setDustCollapsed] = useState(() => localStorage.getItem("load:dustCollapsed") === "1");
 
   const board = data ?? [];
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
@@ -231,14 +233,9 @@ export default function Load() {
     }
   }
 
-  // Dust trucks scheduled for loading and their garment status
+  // All dust trucks — show garment checklist regardless of schedule/status
   const dustGarmentTrucks = board
-    .filter(
-      (t) =>
-        t.truck_type === "Dust" &&
-        !(["off", "oos"] as string[]).includes(effectiveStatus(t, loadDay, holidayLoad)) &&
-        (holidayLoad || !isScheduledOff(t, loadDay)),
-    )
+    .filter((t) => t.truck_type === "Dust")
     .sort((a, b) => a.truck_number - b.truck_number);
 
   return (
@@ -248,35 +245,56 @@ export default function Load() {
         title="Load"
         subtitle="Start loading, finish routes, and track pace for the next run day."
         actions={<PaceBadge avgSeconds={pace?.avg_seconds ?? null} />}
+        mobileBadge={anyInProgress ? (
+          <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
+            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+            Live
+          </span>
+        ) : undefined}
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
-      {/* Dust Garments — read-only, set from Setup Day */}
-      <div className="rounded-xl border px-4 py-3" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
-        <div className="mb-2 flex items-center gap-2">
-          <DustGarmentIcon className="h-4 w-4 text-amber-400" />
+      {/* Dust Garments — read-only, collapsible */}
+      <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+          onClick={() => setDustCollapsed((c) => { const next = !c; localStorage.setItem("load:dustCollapsed", next ? "1" : "0"); return next; })}
+        >
+          <DustGarmentIcon className="h-3.5 w-3.5 shrink-0 text-amber-400" />
           <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
-          <span className="ml-auto text-xs text-ink-muted">Set from Setup Day</span>
-        </div>
-        {dustGarmentTrucks.length === 0 ? (
-          <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {dustGarmentTrucks.map((t) => (
-              <span
-                key={t.truck_number}
-                className={clsx(
-                  "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-base font-semibold",
-                  t.state?.has_dust_garment
-                    ? "border-amber-600/60 bg-amber-950/50"
-                    : "border-hairline bg-surface-3",
-                )}
-                style={t.state?.has_dust_garment ? { color: "#fcd34d" } : { color: "#6f7c8e" }}
-              >
-                #{t.truck_number}
-                {t.state?.has_dust_garment && <DustGarmentIcon className="h-5 w-5" style={{ color: "#fcd34d" }} />}
+          <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
+            {dustCollapsed && (
+              <span className="font-mono tabular-nums">
+                {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
               </span>
-            ))}
+            )}
+            <ChevronDown className={clsx("h-3.5 w-3.5 text-amber-400/60 transition-transform", dustCollapsed && "-rotate-90")} />
+          </span>
+        </button>
+        {!dustCollapsed && (
+          <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
+            {dustGarmentTrucks.length === 0 ? (
+              <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {dustGarmentTrucks.map((t) => (
+                  <span
+                    key={t.truck_number}
+                    className={clsx(
+                      "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold",
+                      t.state?.has_dust_garment
+                        ? "border-amber-600/60 bg-amber-950/50"
+                        : "border-hairline bg-surface-3",
+                    )}
+                    style={t.state?.has_dust_garment ? { color: "#fcd34d" } : { color: "#6f7c8e" }}
+                  >
+                    #{t.truck_number}
+                    {t.state?.has_dust_garment && <DustGarmentIcon className="h-3 w-3" style={{ color: "#fcd34d" }} />}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>

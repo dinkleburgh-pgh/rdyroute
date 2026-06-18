@@ -27,6 +27,8 @@ import Communications from "./pages/Communications";
 import Supervisor from "./pages/Supervisor";
 import NotesBoard from "./pages/Notes";
 import DriverNotes from "./pages/DriverNotes";
+import FleetSchedule from "./pages/FleetSchedule";
+import VerifyShortSheet from "./pages/VerifyShortSheet";
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -68,6 +70,8 @@ const router = createBrowserRouter([
       { path: "notes", element: <NotesBoard /> },
       { path: "supervisor", element: <Navigate to="/management" replace /> },
       { path: "settings", element: <Navigate to="/management" replace /> },
+      { path: "fleet-schedule", element: <FleetSchedule /> },
+      { path: "verify-short-sheet", element: <VerifyShortSheet /> },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

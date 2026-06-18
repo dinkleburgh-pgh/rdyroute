@@ -16,7 +16,8 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import Shortage
+from routers.auth import get_current_user
+from models import Shortage, User
 from schemas import ShortageCategoryPoint, ShortageCreate, ShortageDailyPoint, ShortageOut, ShortageUpdate
 from ws_manager import manager
 
@@ -46,7 +47,7 @@ SHORTS_BUTTON_MAP: dict = {
 
 
 @router.get("/categories")
-def get_shortage_categories():
+def get_shortage_categories(_user: User = Depends(get_current_user)):
     """Return the canonical shortage category/item map for the React shorts form."""
     return SHORTS_BUTTON_MAP
 
@@ -59,6 +60,7 @@ def get_shortage_categories():
 def list_shortages(
     run_date: date = Query(...),
     truck_number: int | None = Query(default=None),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = select(Shortage).where(Shortage.run_date == run_date)
@@ -72,7 +74,7 @@ def list_shortages(
 # ---------------------------------------------------------------------------
 
 @router.post("", response_model=ShortageOut, status_code=status.HTTP_201_CREATED)
-def create_shortage(payload: ShortageCreate, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def create_shortage(payload: ShortageCreate, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = Shortage(**payload.model_dump())
     db.add(row)
     db.commit()
@@ -89,6 +91,7 @@ def update_shortage(
     shortage_id: int,
     payload: ShortageUpdate,
     background_tasks: BackgroundTasks,
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     row = db.get(Shortage, shortage_id)
@@ -106,7 +109,7 @@ def update_shortage(
 
 
 @router.delete("/{shortage_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_shortage(shortage_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+def delete_shortage(shortage_id: int, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = db.get(Shortage, shortage_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shortage not found")
@@ -121,6 +124,7 @@ def clear_shortages_for_truck(
     background_tasks: BackgroundTasks,
     truck_number: int = Query(...),
     run_date: date = Query(...),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Clear all shortages for a specific truck on a run-date (used by 'reset shorts' action)."""
@@ -141,6 +145,7 @@ def clear_shortages_for_truck(
 @router.get("/trends/daily", response_model=list[ShortageDailyPoint])
 def shortage_daily_trend(
     days_back: int = Query(default=14, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Per-day total shortage quantity and entry count."""
@@ -164,6 +169,7 @@ def shortage_daily_trend(
 @router.get("/trends/by-category", response_model=list[ShortageCategoryPoint])
 def shortage_by_category_trend(
     days_back: int = Query(default=14, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Shortage quantities grouped by item category, sorted descending."""
@@ -184,7 +190,7 @@ def shortage_by_category_trend(
 
 
 @router.get("/dates", response_model=list[date])
-def shortage_dates(db: Session = Depends(get_db)):
+def shortage_dates(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Distinct dates with at least one shortage, most recent first."""
     rows = db.scalars(
         select(Shortage.run_date)

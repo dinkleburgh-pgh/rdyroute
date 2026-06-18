@@ -19,13 +19,15 @@ import uuid
 from datetime import date, timedelta
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
+from ws_manager import manager
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AuditEntry, AuditPhoto
+from routers.auth import get_current_user
+from models import AuditEntry, AuditPhoto, User
 from schemas import (
     AnomalyDay,
     AuditEntryCreate,
@@ -61,7 +63,7 @@ _ALLOWED_PHOTO_MIME = {"image/jpeg", "image/png", "image/webp", "image/gif", "im
 
 
 @router.get("/dates")
-def audit_dates(db: Session = Depends(get_db)):
+def audit_dates(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     rows = (
         db.execute(select(AuditEntry.run_date).distinct().order_by(AuditEntry.run_date.desc()))
         .scalars()
@@ -79,6 +81,7 @@ def list_audit_entries(
     run_date: date | None = Query(default=None),
     truck_number: int | None = Query(default=None),
     warn_only: bool = Query(default=False, description="Return only entries with warn_on_next_load=true"),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = select(AuditEntry).order_by(AuditEntry.recorded_at.desc())
@@ -92,11 +95,12 @@ def list_audit_entries(
 
 
 @router.post("/entries", response_model=AuditEntryOut, status_code=status.HTTP_201_CREATED)
-def create_audit_entry(payload: AuditEntryCreate, db: Session = Depends(get_db)):
+def create_audit_entry(payload: AuditEntryCreate, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     entry = AuditEntry(id=uuid.uuid4().hex, **payload.model_dump())
     db.add(entry)
     db.commit()
     db.refresh(entry)
+    background_tasks.add_task(manager.broadcast, {"type": "audit_updated"})
     return entry
 
 
@@ -104,6 +108,8 @@ def create_audit_entry(payload: AuditEntryCreate, db: Session = Depends(get_db))
 def update_audit_entry(
     entry_id: str,
     payload: AuditEntryUpdate,
+    background_tasks: BackgroundTasks,
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     entry = db.get(AuditEntry, entry_id)
@@ -113,11 +119,12 @@ def update_audit_entry(
         setattr(entry, field, value)
     db.commit()
     db.refresh(entry)
+    background_tasks.add_task(manager.broadcast, {"type": "audit_updated"})
     return entry
 
 
 @router.post("/entries/{entry_id}/warning-applied", response_model=AuditEntryOut)
-def mark_warning_applied(entry_id: str, db: Session = Depends(get_db)):
+def mark_warning_applied(entry_id: str, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Mark a load-warning as having been seen/actioned by a loader."""
     entry = db.get(AuditEntry, entry_id)
     if entry is None:
@@ -129,12 +136,13 @@ def mark_warning_applied(entry_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_audit_entry(entry_id: str, db: Session = Depends(get_db)):
+def delete_audit_entry(entry_id: str, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     entry = db.get(AuditEntry, entry_id)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
     db.delete(entry)
     db.commit()
+    background_tasks.add_task(manager.broadcast, {"type": "audit_updated"})
 
 
 # ---------------------------------------------------------------------------
@@ -144,6 +152,7 @@ def delete_audit_entry(entry_id: str, db: Session = Depends(get_db)):
 @router.get("/trends/daily")
 def audit_daily_trend(
     days_back: int = Query(default=14, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -167,6 +176,7 @@ def audit_daily_trend(
 @router.get("/trends/by-route")
 def audit_by_route(
     days_back: int = Query(default=30, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -190,6 +200,7 @@ def audit_by_route(
 @router.get("/trends/by-truck")
 def audit_by_truck(
     days_back: int = Query(default=30, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -214,6 +225,7 @@ def audit_by_truck(
 def trend_summary(
     days_back: int = Query(default=14, ge=1, le=365),
     compare_days_back: int | None = Query(default=None, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Consolidated KPI summary with optional prior-period comparison."""
@@ -287,6 +299,7 @@ def trend_summary(
 def trend_by_truck(
     truck_number: int,
     days_back: int = Query(default=30, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Daily trend for a single truck."""
@@ -312,6 +325,7 @@ def trend_by_truck(
 def trend_by_route(
     route_number: int,
     days_back: int = Query(default=30, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Daily trend for a single route."""
@@ -337,6 +351,7 @@ def trend_by_route(
 @router.get("/trends/comparison")
 def trend_comparison(
     days_back: int = Query(default=14, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Split current period in half for side-by-side trend comparison."""
@@ -386,6 +401,7 @@ def trend_comparison(
 @router.get("/active-warnings")
 def active_warnings(
     run_date: date = Query(...),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
@@ -415,6 +431,7 @@ def list_audit_photos(
     run_date: date | None = Query(default=None),
     truck_number: int | None = Query(default=None),
     entry_id: str | None = Query(default=None),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = select(AuditPhoto).order_by(AuditPhoto.uploaded_at.desc())
@@ -435,6 +452,7 @@ async def upload_audit_photo(
     caption: str = Form(default=""),
     uploaded_by: str = Form(default=""),
     file: UploadFile = File(...),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Upload a photo attached to an audit (optionally tied to an entry)."""
@@ -477,7 +495,7 @@ async def upload_audit_photo(
 
 
 @router.get("/photos/{photo_id}/file")
-def download_audit_photo(photo_id: str, db: Session = Depends(get_db)):
+def download_audit_photo(photo_id: str, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = db.get(AuditPhoto, photo_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Photo not found")
@@ -488,7 +506,7 @@ def download_audit_photo(photo_id: str, db: Session = Depends(get_db)):
 
 
 @router.delete("/photos/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_audit_photo(photo_id: str, db: Session = Depends(get_db)):
+def delete_audit_photo(photo_id: str, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = db.get(AuditPhoto, photo_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Photo not found")
@@ -504,6 +522,7 @@ def delete_audit_photo(photo_id: str, db: Session = Depends(get_db)):
 @router.get("/trends/anomalies", response_model=list[AnomalyDay])
 def audit_anomalies(
     days_back: int = Query(default=90, ge=14, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Days where audit volume diverges >2σ from the mean."""

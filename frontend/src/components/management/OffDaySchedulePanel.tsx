@@ -28,6 +28,11 @@ export default function OffDaySchedulePanel() {
     [rows, todayDayNum],
   );
 
+  const perDayCount = useMemo(
+    () => [1, 2, 3, 4, 5].map((day) => rows.filter((t) => !isScheduledOff(t, day)).length),
+    [rows],
+  );
+
   const activeRow = pinnedRow ?? hoveredRow;
   const activeDay = pinnedDay ?? hoveredDay;
 
@@ -118,6 +123,31 @@ export default function OffDaySchedulePanel() {
             ))
           )}
         </tbody>
+        {rows.length > 0 && (
+          <tfoot>
+            <tr className="bg-slate-800/60 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <td className="sticky left-0 z-10 border border-slate-700/50 bg-slate-800/80 px-1 py-1.5 text-center text-[10px] text-slate-500">
+                Total
+              </td>
+              {perDayCount.map((count, i) => {
+                const day = i + 1;
+                return (
+                  <td
+                    key={day}
+                    className={clsx(
+                      "border border-slate-700/50 px-1 py-1.5 text-center font-mono tabular-nums transition-colors",
+                      day === todayDayNum
+                        ? "bg-blue-900/30 text-blue-300"
+                        : "text-slate-300",
+                    )}
+                  >
+                    {count}
+                  </td>
+                );
+              })}
+            </tr>
+          </tfoot>
+        )}
       </table>
       {rows.length > 0 && (
         <div className="border-t border-slate-800 px-3 py-1.5 text-[10px] text-slate-500">

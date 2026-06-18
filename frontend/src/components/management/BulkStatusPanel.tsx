@@ -10,15 +10,12 @@ import { useToast } from "../../contexts/ToastContext";
 import { todayIso } from "../../api/client";
 import ConfirmDialog from "../ConfirmDialog";
 import type { TruckStatus } from "../../types";
+import { STATUS_LABELS } from "../../constants/truckStatus";
 
 const STATUSES: TruckStatus[] = [
   "dirty", "unfinished", "shop", "in_progress", "unloaded", "loaded", "off", "oos", "spare",
 ];
 
-const STATUS_LABELS: Record<TruckStatus, string> = {
-  dirty: "Dirty", unfinished: "Unfinished", shop: "Shop", in_progress: "In Progress",
-  unloaded: "Unloaded", loaded: "Loaded", off: "Off", oos: "OOS", spare: "Spare",
-};
 
 const STATUS_COLOR: Record<TruckStatus, { bg: string; text: string; ring: string }> = {
   dirty:       { bg: "bg-red-950/60",    text: "text-red-300",    ring: "ring-red-700/60" },

@@ -71,7 +71,6 @@ export default function RunDayWizard({
   const setDailyNotes = useSetDailyNotes();
   const setWizardCompleted = useSetWizardCompleted();
   const upsertSetting = useUpsertSetting();
-  const [workflowSkipped, setWorkflowSkipped] = useState(0);
 
   const dustTrucks = board.filter((t) => t.truck_type === "Dust");
   const [dustSelected, setDustSelected] = useState<Set<number>>(
@@ -99,8 +98,8 @@ export default function RunDayWizard({
   const specialTrucks = [...returningTrucks, ...spareTrucks].filter(
     (t, i, arr) => arr.findIndex((x) => x.truck_number === t.truck_number) === i,
   );
-  const canWizardMutateTruck = (t: TruckWithState) =>
-    (t.state?.state_source ?? "auto") !== "workflow";
+  // Wizard always overrides — including workflow-touched trucks
+  const canWizardMutateTruck = (_t: TruckWithState) => true;
   const editableDustTrucks = dustTrucks.filter(canWizardMutateTruck);
   const editableSpecialTrucks = specialTrucks.filter(canWizardMutateTruck);
   const [absentSelected, setAbsentSelected] = useState<Set<number>>(new Set());
@@ -124,7 +123,6 @@ export default function RunDayWizard({
   }
 
   async function saveDustAndAdvance() {
-    setWorkflowSkipped(dustTrucks.length - editableDustTrucks.length);
     await Promise.all(
       editableDustTrucks.map((t) =>
         upsert.mutateAsync({
@@ -168,16 +166,10 @@ export default function RunDayWizard({
 
   async function saveAbsentAndAdvance() {
     const tasks: Promise<unknown>[] = [];
-    let skipped = 0;
-
     // Absent trucks: mark dirty (they weren't pushed yesterday)
     for (const num of absentSelected) {
       const truck = specialTrucks.find((t) => t.truck_number === num);
       if (!truck) continue;
-      if (!canWizardMutateTruck(truck)) {
-        skipped += 1;
-        continue;
-      }
       tasks.push(upsert.mutateAsync({
         truck_number: num,
         run_date: runDate,
@@ -191,10 +183,6 @@ export default function RunDayWizard({
     // loaded/pushed the day before, so they return in an unloaded state.
     for (const t of returningTrucks) {
       if (!absentSelected.has(t.truck_number)) {
-        if (!canWizardMutateTruck(t)) {
-          skipped += 1;
-          continue;
-        }
         tasks.push(upsert.mutateAsync({
           truck_number: t.truck_number,
           run_date: runDate,
@@ -205,7 +193,6 @@ export default function RunDayWizard({
     }
 
     await Promise.all(tasks);
-    setWorkflowSkipped((prev) => prev + skipped);
     setStep(5);
   }
 
@@ -393,11 +380,6 @@ export default function RunDayWizard({
                     </button>
                   ))}
                 </div>
-              )}
-              {dustTrucks.length !== editableDustTrucks.length && (
-                <p className="text-center text-xs text-amber-400">
-                  {dustTrucks.length - editableDustTrucks.length} dust truck(s) already changed by workflow and will not be overridden.
-                </p>
               )}
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(1)}>Back</button>
@@ -665,11 +647,6 @@ export default function RunDayWizard({
                   ))}
                 </div>
               )}
-              {specialTrucks.length !== editableSpecialTrucks.length && (
-                <p className="text-center text-xs text-amber-400">
-                  {specialTrucks.length - editableSpecialTrucks.length} truck(s) already moved in workflow and will be left alone.
-                </p>
-              )}
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(3)}>Back</button>
                 <button className="flex-1 btn-primary text-sm" disabled={upsert.isPending} onClick={saveAbsentAndAdvance}>Save & Continue</button>
@@ -682,11 +659,6 @@ export default function RunDayWizard({
           {step === 5 && (
             <div className="space-y-4">
               <p className="text-center text-xl font-extrabold text-slate-100">Add any notes about today.</p>
-              {workflowSkipped > 0 && (
-                <div className="rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
-                  Wizard override skipped {workflowSkipped} truck(s) because they were already touched by downstream workflow.
-                </div>
-              )}
               <textarea
                 className="input w-full resize-none text-sm"
                 rows={4}
