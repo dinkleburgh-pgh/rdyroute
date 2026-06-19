@@ -8,10 +8,10 @@
  */
 import { useState, useMemo } from "react";
 import { todayIso } from "../api/client";
-import { useBoard, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useHolidayLoad, useRouteSwapLog } from "../api/hooks";
+import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useRouteSwapLog } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
-import type { TruckWithState, RouteSwap } from "../types";
+import type { TruckWithState, SpareAssignment } from "../types";
 
 // ---- component -------------------------------------------------------------
 
@@ -22,12 +22,13 @@ interface Props {
 export default function RouteSwapModal({ onClose }: Props) {
   const runDate = todayIso();
   const { data: board = [] } = useBoard(runDate);
-  const { data: swaps = [], isLoading: swapsLoading } = useRouteSwaps(runDate);
+  const { data: allSpareAssignments = [], isLoading: swapsLoading } = useSpareAssignments(runDate);
+  const swaps = useMemo(() => allSpareAssignments.filter((s) => !s.returned), [allSpareAssignments]);
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { loadDay } = workdayNumbers();
 
-  const createSwap = useCreateRouteSwap();
-  const deleteSwap = useDeleteRouteSwap();
+  const assignSpare = useAssignSpare();
+  const deleteSpare = useDeleteSpare();
   const { data: swapLog = [] } = useRouteSwapLog(60);
 
   // Per route_truck: ordered list of the last 2 distinct load_on_truck values used historically
@@ -55,8 +56,8 @@ export default function RouteSwapModal({ onClose }: Props) {
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   // Sets for quick lookups
-  const swapRouteSet = new Set(swaps.map((s) => s.route_truck));
-  const swapLoadOnSet = new Set(swaps.map((s) => s.load_on_truck));
+  const swapRouteSet = new Set(swaps.map((s) => s.covering_route_truck));
+  const swapLoadOnSet = new Set(swaps.map((s) => s.spare_truck_number));
 
   // OOS trucks with no swap yet — shown as prefill rows.
   // Only include trucks that actually run on the load day (not scheduled off).
@@ -71,7 +72,7 @@ export default function RouteSwapModal({ onClose }: Props) {
 
   async function addOosSwap(routeTruckNum: number, loadOnTruckNum: number) {
     try {
-      await createSwap.mutateAsync({ run_date: runDate, route_truck: routeTruckNum, load_on_truck: loadOnTruckNum, two_way: false });
+      await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: loadOnTruckNum, covering_route_truck: routeTruckNum });
       setOosLoadOns((prev) => { const n = { ...prev }; delete n[routeTruckNum]; return n; });
     } catch (err: unknown) {
       console.error("OOS swap save failed", err);
@@ -186,7 +187,7 @@ export default function RouteSwapModal({ onClose }: Props) {
     if (rt === lo) { setError("Route truck and load-on truck must be different."); return; }
     setError(null);
     try {
-      await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, two_way: false });
+      await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: lo, covering_route_truck: rt });
       setRouteTruck("");
       setLoadOnTruck("");
     } catch (err: unknown) {
@@ -195,8 +196,8 @@ export default function RouteSwapModal({ onClose }: Props) {
     }
   }
 
-  function handleDelete(s: RouteSwap) {
-    deleteSwap.mutate({ id: s.id, runDate, alsoReciprocal: false });
+  function handleDelete(s: SpareAssignment) {
+    deleteSpare.mutate(s.id);
   }
 
   return (
@@ -274,14 +275,14 @@ export default function RouteSwapModal({ onClose }: Props) {
                     className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <span className="text-xl font-black text-red-400">#{s.route_truck}</span>
+                      <span className="text-xl font-black text-red-400">#{s.covering_route_truck}</span>
                       <span className="text-base font-bold text-slate-500">→</span>
-                      <span className="text-xl font-black text-blue-300">#{s.load_on_truck}</span>
-                      <span className="text-xs text-slate-500">loads route</span>
+                      <span className="text-xl font-black text-blue-300">#{s.spare_truck_number}</span>
+                      <span className="text-xs text-slate-500">covers route</span>
                     </div>
                     <button
                       className="rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
-                      disabled={deleteSwap.isPending}
+                      disabled={deleteSpare.isPending}
                       onClick={() => handleDelete(s)}
                     >
                       Remove
@@ -358,10 +359,10 @@ export default function RouteSwapModal({ onClose }: Props) {
 
             <button
               className="btn-primary w-full"
-              disabled={!routeTruck || !loadOnTruck || createSwap.isPending}
+              disabled={!routeTruck || !loadOnTruck || assignSpare.isPending}
               onClick={handleAdd}
             >
-              {createSwap.isPending ? "Saving…" : "Add Swap"}
+              {assignSpare.isPending ? "Saving…" : "Add Swap"}
             </button>
           </section>
         </div>
