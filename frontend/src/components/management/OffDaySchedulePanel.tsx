@@ -21,11 +21,11 @@ export default function OffDaySchedulePanel() {
       .sort((a, b) => a.truck_number - b.truck_number);
   }, [fleet]);
 
-  const todayDayNum = useMemo(() => workdayNumbers().loadDay, []);
+  const { loadDay, unloadsDay } = workdayNumbers();
 
   const runningToday = useMemo(
-    () => rows.filter((t) => !isScheduledOff(t, todayDayNum)).length,
-    [rows, todayDayNum],
+    () => rows.filter((t) => !isScheduledOff(t, loadDay)).length,
+    [rows, loadDay],
   );
 
   const perDayCount = useMemo(
@@ -62,13 +62,18 @@ export default function OffDaySchedulePanel() {
                 className={clsx(
                   "border border-slate-700/50 px-1 py-1 text-center transition-colors",
                   pinnedDay === day && "bg-blue-900/30",
+                  day === loadDay && "ring-2 ring-blue-500/40 animate-pulse",
+                  day === unloadsDay && "ring-2 ring-emerald-500/40 animate-pulse",
                 )}
                 onMouseEnter={() => setHoveredDay(day)}
                 onMouseLeave={() => setHoveredDay(null)}
                 onClick={() => togglePinDay(day)}
               >
                 <div className="font-semibold text-slate-300">Day {day}</div>
-                <div className="text-[10px] font-normal text-slate-500">{DAY_LABELS[day - 1]}</div>
+                <div className="text-[10px] font-normal text-slate-500">{DAY_LABELS[day - 1]}
+                  {day === loadDay && <span className="ml-1 text-blue-400">L</span>}
+                  {day === unloadsDay && <span className="ml-1 text-emerald-400">U</span>}
+                </div>
               </th>
             ))}
           </tr>
@@ -108,6 +113,8 @@ export default function OffDaySchedulePanel() {
                       key={day}
                       className={clsx(
                         "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-opacity",
+                        day === loadDay && "ring-1 ring-inset ring-blue-500/25",
+                        day === unloadsDay && "ring-1 ring-inset ring-emerald-500/25",
                         off
                           ? highlight
                             ? "bg-red-900/50 text-red-300 opacity-100"
@@ -136,8 +143,10 @@ export default function OffDaySchedulePanel() {
                     key={day}
                     className={clsx(
                       "border border-slate-700/50 px-1 py-1.5 text-center font-mono tabular-nums transition-colors",
-                      day === todayDayNum
+                      day === loadDay
                         ? "bg-blue-900/30 text-blue-300"
+                        : day === unloadsDay
+                        ? "bg-emerald-900/30 text-emerald-300"
                         : "text-slate-300",
                     )}
                   >
@@ -151,7 +160,7 @@ export default function OffDaySchedulePanel() {
       </table>
       {rows.length > 0 && (
         <div className="border-t border-slate-800 px-3 py-1.5 text-[10px] text-slate-500">
-          {runningToday} running Day {todayDayNum} · {rows.length} total route trucks
+          <span className="text-blue-400">{runningToday}</span> running <span className="text-blue-400">Day {loadDay}</span> · <span className="text-emerald-400">{rows.filter((t) => !isScheduledOff(t, unloadsDay)).length}</span> unloading <span className="text-emerald-400">Day {unloadsDay}</span> · {rows.length} total route trucks
         </div>
       )}
     </div>
