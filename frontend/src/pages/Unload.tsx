@@ -1,7 +1,9 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useSettings, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
+import { workdayNumbers } from "../components/Clock";
+import { isScheduledOff } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
@@ -18,6 +20,10 @@ import clsx from "clsx";
  */
 export default function Unload() {
   const runDate = todayIso();
+  const { unloadsDay: computedUnloadsDay } = workdayNumbers();
+  const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
+  const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
+  const { data: holidayUnload } = useHolidayUnload(runDate);
   const { data } = useBoard(runDate);
   const { data: batches } = useBatchSummary(runDate);
   const { data: settings } = useSettings();
@@ -36,27 +42,26 @@ export default function Unload() {
   // Trucks marked unloaded this session — card stays in dirty section with Undo until navigation.
   const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
 
-  // Include spare trucks in dirty/unfinished/unloaded views so idle dirty
-  // spares show up in the Unload page alongside route trucks.
+  // Fleet Schedule is the single source of truth for which trucks appear.
+  // Covering spares always included; pure spares excluded; route trucks included
+  // iff they run on unloadsDay per scheduled_off_days.
   const allTrucks = useMemo(
     () =>
-      (data ?? []).filter(
-        (t) =>
-          t.truck_type !== "Spare" ||
-          t.route_swap_route != null ||
-          t.state?.oos_spare_route != null ||
-          (t.state?.status === "dirty" || t.state == null),
-      ),
-    [data],
+      (data ?? []).filter((t) => {
+        if (t.route_swap_route != null || t.state?.oos_spare_route != null) return true;
+        if (t.truck_type === "Spare") return false;
+        return holidayUnload || !isScheduledOff(t, unloadsDay);
+      }),
+    [data, unloadsDay, holidayUnload],
   );
+  // "Needs unloading" = any truck in allTrucks not yet unloaded/loaded/unfinished.
   const dirty = useMemo(
     () =>
-      allTrucks.filter(
-        (t) =>
-          t.state?.status === "dirty" ||
-          t.state == null ||
-          recentlyUnloaded.has(t.truck_number),
-      ),
+      allTrucks.filter((t) => {
+        if (recentlyUnloaded.has(t.truck_number)) return true;
+        const s = t.state?.status;
+        return s !== "unloaded" && s !== "loaded" && s !== "unfinished";
+      }),
     [allTrucks, recentlyUnloaded],
   );
   const dirtyRoute = useMemo(

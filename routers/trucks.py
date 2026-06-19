@@ -150,23 +150,31 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 status = TruckStatus.unfinished
             elif prior.status in {TruckStatus.oos, TruckStatus.shop}:
                 status = prior.status
-            elif scheduled_off_today:
-                status = TruckStatus.off
-            elif used_yesterday:
-                status = TruckStatus.dirty
             elif prior.status == TruckStatus.dirty:
-                # Truck was dirty yesterday and not yet processed — carry forward as dirty.
-                # It's physically at the dock waiting to be unloaded; do not reset to unloaded.
+                # Truck is physically at the dock waiting to be unloaded. Carry forward
+                # regardless of the next load day's schedule.
+                status = TruckStatus.dirty
+            elif used_yesterday:
+                # Truck was in loaded/in_progress state yesterday — it definitely dispatched
+                # and returned dirty today, regardless of today's load schedule.
                 status = TruckStatus.dirty
             elif prior.status == TruckStatus.unloaded and truck.truck_type != "Spare":
-                # Non-spare was unloaded yesterday. Whether it ran depends on its schedule:
-                # - Scheduled off yesterday → it didn't dispatch → stays unloaded (ready to load)
-                # - NOT scheduled off yesterday → it ran its route → came back dirty
+                # Non-spare was unloaded yesterday. Check if it actually dispatched by looking
+                # at the UNLOAD day schedule (prev_load_day_num = today's unload day number).
+                # Resolve this BEFORE scheduled_off_today so a truck scheduled off for
+                # tomorrow's load doesn't wrongly get "off" status when it ran today.
                 prev_sched_off = (
                     prev_load_day_num is not None
                     and prev_load_day_num in (truck.scheduled_off_days or [])
                 )
-                status = TruckStatus.unloaded if prev_sched_off else TruckStatus.dirty
+                if not prev_sched_off:
+                    status = TruckStatus.dirty    # dispatched → came back dirty
+                elif scheduled_off_today:
+                    status = TruckStatus.off      # didn't dispatch + not loading tonight
+                else:
+                    status = TruckStatus.unloaded  # didn't dispatch + active tonight
+            elif scheduled_off_today:
+                status = TruckStatus.off
             elif prior.status in {TruckStatus.off, TruckStatus.unloaded, TruckStatus.spare}:
                 status = TruckStatus.unloaded
             else:

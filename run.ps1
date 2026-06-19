@@ -141,6 +141,37 @@ function Stop-Tracked {
     if (Test-Path $PidFile) { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
 }
 
+function Stop-Backend {
+    Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
+
+    # uvicorn --reload spawns a watcher + a worker child. Kill any remaining
+    # listeners on the backend port, including ghost PIDs (process died but
+    # kernel socket not yet released) by sweeping WMI for uvicorn orphans.
+    $port = [int]$BackendPort
+    Start-Sleep -Milliseconds 600
+    $listeners = Get-PortListeners -Port $port
+    foreach ($o in $listeners) {
+        $exists = Get-Process -Id $o.Pid -ErrorAction SilentlyContinue
+        if ($exists) {
+            Write-Info "Killing orphaned uvicorn worker PID $($o.Pid)..."
+            Invoke-TaskKill -ProcessId $o.Pid
+        } else {
+            # Ghost PID — process is gone but socket lingers. Sweep WMI for any
+            # python process whose command line matches our stack.
+            Write-Warn2 "Ghost socket on port $port (PID $($o.Pid) no longer exists). Sweeping uvicorn orphans via WMI..."
+            $orphans = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+                $_.Name -match '^python.*\.exe$' -and
+                $_.CommandLine -match 'uvicorn|main:app|multiprocessing|spawn_main'
+            }
+            foreach ($p in $orphans) {
+                Write-Info "Killing orphan $($p.Name) PID $($p.ProcessId)..."
+                Invoke-TaskKill -ProcessId $p.ProcessId
+            }
+        }
+    }
+    Start-Sleep -Milliseconds 800
+}
+
 function Get-PortListeners {
     param([int]$Port)
     $results = @()
@@ -333,7 +364,7 @@ Write-Banner
 
 if ($Stop -or $Restart) {
     Write-Step "$([char]0x25A0)" "Stopping services..."
-    Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
+    Stop-Backend
     Stop-Frontend
     if ($Stop) {
         Write-Host ""

@@ -334,17 +334,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         if (t.truck_type === "Spare" && t.state?.status !== "oos") {
           const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
           const isOosCoverage = coveredRoute != null && truckStatusByNumber.get(coveredRoute) === "oos";
-          const s = effectiveStatus(t, runDayNum, holidayLoad);
+          const s = effectiveStatus(t, runUnloadsDay, holidayUnload);
           if (isOosCoverage) {
-            // This spare is covering an OOS route — it matches its real
-            // lifecycle status (unloaded, loaded, in_progress, etc.)
             return fleetFilters.has(s);
           }
           const isIdle = s === "dirty" || s === "off" || s === "unloaded";
-          // Idle spares match the "spare" filter; active spares match their lifecycle filter
           return isIdle ? fleetFilters.has("spare") : fleetFilters.has(s);
         }
-        return fleetFilters.has(effectiveStatus(t, runDayNum, holidayLoad));
+        return fleetFilters.has(effectiveStatus(t, runUnloadsDay, holidayUnload));
       });
     }
     if (filter === "all") return data;
@@ -626,7 +623,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             rows.push(...filtered);
           }
           const renderTruckCard = (truck: TruckWithState, index: number) => {
-            const status = effectiveStatus(truck, runDayNum, holidayLoad);
+            const status = fleetMode
+              ? effectiveStatus(truck, runUnloadsDay, holidayUnload)
+              : effectiveStatus(truck, runDayNum, holidayLoad);
             const isUnloadView = filter === "dirty" || filter === "unloaded";
             const isLoadView = filter === "loaded";
             let chipDay: number | undefined;
@@ -744,9 +743,16 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       )}
                     </div>
                     <span className="flex min-h-[1.5rem] flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
-                      <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
-                        {STATUS_LABELS[status]}
-                      </span>
+                      {fleetMode && status === "off" ? (
+                        <span className="badge bg-slate-600 text-slate-200">U Off</span>
+                      ) : (
+                        <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
+                          {STATUS_LABELS[status]}
+                        </span>
+                      )}
+                      {fleetMode && !holidayLoad && isScheduledOff(truck, runDayNum) && status !== "off" && (
+                        <span className="badge bg-slate-600 text-slate-200">L Off</span>
+                      )}
                       {!fleetMode && filter === "dirty" && truck.state?.priority_hold && (
                         <motion.span
                           animate={{ opacity: [1, 0.6, 1] }}

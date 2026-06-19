@@ -1,5 +1,9 @@
 /**
  * Truck tile card used on the Day Overview (RunDay) grids. Extracted from RunDay.tsx.
+ *
+ * "Unloaded" status cards use a compact fleet-style horizontal layout (number
+ * top-left, badge top-right) to visually distinguish done-unloads and load-ready
+ * trucks from the active-workflow cards which keep the centered tall layout.
  */
 import { useMemo, useState } from "react";
 import clsx from "clsx";
@@ -15,6 +19,7 @@ export default function TruckCard({
   dayNum,
   isExtraDay,
   notes,
+  context,
 }: {
   t: TruckWithState;
   status: TruckStatus;
@@ -23,6 +28,7 @@ export default function TruckCard({
   dayNum?: number;
   isExtraDay?: boolean;
   notes?: TruckNote[];
+  context?: "unload" | "load";
 }) {
   const [notePopoverOpen, setNotePopoverOpen] = useState(false);
   const visibleNotes = useMemo(
@@ -32,6 +38,128 @@ export default function TruckCard({
     [notes, dayNum],
   );
   const showNotes = visibleNotes.length > 0 && (status === "in_progress" || status === "unloaded");
+
+  const statusBadge = status === "off" && context ? (
+    <span
+      className={clsx(
+        "rounded px-1.5 py-0.5 text-xs font-semibold",
+        context === "unload"
+          ? "bg-slate-700 text-slate-300"
+          : "bg-blue-950 text-blue-400 ring-1 ring-blue-800/60",
+      )}
+    >
+      {context === "unload" ? "U Off" : "L Off"}
+    </span>
+  ) : (
+    <span
+      className={clsx(
+        "rounded px-1.5 py-0.5 text-xs font-semibold text-white",
+        STATUS_BG[status],
+      )}
+    >
+      {STATUS_LABELS[status]}
+    </span>
+  );
+
+  const dayChip = dayNum != null ? (
+    <span
+      className={clsx(
+        "rounded-full px-2 py-0.5 text-[10px] font-semibold",
+        isExtraDay
+          ? "bg-amber-900/60 text-amber-300"
+          : "bg-blue-900/60 text-blue-300",
+      )}
+    >
+      Day {dayNum}
+    </span>
+  ) : null;
+
+  const coverageBadge = coveringSpare ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
+      Cov. #{coveringSpare.truck_number}
+    </span>
+  ) : t.route_swap_route != null && t.truck_type !== "Spare" ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
+      Cov. #{t.route_swap_route}
+    </span>
+  ) : null;
+
+  // Fleet-style horizontal card for unloaded trucks
+  if (status === "unloaded") {
+    return (
+      <AnimateCard
+        className={clsx(
+          "card relative flex flex-col gap-1 p-2.5 transition-opacity min-h-[5rem]",
+          done && "opacity-40",
+          showNotes && "ring-1 ring-violet-500/50",
+        )}
+      >
+        {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+          <span
+            className="absolute right-2 top-2 inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
+            title="Garments assigned"
+          >
+            <DustGarmentIcon className="h-3 w-3 text-amber-300" />
+          </span>
+        )}
+        {/* Top row: number left, badges right */}
+        <div className="flex w-full items-start justify-between gap-2">
+          <span
+            className={clsx(
+              "text-3xl font-extrabold tabular-nums leading-none",
+              STATUS_TEXT[status],
+            )}
+          >
+            {t.truck_number}
+          </span>
+          <div className="flex flex-col items-end gap-0.5">
+            {statusBadge}
+            {t.state?.needs_checked && (
+              <span className="rounded-full bg-amber-900/60 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">
+                Needs Chk
+              </span>
+            )}
+            {showNotes && (
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={(e) => { e.stopPropagation(); setNotePopoverOpen((o) => !o); }}
+                  className="inline-flex items-center gap-1 rounded-md border border-violet-700/40 bg-violet-950/60 px-1.5 py-0.5 text-[10px] font-medium leading-none text-violet-300 transition-colors hover:bg-violet-900/50"
+                >
+                  📝 {visibleNotes.length}
+                </button>
+                {notePopoverOpen && (
+                  <div
+                    className="absolute right-0 top-full z-30 mt-2 w-64 rounded-lg border border-slate-700 bg-slate-900 p-3 shadow-xl"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <div className="space-y-2">
+                      {visibleNotes.map((n) => (
+                        <div key={n.id}>
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-violet-400">
+                            {n.note_type === "constant" ? "Always" : n.note_type === "one_off" ? "One-off" : `Day ${n.workday_num}`}
+                          </span>
+                          <p className="mt-0.5 text-xs leading-snug text-slate-200">{n.body}</p>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+        {/* Bottom row: type, coverage, day chip */}
+        <div className="flex flex-wrap items-center gap-1">
+          <span className="text-[10px] text-slate-400">{t.truck_type}</span>
+          {coverageBadge}
+          {dayChip}
+        </div>
+      </AnimateCard>
+    );
+  }
+
+  // Default centered card for all other statuses
   return (
     <AnimateCard
       className={clsx(
@@ -57,39 +185,12 @@ export default function TruckCard({
       >
         {t.truck_number}
       </span>
-      <span
-        className={clsx(
-          "rounded px-1.5 py-0.5 text-xs font-semibold text-white",
-          STATUS_BG[status],
-        )}
-      >
-        {STATUS_LABELS[status]}
-      </span>
+      {statusBadge}
       <span className="text-xs text-slate-500">
         {t.truck_type}
       </span>
-      {coveringSpare && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
-          Cov. #{coveringSpare.truck_number}
-        </span>
-      )}
-      {t.route_swap_route != null && t.truck_type !== "Spare" && (
-        <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
-          Cov. #{t.route_swap_route}
-        </span>
-      )}
-      {dayNum != null && (
-        <span
-          className={clsx(
-            "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-            isExtraDay
-              ? "bg-amber-900/60 text-amber-300"
-              : "bg-blue-900/60 text-blue-300",
-          )}
-        >
-          Day {dayNum}
-        </span>
-      )}
+      {coverageBadge}
+      {dayChip}
       {t.state?.needs_checked && (
         <span className="rounded-full bg-amber-900/60 px-2 py-0.5 text-[10px] font-semibold text-amber-300">
           Needs Checked

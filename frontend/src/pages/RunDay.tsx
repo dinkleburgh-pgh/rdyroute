@@ -131,25 +131,14 @@ export default function RunDay() {
     [board, loadDay, holidayLoad],
   );
 
-  // Count trucks that actually dispatched today (loaded to run on unloadsDay).
-  // Excludes: pure spare trucks without a route assignment, trucks scheduled off,
-  // and trucks in shop/oos status that never ran their route.
-  // OOS trucks covered by a spare are excluded (the spare is included instead).
-  const unloadActiveTrucks = useMemo(
-    () =>
-      board.filter((t) => {
-        if (
-          t.truck_type === "Spare" &&
-          t.route_swap_route == null &&
-          t.state?.oos_spare_route == null
-        )
-          return false;
-        if (!holidayUnload && isScheduledOff(t, unloadsDay)) return false;
-        const raw = (t.state?.status ?? "dirty") as TruckStatus;
-        return raw !== "shop" && raw !== "oos";
-      }),
+  // Unload active trucks = exactly the routes running on unloadsDay per Fleet Schedule.
+  // Uses buildOperationalDayContext (same as loadContext) so the count is consistent:
+  // one entry per running route (covering spare replaces its OOS route truck).
+  const unloadContext = useMemo(
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload ?? false, false),
     [board, unloadsDay, holidayUnload],
   );
+  const unloadActiveTrucks = unloadContext.activeTrucks;
   const unloadTotal = unloadActiveTrucks.length;
   const unloadDone = useMemo(
     () =>
@@ -348,6 +337,7 @@ export default function RunDay() {
                   dayNum={truckUnloadDay}
                   isExtraDay={truckUnloadDay === unloadsDay2}
                   notes={notesByTruck.get(t.truck_number)}
+                  context="unload"
                 />
               );
             })}
@@ -414,8 +404,8 @@ export default function RunDay() {
                   coveringSpare={coveringTruck}
                   dayNum={truckLoadDay}
                   isExtraDay={truckLoadDay === loadDay2}
-
                   notes={notesByTruck.get(t.truck_number)}
+                  context="load"
                 />
               );
             })}
