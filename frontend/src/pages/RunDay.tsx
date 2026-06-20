@@ -1,5 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
 import { Clock, Calendar, Check } from "lucide-react";
 import {
@@ -26,7 +25,6 @@ import {
 } from "../utils/truckStatus";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
 import TruckCard from "./runday/TruckCard";
-import RunDayWizard from "./runday/RunDayWizard";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
@@ -66,21 +64,12 @@ export default function RunDay() {
   const loadDay    = loadDayOverride    ?? computedLoadDay;
   const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
 
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [unloadCollapsed, setUnloadCollapsed] = useState(
     () => localStorage.getItem("runday:unloadCollapsed") === "1",
   );
   const [loadCollapsed, setLoadCollapsed] = useState(
     () => localStorage.getItem("runday:loadCollapsed") === "1",
   );
-  const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => {
-    if (searchParams.get("setup") === "1") {
-      setWizardOpen(true);
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
-
   // Shift notes — visible inline on the main page, editable by supervisors+
   const { user } = useAuth();
   const canEditNotes = ["admin", "fleet", "supervisor", "lead", "atl"].includes(user?.role ?? "");
@@ -185,15 +174,6 @@ export default function RunDay() {
 
   return (
     <>
-      {wizardOpen && (
-        <RunDayWizard
-          runDate={runDate}
-          board={board}
-          loadDay={loadDay}
-          unloadsDay={unloadsDay}
-          onClose={() => setWizardOpen(false)}
-        />
-      )}
       {/* Page header — matches PageHeader component style */}
       <div className="border-b border-hairline bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.10),transparent_36%),linear-gradient(180deg,rgba(2,6,23,0.6),rgba(15,23,42,0.4))] px-3 py-3 md:px-6 md:py-4">
         <div>

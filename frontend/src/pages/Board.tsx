@@ -753,6 +753,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       {fleetMode && !holidayLoad && isScheduledOff(truck, runDayNum) && status !== "off" && (
                         <span className="badge bg-slate-600 text-slate-200">L Off</span>
                       )}
+                      {!fleetMode && !holidayUnload && isScheduledOff(truck, runUnloadsDay) && (
+                        <span className="badge bg-slate-700 text-slate-300">U Off</span>
+                      )}
+                      {!fleetMode && !holidayLoad && isScheduledOff(truck, runDayNum) && status !== "off" && (
+                        <span className="badge bg-slate-600 text-slate-200">L Off</span>
+                      )}
                       {!fleetMode && filter === "dirty" && truck.state?.priority_hold && (
                         <motion.span
                           animate={{ opacity: [1, 0.6, 1] }}

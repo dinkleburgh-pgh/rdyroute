@@ -166,14 +166,15 @@ export default function RunDayWizard({
 
   async function saveAbsentAndAdvance() {
     const tasks: Promise<unknown>[] = [];
-    // Absent trucks: mark dirty (they weren't pushed yesterday)
+    // Absent trucks: flag needs_checked (don't touch status — they may be unloaded, spare, etc.)
     for (const num of absentSelected) {
       const truck = specialTrucks.find((t) => t.truck_number === num);
       if (!truck) continue;
       tasks.push(upsert.mutateAsync({
         truck_number: num,
         run_date: runDate,
-        status: "dirty",
+        needs_checked: true,
+        wearers: truck.state?.wearers ?? 0,
         state_source: "wizard",
       }));
     }

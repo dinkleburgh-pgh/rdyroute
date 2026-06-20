@@ -72,7 +72,7 @@ export default function Load() {
   const loadDisplayTrucks = loadContext.activeTrucks;
   // Ready = unloaded and scheduled for tomorrow.
   const ready = useMemo(
-    () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true),
+    () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true && t.state?.needs_checked !== true),
     [loadDisplayTrucks],
   );
   const heldReady = useMemo(

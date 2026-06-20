@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
@@ -6,6 +6,7 @@ import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
 import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
+import RunDayWizard from "../pages/runday/RunDayWizard";
 import NoteCardsDrawer from "./NoteCardsDrawer";
 import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
@@ -151,6 +152,16 @@ export default function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Open wizard when ?setup=1 appears in the URL (e.g. from an old link or redirect)
+  useEffect(() => {
+    if (searchParams.get("setup") === "1") {
+      setWizardOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const canManageSwaps = ["admin", "fleet", "supervisor", "atl"].includes(user?.role ?? "");
 
@@ -274,7 +285,7 @@ export default function Layout() {
         <div className="flex-1 space-y-3 overflow-y-auto p-[14px]">
           {/* Setup Day button */}
           <button
-            onClick={() => nav("/?setup=1")}
+            onClick={() => setWizardOpen(true)}
             className={clsx(
               "block w-full rounded-[10px] border px-3 py-2 text-center text-sm font-medium transition-colors",
               wizardDone
@@ -625,6 +636,15 @@ export default function Layout() {
       )}
 
       {swapModalOpen && <RouteSwapModal onClose={() => setSwapModalOpen(false)} />}
+      {wizardOpen && (
+        <RunDayWizard
+          runDate={todayIso()}
+          board={board ?? []}
+          loadDay={loadDay}
+          unloadsDay={unloadsDay}
+          onClose={() => setWizardOpen(false)}
+        />
+      )}
       <NoteCardsDrawer />
     </div>
   );
