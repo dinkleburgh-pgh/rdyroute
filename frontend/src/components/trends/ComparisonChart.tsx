@@ -32,7 +32,7 @@ export default function ComparisonChart({ data, isLoading, onViewDetails }: Prop
   return (
     <TrendChartCard
       title="Period Comparison"
-      subtitle="Current vs prior period — daily audit volume"
+      subtitle="Current vs prior period — daily discrepancy volume"
       isLoading={isLoading}
       isEmpty={!isLoading && current.length === 0 && prior.length === 0}
       onViewDetails={onViewDetails}

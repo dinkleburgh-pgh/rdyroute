@@ -58,7 +58,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
   if (!summary) return null;
 
   const dailyTotals = summary.daily_series.map((d) => d.total_qty);
-  const stableStatus = summary.trend_direction === "stable" ? "Stable" : "Watch";
+
 
   return (
     <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
@@ -68,7 +68,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
           value={summary.total_qty.toLocaleString()}
           change={summary.change_vs_prior_pct}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
-          status={summary.trend_direction === "up" ? "Improving" : stableStatus}
+          status={summary.trend_direction === "down" ? "Improving" : summary.trend_direction === "up" ? "Watch" : "Stable"}
         >
           <MiniSparkline data={dailyTotals} />
         </KpiCard>
@@ -114,7 +114,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
           value={summary.trend_direction === "up" ? "↑ Up" : summary.trend_direction === "down" ? "↓ Down" : "→ Stable"}
           change={summary.change_vs_prior_pct}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
-          status={summary.trend_direction === "up" ? "Improving" : summary.trend_direction === "down" ? "Critical" : "Stable"}
+          status={summary.trend_direction === "down" ? "Improving" : summary.trend_direction === "up" ? "Critical" : "Stable"}
         />
       </motion.div>
 

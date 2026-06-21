@@ -19,7 +19,7 @@ import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 
 const METRICS: Record<string, { label: string; color: string }> = {
-  volume:     { label: "Audit Volume",    color: "text-blue-400" },
+  volume:     { label: "Discrepancy Volume",    color: "text-blue-400" },
   pace:       { label: "Load Pace",       color: "text-green-400" },
   completion: { label: "Completion Rate", color: "text-amber-400" },
   wearers:    { label: "Wearers",         color: "text-violet-400" },

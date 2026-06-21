@@ -47,20 +47,20 @@ export default function InsightsPanel({
     });
   }
 
-  // Trend direction insight
-  if (summary.trend_direction === "up" && summary.change_vs_prior_pct != null) {
-    insights.push({
-      icon: "📊",
-      iconBg: "bg-emerald-900/30",
-      title: "Volume Trending Up",
-      body: `Items removed increased ${Math.abs(summary.change_vs_prior_pct).toFixed(1)}% compared to the prior period.`,
-    });
-  } else if (summary.trend_direction === "down" && summary.change_vs_prior_pct != null) {
+  // Trend direction insight — fewer removals = improvement
+  if (summary.trend_direction === "down" && summary.change_vs_prior_pct != null) {
     insights.push({
       icon: "📉",
+      iconBg: "bg-emerald-900/30",
+      title: "Discrepancies Decreasing",
+      body: `Items removed decreased ${Math.abs(summary.change_vs_prior_pct).toFixed(1)}% vs the prior period — more items delivered.`,
+    });
+  } else if (summary.trend_direction === "up" && summary.change_vs_prior_pct != null) {
+    insights.push({
+      icon: "📊",
       iconBg: "bg-red-900/30",
-      title: "Volume Trending Down",
-      body: `Items removed decreased ${Math.abs(summary.change_vs_prior_pct).toFixed(1)}% vs the prior period.`,
+      title: "Discrepancies Increasing",
+      body: `Items removed increased ${Math.abs(summary.change_vs_prior_pct).toFixed(1)}% compared to the prior period — fewer items delivered.`,
     });
   }
 
