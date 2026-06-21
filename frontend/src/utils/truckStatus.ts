@@ -9,10 +9,10 @@ import type { TruckStatus, TruckType, TruckWithState } from "../types";
 /**
  * Returns the effective display status for a truck on a given day.
  *
- * Trucks that are scheduled off for the target day are shown as "unloaded"
- * because they should have been unloaded the previous day and are ready.
- * Spares are never auto-off, and the check is skipped entirely when holiday
- * mode is on (every route runs on holidays).
+ * V1 parity: trucks whose route is scheduled off for the target day are shown
+ * as "off" when they haven't entered an active workflow state yet (dirty or
+ * unloaded). Spares are never auto-off, and the check is skipped entirely
+ * when holiday mode is on (every route runs on holidays).
  */
 export function effectiveStatus(
   t: TruckWithState,
@@ -28,7 +28,7 @@ export function effectiveStatus(
     isScheduledOff(t, dayNum) &&
     (raw === "dirty" || raw === "unloaded")
   )
-    return "unloaded";
+    return "off";
   return raw;
 }
 

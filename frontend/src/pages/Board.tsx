@@ -690,7 +690,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       setHoldAlertTruck(truck);
                       return;
                     }
-                    if (!holidayLoad && isScheduledOff(truck, runDayNum)) {
+                    if (effectiveStatus(truck, runDayNum, holidayLoad) === "off") {
                       const alreadyCovered = routeSwaps.some((s) => s.route_truck === truck.truck_number);
                       if (alreadyCovered) {
                         setConfirmTruck(truck);
@@ -955,10 +955,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   const lastUsedNums = getSwapHistory(truck.truck_number);
                   const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                   const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
-                  const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && !holidayLoad && isScheduledOff(x, runDayNum));
+                  const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) === "off");
                   const otherTrucks = sorted.filter((x) => {
                     if (x.truck_type === "Spare") return false;
-                    if (!holidayLoad && isScheduledOff(x, runDayNum)) return false;
                     const nextStatus = effectiveStatus(x, runDayNum, holidayLoad);
                     return nextStatus !== "off" && nextStatus !== "oos";
                   });
