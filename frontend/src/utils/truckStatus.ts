@@ -154,10 +154,8 @@ export function effectiveWorkflowStatus(
  * Rules:
  * - Route trucks always count in their own effectiveStatus bucket (OOS trucks
  *   always appear in "oos", never promoted to a spare's status).
- * - A spare covering an OOS route counts in its own lifecycle bucket so the
- *   sidebar reflects whether that route is being actively serviced (loaded,
- *   in_progress, etc.) in addition to the OOS count.
- * - Spares not covering any OOS route count in the "spare" bucket.
+ * - Spares only appear when covering an OOS route — idle spares are excluded
+ *   from load/unload workflow counts entirely.
  * - Non-spare trucks on a scheduled-off day (dirty or unloaded) count as
  *   "off" unless holiday mode is active.
  */
@@ -198,17 +196,12 @@ export function buildRouteStatusCounts(
   }
 
   for (const t of trucks) {
+    // Idle spares with no coverage don't participate in load/unload workflow.
     if (t.truck_type === "Spare") {
-      // A spare actively covering an OOS route represents that route in the
-      // workflow — count it under its own lifecycle status.
       const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
       if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
         out[statusFor(t)] += 1;
         out.spare += 1;
-      } else {
-        out.spare += 1;
-        const s = statusFor(t);
-        out[s] += 1;
       }
       continue;
     }
