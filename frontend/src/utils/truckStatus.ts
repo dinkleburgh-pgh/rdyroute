@@ -6,6 +6,11 @@
 
 import type { TruckStatus, TruckType, TruckWithState } from "../types";
 
+/** Previous workday in the 1–5 day-number system (Mon→Fri on day 1). */
+export function previousWorkday(dayNum: number): number {
+  return dayNum === 1 ? 5 : dayNum - 1;
+}
+
 /**
  * Returns the effective display status for a truck on a given day.
  *
@@ -13,13 +18,15 @@ import type { TruckStatus, TruckType, TruckWithState } from "../types";
  * as "off" when they haven't entered an active workflow state yet (dirty or
  * unloaded). Spares are never auto-off, and the check is skipped entirely
  * when holiday mode is on (every route runs on holidays).
+ *
+ * A truck that was OFF the previous workday is shown as "unloaded" — it
+ * didn't run, so it's ready for today's workflow.
  */
 export function effectiveStatus(
   t: TruckWithState,
   dayNum: number,
   holidayMode = false,
 ): TruckStatus {
-  // is_oos flag persists across dates until explicitly disabled
   if (t.is_oos) return "oos";
   const raw = (t.state?.status ?? "dirty") as TruckStatus;
   if (
@@ -29,6 +36,15 @@ export function effectiveStatus(
     (raw === "dirty" || raw === "unloaded")
   )
     return "off";
+  // Truck was off yesterday and hasn't been touched today — it's ready.
+  if (
+    !holidayMode &&
+    t.truck_type !== "Spare" &&
+    !isScheduledOff(t, dayNum) &&
+    isScheduledOff(t, previousWorkday(dayNum)) &&
+    (raw === "dirty" || raw === "off")
+  )
+    return "unloaded";
   return raw;
 }
 
