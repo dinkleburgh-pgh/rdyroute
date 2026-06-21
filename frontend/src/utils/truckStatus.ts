@@ -9,10 +9,10 @@ import type { TruckStatus, TruckType, TruckWithState } from "../types";
 /**
  * Returns the effective display status for a truck on a given day.
  *
- * V1 parity: trucks whose route is scheduled off for the target day are shown
- * as "off" when they haven't entered an active workflow state yet (dirty or
- * unloaded). Spares are never auto-off, and the check is skipped entirely
- * when holiday mode is on (every route runs on holidays).
+ * Trucks that are scheduled off for the target day are shown as "unloaded"
+ * because they should have been unloaded the previous day and are ready.
+ * Spares are never auto-off, and the check is skipped entirely when holiday
+ * mode is on (every route runs on holidays).
  */
 export function effectiveStatus(
   t: TruckWithState,
@@ -28,7 +28,7 @@ export function effectiveStatus(
     isScheduledOff(t, dayNum) &&
     (raw === "dirty" || raw === "unloaded")
   )
-    return "off";
+    return "unloaded";
   return raw;
 }
 
@@ -201,9 +201,9 @@ export function buildRouteStatusCounts(
     // Unfinished trucks surface under Dirty in the sidebar.
     const s = statusFor(t);
     out[s === "unfinished" ? "dirty" : s] += 1;
-    // Also count in "off" if this truck is off for the load day but is being
-    // shown under its unload-context status (dirty/unloaded). Both counts are
-    // independently useful: unloaded = work to do today, off = not loading tomorrow.
+    // If this truck is off for the load day but its workflow status resolved to
+    // a real-work status (dirty/in_progress/loaded), count it in "off" too so
+    // the sidebar shows the off filter count alongside its workflow bucket.
     const loadDayEff = effectiveStatus(t, loadDayNum, holidayLoad);
     if (loadDayEff === "off" && s !== "off") {
       out.off += 1;
