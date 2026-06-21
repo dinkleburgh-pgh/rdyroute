@@ -74,6 +74,13 @@ export function shipDayNumber(d: Date): number {
  * Pass an explicit date when computing from a specific run_date string.
  */
 export function workdayNumbers(now = shiftRunDate()): { loadDay: number; unloadsDay: number } {
+  // Freeze weekends to the previous Friday — the work week is Mon–Fri and
+  // rolls over at 6am Monday (after 3rd shift).
+  const wd = now.getDay(); // 0=Sun, 6=Sat
+  if (wd === 0 || wd === 6) {
+    const daysBack = wd === 0 ? 2 : 1;
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+  }
   const unloadsDay = shipDayNumber(now);
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
