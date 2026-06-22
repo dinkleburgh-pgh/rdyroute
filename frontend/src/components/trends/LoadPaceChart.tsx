@@ -18,6 +18,8 @@ interface Props {
   data: PaceDailyPoint[] | undefined;
   isLoading: boolean;
   onViewDetails?: () => void;
+  trend?: "up" | "down" | "stable" | null;
+  trendLabel?: string;
 }
 
 function fmtDuration(s: number): string {
@@ -26,7 +28,7 @@ function fmtDuration(s: number): string {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
-export default function LoadPaceChart({ data, isLoading, onViewDetails }: Props) {
+export default function LoadPaceChart({ data, isLoading, onViewDetails, trend, trendLabel }: Props) {
   return (
     <TrendChartCard
       title="Load Pace"
@@ -34,6 +36,8 @@ export default function LoadPaceChart({ data, isLoading, onViewDetails }: Props)
       isLoading={isLoading}
       isEmpty={!isLoading && (!data || data.length === 0)}
       onViewDetails={onViewDetails}
+      trend={trend}
+      trendLabel={trendLabel}
     >
       {data && data.length > 0 && (
         <motion.div className="h-64" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

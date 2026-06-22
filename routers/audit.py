@@ -27,13 +27,15 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routers.auth import get_current_user
-from models import AuditEntry, AuditPhoto, User
+from models import AuditEntry, AuditPhoto, TruckState, User
 from schemas import (
     AnomalyDay,
     AuditEntryCreate,
     AuditEntryOut,
     AuditEntryUpdate,
     AuditPhotoOut,
+    QualityRatePoint,
+    QualityRateSummary,
     TrendComparison,
     TrendDailyPoint,
     TrendRoutePoint,
@@ -171,6 +173,105 @@ def audit_daily_trend(
         .order_by(AuditEntry.run_date)
     ).all()
     return [{"run_date": r.run_date, "total_qty": r.total_qty, "entry_count": r.entry_count} for r in rows]
+
+
+@router.get("/trends/quality-rate", response_model=QualityRateSummary)
+def audit_quality_rate(
+    days_back: int = Query(default=14, ge=1, le=365),
+    compare_days_back: int | None = Query(default=None, ge=1, le=365),
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Per-day quality metrics: audit entries & qty per loaded truck. Lower = better delivery quality."""
+    cutoff = date.today() - timedelta(days=days_back)
+
+    loaded = db.execute(
+        select(
+            TruckState.run_date,
+            func.count(TruckState.id).label("loaded_trucks"),
+        )
+        .where(
+            TruckState.run_date >= cutoff,
+            TruckState.status == "loaded",
+        )
+        .group_by(TruckState.run_date)
+        .order_by(TruckState.run_date)
+    ).all()
+    loaded_map = {r[0]: r[1] for r in loaded}
+
+    audits = db.execute(
+        select(
+            AuditEntry.run_date,
+            func.count(AuditEntry.id).label("entry_count"),
+            func.sum(AuditEntry.quantity).label("audit_qty"),
+        )
+        .where(AuditEntry.run_date >= cutoff)
+        .group_by(AuditEntry.run_date)
+        .order_by(AuditEntry.run_date)
+    ).all()
+    audit_map = {r[0]: (r[1], r[2] or 0) for r in audits}
+
+    all_dates = sorted(set(list(loaded_map.keys()) + list(audit_map.keys())))
+    series = []
+    for d in all_dates:
+        lt = loaded_map.get(d, 0)
+        ec, aq = audit_map.get(d, (0, 0))
+        dr = round(ec / lt, 4) if lt > 0 else None
+        ipt = round(aq / lt, 2) if lt > 0 else None
+        series.append(QualityRatePoint(run_date=d, loaded_trucks=lt, audit_entry_count=ec, audit_qty=aq, discrepancy_rate=dr, items_per_truck=ipt))
+
+    total_loaded = sum(r.loaded_trucks for r in series)
+    total_audit_qty = sum(r.audit_qty for r in series)
+    total_audit_entries = sum(r.audit_entry_count for r in series)
+    days_with_data = len(series)
+
+    avg_items = round(total_audit_qty / total_loaded, 2) if total_loaded > 0 else None
+    avg_dr = round(total_audit_entries / total_loaded, 4) if total_loaded > 0 else None
+
+    mid = len(series) // 2
+    if mid >= 2 and len(series) >= 4:
+        first_half = sum(s.items_per_truck or 0 for s in series[:mid])
+        second_half = sum(s.items_per_truck or 0 for s in series[mid:])
+        if first_half > 0:
+            change = ((second_half - first_half) / first_half) * 100
+            # lower items_per_truck = improvement, so flip polarity
+            trend_direction = "down" if change > 5 else ("up" if change < -5 else "stable")
+        else:
+            trend_direction = "stable"
+    else:
+        trend_direction = "stable"
+
+    change_vs_prior_pct = None
+    if compare_days_back and days_back > 0:
+        prior_cutoff = cutoff - timedelta(days=compare_days_back)
+        prior_cutoff_end = cutoff - timedelta(days=1)
+        prior_loaded = db.execute(
+            select(func.count(TruckState.id))
+            .where(
+                TruckState.run_date >= prior_cutoff,
+                TruckState.run_date <= prior_cutoff_end,
+                TruckState.status == "loaded",
+            )
+        ).scalar() or 0
+        prior_audit_qty = db.execute(
+            select(func.sum(AuditEntry.quantity))
+            .where(
+                AuditEntry.run_date >= prior_cutoff,
+                AuditEntry.run_date <= prior_cutoff_end,
+            )
+        ).scalar() or 0
+        if prior_loaded > 0 and avg_items:
+            prior_avg = prior_audit_qty / prior_loaded
+            change_vs_prior_pct = round(((avg_items - prior_avg) / prior_avg) * 100, 1)
+
+    return QualityRateSummary(
+        avg_items_per_truck=avg_items,
+        avg_discrepancy_rate=avg_dr,
+        days_with_data=days_with_data,
+        trend_direction=trend_direction,
+        change_vs_prior_pct=change_vs_prior_pct,
+        daily_series=series,
+    )
 
 
 @router.get("/trends/by-route")

@@ -1269,6 +1269,36 @@ export interface ShortageCategoryPoint {
   total_qty: number;
 }
 
+export interface ShortageSummary {
+  total_qty: number;
+  avg_per_day: number;
+  peak_day: string | null;
+  peak_qty: number;
+  entry_count: number;
+  days_with_data: number;
+  trend_direction: "up" | "down" | "stable";
+  change_vs_prior_pct: number | null;
+  daily_series: { run_date: string; total_qty: number; entry_count: number }[];
+}
+
+export interface QualityRatePoint {
+  run_date: string;
+  loaded_trucks: number;
+  audit_entry_count: number;
+  audit_qty: number;
+  discrepancy_rate: number | null;
+  items_per_truck: number | null;
+}
+
+export interface QualityRateSummary {
+  avg_items_per_truck: number | null;
+  avg_discrepancy_rate: number | null;
+  days_with_data: number;
+  trend_direction: string;
+  change_vs_prior_pct: number | null;
+  daily_series: QualityRatePoint[];
+}
+
 export interface AnomalyDay {
   run_date: string;
   metric: string;
@@ -1408,6 +1438,32 @@ export function useShortageDailyTrend(daysBack = 14) {
     queryKey: ["shortage-trend-daily", daysBack],
     queryFn: async () =>
       (await api.get<ShortageDailyPoint[]>("/shorts/trends/daily", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useShortageSummary(daysBack = 14, compareDaysBack?: number) {
+  return useQuery({
+    queryKey: ["shortage-summary", daysBack, compareDaysBack],
+    queryFn: async () =>
+      (
+        await api.get<ShortageSummary>("/shorts/trends/summary", {
+          params: { days_back: daysBack, compare_days_back: compareDaysBack },
+        })
+      ).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useQualityRate(daysBack = 14, compareDaysBack?: number) {
+  return useQuery({
+    queryKey: ["quality-rate", daysBack, compareDaysBack],
+    queryFn: async () =>
+      (
+        await api.get<QualityRateSummary>("/audit/trends/quality-rate", {
+          params: { days_back: daysBack, compare_days_back: compareDaysBack },
+        })
+      ).data,
     staleTime: 60_000,
   });
 }

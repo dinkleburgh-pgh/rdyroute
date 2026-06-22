@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers.auth import get_current_user
 from models import Shortage, User
-from schemas import ShortageCategoryPoint, ShortageCreate, ShortageDailyPoint, ShortageOut, ShortageUpdate
+from schemas import ShortageCategoryPoint, ShortageCreate, ShortageDailyPoint, ShortageOut, ShortageSummary, ShortageUpdate
 from ws_manager import manager
 
 router = APIRouter(prefix="/shorts", tags=["shorts"])
@@ -187,6 +187,78 @@ def shortage_by_category_trend(
         ShortageCategoryPoint(category=r[0], total_qty=r[1] or 0)
         for r in rows
     ]
+
+
+@router.get("/trends/summary", response_model=ShortageSummary)
+def shortage_trend_summary(
+    days_back: int = Query(default=14, ge=1, le=365),
+    compare_days_back: int | None = Query(default=None, ge=1, le=365),
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Consolidated shortage KPIs with trend direction and prior-period comparison."""
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.execute(
+        select(
+            Shortage.run_date,
+            func.sum(Shortage.quantity).label("total_qty"),
+            func.count(Shortage.id).label("entry_count"),
+        )
+        .where(Shortage.run_date >= cutoff)
+        .group_by(Shortage.run_date)
+        .order_by(Shortage.run_date)
+    ).all()
+
+    daily_series = [
+        ShortageDailyPoint(run_date=r[0], total_qty=r[1] or 0, entry_count=r[2])
+        for r in rows
+    ]
+    total_qty = sum(r[1] or 0 for r in rows)
+    entry_count = sum(r[2] for r in rows)
+    days_with_data = len(rows)
+    avg_per_day = round(total_qty / days_with_data, 1) if days_with_data else 0.0
+
+    peak = max(rows, key=lambda r: r[1]) if rows else None
+    peak_day = peak[0] if peak else None
+    peak_qty = peak[1] or 0 if peak else 0
+
+    mid = len(daily_series) // 2
+    if mid >= 2 and len(daily_series) >= 4:
+        first_half = sum(d.total_qty for d in daily_series[:mid])
+        second_half = sum(d.total_qty for d in daily_series[mid:])
+        change = ((second_half - first_half) / first_half) * 100
+        trend_direction = "up" if change > 5 else ("down" if change < -5 else "stable")
+    else:
+        change = None
+        trend_direction = "stable"
+
+    change_vs_prior_pct = None
+    if compare_days_back and days_back > 0:
+        prior_cutoff = cutoff - timedelta(days=compare_days_back)
+        prior_cutoff_end = cutoff - timedelta(days=1)
+        prior_total = db.execute(
+            select(func.sum(Shortage.quantity))
+            .where(
+                Shortage.run_date >= prior_cutoff,
+                Shortage.run_date <= prior_cutoff_end,
+            )
+        ).scalar()
+        if prior_total and total_qty > 0:
+            change_vs_prior_pct = round(
+                ((total_qty - prior_total) / prior_total) * 100, 1
+            )
+
+    return ShortageSummary(
+        total_qty=total_qty,
+        avg_per_day=avg_per_day,
+        peak_day=peak_day,
+        peak_qty=peak_qty,
+        entry_count=entry_count,
+        days_with_data=days_with_data,
+        trend_direction=trend_direction,
+        change_vs_prior_pct=change_vs_prior_pct,
+        daily_series=daily_series,
+    )
 
 
 @router.get("/dates", response_model=list[date])

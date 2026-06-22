@@ -864,6 +864,36 @@ class ShortageCategoryPoint(BaseModel):
     total_qty: int
 
 
+class ShortageSummary(BaseModel):
+    total_qty: int
+    avg_per_day: float
+    peak_day: date | None
+    peak_qty: int
+    entry_count: int
+    days_with_data: int
+    trend_direction: str  # "up" | "down" | "stable"
+    change_vs_prior_pct: float | None
+    daily_series: list[ShortageDailyPoint]
+
+
+class QualityRatePoint(BaseModel):
+    run_date: date
+    loaded_trucks: int
+    audit_entry_count: int
+    audit_qty: int
+    discrepancy_rate: float | None   # audit_entry_count / loaded_trucks; lower = better
+    items_per_truck: float | None    # audit_qty / loaded_trucks; lower = better
+
+
+class QualityRateSummary(BaseModel):
+    avg_items_per_truck: float | None   # total audit qty / total loaded trucks
+    avg_discrepancy_rate: float | None  # total audit entries / total loaded trucks
+    days_with_data: int
+    trend_direction: str
+    change_vs_prior_pct: float | None
+    daily_series: list[QualityRatePoint]
+
+
 class AnomalyDay(BaseModel):
     run_date: date
     metric: str           # "completion", "pace", "wearers", "audit_volume"
