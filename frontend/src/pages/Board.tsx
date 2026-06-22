@@ -583,11 +583,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               (t) => effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload) === "dirty",
             );
             unfinishedRows = filtered.filter(
-              (t) => effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload) === "unfinished" && t.state?.priority_hold !== true,
+              (t) => effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload) === "unfinished" && t.state?.priority_hold !== true && t.state?.needs_checked !== true,
             );
             priorityRows = filtered.filter((t) => t.state?.priority_hold === true);
-            dirtyRouteRows = dirtyRows.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && t.state?.priority_hold !== true);
-            dirtyCoverageRows = dirtyRows.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) && t.state?.priority_hold !== true);
+            dirtyRouteRows = dirtyRows.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && t.state?.priority_hold !== true && t.state?.needs_checked !== true);
+            dirtyCoverageRows = dirtyRows.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) && t.state?.priority_hold !== true && t.state?.needs_checked !== true);
             needsCheckedRows = filtered.filter((t) => t.state?.needs_checked === true && t.state?.priority_hold !== true);
           } else if (!fleetMode && filter === "spare") {
             coveringSpares = filtered.filter((t) =>
