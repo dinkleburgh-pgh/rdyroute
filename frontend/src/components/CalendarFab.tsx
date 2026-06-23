@@ -9,7 +9,7 @@ export default function CalendarFab({ open, onClose }: { open: boolean; onClose:
       onClick={onClose}
     >
       <div
-        className="flex flex-col rounded-xl bg-slate-900 shadow-2xl md:max-h-[85svh] md:min-w-[32rem] md:max-w-3xl"
+        className="flex flex-col rounded-xl bg-slate-900 shadow-2xl max-h-[85svh] md:min-w-[32rem] md:max-w-3xl"
         style={{ width: "calc(100vw - 2rem)", margin: "0.5rem" }}
         onClick={(e) => e.stopPropagation()}
       >
@@ -24,10 +24,14 @@ export default function CalendarFab({ open, onClose }: { open: boolean; onClose:
             <OffDaySchedulePanel compact />
           </div>
           {/* Bouncing right-edge indicator */}
-          <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-slate-900/80 to-transparent animate-bounce-edge md:hidden" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center md:hidden">
+            <div className="flex h-12 w-6 items-center justify-center rounded-l-full bg-slate-800/80 backdrop-blur animate-bounce-slide">
+              <span className="text-xs text-slate-400">&rsaquo;</span>
+            </div>
+          </div>
         </div>
       </div>
-      <style>{`@keyframes bounce-edge { 0%, 100% { opacity: 0.3; } 50% { opacity: 0.9; } } .animate-bounce-edge { animation: bounce-edge 1.5s ease-in-out 4; } .scrollbar-thin::-webkit-scrollbar { height: 4px; } .scrollbar-thin::-webkit-scrollbar-track { background: transparent; } .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 2px; }`}</style>
+      <style>{`@keyframes bounce-slide { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-4px); } } .animate-bounce-slide { animation: bounce-slide 1s ease-in-out 4; } .scrollbar-thin::-webkit-scrollbar { height: 4px; } .scrollbar-thin::-webkit-scrollbar-track { background: transparent; } .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 2px; }`}</style>
     </div>
   );
 }
