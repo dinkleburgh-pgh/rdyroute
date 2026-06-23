@@ -6,7 +6,7 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { useLocation } from "react-router-dom";
-import { FileText, Check, Bell, AlertTriangle } from "lucide-react";
+import { FileText, Check, Bell, AlertTriangle, Plus, Trash2 } from "lucide-react";
 import { useSettings, useSpareAssignments, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
@@ -53,27 +53,48 @@ export default function NoteCardsDrawer() {
   const [tab, setTab] = useState<"truck" | "mine" | "reminders">("truck");
   const [filter, setFilter] = useState<"all" | "today">("all");
 
-  // Personal note state
+  // Personal note state — stored as JSON array of { title, body }
+  interface NoteSection { title: string; body: string; id: string; }
   const personalKey = `personal_note_${user?.username ?? "unknown"}`;
-  const savedPersonal = (settings ?? []).find((s) => s.key === personalKey)?.value as string ?? "";
-  const [personalDraft, setPersonalDraft] = useState<string | null>(null);
+  const rawSaved = (settings ?? []).find((s) => s.key === personalKey)?.value;
+  const savedSections = useMemo((): NoteSection[] => {
+    if (!rawSaved) return [];
+    if (typeof rawSaved === "string") {
+      try { return JSON.parse(rawSaved); } catch { return [{ title: "", body: rawSaved, id: "legacy" }]; }
+    }
+    return [];
+  }, [rawSaved]);
+  const [sections, setSections] = useState<NoteSection[] | null>(null);
   const [noteSaved, setNoteSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const currentSections = sections ?? savedSections;
+
   useEffect(() => {
-    if (personalDraft === null && savedPersonal !== "") setPersonalDraft(savedPersonal);
-  }, [savedPersonal, personalDraft]);
+    if (sections === null && savedSections.length > 0) setSections(savedSections);
+  }, [savedSections, sections]);
 
-  const personalText = personalDraft ?? savedPersonal;
-
-  function handlePersonalChange(val: string) {
-    setPersonalDraft(val);
+  function saveSections(s: NoteSection[]) {
+    setSections(s);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      await upsert.mutateAsync({ key: personalKey, value: val });
+      await upsert.mutateAsync({ key: personalKey, value: JSON.stringify(s) });
       setNoteSaved(true);
       setTimeout(() => setNoteSaved(false), 1500);
     }, 800);
+  }
+
+  function addSection() {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    saveSections([...currentSections, { id, title: "", body: "" }]);
+  }
+
+  function removeSection(id: string) {
+    saveSections(currentSections.filter((s) => s.id !== id));
+  }
+
+  function updateSection(id: string, field: "title" | "body", val: string) {
+    saveSections(currentSections.map((s) => s.id === id ? { ...s, [field]: val } : s));
   }
 
   const yesterday = useMemo(() => {
@@ -221,20 +242,41 @@ export default function NoteCardsDrawer() {
 
             {/* My Notes tab */}
             {tab === "mine" && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-emerald-400" />
                   <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">{user?.username}</span>
                   {noteSaved && <span className="text-[10px] text-emerald-500 ml-auto">Saved</span>}
                   {upsert.isPending && !noteSaved && <span className="text-[10px] text-slate-500 ml-auto">Saving…</span>}
                 </div>
-                <textarea
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
-                  rows={12}
-                  placeholder="Personal notes visible only to you…"
-                  value={personalText}
-                  onChange={(e) => handlePersonalChange(e.target.value)}
-                />
+                {currentSections.map((sec) => (
+                  <div key={sec.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-sm font-semibold text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                        placeholder="Section title (optional)"
+                        value={sec.title}
+                        onChange={(e) => updateSection(sec.id, "title", e.target.value)}
+                      />
+                      <button onClick={() => removeSection(sec.id)} className="rounded p-1 text-slate-500 hover:text-red-400 transition-colors" title="Remove section">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <textarea
+                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
+                      rows={4}
+                      placeholder="Notes…"
+                      value={sec.body}
+                      onChange={(e) => updateSection(sec.id, "body", e.target.value)}
+                    />
+                  </div>
+                ))}
+                <button
+                  onClick={addSection}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-700 py-3 text-sm font-medium text-slate-500 transition-colors hover:border-emerald-600 hover:text-emerald-400"
+                >
+                  <Plus className="h-4 w-4" /> Add section
+                </button>
               </div>
             )}
 
