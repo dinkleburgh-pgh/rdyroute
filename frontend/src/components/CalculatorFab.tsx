@@ -88,6 +88,8 @@ export default function CalculatorFab() {
   const eqBg = "bg-sky-600 text-white hover:bg-sky-500 active:bg-sky-400";
   const auxBg = "bg-slate-800/60 text-slate-400 hover:bg-slate-700/60";
 
+  const pctOp = "bg-indigo-900/30 text-indigo-400 hover:bg-indigo-800/40 border border-indigo-700/30 rounded-lg text-[10px] font-semibold active:scale-95 select-none";
+
   return (
     <>
       <button
@@ -112,11 +114,11 @@ export default function CalculatorFab() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 300, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="flex h-full w-full flex-col bg-slate-900 pt-4 shadow-2xl md:max-w-sm md:rounded-2xl md:p-4"
+              className="flex h-full w-full flex-col bg-slate-900 shadow-2xl md:max-w-sm md:rounded-2xl md:p-4"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
-              <div className="flex shrink-0 items-center justify-between px-4 pb-3 md:px-0">
+              <div className="flex shrink-0 items-center justify-between px-3 pb-2 pt-3 md:px-0 md:pt-0">
                 <div className="flex items-center gap-2">
                   <Calculator className="h-4 w-4 text-sky-400" />
                   <span className="text-sm font-semibold text-slate-100">Calculator</span>
@@ -127,9 +129,9 @@ export default function CalculatorFab() {
                 </button>
               </div>
 
-              {/* Display + History combined */}
-              <div className="mx-4 mb-2 flex shrink-0 flex-col overflow-hidden rounded-xl bg-slate-950 md:mx-0">
-                <div className="p-3 pb-1">
+              {/* Display + History */}
+              <div className="mx-3 mb-1 flex shrink-0 flex-col overflow-hidden rounded-xl bg-slate-950 md:mx-0">
+                <div className="px-3 pb-1 pt-2">
                   <div className="text-right text-3xl font-bold tabular-nums text-slate-100 select-none">
                     {display}
                   </div>
@@ -137,27 +139,29 @@ export default function CalculatorFab() {
                     <span>{prev != null ? `${fmt(prev)} ${op ?? ""}` : "\u00a0"}</span>
                   </div>
                 </div>
-                <div className="max-h-24 overflow-y-auto border-t border-slate-800/60 px-3 py-1.5">
+                <div className="max-h-[4.5rem] overflow-y-auto border-t border-slate-800/60 px-3 py-1">
                   {tape.length > 0 ? (
                     tape.map((t, i) => (
-                      <div key={i} className="flex justify-between py-0.5 text-[10px]">
+                      <div key={i} className="flex justify-between py-[1px] text-[10px]">
                         <span className="text-slate-500">{t.expr}</span>
                         <span className="font-semibold text-slate-200">= {fmt(t.result)}</span>
                       </div>
                     ))
                   ) : (
-                    <div className="text-center text-[10px] text-slate-600 py-0.5">No calculations yet</div>
+                    <div className="text-center text-[10px] text-slate-600">No calculations yet</div>
                   )}
                   {tape.length > 0 && (
-                    <button onClick={clearTape} className="mt-0.5 text-[9px] text-slate-600 hover:text-slate-400">Clear</button>
+                    <button onClick={clearTape} className="text-[9px] text-slate-600 hover:text-slate-400">Clear</button>
                   )}
                 </div>
               </div>
 
-              {/* Pack converter */}
-              <div className="mx-4 mb-2 flex shrink-0 items-center gap-2 md:mx-0">
+              {/* Quick percent buttons + pack converter */}
+              <div className="mx-3 mb-1 flex shrink-0 items-center gap-1.5 md:mx-0">
+                <button onClick={() => { const r = val * 0.5; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `50% of ${fmt(val)}`, result: r }]); }} className={`${pctOp} px-2 py-1`}>50%</button>
+                <button onClick={() => { const r = val * 0.8; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `80% of ${fmt(val)}`, result: r }]); }} className={`${pctOp} px-2 py-1`}>80%</button>
                 <select value={packItem} onChange={(e) => setPackItem(e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-xs text-slate-300 outline-none">
+                  className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] text-slate-300 outline-none">
                   <option value="">No item</option>
                   {itemsWithPack.map((i) => (
                     <option key={i.label} value={i.label}>{i.label} ({i.pack_size}/bag)</option>
@@ -171,14 +175,11 @@ export default function CalculatorFab() {
                 )}
               </div>
 
-              {/* Number pad — flex-fill to use available height */}
-              <div className="mx-4 flex flex-1 flex-col gap-1.5 md:mx-0">
-                <div className="grid flex-1 grid-cols-4 gap-1.5">
-                  <button onClick={clear} className={`${auxBg} text-amber-400 rounded-lg text-sm font-semibold active:scale-95 select-none`}><RotateCcw className="h-4 w-4" /></button>
-                  <button onClick={backspace} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}><Delete className="h-4 w-4" /></button>
-                  <button onClick={toggleSign} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}>±</button>
-                  <button onClick={clear} className={`${auxBg} text-amber-400 rounded-lg text-sm font-semibold active:scale-95 select-none`}><RotateCcw className="h-4 w-4" /></button>
-                  <button onClick={backspace} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}><Delete className="h-4 w-4" /></button>
+              {/* Number pad — fills remaining space */}
+              <div className="mx-3 flex flex-1 flex-col gap-1 pb-2 md:mx-0 md:pb-0">
+                <div className="grid flex-1 grid-cols-4 gap-1">
+                  <button onClick={clear} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none text-amber-400`}><RotateCcw className="h-4 w-4 mx-auto" /></button>
+                  <button onClick={backspace} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}><Delete className="h-4 w-4 mx-auto" /></button>
                   <button onClick={toggleSign} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}>±</button>
                   <button onClick={() => setOpState("÷")} className={`${(op ?? "") === "÷" ? "bg-sky-600 text-white" : opBg} rounded-lg text-lg font-bold active:scale-95 select-none`}>÷</button>
 
@@ -199,25 +200,17 @@ export default function CalculatorFab() {
 
                   <button onClick={() => appendDigit("0")} className={`${numBg} col-span-2 rounded-lg text-lg font-bold active:scale-95 select-none`}>0</button>
                   <button onClick={() => appendDigit(".")} className={`${numBg} rounded-lg text-lg font-bold active:scale-95 select-none`}>.</button>
-                  <button onClick={compute} className={`${eqBg} rounded-lg active:scale-95 select-none`}><Equal className="h-5 w-5" /></button>
+                  <button onClick={compute} className={`${eqBg} rounded-lg active:scale-95 select-none flex items-center justify-center`}><Equal className="h-5 w-5" /></button>
                 </div>
 
-                {/* Bottom row: percent, memory, use */}
-                <div className="grid grid-cols-5 gap-1.5">
-                  <button onClick={() => { const r = val * 0.5; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `50% of ${fmt(val)}`, result: r }]); }}
-                    className="bg-indigo-900/30 text-indigo-400 hover:bg-indigo-800/40 border border-indigo-700/30 rounded-lg py-2 text-[10px] font-semibold active:scale-95 select-none">50%</button>
-                  <button onClick={() => { const r = val * 0.8; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `80% of ${fmt(val)}`, result: r }]); }}
-                    className="bg-indigo-900/30 text-indigo-400 hover:bg-indigo-800/40 border border-indigo-700/30 rounded-lg py-2 text-[10px] font-semibold active:scale-95 select-none">80%</button>
+                <div className="grid grid-cols-5 gap-1">
                   <button onClick={memClear} className={`${auxBg} rounded-lg text-[10px] font-semibold active:scale-95 select-none`}>MC</button>
                   <button onClick={memRecall} className={`${auxBg} rounded-lg text-[10px] font-semibold active:scale-95 select-none`}>MR</button>
-                  <button onClick={useResult} className={`flex items-center justify-center gap-1 rounded-lg py-2 text-[10px] font-semibold active:scale-95 select-none ${copied ? "bg-emerald-600 text-white" : "bg-sky-600 text-white hover:bg-sky-500"}`}>
-                    {copied ? <span>Copied</span> : <><Copy className="h-3 w-3" /> Use</>}
-                  </button>
-                </div>
-
-                <div className="grid grid-cols-2 gap-1.5">
                   <button onClick={memAdd} className={`${auxBg} rounded-lg text-[10px] font-semibold active:scale-95 select-none`}>M+</button>
                   <button onClick={memSub} className={`${auxBg} rounded-lg text-[10px] font-semibold active:scale-95 select-none`}>M-</button>
+                  <button onClick={useResult} className={`flex items-center justify-center gap-1 rounded-lg text-[10px] font-semibold active:scale-95 select-none ${copied ? "bg-emerald-600 text-white" : "bg-sky-600 text-white hover:bg-sky-500"}`}>
+                    {copied ? "Copied" : <><Copy className="h-3 w-3" /> Use</>}
+                  </button>
                 </div>
               </div>
             </motion.div>
