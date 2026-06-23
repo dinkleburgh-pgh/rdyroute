@@ -211,9 +211,10 @@ def upsert_setting(
         setting.value = payload.value
     activity_payload = _setting_activity_payload(key, before_value, payload.value)
     if activity_payload is not None and before_value != payload.value:
+        is_setup = activity_payload.get("event_family") == "setup"
         append_activity_event(
             db,
-            actor_user=current_user,
+            actor_user=None if is_setup else current_user,
             event_family=str(activity_payload["event_family"]),
             event_type=str(activity_payload["event_type"]),
             run_date=activity_payload.get("run_date"),
