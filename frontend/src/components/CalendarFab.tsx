@@ -25,11 +25,18 @@ export default function CalendarFab({ open, onClose }: { open: boolean; onClose:
           <OffDaySchedulePanel compact={!expanded} />
         </div>
         {/* Bouncing right-edge arrow — fixed in viewport */}
-        <button onClick={() => setExpanded((e) => !e)} className="fixed bottom-8 right-8 z-[66] md:hidden">
-          <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 shadow-lg border border-slate-700 transition-all ${expanded ? "" : "animate-bounce-slide"}`}>
-            <span className={`text-lg font-bold text-slate-400 transition-transform ${expanded ? "rotate-180" : ""}`}>&rarr;</span>
+        <button onClick={() => setExpanded((e) => !e)} className="fixed top-1/2 z-[66] -translate-y-1/2 md:hidden right-2">
+          <div className={`flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 shadow-lg border border-slate-700 transition-all ${expanded ? "opacity-0 pointer-events-none" : "animate-bounce-slide"}`}>
+            <span className="text-lg font-bold text-slate-400">&rarr;</span>
           </div>
         </button>
+        {expanded && (
+          <button onClick={() => setExpanded(false)} className="fixed top-1/2 z-[66] -translate-y-1/2 md:hidden left-2">
+            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 shadow-lg border border-slate-700 animate-bounce-slide">
+              <span className="text-lg font-bold text-slate-400">&larr;</span>
+            </div>
+          </button>
+        )}
       </div>
       <style>{`@keyframes bounce-slide { 0%, 100% { transform: translateX(0) scale(1); } 50% { transform: translateX(-8px) scale(1.15); } } .animate-bounce-slide { animation: bounce-slide 0.8s ease-in-out 5; } .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; } .scrollbar-thin::-webkit-scrollbar-track { background: transparent; } .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 2px; }`}</style>
     </div>
