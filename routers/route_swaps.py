@@ -23,7 +23,7 @@ from notification_service import (
     coverage_removed_notification,
     dispatch_notification,
 )
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_non_guest
 from schemas import RouteSwapCreate, RouteSwapOut, RouteSwapLogOut
 
 router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
@@ -49,7 +49,7 @@ def create_swap(
     payload: RouteSwapCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """
     Create a route swap assignment.  If two_way=True, also creates the
@@ -239,7 +239,7 @@ def delete_swap(
         description="Also delete the reciprocal row if a two-way swap exists",
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """
     Delete a single swap row.  Pass also_reciprocal=true to also clear the
@@ -316,7 +316,7 @@ def clear_all_swaps(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """Remove all route swap assignments for a run date."""
     rows = db.scalars(select(RouteSwap).where(RouteSwap.run_date == run_date)).all()

@@ -89,7 +89,7 @@ const ROLE_NAV_ACCESS: Record<AuthRole, Set<string>> = {
   lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management"]),
   loader: new Set(["/load", "/communications", "/audit"]),
   unloader: new Set(["/unload", "/communications"]),
-  guest: new Set<string>(),
+  guest: new Set(["/fleet-schedule"]),
 };
 
 const ROLE_LABELS: Record<AuthRole, string> = {
@@ -178,6 +178,13 @@ export default function Layout() {
     setMoreOpen(false);
   }, [location.pathname]);
 
+  // Guests are read-only and locked to Day Overview
+  useEffect(() => {
+    if (user?.role === "guest" && location.pathname !== "/" && location.pathname !== "/fleet-schedule") {
+      nav("/", { replace: true });
+    }
+  }, [user?.role, location.pathname, nav]);
+
   const { loadDay, unloadsDay } = workdayNumbers();
   const loadDayNum = loadDay;
 
@@ -260,10 +267,15 @@ export default function Layout() {
   const roleLabel = roleOverride?.label ?? user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
   const roleBadgeCls = roleOverride?.cls ?? ROLE_BADGE[(user?.role ?? "guest") as AuthRole] ?? ROLE_BADGE.guest;
   const allowed = ROLE_NAV_ACCESS[(user?.role ?? "guest") as AuthRole] ?? new Set<string>();
-  const sidebarPrimaryNav = SIDEBAR_PRIMARY_NAV.filter((i) => allowed.has(i.to));
-  const sidebarSecondaryNav = SIDEBAR_SECONDARY_NAV.filter((i) => allowed.has(i.to));
-  const mobilePrimaryNav = MOBILE_PRIMARY_NAV.filter((i) => allowed.has(i.to));
-  const mobileSecondaryNav = MOBILE_SECONDARY_NAV.filter((i) => allowed.has(i.to));
+  const isGuest = user?.role === "guest";
+  const sidebarPrimaryNav = isGuest
+    ? [...SIDEBAR_PRIMARY_NAV, ...SIDEBAR_SECONDARY_NAV].filter((i) => allowed.has(i.to))
+    : SIDEBAR_PRIMARY_NAV.filter((i) => allowed.has(i.to));
+  const sidebarSecondaryNav = isGuest ? [] : SIDEBAR_SECONDARY_NAV.filter((i) => allowed.has(i.to));
+  const mobilePrimaryNav = isGuest
+    ? [...MOBILE_PRIMARY_NAV, ...MOBILE_SECONDARY_NAV].filter((i) => allowed.has(i.to))
+    : MOBILE_PRIMARY_NAV.filter((i) => allowed.has(i.to));
+  const mobileSecondaryNav = isGuest ? [] : MOBILE_SECONDARY_NAV.filter((i) => allowed.has(i.to));
   const shiftName = currentShift().name;
   const loadBadgeText = `L${loadDay}${holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}`;
   const unloadBadgeText = `U${unloadsDay}${holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}`;
@@ -292,19 +304,21 @@ export default function Layout() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex-1 space-y-3 overflow-y-auto p-[14px]">
+        <div className="flex-1 space-y-3 overflow-y-auto p-[14px] pt-safe">
           {/* Setup Day button */}
-          <button
-            onClick={() => setWizardOpen(true)}
-            className={clsx(
-              "block w-full rounded-[10px] border px-3 py-2 text-center text-sm font-medium transition-colors",
-              wizardDone
-                ? "border-hairline bg-surface text-ink-soft hover:bg-surface-2"
-                : "border-[rgba(245,158,11,0.30)] bg-[rgba(245,158,11,0.08)] text-[#fbbf5c] hover:bg-[rgba(245,158,11,0.15)]",
-            )}
-          >
-            {wizardDone ? "Setup Day" : "Setup Day (optional override)"}
-          </button>
+          {!isGuest && (
+            <button
+              onClick={() => setWizardOpen(true)}
+              className={clsx(
+                "block w-full rounded-[10px] border px-3 py-2 text-center text-sm font-medium transition-colors",
+                wizardDone
+                  ? "border-hairline bg-surface text-ink-soft hover:bg-surface-2"
+                  : "border-[rgba(245,158,11,0.30)] bg-[rgba(245,158,11,0.08)] text-[#fbbf5c] hover:bg-[rgba(245,158,11,0.15)]",
+              )}
+            >
+              {wizardDone ? "Setup Day" : "Setup Day (optional override)"}
+            </button>
+          )}
 
           {canManageSwaps && (
             <button
@@ -490,12 +504,12 @@ export default function Layout() {
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* App top bar — mobile shows hamburger + brand, all sizes show clock/shift/day badges */}
-        <header className="sticky top-0 z-10 flex h-[54px] items-center gap-2 border-b border-hairline bg-[rgba(13,18,28,0.7)] backdrop-blur px-[22px]">
+        <header className="sticky top-0 z-10 flex min-h-[54px] items-center gap-2 border-b border-hairline bg-[rgba(13,18,28,0.7)] backdrop-blur px-[22px] pt-safe">
           <button
             type="button"
             aria-label="Open menu"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-ink-faint hover:bg-surface hover:text-ink md:hidden"
+            className="rounded-md p-2.5 text-ink-faint hover:bg-surface hover:text-ink md:hidden"
           >
             <Menu className="h-6 w-6" />
           </button>
@@ -529,7 +543,7 @@ export default function Layout() {
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto pb-14 md:pb-0">
+        <main className="flex-1 overflow-auto pb-nav-safe md:pb-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -554,7 +568,7 @@ export default function Layout() {
                 className="fixed inset-0 z-30 bg-black/50 md:hidden"
                 onClick={() => setMoreOpen(false)}
               />
-              <div className="fixed bottom-12 inset-x-0 z-40 rounded-t-xl border-t border-hairline bg-[#0e1320] pb-2 shadow-xl md:hidden">
+              <div className="fixed inset-x-0 z-40 rounded-t-xl border-t border-hairline bg-[#0e1320] pb-2 shadow-xl md:hidden" style={{ bottom: 'calc(3rem + env(safe-area-inset-bottom))' }}>
                 <div className="flex items-center justify-between px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">More</p>
                   <button onClick={() => setMoreOpen(false)} className="text-ink-faint hover:text-ink-soft">
@@ -569,7 +583,7 @@ export default function Layout() {
                       onClick={() => setMoreOpen(false)}
                       className={({ isActive }) =>
                         clsx(
-                          "flex flex-col items-center justify-center rounded-lg px-2 py-3 text-[11px] font-semibold transition-colors",
+                          "flex flex-col items-center justify-center rounded-lg px-2 py-4 text-[11px] font-semibold transition-colors",
                           isActive
                             ? "bg-[rgba(59,130,246,0.20)] text-blue-400"
                             : "text-ink-faint hover:bg-surface hover:text-ink-soft",
@@ -596,7 +610,7 @@ export default function Layout() {
             </>
           )}
 
-          <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-hairline bg-[#0e1320] md:hidden">
+          <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-hairline bg-[#0e1320] pb-safe md:hidden">
             {mobilePrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
@@ -606,7 +620,7 @@ export default function Layout() {
                   to={item.to}
                   className={({ isActive }) =>
                     clsx(
-                      "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
+                      "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-3 text-[10px] font-semibold leading-tight transition-colors",
                       isActive ? "text-blue-400" : "text-ink-faint",
                     )
                   }
@@ -633,6 +647,7 @@ export default function Layout() {
                   "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
                   moreOpen ? "text-blue-400" : "text-ink-faint",
                 )}
+                style={{ minHeight: '44px' }}
               >
                 More
                 <span className={clsx(

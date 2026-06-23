@@ -49,6 +49,15 @@ export function useLogin() {
   });
 }
 
+export function useGuestLogin() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<TokenResponse>("/auth/guest");
+      return data;
+    },
+  });
+}
+
 export function useMe(enabled = true) {
   return useQuery({
     queryKey: ["me"],

@@ -107,19 +107,21 @@ export default function OffDaySchedulePanel() {
                 </td>
                 {[1, 2, 3, 4, 5].map((day) => {
                   const off = isScheduledOff(t, day);
-                  const highlight = off && isActive(t.truck_number, day);
+                  const highlight = isActive(t.truck_number, day);
                   return (
                     <td
                       key={day}
                       className={clsx(
-                        "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-opacity",
+                        "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-all",
                         day === loadDay && "ring-1 ring-inset ring-blue-500/25",
                         day === unloadsDay && "ring-1 ring-inset ring-emerald-500/25",
                         off
                           ? highlight
-                            ? "bg-red-900/50 text-red-300 opacity-100"
-                            : "bg-red-900/30 text-red-300/60 opacity-40"
-                          : "bg-emerald-900/40 text-emerald-300",
+                            ? "bg-red-700/60 text-red-200"
+                            : "bg-red-900/60 text-red-400"
+                          : highlight
+                            ? "bg-slate-800/50 text-slate-500"
+                            : "text-slate-700",
                       )}
                     >
                       {off ? "OFF" : "RUN"}

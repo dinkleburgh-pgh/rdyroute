@@ -25,7 +25,7 @@ from activity_log import add_related_truck_context, append_activity_event, appen
 from database import get_db
 from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
-from routers.auth import get_current_user, require_admin
+from routers.auth import get_current_user, require_admin, require_non_guest
 from schemas import (
     AnomalyDay,
     CompletionDailyPoint,
@@ -313,7 +313,7 @@ def create_truck_state(
     payload: TruckStateCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
 ):
     if payload.truck_number != truck_number:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="truck_number mismatch")
@@ -372,7 +372,7 @@ def update_truck_state(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
 ):
     """
     Partial update — only fields present in the request body are applied.
@@ -637,7 +637,7 @@ def bulk_update_status(
     truck_numbers: list[int] = Query(...),
     new_status: str = Query(...),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
 ):
     """
     Set all listed trucks to *new_status* for *run_date*.

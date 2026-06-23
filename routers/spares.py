@@ -24,7 +24,7 @@ from notification_service import (
     coverage_removed_notification,
     dispatch_notification,
 )
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_non_guest
 from schemas import SpareAssignCreate, SpareAssignOut, SpareAssignReturn
 
 router = APIRouter(prefix="/spares", tags=["spares"])
@@ -48,7 +48,7 @@ def assign_spare(
     payload: SpareAssignCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     # Prevent double-assignment of the same spare on the same date
     existing = db.scalars(
@@ -132,7 +132,7 @@ def return_spare(
     background_tasks: BackgroundTasks,
     payload: SpareAssignReturn | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     row = db.get(SpareAssignment, assignment_id)
     if row is None:
@@ -195,7 +195,7 @@ def delete_assignment(
     assignment_id: int,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     row = db.get(SpareAssignment, assignment_id)
     if row is None:

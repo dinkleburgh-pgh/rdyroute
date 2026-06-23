@@ -16,7 +16,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_non_guest
 from models import Shortage, User
 from schemas import ShortageCategoryPoint, ShortageCreate, ShortageDailyPoint, ShortageOut, ShortageSummary, ShortageUpdate
 from ws_manager import manager
@@ -74,7 +74,7 @@ def list_shortages(
 # ---------------------------------------------------------------------------
 
 @router.post("", response_model=ShortageOut, status_code=status.HTTP_201_CREATED)
-def create_shortage(payload: ShortageCreate, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_shortage(payload: ShortageCreate, background_tasks: BackgroundTasks, _user: User = Depends(require_non_guest), db: Session = Depends(get_db)):
     row = Shortage(**payload.model_dump())
     db.add(row)
     db.commit()
@@ -91,7 +91,7 @@ def update_shortage(
     shortage_id: int,
     payload: ShortageUpdate,
     background_tasks: BackgroundTasks,
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
     db: Session = Depends(get_db),
 ):
     row = db.get(Shortage, shortage_id)
@@ -109,7 +109,7 @@ def update_shortage(
 
 
 @router.delete("/{shortage_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_shortage(shortage_id: int, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_shortage(shortage_id: int, background_tasks: BackgroundTasks, _user: User = Depends(require_non_guest), db: Session = Depends(get_db)):
     row = db.get(Shortage, shortage_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Shortage not found")
@@ -124,7 +124,7 @@ def clear_shortages_for_truck(
     background_tasks: BackgroundTasks,
     truck_number: int = Query(...),
     run_date: date = Query(...),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
     db: Session = Depends(get_db),
 ):
     """Clear all shortages for a specific truck on a run-date (used by 'reset shorts' action)."""

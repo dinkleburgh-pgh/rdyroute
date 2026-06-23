@@ -202,6 +202,12 @@ _MANAGEMENT_ACCESS_ROLES = frozenset({
 })
 
 
+def require_non_guest(current_user: User = Depends(get_current_user)) -> User:
+    if current_user.role == AuthRole.guest:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Guests cannot perform this action")
+    return current_user
+
+
 def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if current_user.role not in _ADMIN_ROLES:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Insufficient permissions")
@@ -260,6 +266,35 @@ def login(payload: LoginRequest, request: Request, response: Response, db: Sessi
     )
 
     return TokenResponse(access_token=token, role=user.role, username=user.username)
+
+
+@router.post("/guest", response_model=TokenResponse)
+def guest_login(request: Request, response: Response, db: Session = Depends(get_db)):
+    """Issue a read-only guest session without credentials."""
+    guest_user = db.scalars(select(User).where(User.username == "guest")).first()
+    if guest_user is None:
+        guest_user = User(
+            username="guest",
+            hashed_password=_hash_password(uuid.uuid4().hex),
+            role=AuthRole.guest,
+            display_name="Guest",
+            is_enabled=True,
+        )
+        db.add(guest_user)
+        db.commit()
+        db.refresh(guest_user)
+
+    ip = request.client.host if request.client else "unknown"
+    ua = request.headers.get("user-agent", "")[:256]
+    sid = _write_server_session("guest", AuthRole.guest.value, db, ip=ip, ua=ua)
+    token = _create_access_token("guest", AuthRole.guest.value, sid)
+
+    response.set_cookie(SESSION_COOKIE, sid, httponly=True, samesite="lax",
+                        max_age=settings.session_expiry_days * 86400)
+    response.set_cookie(JWT_COOKIE, token, httponly=True, samesite="lax",
+                        max_age=settings.access_token_expire_minutes * 60)
+
+    return TokenResponse(access_token=token, role=AuthRole.guest, username="guest")
 
 
 # OAuth2 form-compatible endpoint used by the OpenAPI /docs "Authorize" button

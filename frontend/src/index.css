@@ -5,6 +5,7 @@
 @layer base {
   body {
     @apply min-h-screen font-sans antialiased;
+    overscroll-behavior: none;
   }
 }
 
@@ -14,6 +15,14 @@
   .animate-priority-glow {
     animation: priorityGlow 2s ease-in-out infinite;
   }
+
+  /* Safe area inset utilities (iPhone notch / Android gesture bar) */
+  .pt-safe  { padding-top:    env(safe-area-inset-top); }
+  .pb-safe  { padding-bottom: env(safe-area-inset-bottom); }
+  .pl-safe  { padding-left:   env(safe-area-inset-left); }
+  .pr-safe  { padding-right:  env(safe-area-inset-right); }
+  /* Main content bottom padding = bottom-nav height + home-indicator safe area */
+  .pb-nav-safe { padding-bottom: calc(3.5rem + env(safe-area-inset-bottom)); }
 }
 
 @keyframes priorityGlow {
@@ -88,7 +97,7 @@
     @apply rounded-xl border border-hairline bg-surface p-4 shadow-inset-top shadow-card;
   }
   .input {
-    @apply w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm
+    @apply w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-1.5 text-base
            text-slate-100 placeholder-slate-500 focus:border-blue-500 focus:outline-none;
   }
   .label {
