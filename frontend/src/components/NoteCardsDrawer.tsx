@@ -5,9 +5,7 @@
  */
 import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
-import { useLocation } from "react-router-dom";
-import { FileText, Check, Bell, AlertTriangle, Plus, Trash2 } from "lucide-react";
-import DraggableFab from "./DraggableFab";
+import { Bell, Check, AlertTriangle, Plus, Trash2, X } from "lucide-react";
 import { useSettings, useSpareAssignments, useRouteSwapLog, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
@@ -44,14 +42,12 @@ const STATUS_TEXT: Partial<Record<TruckStatus, string>> = {
 };
 
 
-export default function NoteCardsDrawer() {
-  const location = useLocation();
+export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const { data: settings } = useSettings();
   const { data: notes = [] } = useTruckNotes({ activeOnly: true });
   const { data: board = [] } = useBoard(todayIso());
   const upsert = useUpsertSetting();
-  const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<"truck" | "mine" | "reminders">("truck");
   const [filter, setFilter] = useState<"all" | "today">("all");
 
@@ -132,11 +128,6 @@ export default function NoteCardsDrawer() {
     return map;
   }, [board]);
 
-  const enabled = useMemo(
-    () => (settings ?? []).find((s) => s.key === "note_cards_enabled")?.value === true,
-    [settings],
-  );
-
   const today = useMemo(() => {
     const d = new Date();
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -172,17 +163,12 @@ export default function NoteCardsDrawer() {
     [byTruck],
   );
 
-  if (!enabled) {
-    return null;
-  }
+  if (!open) return null;
 
   return (
-    <>
-      {/* Floating panel */}
-      {open && (
-        <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ height: "calc(80svh - 3rem)" }}>
-          {/* Panel header — grid keeps close button in a fixed position */}
-          <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-2 border-b border-slate-700 bg-slate-800 px-4 py-3 rounded-t-xl">
+    <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ height: "calc(80svh - 3rem)" }}>
+      {/* Panel header */}
+      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-2 border-b border-slate-700 bg-slate-800 px-4 py-3 rounded-t-xl">
             {/* Tab switcher */}
             <div className="flex items-center gap-1 rounded-lg overflow-hidden ring-1 ring-slate-700 min-w-0">
               <button
@@ -241,11 +227,11 @@ export default function NoteCardsDrawer() {
               )}
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={onClose}
                 className="rounded p-1 text-slate-500 hover:text-slate-300 transition-colors"
                 aria-label="Close"
               >
-                <FileText className="h-5 w-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
           </div>
@@ -421,26 +407,7 @@ export default function NoteCardsDrawer() {
                 </div>
               );
             })}
-          </div>
         </div>
-      )}
-
-      {/* FAB toggle button */}
-      <DraggableFab storageKey="notes" defaultRight={16} defaultBottom={160} onClick={() => setOpen((o) => !o)}>
-        <div className={clsx(
-          "flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
-          "px-3 py-2 text-sm font-bold md:gap-3 md:px-6 md:py-3.5 md:text-base",
-          open
-            ? "bg-violet-700 text-white ring-4 ring-violet-500/40 shadow-violet-900/50"
-            : "bg-gradient-to-br from-violet-600 to-indigo-700 text-white ring-2 ring-violet-400/30 hover:from-violet-500 hover:to-indigo-600 hover:ring-violet-400/50 hover:scale-105",
-        )}>
-          <Bell className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
-          <span className="hidden md:inline">Notes</span>
-          <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.25rem] h-5 px-1.5 text-xs font-extrabold text-indigo-700 md:min-w-[1.5rem] md:h-6 md:px-2 md:text-sm" style={{ lineHeight: 1 }}>
-            {displayedNotes.length + unreturnedSpares.length}
-          </span>
-        </div>
-      </DraggableFab>
-    </>
+    </div>
   );
 }

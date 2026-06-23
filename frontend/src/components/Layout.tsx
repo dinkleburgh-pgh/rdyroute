@@ -7,9 +7,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useBoard, useHolidayLoad, useHolidayUnload, useSettings, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
-import NoteCardsDrawer from "./NoteCardsDrawer";
-import CalculatorFab from "./CalculatorFab";
-import CalendarFab from "./CalendarFab";
+import ToolFab from "./ToolFab";
 import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
@@ -148,8 +146,7 @@ export default function Layout() {
   const { user, logout } = useAuth();
   const { data: allSettings } = useSettings();
   const settingsMap = useMemo(() => allSettings ? new Map(allSettings.map((s) => [s.key, s.value])) : new Map(), [allSettings]);
-  const calcFabEnabled = settingsMap.get("calculator_fab_enabled") !== false;
-  const calendarFabEnabled = settingsMap.get("calendar_fab_enabled") === true;
+
   const nav = useNavigate();
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
@@ -563,8 +560,7 @@ export default function Layout() {
           </AnimatePresence>
         </main>
 
-        {calendarFabEnabled && <CalendarFab />}
-        {calcFabEnabled && <CalculatorFab />}
+        <ToolFab />
       </div>
 
       {/* Mobile bottom nav — primary workflow actions + More drawer */}
@@ -681,7 +677,6 @@ export default function Layout() {
           onClose={() => setWizardOpen(false)}
         />
       )}
-      <NoteCardsDrawer />
     </div>
   );
 }
