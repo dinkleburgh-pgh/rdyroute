@@ -27,7 +27,6 @@ export default function CalculatorFab() {
   const [copied, setCopied] = useState(false);
 
   const { data: trackedItems = [] } = useTrackedItems();
-  const itemsWithPack = trackedItems.filter((i) => i.pack_size != null && i.pack_size > 0);
   const selectedItem = trackedItems.find((i) => i.label === packItem);
   const packSize = selectedItem?.pack_size ?? 1;
 
@@ -161,11 +160,11 @@ export default function CalculatorFab() {
                 <select value={packItem} onChange={(e) => setPackItem(e.target.value)}
                   className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300 outline-none">
                   <option value="">No item</option>
-                  {itemsWithPack.map((i) => (
-                    <option key={i.label} value={i.label}>{i.label} ({i.pack_size}/bag)</option>
+                  {trackedItems.map((i) => (
+                    <option key={i.label} value={i.label}>{i.label}{i.pack_size ? ` (${i.pack_size}/bag)` : ""}</option>
                   ))}
                 </select>
-                {selectedItem && (
+                {selectedItem?.pack_size && (
                   <button onClick={() => { const r = val * packSize; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `${fmt(val)} bags × ${packSize}`, result: r }]); }}
                     className="rounded-lg bg-emerald-900/30 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-800/40 border border-emerald-700/30 active:scale-95 select-none">
                     ×{packSize}
