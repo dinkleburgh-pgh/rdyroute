@@ -116,7 +116,7 @@ export default function ToolFab() {
                 key={tool.id}
                 data-wheel-btn
                 onClick={() => openPanel(tool.id)}
-                className={`${tool.bg} fixed z-[70] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition-all hover:scale-110 active:scale-95`}
+                className={`${tool.bg} fixed z-[70] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition-all hover:scale-110 active:scale-95 ${activePanel === tool.id ? "ring-4 ring-white/50 scale-110" : ""}`}
                 style={{
                   left: clampedX,
                   top: clampedY,
