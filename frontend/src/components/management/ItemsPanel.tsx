@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useTrackedItems, useUpdateTrackedItems, type TrackedItem } from "../../api/hooks";
 import ConfirmDialog from "../ConfirmDialog";
-import { Plus, Trash2, Save, X, RotateCcw, Upload } from "lucide-react";
+import { Plus, Trash2, Save, RotateCcw, Upload, Package, X } from "lucide-react";
 
 export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const { data: items, isLoading } = useTrackedItems();
@@ -12,10 +12,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ label: string; category: string; qty: string; unitLabel: string; packSize: string }>({ label: "", category: "", qty: "1", unitLabel: "", packSize: "" });
+  const [editForm, setEditForm] = useState<{ label: string; unitLabel: string; packSize: string }>({ label: "", unitLabel: "", packSize: "" });
   const [confirmRemoveLabel, setConfirmRemoveLabel] = useState<string | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
-  const [addForm, setAddForm] = useState({ label: "", qty: "1", unitLabel: "", packSize: "" });
+  const [addForm, setAddForm] = useState({ label: "", unitLabel: "", packSize: "" });
   const [extraCategories, setExtraCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
 
@@ -61,7 +61,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   function startEdit(it: TrackedItem) {
     setEditingLabel(it.label);
-    setEditForm({ label: it.label, category: it.category ?? "", qty: String(it.qty_default), unitLabel: it.unit_label ?? "", packSize: it.pack_size ? String(it.pack_size) : "" });
+    setEditForm({ label: it.label, unitLabel: it.unit_label ?? "", packSize: it.pack_size ? String(it.pack_size) : "" });
   }
 
   function cancelEdit() {
@@ -77,10 +77,22 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     const unitLabel = packSize ? editForm.unitLabel.trim() || undefined : undefined;
     setDraft((d) => d.map((it) =>
       it.label === editingLabel
-        ? { label: newLabel, qty_default: Math.max(1, parseInt(editForm.qty || "1", 10)), category: editForm.category.trim() || undefined, unit_label: unitLabel, pack_size: packSize }
+        ? { ...it, label: newLabel, unit_label: unitLabel, pack_size: packSize }
         : it,
     ));
     setEditingLabel(null);
+  }
+
+  function togglePack(label: string) {
+    setDraft((d) => d.map((it) => {
+      if (it.label !== label) return it;
+      if (it.pack_size) return { ...it, pack_size: undefined, unit_label: undefined };
+      return { ...it, pack_size: 12, unit_label: "Case" };
+    }));
+  }
+
+  function updatePack(label: string, packSize: number | undefined, unitLabel: string | undefined) {
+    setDraft((d) => d.map((it) => it.label === label ? { ...it, pack_size: packSize, unit_label: unitLabel } : it));
   }
 
   function addItemToCategory(cat: string) {
@@ -91,9 +103,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     const parsedPack = parseInt(addForm.packSize, 10);
     const packSize = addForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
     const unitLabel = packSize ? addForm.unitLabel.trim() || undefined : undefined;
-    setDraft((d) => [...d, { label, qty_default: Math.max(1, parseInt(addForm.qty || "1", 10)), category: finalCat, unit_label: unitLabel, pack_size: packSize }]);
+    setDraft((d) => [...d, { label, qty_default: 1, category: finalCat, unit_label: unitLabel, pack_size: packSize }]);
     setExtraCategories((current) => current.filter((category) => category !== finalCat));
-    setAddForm({ label: "", qty: "1", unitLabel: "", packSize: "" });
+    setAddForm({ label: "", unitLabel: "", packSize: "" });
     setAddingToCategory(null);
   }
 
@@ -105,7 +117,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     setNewCategoryName("");
     setActiveTab(category);
     setAddingToCategory(category);
-    setAddForm({ label: "", qty: "1", unitLabel: "", packSize: "" });
+    setAddForm({ label: "", unitLabel: "", packSize: "" });
   }
 
   function applyBulkImport() {
@@ -172,20 +184,15 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
         </div>
       )}
 
-      {/* Add category card */}
+      {/* Add category */}
       <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
         <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add category</p>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:items-end">
           <div className="min-w-0 sm:min-w-[14rem] sm:flex-1">
             <label className="label">Category name</label>
-            <input
-              className="input"
-              placeholder="New category"
-              value={newCategoryName}
-              disabled={disabled}
+            <input className="input" placeholder="New category" value={newCategoryName} disabled={disabled}
               onChange={(e) => setNewCategoryName(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") addCategory(); }}
-            />
+              onKeyDown={(e) => { if (e.key === "Enter") addCategory(); }} />
           </div>
           <button className="btn-primary w-full sm:w-auto" disabled={disabled || !newCategoryName.trim()} onClick={addCategory}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add
@@ -193,145 +200,110 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
         </div>
       </div>
 
-      {/* Category cards with table layout */}
+      {/* Category cards */}
       {visibleGroups.map(([cat, groupItems]) => {
         const catItems = groupItems as TrackedItem[];
         const isAdding = addingToCategory === cat;
         return (
           <div key={cat || "__none__"} className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
-            {/* Category header */}
             <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-4 py-2.5">
               <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
                 {cat || "Uncategorised"}
-                <span className="ml-2 font-normal text-slate-600">{catItems.length} item{catItems.length !== 1 ? "s" : ""}</span>
+                <span className="ml-2 font-normal text-slate-600">{catItems.length}</span>
               </span>
               {!disabled && cat !== "" && (
-                <button
-                  className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
-                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", qty: "1", unitLabel: "", packSize: "" }); }}>
-                  <Plus className="h-3 w-3" />
-                  {isAdding ? "Cancel" : "Add Item"}
+                <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", unitLabel: "", packSize: "" }); }}>
+                  <Plus className="h-3 w-3" /> {isAdding ? "Cancel" : "Add Item"}
                 </button>
               )}
             </div>
 
-            {/* Items table */}
-            <div className="divide-y divide-slate-800/60">
+            <div className="flex flex-wrap gap-2 p-3">
               {catItems.map((it) => {
                 const isEditing = editingLabel === it.label;
+                const hasPack = it.pack_size != null && it.pack_size > 0;
+
                 if (isEditing) {
                   return (
-                    <div key={it.label} className="bg-slate-800/40 px-4 py-3">
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
-                        <div className="sm:col-span-3">
-                          <label className="label">Label</label>
-                          <input className="input w-full" value={editForm.label} autoFocus
-                            onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
-                            onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="label">Category</label>
-                          <input className="input w-full" list="items-category-datalist" placeholder="None" value={editForm.category}
-                            onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
-                        </div>
-                        <div className="sm:col-span-1">
-                          <label className="label">Qty</label>
-                          <input type="number" min={1} className="input w-full" value={editForm.qty}
-                            onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} />
-                        </div>
-                        <div className="sm:col-span-2">
-                          <label className="label">Pack unit</label>
-                          <input className="input w-full" placeholder='e.g. "Case"' value={editForm.unitLabel}
+                    <div key={it.label} className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-blue-600/50 bg-slate-800/60 p-2.5">
+                      <div className="min-w-0 flex-[2]">
+                        <label className="label">Label</label>
+                        <input className="input w-full" value={editForm.label} autoFocus
+                          onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
+                          onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <label className="label">Bag/Case unit</label>
+                        <div className="flex items-center gap-1.5">
+                          <input className="input w-20" placeholder='e.g. "Case"' value={editForm.unitLabel}
                             onChange={(e) => setEditForm({ ...editForm, unitLabel: e.target.value })} />
-                        </div>
-                        <div className="sm:col-span-1">
-                          <label className="label">Pcs/unit</label>
-                          <input type="number" min={1} className="input w-full" placeholder="1" value={editForm.packSize}
+                          <span className="text-xs text-slate-500">×</span>
+                          <input type="number" min={1} className="input w-16" placeholder="12" value={editForm.packSize}
                             onChange={(e) => setEditForm({ ...editForm, packSize: e.target.value })} />
+                          <span className="text-[10px] text-slate-500">pcs</span>
                         </div>
-                        <div className="flex items-end gap-2 sm:col-span-3">
-                          <button className="btn-primary flex-1 text-xs" onClick={commitEdit}>
-                            <Save className="mr-1 h-3 w-3" /> Save
-                          </button>
-                          <button className="btn-ghost flex-1 text-xs" onClick={cancelEdit}>
-                            <X className="mr-1 h-3 w-3" /> Cancel
-                          </button>
-                        </div>
+                      </div>
+                      <div className="flex gap-1 pb-0.5">
+                        <button className="btn-primary text-xs px-2 py-1" onClick={commitEdit}><Save className="h-3 w-3" /></button>
+                        <button className="btn-ghost text-xs px-2 py-1" onClick={cancelEdit}><X className="h-3 w-3" /></button>
                       </div>
                     </div>
                   );
                 }
+
                 return (
-                  <div key={it.label} className="group grid grid-cols-1 gap-2 px-4 py-2.5 transition-colors hover:bg-slate-800/30 sm:grid-cols-12 sm:items-center sm:gap-3">
-                    <div className="sm:col-span-3">
-                      <button className="text-sm font-medium text-slate-200 transition-colors hover:text-blue-400" disabled={disabled} onClick={() => startEdit(it)}>
-                        {it.label}
-                      </button>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <span className="text-xs text-slate-500 sm:hidden">Category: </span>
-                      <span className="text-xs text-slate-400">{it.category || <span className="text-slate-600">—</span>}</span>
-                    </div>
-                    <div className="sm:col-span-1">
-                      <span className="text-xs text-slate-500 sm:hidden">Qty: </span>
-                      <span className="text-xs font-semibold text-slate-300">{it.qty_default}</span>
-                    </div>
-                    <div className="sm:col-span-2">
-                      <span className="text-xs text-slate-500 sm:hidden">Pack unit: </span>
-                      {it.pack_size != null && it.pack_size > 0 ? (
-                        <span className="inline-flex items-center gap-1 rounded-md bg-emerald-900/25 px-2 py-0.5 text-[11px] font-medium text-emerald-400">
-                          {it.pack_size}/{it.unit_label ?? "pcs"}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-slate-500">Single</span>
+                  <div key={it.label} className="group flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800 pl-3 pr-1 py-1 text-sm text-slate-200 transition-colors hover:border-slate-600">
+                    <button className="truncate font-medium leading-none max-w-[8rem]" disabled={disabled} onClick={() => startEdit(it)} title="Edit item">
+                      {it.label}
+                    </button>
+                    <button
+                      onClick={() => togglePack(it.label)}
+                      className={clsx(
+                        "ml-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all",
+                        hasPack
+                          ? "bg-emerald-900/40 text-emerald-400"
+                          : "bg-slate-700/50 text-slate-500 hover:bg-slate-700 hover:text-slate-300",
                       )}
-                    </div>
-                    <div className="sm:col-span-1">
-                      <span className="text-xs text-slate-500 sm:hidden">Suggested: </span>
-                      <span className="text-xs text-slate-500">{it.qty_default !== 1 ? `×${it.qty_default}` : "—"}</span>
-                    </div>
-                    <div className="flex items-center justify-end gap-1 sm:col-span-3">
-                      <button
-                        className="flex h-7 w-7 items-center justify-center rounded-md text-slate-600 opacity-0 transition-all hover:bg-red-500/15 hover:text-red-400 group-hover:opacity-100"
-                        onClick={() => removeItem(it.label)}
-                        title="Remove item"
-                        disabled={disabled}
-                      >
-                        <Trash2 className="h-3.5 w-3.5" />
+                      title={hasPack ? `${it.pack_size} ${it.unit_label ?? "pcs"}` : "Click to set bag/case size"}
+                    >
+                      <Package className="h-2.5 w-2.5" />
+                      {hasPack ? `${it.pack_size}/${it.unit_label ?? "pcs"}` : "Single"}
+                    </button>
+                    {!disabled && (
+                      <button onClick={() => removeItem(it.label)}
+                        className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full text-slate-600 opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100" title="Remove">
+                        <Trash2 className="h-3 w-3" />
                       </button>
-                    </div>
+                    )}
                   </div>
                 );
               })}
             </div>
 
-            {/* Add item inline form */}
+            {/* Add item form */}
             {isAdding && !disabled && cat !== "" && (
               <div className="border-t border-slate-800/60 bg-slate-800/20 px-4 py-3">
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-12 sm:items-end">
-                  <div className="sm:col-span-3">
+                <div className="grid grid-cols-1 gap-3 sm:flex sm:items-end sm:gap-2">
+                  <div className="sm:min-w-[12rem] sm:flex-1">
                     <label className="label">Label</label>
                     <input className="input w-full" placeholder="Item name" value={addForm.label} autoFocus
                       onChange={(e) => setAddForm({ ...addForm, label: e.target.value })}
                       onKeyDown={(e) => { if (e.key === "Enter") addItemToCategory(cat); if (e.key === "Escape") setAddingToCategory(null); }} />
                   </div>
-                  <div className="sm:col-span-1">
-                    <label className="label">Qty</label>
-                    <input type="number" min={1} className="input w-full" value={addForm.qty} onChange={(e) => setAddForm({ ...addForm, qty: e.target.value })} />
-                  </div>
-                  <div className="sm:col-span-2">
+                  <div>
                     <label className="label">Pack unit</label>
-                    <input className="input w-full" placeholder='e.g. "Case"' value={addForm.unitLabel} onChange={(e) => setAddForm({ ...addForm, unitLabel: e.target.value })} />
+                    <input className="input w-24" placeholder='e.g. "Case"' value={addForm.unitLabel}
+                      onChange={(e) => setAddForm({ ...addForm, unitLabel: e.target.value })} />
                   </div>
-                  <div className="sm:col-span-1">
+                  <div>
                     <label className="label">Pcs/unit</label>
-                    <input type="number" min={1} className="input w-full" placeholder="1" value={addForm.packSize} onChange={(e) => setAddForm({ ...addForm, packSize: e.target.value })} />
+                    <input type="number" min={1} className="input w-16" placeholder="12" value={addForm.packSize}
+                      onChange={(e) => setAddForm({ ...addForm, packSize: e.target.value })} />
                   </div>
-                  <div className="sm:col-span-2">
-                    <button className="btn-primary w-full text-xs" disabled={!addForm.label.trim()} onClick={() => addItemToCategory(cat)}>
-                      <Plus className="mr-1 h-3 w-3" /> Add
-                    </button>
-                  </div>
+                  <button className="btn-primary text-xs" disabled={!addForm.label.trim()} onClick={() => addItemToCategory(cat)}>
+                    <Plus className="mr-1 h-3 w-3" /> Add
+                  </button>
                 </div>
               </div>
             )}
