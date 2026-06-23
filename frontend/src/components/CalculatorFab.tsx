@@ -256,15 +256,23 @@ export default function CalculatorFab() {
                 <button onClick={compute} className={eqBg}><Equal className="h-4 w-4" /></button>
               </div>
 
-              {/* Memory row */}
+              {/* Quick percent row */}
               <div className="mt-2 grid grid-cols-5 gap-1.5">
+                <button onClick={() => { const r = val * 0.5; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `50% of ${fmt(val)}`, result: r }]); }} className="bg-indigo-900/30 text-indigo-400 hover:bg-indigo-800/40 border border-indigo-700/30 rounded-lg py-2 text-[10px] font-semibold">50%</button>
+                <button onClick={() => { const r = val * 0.8; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `80% of ${fmt(val)}`, result: r }]); }} className="bg-indigo-900/30 text-indigo-400 hover:bg-indigo-800/40 border border-indigo-700/30 rounded-lg py-2 text-[10px] font-semibold">80%</button>
+                <div />
+                <div />
+                <button onClick={useResult} className={`flex items-center justify-center gap-1 rounded-lg py-2 text-[10px] font-semibold transition-colors ${copied ? "bg-emerald-600 text-white" : "bg-sky-600 text-white hover:bg-sky-500"}`}>
+                  {copied ? <span>Copied</span> : <><Copy className="h-3 w-3" /> Use</>}
+                </button>
+              </div>
+
+              {/* Memory row */}
+              <div className="mt-1.5 grid grid-cols-4 gap-1.5">
                 <button onClick={memClear} className={`${auxBg} text-[10px]`}>MC</button>
                 <button onClick={memRecall} className={`${auxBg} text-[10px]`}>MR</button>
                 <button onClick={memAdd} className={`${auxBg} text-[10px]`}>M+</button>
                 <button onClick={memSub} className={`${auxBg} text-[10px]`}>M-</button>
-                <button onClick={useResult} className={`flex items-center justify-center gap-1 rounded-lg py-2 text-[10px] font-semibold transition-colors ${copied ? "bg-emerald-600 text-white" : "bg-sky-600 text-white hover:bg-sky-500"}`}>
-                  {copied ? <span>Copied</span> : <><Copy className="h-3 w-3" /> Use</>}
-                </button>
               </div>
 
               {/* Tape toggle */}

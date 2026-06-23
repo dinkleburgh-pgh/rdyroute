@@ -12,10 +12,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ label: string; unitLabel: string; packSize: string }>({ label: "", unitLabel: "", packSize: "" });
+  const [editForm, setEditForm] = useState<{ label: string; packSize: string }>({ label: "", packSize: "" });
   const [confirmRemoveLabel, setConfirmRemoveLabel] = useState<string | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
-  const [addForm, setAddForm] = useState({ label: "", unitLabel: "", packSize: "" });
+  const [addForm, setAddForm] = useState({ label: "", packSize: "" });
   const [extraCategories, setExtraCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
 
@@ -61,7 +61,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   function startEdit(it: TrackedItem) {
     setEditingLabel(it.label);
-    setEditForm({ label: it.label, unitLabel: it.unit_label ?? "", packSize: it.pack_size ? String(it.pack_size) : "" });
+    setEditForm({ label: it.label, packSize: it.pack_size ? String(it.pack_size) : "" });
   }
 
   function cancelEdit() {
@@ -74,10 +74,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     if (!newLabel) return;
     const parsedPack = parseInt(editForm.packSize, 10);
     const packSize = editForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
-    const unitLabel = packSize ? editForm.unitLabel.trim() || undefined : undefined;
     setDraft((d) => d.map((it) =>
       it.label === editingLabel
-        ? { ...it, label: newLabel, unit_label: unitLabel, pack_size: packSize }
+        ? { ...it, label: newLabel, pack_size: packSize, unit_label: packSize ? undefined : undefined }
         : it,
     ));
     setEditingLabel(null);
@@ -86,13 +85,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   function togglePack(label: string) {
     setDraft((d) => d.map((it) => {
       if (it.label !== label) return it;
-      if (it.pack_size) return { ...it, pack_size: undefined, unit_label: undefined };
-      return { ...it, pack_size: 12, unit_label: "Case" };
+      if (it.pack_size) return { ...it, pack_size: undefined };
+      return { ...it, pack_size: 12 };
     }));
-  }
-
-  function updatePack(label: string, packSize: number | undefined, unitLabel: string | undefined) {
-    setDraft((d) => d.map((it) => it.label === label ? { ...it, pack_size: packSize, unit_label: unitLabel } : it));
   }
 
   function addItemToCategory(cat: string) {
@@ -102,10 +97,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     if (!finalCat) return;
     const parsedPack = parseInt(addForm.packSize, 10);
     const packSize = addForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
-    const unitLabel = packSize ? addForm.unitLabel.trim() || undefined : undefined;
-    setDraft((d) => [...d, { label, qty_default: 1, category: finalCat, unit_label: unitLabel, pack_size: packSize }]);
+    setDraft((d) => [...d, { label, qty_default: 1, category: finalCat, pack_size: packSize }]);
     setExtraCategories((current) => current.filter((category) => category !== finalCat));
-    setAddForm({ label: "", unitLabel: "", packSize: "" });
+    setAddForm({ label: "", packSize: "" });
     setAddingToCategory(null);
   }
 
@@ -117,7 +111,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     setNewCategoryName("");
     setActiveTab(category);
     setAddingToCategory(category);
-    setAddForm({ label: "", unitLabel: "", packSize: "" });
+    setAddForm({ label: "", packSize: "" });
   }
 
   function applyBulkImport() {
@@ -213,7 +207,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
               </span>
               {!disabled && cat !== "" && (
                 <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
-                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", unitLabel: "", packSize: "" }); }}>
+                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", packSize: "" }); }}>
                   <Plus className="h-3 w-3" /> {isAdding ? "Cancel" : "Add Item"}
                 </button>
               )}
@@ -233,16 +227,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                           onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
                           onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
                       </div>
-                      <div className="flex flex-col gap-1">
-                        <label className="label">Bag/Case unit</label>
-                        <div className="flex items-center gap-1.5">
-                          <input className="input w-20" placeholder='e.g. "Case"' value={editForm.unitLabel}
-                            onChange={(e) => setEditForm({ ...editForm, unitLabel: e.target.value })} />
-                          <span className="text-xs text-slate-500">×</span>
-                          <input type="number" min={1} className="input w-16" placeholder="12" value={editForm.packSize}
-                            onChange={(e) => setEditForm({ ...editForm, packSize: e.target.value })} />
-                          <span className="text-[10px] text-slate-500">pcs</span>
-                        </div>
+                      <div>
+                        <label className="label">Bag/Case amount</label>
+                        <input type="number" min={1} className="input w-20" placeholder="12" value={editForm.packSize}
+                          onChange={(e) => setEditForm({ ...editForm, packSize: e.target.value })} />
                       </div>
                       <div className="flex gap-1 pb-0.5">
                         <button className="btn-primary text-xs px-2 py-1" onClick={commitEdit}><Save className="h-3 w-3" /></button>
@@ -265,10 +253,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                           ? "bg-emerald-900/40 text-emerald-400"
                           : "bg-slate-700/50 text-slate-500 hover:bg-slate-700 hover:text-slate-300",
                       )}
-                      title={hasPack ? `${it.pack_size} ${it.unit_label ?? "pcs"}` : "Click to set bag/case size"}
+                      title={hasPack ? `${it.pack_size} per bag/case` : "Click to set bag/case amount"}
                     >
                       <Package className="h-2.5 w-2.5" />
-                      {hasPack ? `${it.pack_size}/${it.unit_label ?? "pcs"}` : "Single"}
+                      {hasPack ? `${it.pack_size}/bag` : "Single"}
                     </button>
                     {!disabled && (
                       <button onClick={() => removeItem(it.label)}
@@ -292,13 +280,8 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                       onKeyDown={(e) => { if (e.key === "Enter") addItemToCategory(cat); if (e.key === "Escape") setAddingToCategory(null); }} />
                   </div>
                   <div>
-                    <label className="label">Pack unit</label>
-                    <input className="input w-24" placeholder='e.g. "Case"' value={addForm.unitLabel}
-                      onChange={(e) => setAddForm({ ...addForm, unitLabel: e.target.value })} />
-                  </div>
-                  <div>
-                    <label className="label">Pcs/unit</label>
-                    <input type="number" min={1} className="input w-16" placeholder="12" value={addForm.packSize}
+                    <label className="label">Bag/Case amount</label>
+                    <input type="number" min={1} className="input w-20" placeholder="12" value={addForm.packSize}
                       onChange={(e) => setAddForm({ ...addForm, packSize: e.target.value })} />
                   </div>
                   <button className="btn-primary text-xs" disabled={!addForm.label.trim()} onClick={() => addItemToCategory(cat)}>
