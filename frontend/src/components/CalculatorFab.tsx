@@ -97,7 +97,7 @@ export default function CalculatorFab() {
 
   return (
     <>
-      <DraggableFab storageKey="calc" defaultX={window.innerWidth - 80} defaultY={window.innerHeight - 200} onClick={() => setOpen(true)}>
+      <DraggableFab storageKey="calc" defaultRight={16} defaultBottom={100} onClick={() => setOpen(true)}>
         <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg shadow-sky-900/40 transition-all hover:bg-sky-500 hover:scale-110 active:scale-95">
           <Calculator className="h-5 w-5" />
         </div>

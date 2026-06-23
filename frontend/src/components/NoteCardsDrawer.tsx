@@ -426,7 +426,7 @@ export default function NoteCardsDrawer() {
       )}
 
       {/* FAB toggle button */}
-      <DraggableFab storageKey="notes" defaultX={window.innerWidth - 120} defaultY={window.innerHeight - 200} onClick={() => setOpen((o) => !o)}>
+      <DraggableFab storageKey="notes" defaultRight={16} defaultBottom={160} onClick={() => setOpen((o) => !o)}>
         <div className={clsx(
           "flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
           "px-3 py-2 text-sm font-bold md:gap-3 md:px-6 md:py-3.5 md:text-base",

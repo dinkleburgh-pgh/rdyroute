@@ -18,6 +18,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
       calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), true),
+      calendar_fab_enabled: asBool(map.get("calendar_fab_enabled"), false),
       force_unloaded_on_new_day: asBool(map.get("force_unloaded_on_new_day"), false),
     }),
     [map],
@@ -132,6 +133,19 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, note_cards_enabled: e.target.checked })}
           />
           Enable Note Cards
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Calendar FAB"
+        hint="Show a floating calendar button that opens the Fleet Schedule page."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.calendar_fab_enabled}
+            onChange={(e) => setForm({ ...form, calendar_fab_enabled: e.target.checked })}
+          />
+          Enable calendar FAB
         </label>
       </FieldRow>
       <FieldRow

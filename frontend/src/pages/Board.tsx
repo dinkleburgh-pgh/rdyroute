@@ -1101,13 +1101,18 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           };
 
           const CollapsibleSection = ({ sectionKey, title, titleClassName, sectionRows }: { sectionKey: string; title: string; titleClassName: string; sectionRows: TruckWithState[] }) => {
-            const { open, toggle } = useCollapseState(`board-${sectionKey}`, true);
+            const initOpen = useRef(
+              localStorage.getItem(`readyroutev2_collapse_board-${sectionKey}`) !== "false"
+            ).current;
             if (sectionRows.length === 0) return null;
             return (
               <details
                 key={sectionKey}
-                open={open}
-                onToggle={toggle}
+                open={initOpen ? true : undefined}
+                onToggle={(e) => {
+                  const val = (e.target as HTMLDetailsElement).open;
+                  try { localStorage.setItem(`readyroutev2_collapse_board-${sectionKey}`, String(val)); } catch { }
+                }}
                 className="group col-span-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/50"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-900/80 px-4 py-3">

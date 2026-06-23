@@ -3,32 +3,32 @@ import { useAuth } from "../contexts/AuthContext";
 
 interface Props {
   storageKey: string;
-  defaultX?: number;
-  defaultY?: number;
+  defaultRight?: number;
+  defaultBottom?: number;
   onClick: () => void;
   children: ReactNode;
 }
 
-export default function DraggableFab({ storageKey, defaultX = 16, defaultY = 16, onClick, children }: Props) {
+export default function DraggableFab({ storageKey, defaultRight = 16, defaultBottom = 16, onClick, children }: Props) {
   const { user } = useAuth();
   const lsKey = `fab_pos_${storageKey}_${user?.username ?? "anon"}`;
 
   const [pos] = useState(() => {
     try {
       const raw = localStorage.getItem(lsKey);
-      return raw ? (JSON.parse(raw) as { x: number; y: number }) : null;
+      return raw ? (JSON.parse(raw) as { right: number; bottom: number }) : null;
     } catch { return null; }
   });
 
   const dragRef = useRef<{
     startX: number; startY: number;
-    elX: number; elY: number;
+    elRight: number; elBottom: number;
     dragged: boolean;
   } | null>(null);
   const fabRef = useRef<HTMLDivElement>(null);
 
-  const savePos = useCallback((x: number, y: number) => {
-    try { localStorage.setItem(lsKey, JSON.stringify({ x: Math.round(x), y: Math.round(y) })); } catch { }
+  const savePos = useCallback((right: number, bottom: number) => {
+    try { localStorage.setItem(lsKey, JSON.stringify({ right: Math.round(right), bottom: Math.round(bottom) })); } catch { }
   }, [lsKey]);
 
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -38,7 +38,8 @@ export default function DraggableFab({ storageKey, defaultX = 16, defaultY = 16,
     const rect = el.getBoundingClientRect();
     dragRef.current = {
       startX: e.clientX, startY: e.clientY,
-      elX: rect.left, elY: rect.top,
+      elRight: window.innerWidth - rect.right,
+      elBottom: window.innerHeight - rect.bottom,
       dragged: false,
     };
   }, []);
@@ -50,22 +51,20 @@ export default function DraggableFab({ storageKey, defaultX = 16, defaultY = 16,
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragRef.current.dragged = true;
     const el = fabRef.current;
     if (el) {
-      el.style.left = (dragRef.current.elX + dx) + "px";
-      el.style.top = (dragRef.current.elY + dy) + "px";
+      el.style.right = (dragRef.current.elRight - dx) + "px";
+      el.style.bottom = (dragRef.current.elBottom - dy) + "px";
     }
   }, []);
 
-  const handlePointerUp = useCallback((e: React.PointerEvent) => {
+  const handlePointerUp = useCallback(() => {
     const drag = dragRef.current;
     dragRef.current = null;
     if (!drag || !fabRef.current) return;
     const el = fabRef.current;
-    const x = parseFloat(el.style.left) || drag.elX;
-    const y = parseFloat(el.style.top) || drag.elY;
-    savePos(x, y);
-    if (!drag.dragged) {
-      onClick();
-    }
+    const right = parseFloat(el.style.right) || drag.elRight;
+    const bottom = parseFloat(el.style.bottom) || drag.elBottom;
+    savePos(right, bottom);
+    if (!drag.dragged) onClick();
   }, [savePos, onClick]);
 
   return (
@@ -76,8 +75,8 @@ export default function DraggableFab({ storageKey, defaultX = 16, defaultY = 16,
       onPointerUp={handlePointerUp}
       className="fixed z-50 touch-none select-none"
       style={{
-        left: pos ? `${pos.x}px` : `${defaultX}px`,
-        top: pos ? `${pos.y}px` : `${defaultY}px`,
+        right: pos ? `${pos.right}px` : `${defaultRight}px`,
+        bottom: pos ? `${pos.bottom}px` : `${defaultBottom}px`,
       }}
     >
       {children}

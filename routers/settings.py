@@ -36,6 +36,7 @@ KNOWN_KEYS = {
     "note_cards_enabled",
     "tracked_items_map",
     "calculator_fab_enabled",
+    "calendar_fab_enabled",
     "force_unloaded_on_new_day",
     "communications_censor_words",
     "ollama_base_url",
@@ -70,6 +71,7 @@ _USER_READABLE_KEYS = {
     "note_cards_enabled",
     "tracked_items_map",
     "calculator_fab_enabled",
+    "calendar_fab_enabled",
     "force_unloaded_on_new_day",
 }
 

@@ -9,6 +9,7 @@ import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import NoteCardsDrawer from "./NoteCardsDrawer";
 import CalculatorFab from "./CalculatorFab";
+import CalendarFab from "./CalendarFab";
 import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
@@ -148,6 +149,7 @@ export default function Layout() {
   const { data: allSettings } = useSettings();
   const settingsMap = useMemo(() => allSettings ? new Map(allSettings.map((s) => [s.key, s.value])) : new Map(), [allSettings]);
   const calcFabEnabled = settingsMap.get("calculator_fab_enabled") !== false;
+  const calendarFabEnabled = settingsMap.get("calendar_fab_enabled") === true;
   const nav = useNavigate();
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
@@ -561,6 +563,7 @@ export default function Layout() {
           </AnimatePresence>
         </main>
 
+        {calendarFabEnabled && <CalendarFab />}
         {calcFabEnabled && <CalculatorFab />}
       </div>
 
