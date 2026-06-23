@@ -1,5 +1,6 @@
-import { useState, useMemo, useRef, useEffect, useCallback } from "react";
-import { Wrench } from "lucide-react";
+import { useState, useMemo, useRef, useEffect, useCallback, type ComponentType } from "react";
+import { Wrench, Calculator, StickyNote, CalendarDays } from "lucide-react";
+import { useLocation } from "react-router-dom";
 import DraggableFab from "./DraggableFab";
 import CalculatorFab from "./CalculatorFab";
 import CalendarFab from "./CalendarFab";
@@ -10,18 +11,25 @@ interface Tool {
   id: string;
   label: string;
   bg: string;
+  Icon: ComponentType<{ className?: string }>;
 }
 
 const TOOLS: Tool[] = [
-  { id: "calculator", label: "Calc",  bg: "bg-sky-600" },
-  { id: "notes",      label: "Notes", bg: "bg-violet-600" },
-  { id: "calendar",   label: "Sched", bg: "bg-emerald-600" },
+  { id: "calculator", label: "Calc",  bg: "bg-sky-600",     Icon: Calculator },
+  { id: "notes",      label: "Notes", bg: "bg-violet-600",  Icon: StickyNote },
+  { id: "calendar",   label: "Sched", bg: "bg-emerald-600", Icon: CalendarDays },
 ];
 
 export default function ToolFab() {
   const { data: settings } = useSettings();
   const [wheelOpen, setWheelOpen] = useState(false);
   const [activePanel, setActivePanel] = useState<string | null>(null);
+  const location = useLocation();
+
+  // Close wheel when navigating so the fixed overlay never blocks a new page
+  useEffect(() => {
+    setWheelOpen(false);
+  }, [location.pathname]);
   const fabRef = useRef<HTMLDivElement>(null);
   const [fabRect, setFabRect] = useState<DOMRect | null>(null);
   const fabPosRef = useRef<{ right: number; bottom: number } | null>(null);
@@ -51,9 +59,22 @@ export default function ToolFab() {
     if (wheelOpen) updateFabRect();
   }, [wheelOpen, updateFabRect]);
 
+  // Close wheel when tapping outside the FAB or orbit buttons — no backdrop so scrolling is never blocked
+  useEffect(() => {
+    if (!wheelOpen) return;
+    const handler = (e: PointerEvent) => {
+      if (fabRef.current?.contains(e.target as Node)) return;
+      if ((e.target as HTMLElement).closest?.("[data-wheel-btn]")) return;
+      setWheelOpen(false);
+    };
+    document.addEventListener("pointerdown", handler, true);
+    return () => document.removeEventListener("pointerdown", handler, true);
+  }, [wheelOpen]);
+
   if (enabledTools.length === 0) return null;
 
   function openPanel(id: string) {
+    setWheelOpen(false);
     setActivePanel((prev) => prev === id ? null : id);
   }
 
@@ -80,7 +101,6 @@ export default function ToolFab() {
 
       {wheelOpen && (
         <>
-          <div className="fixed inset-0 z-[69]" onClick={() => setWheelOpen(false)} />
           {fabRect && enabledTools.map((tool, i) => {
             const angle = startAngle + (arcAngle * i) / (count - 1 || 1);
             const rad = (angle * Math.PI) / 180;
@@ -94,6 +114,7 @@ export default function ToolFab() {
             return (
               <button
                 key={tool.id}
+                data-wheel-btn
                 onClick={() => openPanel(tool.id)}
                 className={`${tool.bg} fixed z-[70] flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition-all hover:scale-110 active:scale-95`}
                 style={{
@@ -102,7 +123,7 @@ export default function ToolFab() {
                   animation: `popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 0.04}s both`,
                 }}
               >
-                <span className="text-[8px] font-bold uppercase leading-tight text-center">{tool.label}</span>
+                <tool.Icon className="h-5 w-5" />
               </button>
             );
           })}
