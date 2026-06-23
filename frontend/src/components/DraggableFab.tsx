@@ -5,7 +5,7 @@ interface Props {
   storageKey: string;
   defaultRight?: number;
   defaultBottom?: number;
-  onClick: () => void;
+  onClick?: () => void;
   children: ReactNode;
 }
 
@@ -64,7 +64,7 @@ export default function DraggableFab({ storageKey, defaultRight = 16, defaultBot
     const right = parseFloat(el.style.right) || drag.elRight;
     const bottom = parseFloat(el.style.bottom) || drag.elBottom;
     savePos(right, bottom);
-    if (!drag.dragged) onClick();
+    if (!drag.dragged && onClick) onClick();
   }, [savePos, onClick]);
 
   return (
