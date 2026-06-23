@@ -8,6 +8,7 @@ import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import NoteCardsDrawer from "./NoteCardsDrawer";
+import CalculatorFab from "./CalculatorFab";
 import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
@@ -556,6 +557,8 @@ export default function Layout() {
             </motion.div>
           </AnimatePresence>
         </main>
+
+        <CalculatorFab />
       </div>
 
       {/* Mobile bottom nav — primary workflow actions + More drawer */}
