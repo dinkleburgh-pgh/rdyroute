@@ -120,9 +120,9 @@ export default function OffDaySchedulePanel() {
                           : highlight
                             ? "bg-slate-800/50 text-slate-500"
                             : day === loadDay
-                              ? "text-slate-700 bg-blue-900/10"
+                              ? "text-blue-300 bg-blue-900/30 ring-1 ring-inset ring-blue-500/30 font-bold"
                               : day === unloadsDay
-                                ? "text-slate-700 bg-emerald-900/10"
+                                ? "text-emerald-300 bg-emerald-900/30 ring-1 ring-inset ring-emerald-500/30 font-bold"
                                 : "text-slate-700",
                       )}
                     >
