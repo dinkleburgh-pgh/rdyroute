@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useCallback } from "react";
 import { Wrench } from "lucide-react";
 import DraggableFab from "./DraggableFab";
 import CalculatorFab from "./CalculatorFab";
@@ -24,6 +24,11 @@ export default function ToolFab() {
   const [activePanel, setActivePanel] = useState<string | null>(null);
   const fabRef = useRef<HTMLDivElement>(null);
   const [fabRect, setFabRect] = useState<DOMRect | null>(null);
+  const fabPosRef = useRef<{ right: number; bottom: number } | null>(null);
+
+  const updateFabRect = useCallback(() => {
+    if (fabRef.current) setFabRect(fabRef.current.getBoundingClientRect());
+  }, []);
 
   const settingsMap = useMemo(
     () => settings ? new Map(settings.map((s) => [s.key, s.value])) : new Map(),
@@ -43,10 +48,8 @@ export default function ToolFab() {
   );
 
   useEffect(() => {
-    if (wheelOpen && fabRef.current) {
-      setFabRect(fabRef.current.getBoundingClientRect());
-    }
-  }, [wheelOpen]);
+    if (wheelOpen) updateFabRect();
+  }, [wheelOpen, updateFabRect]);
 
   if (enabledTools.length === 0) return null;
 
@@ -69,7 +72,7 @@ export default function ToolFab() {
       <CalendarFab open={activePanel === "calendar"} onClose={closePanel} />
       <NoteCardsDrawer open={activePanel === "notes"} onClose={closePanel} />
 
-      <DraggableFab storageKey="tool" defaultRight={16} defaultBottom={100}>
+      <DraggableFab storageKey="tool" defaultRight={16} defaultBottom={100} onMove={updateFabRect}>
         <div ref={fabRef} onClick={() => setWheelOpen((o) => !o)} className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-white shadow-lg shadow-slate-900/40 ring-2 ring-slate-600/50 transition-all hover:bg-slate-700 hover:scale-110 active:scale-95 cursor-pointer">
           <Wrench className="h-6 w-6" />
         </div>

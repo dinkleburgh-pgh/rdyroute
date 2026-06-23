@@ -6,10 +6,11 @@ interface Props {
   defaultRight?: number;
   defaultBottom?: number;
   onClick?: () => void;
+  onMove?: (right: number, bottom: number) => void;
   children: ReactNode;
 }
 
-export default function DraggableFab({ storageKey, defaultRight = 16, defaultBottom = 16, onClick, children }: Props) {
+export default function DraggableFab({ storageKey, defaultRight = 16, defaultBottom = 16, onClick, onMove, children }: Props) {
   const { user } = useAuth();
   const lsKey = `fab_pos_${storageKey}_${user?.username ?? "anon"}`;
 
@@ -51,10 +52,13 @@ export default function DraggableFab({ storageKey, defaultRight = 16, defaultBot
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) dragRef.current.dragged = true;
     const el = fabRef.current;
     if (el) {
-      el.style.right = (dragRef.current.elRight - dx) + "px";
-      el.style.bottom = (dragRef.current.elBottom - dy) + "px";
+      const right = dragRef.current.elRight - dx;
+      const bottom = dragRef.current.elBottom - dy;
+      el.style.right = right + "px";
+      el.style.bottom = bottom + "px";
+      onMove?.(right, bottom);
     }
-  }, []);
+  }, [onMove]);
 
   const handlePointerUp = useCallback(() => {
     const drag = dragRef.current;
