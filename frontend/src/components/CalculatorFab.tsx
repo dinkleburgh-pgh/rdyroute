@@ -1,6 +1,6 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Calculator, X, Copy, RotateCcw, Delete, Equal } from "lucide-react";
+import { Calculator, X, Copy, Delete, Equal } from "lucide-react";
 import { useTrackedItems } from "../api/hooks";
 
 type Op = "+" | "-" | "×" | "÷";
@@ -68,7 +68,7 @@ export default function CalculatorFab() {
     setWaiting(true);
   }, [display, prev, op]);
 
-  const clear = useCallback(() => { setDisplay("0"); setPrev(null); setOp(null); setWaiting(false); }, []);
+  const clearAll = useCallback(() => { setDisplay("0"); setPrev(null); setOp(null); setWaiting(false); setTape([]); }, []);
   const backspace = useCallback(() => { if (waiting) return; setDisplay((s) => (s.length > 1 ? s.slice(0, -1) : "0")); }, [waiting]);
   const toggleSign = useCallback(() => { setDisplay((s) => (s.startsWith("-") ? s.slice(1) : "-" + s)); }, []);
 
@@ -182,7 +182,7 @@ export default function CalculatorFab() {
               {/* Number pad — fills remaining space */}
               <div className="mx-3 flex flex-1 flex-col gap-1 pb-2 md:mx-0 md:pb-0">
                 <div className="grid flex-1 grid-cols-4 gap-1">
-                  <button onClick={clear} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none text-amber-400`}><RotateCcw className="h-4 w-4 mx-auto" /></button>
+                  <button onClick={clearAll} className={`${auxBg} rounded-lg text-sm font-bold active:scale-95 select-none text-amber-400`}>C</button>
                   <button onClick={backspace} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}><Delete className="h-4 w-4 mx-auto" /></button>
                   <button onClick={toggleSign} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}>±</button>
                   <button onClick={() => setOpState("÷")} className={`${(op ?? "") === "÷" ? "bg-sky-600 text-white" : opBg} rounded-lg text-lg font-bold active:scale-95 select-none`}>÷</button>

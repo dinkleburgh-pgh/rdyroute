@@ -1970,7 +1970,7 @@ const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
 export function useTrackedItems() {
   return useQuery({
     queryKey: ["tracked-items"],
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     queryFn: async (): Promise<TrackedItem[]> => {
       try {
         const { data } = await api.get<AppSetting>("/settings/tracked_items_map");
