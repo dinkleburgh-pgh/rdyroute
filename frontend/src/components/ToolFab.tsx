@@ -9,14 +9,13 @@ import { useSettings } from "../api/hooks";
 interface Tool {
   id: string;
   label: string;
-  color: string;
   bg: string;
 }
 
 const TOOLS: Tool[] = [
-  { id: "calculator", label: "Calc",  color: "text-sky-400", bg: "bg-sky-600" },
-  { id: "notes",      label: "Notes", color: "text-violet-400", bg: "bg-violet-600" },
-  { id: "calendar",   label: "Sched", color: "text-emerald-400", bg: "bg-emerald-600" },
+  { id: "calculator", label: "Calc",  bg: "bg-sky-600" },
+  { id: "notes",      label: "Notes", bg: "bg-violet-600" },
+  { id: "calendar",   label: "Sched", bg: "bg-emerald-600" },
 ];
 
 export default function ToolFab() {
@@ -52,6 +51,10 @@ export default function ToolFab() {
     setActivePanel(null);
   }
 
+  const count = enabledTools.length;
+  const arcAngle = Math.min(160, count * 50);
+  const startAngle = -(arcAngle / 2);
+
   return (
     <>
       <CalculatorFab open={activePanel === "calculator"} onClose={closePanel} />
@@ -59,28 +62,39 @@ export default function ToolFab() {
       <NoteCardsDrawer open={activePanel === "notes"} onClose={closePanel} />
 
       <DraggableFab storageKey="tool" defaultRight={16} defaultBottom={100} onClick={() => setWheelOpen((o) => !o)}>
-        <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-white shadow-lg shadow-slate-900/40 ring-2 ring-slate-600/50 transition-all hover:bg-slate-700 hover:scale-110 active:scale-95">
+        <div className="relative flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-white shadow-lg shadow-slate-900/40 ring-2 ring-slate-600/50 transition-all hover:bg-slate-700 hover:scale-110 active:scale-95">
           <Wrench className="h-6 w-6" />
         </div>
+        {wheelOpen && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            {enabledTools.map((tool, i) => {
+              const angle = startAngle + (arcAngle * i) / (count - 1 || 1);
+              const rad = (angle * Math.PI) / 180;
+              const r = 80;
+              const x = Math.sin(rad) * r;
+              const y = -Math.cos(rad) * r;
+              return (
+                <div
+                  key={tool.id}
+                  className="absolute"
+                  style={{ transform: `translate(${x}px, ${y}px)` }}
+                >
+                  <button
+                    onClick={(e) => { e.stopPropagation(); openPanel(tool.id); }}
+                    className={`${tool.bg} flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition-all hover:scale-110 active:scale-95`}
+                    style={{ animation: `popIn 0.25s cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 0.04}s both` }}
+                  >
+                    <span className="text-[8px] font-bold uppercase leading-tight text-center">{tool.label}</span>
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
       </DraggableFab>
 
       {wheelOpen && (
-        <>
-          <div className="fixed inset-0 z-[69]" onClick={() => setWheelOpen(false)} />
-          <div className="fixed bottom-36 right-4 z-[70] flex flex-col-reverse items-center gap-3">
-            {enabledTools.map((tool, i) => (
-              <button
-                key={tool.id}
-                onClick={() => openPanel(tool.id)}
-                className={`${tool.bg} flex h-12 w-12 items-center justify-center rounded-full text-white shadow-lg transition-all hover:scale-110 active:scale-95`}
-                style={{ animation: `fadeIn 0.2s ease-out ${i * 0.05}s both` }}
-              >
-                <span className="text-[8px] font-bold uppercase leading-tight text-center">{tool.label}</span>
-              </button>
-            ))}
-          </div>
-          <style>{`@keyframes fadeIn { from { opacity: 0; transform: translateY(8px) scale(0.8); } to { opacity: 1; transform: translateY(0) scale(1); } }`}</style>
-        </>
+        <style>{`@keyframes popIn { from { opacity: 0; transform: scale(0.3); } to { opacity: 1; transform: scale(1); } }`}</style>
       )}
     </>
   );
