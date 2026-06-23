@@ -263,11 +263,15 @@ export default function NoteCardsDrawer() {
                       </button>
                     </div>
                     <textarea
-                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
-                      rows={4}
+                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none overflow-hidden"
+                      rows={1}
                       placeholder="Notes…"
                       value={sec.body}
-                      onChange={(e) => updateSection(sec.id, "body", e.target.value)}
+                      onChange={(e) => {
+                        updateSection(sec.id, "body", e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = e.target.scrollHeight + "px";
+                      }}
                     />
                   </div>
                 ))}
