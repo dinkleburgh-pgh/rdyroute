@@ -167,7 +167,7 @@ export default function NoteCardsDrawer() {
     <>
       {/* Floating panel */}
       {open && (
-        <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ maxHeight: "calc(80svh - 3rem)" }}>
+        <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ height: "calc(80svh - 3rem)" }}>
           {/* Panel header — grid keeps close button in a fixed position */}
           <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-2 border-b border-slate-700 bg-slate-800 px-4 py-3 rounded-t-xl">
             {/* Tab switcher */}
