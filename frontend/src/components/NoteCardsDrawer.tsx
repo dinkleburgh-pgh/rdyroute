@@ -6,8 +6,8 @@
 import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { useLocation } from "react-router-dom";
-import { FileText, Check, Bell } from "lucide-react";
-import { useSettings, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
+import { FileText, Check, Bell, AlertTriangle } from "lucide-react";
+import { useSettings, useSpareAssignments, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
 import { useAuth } from "../contexts/AuthContext";
@@ -50,7 +50,7 @@ export default function NoteCardsDrawer() {
   const { data: board = [] } = useBoard(todayIso());
   const upsert = useUpsertSetting();
   const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"truck" | "mine">("truck");
+  const [tab, setTab] = useState<"truck" | "mine" | "reminders">("truck");
   const [filter, setFilter] = useState<"all" | "today">("all");
 
   // Personal note state
@@ -75,6 +75,18 @@ export default function NoteCardsDrawer() {
       setTimeout(() => setNoteSaved(false), 1500);
     }, 800);
   }
+
+  const yesterday = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+
+  const { data: yesterdaySpares } = useSpareAssignments(yesterday);
+  const unreturnedSpares = useMemo(
+    () => (yesterdaySpares ?? []).filter((s) => !s.returned),
+    [yesterdaySpares],
+  );
 
   const { loadDay } = workdayNumbers();
 
@@ -159,6 +171,16 @@ export default function NoteCardsDrawer() {
               >
                 My Notes
               </button>
+              <button
+                type="button"
+                onClick={() => setTab("reminders")}
+                className={clsx(
+                  "px-3 py-1.5 text-xs font-semibold transition-colors border-l border-slate-700",
+                  tab === "reminders" ? "bg-amber-700 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                )}
+              >
+                Reminders {unreturnedSpares.length > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{unreturnedSpares.length}</span>}
+              </button>
             </div>
 
             <div className="flex items-center gap-2">
@@ -213,6 +235,32 @@ export default function NoteCardsDrawer() {
                   value={personalText}
                   onChange={(e) => handlePersonalChange(e.target.value)}
                 />
+              </div>
+            )}
+
+            {/* Reminders tab */}
+            {tab === "reminders" && (
+              <div className="space-y-3">
+                <div className="flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-amber-400" />
+                  <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Yesterday's Coverage</span>
+                </div>
+                {unreturnedSpares.length === 0 ? (
+                  <p className="text-center text-sm text-slate-500 py-6">No active coverage reminders.</p>
+                ) : (
+                  unreturnedSpares.map((s) => (
+                    <div key={s.id} className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-4 space-y-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-lg font-black text-amber-300">#{s.covering_route_truck}</span>
+                        <span className="text-xs text-slate-500">ran on</span>
+                        <span className="text-lg font-black text-amber-300">Spare #{s.spare_truck_number}</span>
+                      </div>
+                      <p className="text-sm text-slate-400">
+                        Coverage from {yesterday} has not been returned yet.
+                      </p>
+                    </div>
+                  ))
+                )}
               </div>
             )}
 
@@ -273,7 +321,7 @@ export default function NoteCardsDrawer() {
         <Bell className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
         <span className="hidden md:inline">Notes</span>
         <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.25rem] h-5 px-1.5 text-xs font-extrabold text-indigo-700 md:min-w-[1.5rem] md:h-6 md:px-2 md:text-sm" style={{ lineHeight: 1 }}>
-          {displayedNotes.length}
+          {displayedNotes.length + unreturnedSpares.length}
         </span>
       </button>
     </>
