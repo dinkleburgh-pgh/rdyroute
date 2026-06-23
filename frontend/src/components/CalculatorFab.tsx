@@ -143,7 +143,7 @@ export default function CalculatorFab() {
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 md:items-center"
+            className="fixed inset-0 z-[60] flex items-end justify-center bg-black/50 md:p-4 md:items-center"
             onClick={() => setOpen(false)}
           >
             <motion.div
@@ -151,7 +151,7 @@ export default function CalculatorFab() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: 300, opacity: 0 }}
               transition={{ type: "spring", damping: 25, stiffness: 300 }}
-              className="w-full max-w-sm rounded-t-2xl bg-slate-900 p-4 shadow-2xl md:rounded-2xl"
+              className="flex h-full w-full flex-col bg-slate-900 p-4 shadow-2xl md:max-w-sm md:rounded-2xl"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Header */}
@@ -260,21 +260,22 @@ export default function CalculatorFab() {
                 <button onClick={memSub} className={`${auxBg} text-[10px]`}>M-</button>
               </div>
 
-              {/* Tape — always visible */}
-              {tape.length > 0 && (
-                <div className="mt-3 max-h-32 overflow-y-auto rounded-lg bg-slate-950 p-2">
-                  {tape.map((t, i) => (
-                    <div key={i} className="flex justify-between py-0.5 text-[10px]">
-                      <span className="text-slate-500">{t.expr}</span>
-                      <span className="font-semibold text-slate-200">= {fmt(t.result)}</span>
-                    </div>
-                  ))}
-                  <button onClick={clearTape} className="mt-1 text-[9px] text-slate-600 hover:text-slate-400">Clear history</button>
-                </div>
-              )}
-              {tape.length === 0 && (
-                <div className="mt-3 text-center text-[10px] text-slate-600">No calculations yet</div>
-              )}
+              {/* Tape — always visible, flex-grow on mobile */}
+              <div className="mt-3 flex-1 overflow-y-auto min-h-0 md:min-h-0">
+                {tape.length > 0 ? (
+                  <div className="rounded-lg bg-slate-950 p-2">
+                    {tape.map((t, i) => (
+                      <div key={i} className="flex justify-between py-0.5 text-[10px]">
+                        <span className="text-slate-500">{t.expr}</span>
+                        <span className="font-semibold text-slate-200">= {fmt(t.result)}</span>
+                      </div>
+                    ))}
+                    <button onClick={clearTape} className="mt-1 text-[9px] text-slate-600 hover:text-slate-400">Clear history</button>
+                  </div>
+                ) : (
+                  <div className="text-center text-[10px] text-slate-600">No calculations yet</div>
+                )}
+              </div>
             </motion.div>
           </motion.div>
         )}
