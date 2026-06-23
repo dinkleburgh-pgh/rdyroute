@@ -19,19 +19,17 @@ export default function CalendarFab({ open, onClose }: { open: boolean; onClose:
             <X className="h-4 w-4" />
           </button>
         </div>
-        <div className="relative flex-1 overflow-hidden">
-          <div className="overflow-x-auto p-4 scrollbar-thin">
-            <OffDaySchedulePanel compact />
-          </div>
-          {/* Bouncing right-edge indicator */}
-          <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center md:hidden">
-            <div className="flex h-12 w-6 items-center justify-center rounded-l-full bg-slate-800/80 backdrop-blur animate-bounce-slide">
-              <span className="text-xs text-slate-400">&rsaquo;</span>
-            </div>
+        <div className="flex-1 overflow-auto p-4 scrollbar-thin">
+          <OffDaySchedulePanel compact />
+        </div>
+        {/* Bouncing right-edge arrow — fixed in viewport */}
+        <div className="pointer-events-none fixed bottom-8 right-8 z-[66] md:hidden">
+          <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-800 shadow-lg border border-slate-700 animate-bounce-slide">
+            <span className="text-lg font-bold text-slate-400">&rarr;</span>
           </div>
         </div>
       </div>
-      <style>{`@keyframes bounce-slide { 0%, 100% { transform: translateX(0); } 50% { transform: translateX(-4px); } } .animate-bounce-slide { animation: bounce-slide 1s ease-in-out 4; } .scrollbar-thin::-webkit-scrollbar { height: 4px; } .scrollbar-thin::-webkit-scrollbar-track { background: transparent; } .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 2px; }`}</style>
+      <style>{`@keyframes bounce-slide { 0%, 100% { transform: translateX(0) scale(1); } 50% { transform: translateX(-8px) scale(1.15); } } .animate-bounce-slide { animation: bounce-slide 0.8s ease-in-out 5; } .scrollbar-thin::-webkit-scrollbar { width: 4px; height: 4px; } .scrollbar-thin::-webkit-scrollbar-track { background: transparent; } .scrollbar-thin::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.3); border-radius: 2px; }`}</style>
     </div>
   );
 }
