@@ -71,6 +71,10 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
         db.commit()
         return
 
+    # Check force_unloaded_on_new_day setting — overrides all prior-status logic
+    force_setting = db.get(AppSetting, "force_unloaded_on_new_day")
+    force_unloaded = force_setting is not None and force_setting.value is True
+
     load_day_num = _load_day_number(run_date)
     prev_run_date = db.scalar(
         select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
@@ -188,6 +192,10 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             # Only reset to unloaded if the spare wasn't already carrying a dirty state forward.
             if prior is None or prior.status != TruckStatus.dirty:
                 status = TruckStatus.unloaded
+
+        # force_unloaded_on_new_day overrides everything — mark all trucks unloaded
+        if force_unloaded:
+            status = TruckStatus.unloaded
 
         row = TruckState(
             truck_number=truck.truck_number,

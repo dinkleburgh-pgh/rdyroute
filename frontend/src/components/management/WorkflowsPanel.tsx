@@ -17,6 +17,8 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
+      calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), true),
+      force_unloaded_on_new_day: asBool(map.get("force_unloaded_on_new_day"), false),
     }),
     [map],
   );
@@ -130,6 +132,32 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, note_cards_enabled: e.target.checked })}
           />
           Enable Note Cards
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Calculator FAB"
+        hint="Show the floating calculator button for quick pack/percent calculations."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.calculator_fab_enabled}
+            onChange={(e) => setForm({ ...form, calculator_fab_enabled: e.target.checked })}
+          />
+          Enable calculator
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Auto-unload all trucks"
+        hint="When enabled, every truck is automatically set to Unloaded at the start of each new run day, overriding any dirty/unfinished state from the previous day."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.force_unloaded_on_new_day}
+            onChange={(e) => setForm({ ...form, force_unloaded_on_new_day: e.target.checked })}
+          />
+          Assume all trucks unloaded by next start day
         </label>
       </FieldRow>
       <SaveButton

@@ -35,6 +35,8 @@ KNOWN_KEYS = {
     "arrived_tracking_enabled",
     "note_cards_enabled",
     "tracked_items_map",
+    "calculator_fab_enabled",
+    "force_unloaded_on_new_day",
     "communications_censor_words",
     "ollama_base_url",
     "shortage_sheet_ollama_model",
@@ -67,6 +69,8 @@ _USER_READABLE_KEYS = {
     "arrived_tracking_enabled",
     "note_cards_enabled",
     "tracked_items_map",
+    "calculator_fab_enabled",
+    "force_unloaded_on_new_day",
 }
 
 # Keys any authenticated user may write to (e.g. personal notes)

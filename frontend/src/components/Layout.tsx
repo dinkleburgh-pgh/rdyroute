@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useSettings, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import NoteCardsDrawer from "./NoteCardsDrawer";
@@ -145,6 +145,9 @@ function BuildInfo() {
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const { data: allSettings } = useSettings();
+  const settingsMap = useMemo(() => allSettings ? new Map(allSettings.map((s) => [s.key, s.value])) : new Map(), [allSettings]);
+  const calcFabEnabled = settingsMap.get("calculator_fab_enabled") !== false;
   const nav = useNavigate();
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
@@ -558,7 +561,7 @@ export default function Layout() {
           </AnimatePresence>
         </main>
 
-        <CalculatorFab />
+        {calcFabEnabled && <CalculatorFab />}
       </div>
 
       {/* Mobile bottom nav — primary workflow actions + More drawer */}
