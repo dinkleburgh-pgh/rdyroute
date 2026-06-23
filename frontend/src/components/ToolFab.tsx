@@ -51,8 +51,7 @@ export default function ToolFab() {
   if (enabledTools.length === 0) return null;
 
   function openPanel(id: string) {
-    setWheelOpen(false);
-    setActivePanel(id);
+    setActivePanel((prev) => prev === id ? null : id);
   }
 
   function closePanel() {
@@ -62,7 +61,7 @@ export default function ToolFab() {
   const count = enabledTools.length;
   const arcAngle = Math.min(160, count * 50);
   const startAngle = -(arcAngle / 2);
-  const r = 80;
+  const r = 55;
 
   return (
     <>
