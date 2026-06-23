@@ -73,7 +73,7 @@ export default function DraggableFab({ storageKey, defaultRight = 16, defaultBot
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerUp}
-      className="fixed z-50 touch-none select-none"
+      className="fixed z-[70] touch-none select-none"
       style={{
         right: pos ? `${pos.right}px` : `${defaultRight}px`,
         bottom: pos ? `${pos.bottom}px` : `${defaultBottom}px`,
