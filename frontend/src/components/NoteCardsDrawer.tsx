@@ -308,15 +308,12 @@ export default function NoteCardsDrawer() {
                     <p className="text-center text-sm text-slate-500 py-3">No active coverage reminders.</p>
                   ) : (
                     unreturnedSpares.map((s) => (
-                      <div key={s.id} className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-4 space-y-2">
+                      <div key={s.id} className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-3">
                         <div className="flex items-center gap-2">
-                          <span className="text-lg font-black text-amber-300">#{s.covering_route_truck}</span>
+                          <span className="text-base font-black text-amber-300">#{s.covering_route_truck}</span>
                           <span className="text-xs text-slate-500">ran on</span>
-                          <span className="text-lg font-black text-amber-300">Spare #{s.spare_truck_number}</span>
+                          <span className="text-base font-black text-amber-300">Spare #{s.spare_truck_number}</span>
                         </div>
-                        <p className="text-sm text-slate-400">
-                          Coverage from {yesterday} has not been returned yet.
-                        </p>
                       </div>
                     ))
                   )}
@@ -361,19 +358,22 @@ export default function NoteCardsDrawer() {
                     </div>
                   )}
 
-                  {/* Off trucks */}
-                  {offTrucksToday.length > 0 && (
-                    <div className="space-y-2">
-                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Off Today</p>
-                      <div className="flex flex-wrap gap-2">
-                        {offTrucksToday.map((t) => (
-                          <span key={t.truck_number} className="inline-flex items-center rounded-full bg-red-900/30 px-3 py-1 text-xs font-semibold text-red-400">
-                            #{t.truck_number}
-                          </span>
-                        ))}
+                  {/* Routes Off — non-spare route trucks not running today */}
+                  {(() => {
+                    const routeOff = board.filter((t) => t.state?.status === "off" && t.truck_type !== "Spare");
+                    return routeOff.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Routes Off</p>
+                        <div className="flex flex-wrap gap-2">
+                          {routeOff.map((t) => (
+                            <span key={t.truck_number} className="inline-flex items-center rounded-full bg-red-900/30 px-3 py-1 text-xs font-semibold text-red-400">
+                              #{t.truck_number}
+                            </span>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    ) : null;
+                  })()}
 
                   {(!todaySpares || todaySpares.filter((s) => !s.returned).length === 0) && todaySwaps.length === 0 && offTrucksToday.length === 0 && (
                     <p className="text-center text-sm text-slate-500 py-3">No coverage or off trucks today.</p>
