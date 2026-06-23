@@ -52,8 +52,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(LS_USER_KEY);
-    setUser(null);
+    api.post("/auth/logout").catch(() => {}).finally(() => {
+      localStorage.removeItem(LS_USER_KEY);
+      setUser(null);
+    });
   }, []);
 
   // On every mount, verify the httpOnly JWT cookie is still valid by calling
