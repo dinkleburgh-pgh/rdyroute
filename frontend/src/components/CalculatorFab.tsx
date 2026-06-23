@@ -1,4 +1,4 @@
-import { useState, useCallback, useRef, useEffect } from "react";
+import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, X, Copy, RotateCcw, Delete, Equal } from "lucide-react";
 import { useTrackedItems } from "../api/hooks";
@@ -26,19 +26,12 @@ export default function CalculatorFab() {
   const [packMode, setPackMode] = useState<"packs" | "pieces">("packs");
   const [packItem, setPackItem] = useState<string>("");
   const [copied, setCopied] = useState(false);
-  const [showTape, setShowTape] = useState(false);
 
   const { data: trackedItems = [] } = useTrackedItems();
   const itemsWithPack = trackedItems.filter((i) => i.pack_size != null && i.pack_size > 0);
   const selectedItem = trackedItems.find((i) => i.label === packItem);
   const packSize = selectedItem?.pack_size ?? 1;
   const unitLabel = selectedItem?.unit_label ?? "Pack";
-
-  const inputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    if (open) inputRef.current?.focus();
-  }, [open]);
 
   const val = parseFloat(display);
 
@@ -118,8 +111,7 @@ export default function CalculatorFab() {
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
     } catch {
-      // fallback: just select text in display
-      inputRef.current?.select();
+      // clipboard unavailable
     }
   }, [display]);
 
@@ -180,16 +172,9 @@ export default function CalculatorFab() {
 
               {/* Display */}
               <div className="mb-3 overflow-hidden rounded-xl bg-slate-950 p-3">
-                <input
-                  ref={inputRef}
-                  type="text"
-                  value={display}
-                  onChange={(e) => {
-                    const v = e.target.value.replace(/[^0-9.\-]/g, "");
-                    if (v !== "") setDisplay(v);
-                  }}
-                  className="w-full bg-transparent text-right text-3xl font-bold tabular-nums text-slate-100 outline-none"
-                />
+                <div className="w-full bg-transparent text-right text-3xl font-bold tabular-nums text-slate-100 outline-none select-none">
+                  {display}
+                </div>
                 <div className="mt-1 flex items-center justify-between text-[10px] text-slate-500">
                   <span>{prev != null ? `${fmt(prev)} ${op ?? ""}` : "\u00a0"}</span>
                   {selectedItem && (
@@ -275,26 +260,20 @@ export default function CalculatorFab() {
                 <button onClick={memSub} className={`${auxBg} text-[10px]`}>M-</button>
               </div>
 
-              {/* Tape toggle */}
+              {/* Tape — always visible */}
               {tape.length > 0 && (
-                <div className="mt-3">
-                  <button onClick={() => setShowTape(!showTape)} className="flex items-center gap-1 text-[10px] font-semibold text-slate-500">
-                    {showTape ? "Hide" : "Show"} history ({tape.length})
-                  </button>
-                  <AnimatePresence>
-                    {showTape && (
-                      <motion.div initial={{ height: 0 }} animate={{ height: "auto" }} exit={{ height: 0 }} className="mt-1 max-h-32 overflow-y-auto rounded-lg bg-slate-950 p-2">
-                        {tape.map((t, i) => (
-                          <div key={i} className="flex justify-between py-0.5 text-[10px]">
-                            <span className="text-slate-500">{t.expr}</span>
-                            <span className="font-semibold text-slate-200">= {fmt(t.result)}</span>
-                          </div>
-                        ))}
-                        <button onClick={clearTape} className="mt-1 text-[9px] text-slate-600 hover:text-slate-400">Clear history</button>
-                      </motion.div>
-                    )}
-                  </AnimatePresence>
+                <div className="mt-3 max-h-32 overflow-y-auto rounded-lg bg-slate-950 p-2">
+                  {tape.map((t, i) => (
+                    <div key={i} className="flex justify-between py-0.5 text-[10px]">
+                      <span className="text-slate-500">{t.expr}</span>
+                      <span className="font-semibold text-slate-200">= {fmt(t.result)}</span>
+                    </div>
+                  ))}
+                  <button onClick={clearTape} className="mt-1 text-[9px] text-slate-600 hover:text-slate-400">Clear history</button>
                 </div>
+              )}
+              {tape.length === 0 && (
+                <div className="mt-3 text-center text-[10px] text-slate-600">No calculations yet</div>
               )}
             </motion.div>
           </motion.div>
