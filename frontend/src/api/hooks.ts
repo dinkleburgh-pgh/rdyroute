@@ -1976,17 +1976,23 @@ export function useTrackedItems() {
         const { data } = await api.get<AppSetting>("/settings/tracked_items_map");
         const raw = data?.value;
         if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-          const items = Object.entries(raw as Record<string, unknown>).map(([label, meta]) => {
+          const seen = new Set<string>();
+          const items: TrackedItem[] = [];
+          for (const [label, meta] of Object.entries(raw as Record<string, unknown>)) {
             const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
-            return {
+            items.push({
               label,
               qty_default: Number(m.qty_default) || 1,
               category: typeof m.category === "string" ? m.category : undefined,
               unit_label: typeof m.unit_label === "string" ? m.unit_label : undefined,
               pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
-            };
-          });
-          return items.length > 0 ? items : DEFAULT_TRACKED_ITEMS;
+            });
+            seen.add(label);
+          }
+          for (const d of DEFAULT_TRACKED_ITEMS) {
+            if (!seen.has(d.label)) items.push(d);
+          }
+          return items;
         }
         return DEFAULT_TRACKED_ITEMS;
       } catch (err: unknown) {
