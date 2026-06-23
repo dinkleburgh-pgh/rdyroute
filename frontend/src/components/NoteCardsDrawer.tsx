@@ -7,6 +7,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { useLocation } from "react-router-dom";
 import { FileText, Check, Bell, AlertTriangle, Plus, Trash2 } from "lucide-react";
+import DraggableFab from "./DraggableFab";
 import { useSettings, useSpareAssignments, useRouteSwapLog, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
@@ -425,24 +426,21 @@ export default function NoteCardsDrawer() {
       )}
 
       {/* FAB toggle button */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={clsx(
-          "fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
-          "px-3 py-2 text-sm font-bold md:bottom-6 md:right-5 md:gap-3 md:px-6 md:py-3.5 md:text-base",
+      <DraggableFab storageKey="notes" defaultX={window.innerWidth - 120} defaultY={window.innerHeight - 200} onClick={() => setOpen((o) => !o)}>
+        <div className={clsx(
+          "flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
+          "px-3 py-2 text-sm font-bold md:gap-3 md:px-6 md:py-3.5 md:text-base",
           open
             ? "bg-violet-700 text-white ring-4 ring-violet-500/40 shadow-violet-900/50"
             : "bg-gradient-to-br from-violet-600 to-indigo-700 text-white ring-2 ring-violet-400/30 hover:from-violet-500 hover:to-indigo-600 hover:ring-violet-400/50 hover:scale-105",
-        )}
-      >
-        {/* Clipboard / note icon */}
-        <Bell className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
-        <span className="hidden md:inline">Notes</span>
-        <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.25rem] h-5 px-1.5 text-xs font-extrabold text-indigo-700 md:min-w-[1.5rem] md:h-6 md:px-2 md:text-sm" style={{ lineHeight: 1 }}>
-          {displayedNotes.length + unreturnedSpares.length}
-        </span>
-      </button>
+        )}>
+          <Bell className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
+          <span className="hidden md:inline">Notes</span>
+          <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.25rem] h-5 px-1.5 text-xs font-extrabold text-indigo-700 md:min-w-[1.5rem] md:h-6 md:px-2 md:text-sm" style={{ lineHeight: 1 }}>
+            {displayedNotes.length + unreturnedSpares.length}
+          </span>
+        </div>
+      </DraggableFab>
     </>
   );
 }

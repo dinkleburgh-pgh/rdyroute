@@ -17,6 +17,7 @@ import {
   useUpsertTruckState,
 } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
+import { useCollapseState } from "../utils/useCollapseState";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
@@ -1099,17 +1100,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             );
           };
 
-          const renderUnloadedSection = (
-            sectionKey: string,
-            title: string,
-            titleClassName: string,
-            sectionRows: TruckWithState[],
-          ) => {
+          const CollapsibleSection = ({ sectionKey, title, titleClassName, sectionRows }: { sectionKey: string; title: string; titleClassName: string; sectionRows: TruckWithState[] }) => {
+            const { open, toggle } = useCollapseState(`board-${sectionKey}`, true);
             if (sectionRows.length === 0) return null;
             return (
               <details
                 key={sectionKey}
-                open
+                open={open}
+                onToggle={toggle}
                 className="group col-span-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/50"
               >
                 <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-900/80 px-4 py-3">
@@ -1134,33 +1132,33 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
           if (!fleetMode && filter === "unloaded") {
             return [
-              renderUnloadedSection("unloaded-running", `Day ${runDayNum}`, "text-emerald-400", unloadedRunningRows),
-              renderUnloadedSection("unloaded-spare", "Spare", "text-cyan-400", unloadedSpareRows),
-              renderUnloadedSection("unloaded-off", "Off", "text-slate-400", unloadedOffRows),
+              <CollapsibleSection key="unloaded-running" sectionKey="unloaded-running" title={`Day ${runDayNum}`} titleClassName="text-emerald-400" sectionRows={unloadedRunningRows} />,
+              <CollapsibleSection key="unloaded-spare" sectionKey="unloaded-spare" title="Spare" titleClassName="text-cyan-400" sectionRows={unloadedSpareRows} />,
+              <CollapsibleSection key="unloaded-off" sectionKey="unloaded-off" title="Off" titleClassName="text-slate-400" sectionRows={unloadedOffRows} />,
             ];
           }
 
           if (!fleetMode && filter === "dirty") {
             return [
-              renderUnloadedSection("dirty-requests", "Requests", "text-amber-400", priorityRows),
-              renderUnloadedSection("dirty-coverages", "Spares / Coverages", "text-violet-400", dirtyCoverageRows),
-              renderUnloadedSection("dirty-needs-checked", "Needs Checked", "text-amber-400", needsCheckedRows),
-              renderUnloadedSection("dirty-dirty", "Dirty", "text-red-400", dirtyRouteRows),
-              renderUnloadedSection("dirty-unfinished", "Unfinished", "text-status-unfinished", unfinishedRows),
+              <CollapsibleSection key="dirty-requests" sectionKey="dirty-requests" title="Requests" titleClassName="text-amber-400" sectionRows={priorityRows} />,
+              <CollapsibleSection key="dirty-coverages" sectionKey="dirty-coverages" title="Spares / Coverages" titleClassName="text-violet-400" sectionRows={dirtyCoverageRows} />,
+              <CollapsibleSection key="dirty-needs-checked" sectionKey="dirty-needs-checked" title="Needs Checked" titleClassName="text-amber-400" sectionRows={needsCheckedRows} />,
+              <CollapsibleSection key="dirty-dirty" sectionKey="dirty-dirty" title="Dirty" titleClassName="text-red-400" sectionRows={dirtyRouteRows} />,
+              <CollapsibleSection key="dirty-unfinished" sectionKey="dirty-unfinished" title="Unfinished" titleClassName="text-status-unfinished" sectionRows={unfinishedRows} />,
             ];
           }
 
           if (!fleetMode && filter === "oos") {
             return [
-              renderUnloadedSection("oos-hold", "Requests", "text-amber-400", holdRows),
-              renderUnloadedSection("oos-out", "Out of Service", "text-slate-400", outOfServiceRows),
+              <CollapsibleSection key="oos-hold" sectionKey="oos-hold" title="Requests" titleClassName="text-amber-400" sectionRows={holdRows} />,
+              <CollapsibleSection key="oos-out" sectionKey="oos-out" title="Out of Service" titleClassName="text-slate-400" sectionRows={outOfServiceRows} />,
             ];
           }
 
           if (!fleetMode && filter === "spare") {
             return [
-              renderUnloadedSection("spare-cov", "Coverage", "text-violet-400", coveringSpares),
-              renderUnloadedSection("spare-idle", "Idle Spare", "text-cyan-400", idleSpares),
+              <CollapsibleSection key="spare-cov" sectionKey="spare-cov" title="Coverage" titleClassName="text-violet-400" sectionRows={coveringSpares} />,
+              <CollapsibleSection key="spare-idle" sectionKey="spare-idle" title="Idle Spare" titleClassName="text-cyan-400" sectionRows={idleSpares} />,
             ];
           }
 
