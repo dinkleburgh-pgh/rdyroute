@@ -156,12 +156,10 @@ export default function CalculatorFab() {
                 </div>
               </div>
 
-              {/* Quick percent buttons + pack converter */}
+              {/* Pack converter */}
               <div className="mx-3 mb-1 flex shrink-0 items-center gap-1.5 md:mx-0">
-                <button onClick={() => { const r = val * 0.5; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `50% of ${fmt(val)}`, result: r }]); }} className={`${pctOp} px-2 py-1`}>50%</button>
-                <button onClick={() => { const r = val * 0.8; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `80% of ${fmt(val)}`, result: r }]); }} className={`${pctOp} px-2 py-1`}>80%</button>
                 <select value={packItem} onChange={(e) => setPackItem(e.target.value)}
-                  className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1 text-[10px] text-slate-300 outline-none">
+                  className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300 outline-none">
                   <option value="">No item</option>
                   {itemsWithPack.map((i) => (
                     <option key={i.label} value={i.label}>{i.label} ({i.pack_size}/bag)</option>
@@ -169,10 +167,16 @@ export default function CalculatorFab() {
                 </select>
                 {selectedItem && (
                   <button onClick={() => { const r = val * packSize; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `${fmt(val)} bags × ${packSize}`, result: r }]); }}
-                    className="rounded-lg bg-emerald-900/30 px-2 py-1 text-[10px] font-semibold text-emerald-400 hover:bg-emerald-800/40 border border-emerald-700/30">
+                    className="rounded-lg bg-emerald-900/30 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-800/40 border border-emerald-700/30 active:scale-95 select-none">
                     ×{packSize}
                   </button>
                 )}
+              </div>
+
+              {/* Quick percent buttons */}
+              <div className="mx-3 mb-1 flex shrink-0 items-center gap-1.5 md:mx-0">
+                <button onClick={() => { const r = val * 0.5; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `50% of ${fmt(val)}`, result: r }]); }} className={`${pctOp} flex-1 py-2`}>50%</button>
+                <button onClick={() => { const r = val * 0.8; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `80% of ${fmt(val)}`, result: r }]); }} className={`${pctOp} flex-1 py-2`}>80%</button>
               </div>
 
               {/* Number pad — fills remaining space */}

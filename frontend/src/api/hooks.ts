@@ -1959,6 +1959,14 @@ export interface TrackedItem {
   pack_size?: number;
 }
 
+const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
+  { label: "Terrys/Grids",  qty_default: 1, category: "Towels", pack_size: 20 },
+  { label: "White Micros",  qty_default: 1, category: "Towels", pack_size: 50 },
+  { label: "Red Shops",     qty_default: 1, category: "Towels", pack_size: 50 },
+  { label: "Black Aprons",  qty_default: 1, category: "Aprons", pack_size: 10 },
+  { label: "White Aprons",  qty_default: 1, category: "Aprons", pack_size: 10 },
+];
+
 export function useTrackedItems() {
   return useQuery({
     queryKey: ["tracked-items"],
@@ -1968,7 +1976,7 @@ export function useTrackedItems() {
         const { data } = await api.get<AppSetting>("/settings/tracked_items_map");
         const raw = data?.value;
         if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-          return Object.entries(raw as Record<string, unknown>).map(([label, meta]) => {
+          const items = Object.entries(raw as Record<string, unknown>).map(([label, meta]) => {
             const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
             return {
               label,
@@ -1978,11 +1986,12 @@ export function useTrackedItems() {
               pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
             };
           });
+          return items.length > 0 ? items : DEFAULT_TRACKED_ITEMS;
         }
-        return [];
+        return DEFAULT_TRACKED_ITEMS;
       } catch (err: unknown) {
         const e = err as { response?: { status?: number } };
-        if (e?.response?.status === 404) return [];
+        if (e?.response?.status === 404) return DEFAULT_TRACKED_ITEMS;
         throw err;
       }
     },
