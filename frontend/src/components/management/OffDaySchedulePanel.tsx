@@ -7,7 +7,7 @@ import clsx from "clsx";
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const TYPE_SHORT: Record<string, string> = { Dust: "(D)", Uniform: "(U)" };
 
-export default function OffDaySchedulePanel() {
+export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) {
   const { data: fleet } = useFleet(false);
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
   const [hoveredDay, setHoveredDay] = useState<number | null>(null);
@@ -56,7 +56,7 @@ export default function OffDaySchedulePanel() {
         <thead>
           <tr className="bg-slate-800 text-left text-xs uppercase tracking-widest text-slate-400">
             <th className="sticky left-0 z-10 border border-slate-700/50 bg-slate-800 px-1 py-1.5 text-center">Route</th>
-            {[1, 2, 3, 4, 5].map((day) => (
+                {[1, 2, 3, 4, 5].map((day) => (
               <th
                 key={day}
                 className={clsx(
@@ -64,6 +64,7 @@ export default function OffDaySchedulePanel() {
                   pinnedDay === day && "bg-blue-900/30",
                   day === loadDay && "ring-2 ring-blue-500/40 animate-pulse",
                   day === unloadsDay && "ring-2 ring-emerald-500/40 animate-pulse",
+                  compact && day !== loadDay && day !== unloadsDay && "hidden md:table-cell",
                 )}
                 onMouseEnter={() => setHoveredDay(day)}
                 onMouseLeave={() => setHoveredDay(null)}
@@ -113,6 +114,7 @@ export default function OffDaySchedulePanel() {
                       key={day}
                       className={clsx(
                         "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-all",
+                        compact && day !== loadDay && day !== unloadsDay && "hidden md:table-cell",
                         off
                           ? highlight
                             ? "bg-red-700/60 text-red-200"
@@ -147,6 +149,7 @@ export default function OffDaySchedulePanel() {
                     key={day}
                     className={clsx(
                       "border border-slate-700/50 px-1 py-1.5 text-center font-mono tabular-nums transition-colors",
+                      compact && day !== loadDay && day !== unloadsDay && "hidden md:table-cell",
                       day === loadDay
                         ? "bg-blue-900/30 text-blue-300"
                         : day === unloadsDay
