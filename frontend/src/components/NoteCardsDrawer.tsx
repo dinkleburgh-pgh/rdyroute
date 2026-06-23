@@ -7,7 +7,7 @@ import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { useLocation } from "react-router-dom";
 import { FileText, Check, Bell, AlertTriangle, Plus, Trash2 } from "lucide-react";
-import { useSettings, useSpareAssignments, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
+import { useSettings, useSpareAssignments, useRouteSwapLog, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
 import { useAuth } from "../contexts/AuthContext";
@@ -107,6 +107,17 @@ export default function NoteCardsDrawer() {
   const unreturnedSpares = useMemo(
     () => (yesterdaySpares ?? []).filter((s) => !s.returned),
     [yesterdaySpares],
+  );
+
+  const { data: todaySpares } = useSpareAssignments(todayIso());
+  const { data: swapLog = [] } = useRouteSwapLog(1);
+  const todaySwaps = useMemo(
+    () => swapLog.filter((s) => s.run_date === todayIso()),
+    [swapLog],
+  );
+  const offTrucksToday = useMemo(
+    () => board.filter((t) => t.state?.status === "off"),
+    [board],
   );
 
   const { loadDay } = workdayNumbers();
@@ -286,27 +297,88 @@ export default function NoteCardsDrawer() {
 
             {/* Reminders tab */}
             {tab === "reminders" && (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2">
-                  <AlertTriangle className="h-4 w-4 text-amber-400" />
-                  <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Yesterday's Coverage</span>
-                </div>
-                {unreturnedSpares.length === 0 ? (
-                  <p className="text-center text-sm text-slate-500 py-6">No active coverage reminders.</p>
-                ) : (
-                  unreturnedSpares.map((s) => (
-                    <div key={s.id} className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-4 space-y-2">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg font-black text-amber-300">#{s.covering_route_truck}</span>
-                        <span className="text-xs text-slate-500">ran on</span>
-                        <span className="text-lg font-black text-amber-300">Spare #{s.spare_truck_number}</span>
+              <div className="space-y-4">
+                {/* Yesterday's Coverage */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Yesterday's Coverage</span>
+                  </div>
+                  {unreturnedSpares.length === 0 ? (
+                    <p className="text-center text-sm text-slate-500 py-3">No active coverage reminders.</p>
+                  ) : (
+                    unreturnedSpares.map((s) => (
+                      <div key={s.id} className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-4 space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg font-black text-amber-300">#{s.covering_route_truck}</span>
+                          <span className="text-xs text-slate-500">ran on</span>
+                          <span className="text-lg font-black text-amber-300">Spare #{s.spare_truck_number}</span>
+                        </div>
+                        <p className="text-sm text-slate-400">
+                          Coverage from {yesterday} has not been returned yet.
+                        </p>
                       </div>
-                      <p className="text-sm text-slate-400">
-                        Coverage from {yesterday} has not been returned yet.
-                      </p>
+                    ))
+                  )}
+                </div>
+
+                {/* Today's Coverage */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-blue-400" />
+                    <span className="text-xs font-semibold text-blue-400 uppercase tracking-wide">Today's Coverage</span>
+                  </div>
+
+                  {/* Active spares */}
+                  {todaySpares && todaySpares.filter((s) => !s.returned).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Active Spares</p>
+                      {todaySpares.filter((s) => !s.returned).map((s) => (
+                        <div key={s.id} className="rounded-xl border border-blue-700/30 bg-blue-900/10 p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-black text-blue-300">Spare #{s.spare_truck_number}</span>
+                            <span className="text-xs text-slate-500">covering</span>
+                            <span className="text-base font-black text-blue-300">#{s.covering_route_truck}</span>
+                          </div>
+                        </div>
+                      ))}
                     </div>
-                  ))
-                )}
+                  )}
+
+                  {/* Route swaps */}
+                  {todaySwaps.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Route Swaps</p>
+                      {todaySwaps.map((s, i) => (
+                        <div key={i} className="rounded-xl border border-blue-700/30 bg-blue-900/10 p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-black text-blue-300">#{s.route_truck}</span>
+                            <span className="text-xs text-slate-500">loaded by</span>
+                            <span className="text-base font-black text-blue-300">#{s.load_on_truck}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Off trucks */}
+                  {offTrucksToday.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Off Today</p>
+                      <div className="flex flex-wrap gap-2">
+                        {offTrucksToday.map((t) => (
+                          <span key={t.truck_number} className="inline-flex items-center rounded-full bg-red-900/30 px-3 py-1 text-xs font-semibold text-red-400">
+                            #{t.truck_number}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {(!todaySpares || todaySpares.filter((s) => !s.returned).length === 0) && todaySwaps.length === 0 && offTrucksToday.length === 0 && (
+                    <p className="text-center text-sm text-slate-500 py-3">No coverage or off trucks today.</p>
+                  )}
+                </div>
               </div>
             )}
 
