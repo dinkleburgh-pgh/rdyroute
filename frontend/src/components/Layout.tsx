@@ -496,7 +496,7 @@ export default function Layout() {
               nav("/login");
             }}
           >
-            Logout
+            {user?.role === "guest" ? "Login" : "Logout"}
           </button>
           <BuildInfo />
         </div>

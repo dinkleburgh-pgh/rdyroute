@@ -1,7 +1,6 @@
 import { useState, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, X, Copy, Delete, Equal } from "lucide-react";
-import { useTrackedItems } from "../api/hooks";
 
 type Op = "+" | "-" | "×" | "÷";
 
@@ -26,8 +25,14 @@ export default function CalculatorFab() {
   const [packItem, setPackItem] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
-  const { data: trackedItems = [] } = useTrackedItems();
-  const selectedItem = trackedItems.find((i) => i.label === packItem);
+  const CALC_ITEMS = [
+    { label: "Terrys/Grids", pack_size: 20 },
+    { label: "White Micros", pack_size: 20 },
+    { label: "Red Shops",    pack_size: 50 },
+    { label: "Black Aprons", pack_size: 10 },
+    { label: "White Aprons", pack_size: 10 },
+  ];
+  const selectedItem = CALC_ITEMS.find((i) => i.label === packItem);
   const packSize = selectedItem?.pack_size ?? 1;
 
   const val = parseFloat(display);
@@ -160,8 +165,8 @@ export default function CalculatorFab() {
                 <select value={packItem} onChange={(e) => setPackItem(e.target.value)}
                   className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300 outline-none">
                   <option value="">No item</option>
-                  {trackedItems.map((i) => (
-                    <option key={i.label} value={i.label}>{i.label}{i.pack_size ? ` (${i.pack_size}/bag)` : ""}</option>
+                  {CALC_ITEMS.map((i) => (
+                    <option key={i.label} value={i.label}>{i.label} ({i.pack_size}/bag)</option>
                   ))}
                 </select>
                 {selectedItem?.pack_size && (
