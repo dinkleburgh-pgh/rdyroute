@@ -15,11 +15,13 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ label: string; category: string; qty: string }>({ label: "", category: "", qty: "1" });
+  const [editForm, setEditForm] = useState<{ label: string; category: string; qty: string; unitLabel: string; packSize: string }>({ label: "", category: "", qty: "1", unitLabel: "", packSize: "" });
   const [confirmRemoveLabel, setConfirmRemoveLabel] = useState<string | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
   const [addLabel, setAddLabel] = useState("");
   const [addQty, setAddQty] = useState("1");
+  const [addUnitLabel, setAddUnitLabel] = useState("");
+  const [addPackSize, setAddPackSize] = useState("");
   const [extraCategories, setExtraCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
 
@@ -65,16 +67,19 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   function startEdit(it: TrackedItem) {
     setEditingLabel(it.label);
-    setEditForm({ label: it.label, category: it.category ?? "", qty: String(it.qty_default) });
+    setEditForm({ label: it.label, category: it.category ?? "", qty: String(it.qty_default), unitLabel: it.unit_label ?? "", packSize: it.pack_size ? String(it.pack_size) : "" });
   }
 
   function commitEdit() {
     if (!editingLabel) return;
     const newLabel = editForm.label.trim();
     if (!newLabel) return;
+    const parsedPack = parseInt(editForm.packSize, 10);
+    const packSize = editForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
+    const unitLabel = packSize ? editForm.unitLabel.trim() || undefined : undefined;
     setDraft((d) => d.map((it) =>
       it.label === editingLabel
-        ? { label: newLabel, qty_default: Math.max(1, parseInt(editForm.qty || "1", 10)), category: editForm.category.trim() || undefined }
+        ? { label: newLabel, qty_default: Math.max(1, parseInt(editForm.qty || "1", 10)), category: editForm.category.trim() || undefined, unit_label: unitLabel, pack_size: packSize }
         : it,
     ));
     setEditingLabel(null);
@@ -85,9 +90,12 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     const finalCat = cat.trim();
     if (!label || draft.some((d) => d.label.toLowerCase() === label.toLowerCase())) return;
     if (!finalCat) return;
-    setDraft((d) => [...d, { label, qty_default: Math.max(1, parseInt(addQty || "1", 10)), category: finalCat }]);
+    const parsedPack = parseInt(addPackSize, 10);
+    const packSize = addPackSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
+    const unitLabel = packSize ? addUnitLabel.trim() || undefined : undefined;
+    setDraft((d) => [...d, { label, qty_default: Math.max(1, parseInt(addQty || "1", 10)), category: finalCat, unit_label: unitLabel, pack_size: packSize }]);
     setExtraCategories((current) => current.filter((category) => category !== finalCat));
-    setAddLabel(""); setAddQty("1"); setAddingToCategory(null);
+    setAddLabel(""); setAddQty("1"); setAddUnitLabel(""); setAddPackSize(""); setAddingToCategory(null);
   }
 
   function addCategory() {
@@ -196,7 +204,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
               </span>
               {!disabled && cat !== "" && (
                 <button className="text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors"
-                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddLabel(""); setAddQty("1"); }}>
+                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddLabel(""); setAddQty("1"); setAddUnitLabel(""); setAddPackSize(""); }}>
                   {isAdding ? "Cancel" : "+ Add item"}
                 </button>
               )}
@@ -214,15 +222,25 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                           onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
                           onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") setEditingLabel(null); }} />
                       </div>
-                      <div className="w-40">
+                      <div className="w-36">
                         <label className="label">Category</label>
                         <input className="input" list="items-category-datalist" placeholder="None" value={editForm.category}
                           onChange={(e) => setEditForm({ ...editForm, category: e.target.value })} />
                       </div>
-                      <div className="w-20">
+                      <div className="w-16">
                         <label className="label">Qty</label>
                         <input type="number" min={1} className="input" value={editForm.qty}
                           onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} />
+                      </div>
+                      <div className="w-24">
+                        <label className="label">Pack unit</label>
+                        <input className="input" placeholder='e.g. "Case"' value={editForm.unitLabel}
+                          onChange={(e) => setEditForm({ ...editForm, unitLabel: e.target.value })} />
+                      </div>
+                      <div className="w-16">
+                        <label className="label">Pcs/unit</label>
+                        <input type="number" min={1} className="input" placeholder="1" value={editForm.packSize}
+                          onChange={(e) => setEditForm({ ...editForm, packSize: e.target.value })} />
                       </div>
                       <div className="flex gap-2 pb-0.5">
                         <button className="btn-primary text-xs" onClick={commitEdit}>Save</button>
@@ -232,35 +250,46 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                   );
                 }
                 return (
-                  <div key={it.label} className="group flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800 pl-3 pr-1 py-1 text-sm text-slate-200 transition-colors hover:border-slate-600">
-                    <button className="min-w-0 truncate font-medium leading-none" disabled={disabled} onClick={() => startEdit(it)} title="Click to edit">
-                      {it.label}
-                    </button>
-                    {it.qty_default !== 1 && (
-                      <span className="ml-1 shrink-0 rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">×{it.qty_default}</span>
-                    )}
-                    {!disabled && (
-                      <button onClick={() => removeItem(it.label)}
-                        className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-red-500/20 hover:text-red-400" title="Remove">
-                        ×
+                    <div key={it.label} className="group flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800 pl-3 pr-1 py-1 text-sm text-slate-200 transition-colors hover:border-slate-600">
+                      <button className="min-w-0 truncate font-medium leading-none" disabled={disabled} onClick={() => startEdit(it)} title="Click to edit">
+                        {it.label}
                       </button>
-                    )}
-                  </div>
+                      {it.qty_default !== 1 && (
+                        <span className="ml-1 shrink-0 rounded-full bg-slate-700 px-1.5 py-0.5 text-[10px] font-semibold text-slate-400">×{it.qty_default}</span>
+                      )}
+                      {it.pack_size != null && it.pack_size > 0 && (
+                        <span className="shrink-0 rounded-full bg-emerald-900/30 px-1.5 py-0.5 text-[10px] font-semibold text-emerald-400">{it.pack_size}/{it.unit_label ?? "pcs"}</span>
+                      )}
+                      {!disabled && (
+                        <button onClick={() => removeItem(it.label)}
+                          className="ml-1 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-slate-500 transition-colors hover:bg-red-500/20 hover:text-red-400" title="Remove">
+                          ×
+                        </button>
+                      )}
+                    </div>
                 );
               })}
             </div>
 
             {isAdding && !disabled && cat !== "" && (
               <div className="grid grid-cols-1 gap-2 rounded-lg border border-slate-700 bg-slate-800/40 p-2.5 sm:flex sm:flex-wrap sm:items-end">
-                <div className="min-w-0 sm:min-w-[14rem] sm:flex-1">
+                <div className="min-w-0 sm:min-w-[12rem] sm:flex-1">
                   <label className="label">Label</label>
                   <input className="input" placeholder="Item name" value={addLabel} autoFocus
                     onChange={(e) => setAddLabel(e.target.value)}
                     onKeyDown={(e) => { if (e.key === "Enter") addItemToCategory(cat); if (e.key === "Escape") setAddingToCategory(null); }} />
                 </div>
-                <div className="w-full sm:w-20">
+                <div className="w-full sm:w-16">
                   <label className="label">Qty</label>
                   <input type="number" min={1} className="input" value={addQty} onChange={(e) => setAddQty(e.target.value)} />
+                </div>
+                <div className="w-full sm:w-20">
+                  <label className="label">Pack unit</label>
+                  <input className="input" placeholder='e.g. "Case"' value={addUnitLabel} onChange={(e) => setAddUnitLabel(e.target.value)} />
+                </div>
+                <div className="w-full sm:w-16">
+                  <label className="label">Pcs/unit</label>
+                  <input type="number" min={1} className="input" placeholder="1" value={addPackSize} onChange={(e) => setAddPackSize(e.target.value)} />
                 </div>
                 <button className="btn-primary w-full text-xs sm:w-auto sm:self-auto" disabled={!addLabel.trim()} onClick={() => addItemToCategory(cat)}>Add</button>
               </div>
