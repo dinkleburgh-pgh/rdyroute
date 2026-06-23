@@ -33,12 +33,13 @@ const LS_USER_KEY = "readyroutev2_user";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Seed from localStorage so returning users don't flash a blank screen.
-  // The /auth/me check below validates that the httpOnly JWT cookie is still
-  // valid and replaces or clears the cached user accordingly.
+  // Guest sessions are never persisted — they're ephemeral per tab.
   const [user, setUser] = useState<StoredUser | null>(() => {
     try {
       const raw = localStorage.getItem(LS_USER_KEY);
-      return raw ? (JSON.parse(raw) as StoredUser) : null;
+      if (!raw) return null;
+      const cached = JSON.parse(raw) as StoredUser;
+      return cached.role === "guest" ? null : cached;
     } catch {
       return null;
     }
@@ -47,7 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const setSession = useCallback((u: StoredUser) => {
-    localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
+    if (u.role !== "guest") {
+      localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
+    }
     setUser(u);
   }, []);
 
@@ -71,7 +74,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         display_role: res.data.display_role ?? null,
         display_name: res.data.display_name,
       };
-      localStorage.setItem(LS_USER_KEY, JSON.stringify(fresh));
+      if (fresh.role !== "guest") {
+        localStorage.setItem(LS_USER_KEY, JSON.stringify(fresh));
+      }
       setUser(fresh);
     }).catch(() => {
       if (cancelled) return;
