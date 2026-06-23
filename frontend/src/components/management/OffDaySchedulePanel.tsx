@@ -113,15 +113,17 @@ export default function OffDaySchedulePanel() {
                       key={day}
                       className={clsx(
                         "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-all",
-                        day === loadDay && "ring-1 ring-inset ring-blue-500/25",
-                        day === unloadsDay && "ring-1 ring-inset ring-emerald-500/25",
                         off
                           ? highlight
                             ? "bg-red-700/60 text-red-200"
                             : "bg-red-900/60 text-red-400"
                           : highlight
                             ? "bg-slate-800/50 text-slate-500"
-                            : "text-slate-700",
+                            : day === loadDay
+                              ? "text-slate-700 bg-blue-900/10"
+                              : day === unloadsDay
+                                ? "text-slate-700 bg-emerald-900/10"
+                                : "text-slate-700",
                       )}
                     >
                       {off ? "OFF" : "RUN"}

@@ -186,7 +186,7 @@ export default function CalculatorFab() {
               {/* Number pad — fills remaining space */}
               <div className="mx-3 flex flex-1 flex-col gap-1 pb-2 md:mx-0 md:pb-0">
                 <div className="grid flex-1 grid-cols-4 gap-1">
-                  <button onClick={clearAll} className={`${auxBg} rounded-lg text-sm font-bold active:scale-95 select-none text-amber-400`}>C</button>
+                  <button onClick={clearAll} className="bg-red-900/40 text-red-400 hover:bg-red-800/50 rounded-lg text-sm font-bold active:scale-95 select-none">C</button>
                   <button onClick={backspace} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}><Delete className="h-4 w-4 mx-auto" /></button>
                   <button onClick={toggleSign} className={`${auxBg} rounded-lg text-sm font-semibold active:scale-95 select-none`}>±</button>
                   <button onClick={() => setOpState("÷")} className={`${(op ?? "") === "÷" ? "bg-sky-600 text-white" : opBg} rounded-lg text-lg font-bold active:scale-95 select-none`}>÷</button>
