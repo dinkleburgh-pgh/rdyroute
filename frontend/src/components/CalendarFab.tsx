@@ -10,11 +10,11 @@ export default function CalendarFab() {
     <>
       {open && (
         <div
-          className="fixed inset-0 z-[65] flex items-end justify-center bg-black/50 md:items-center md:p-4"
+          className="fixed inset-0 z-[65] flex items-start justify-center bg-black/50 md:items-center md:p-4"
           onClick={() => setOpen(false)}
         >
           <div
-            className="flex max-h-[85svh] w-full flex-col rounded-t-2xl bg-slate-900 shadow-2xl md:max-w-3xl md:rounded-2xl"
+            className="flex h-full w-full flex-col bg-slate-900 shadow-2xl md:max-h-[85svh] md:max-w-3xl md:rounded-2xl"
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex shrink-0 items-center justify-between border-b border-slate-700 px-4 py-3">
@@ -23,7 +23,7 @@ export default function CalendarFab() {
                 <X className="h-4 w-4" />
               </button>
             </div>
-            <div className="overflow-y-auto p-4">
+            <div className="flex-1 overflow-y-auto p-4">
               <OffDaySchedulePanel />
             </div>
           </div>
