@@ -10,6 +10,7 @@ import { FileText, Check, Bell, AlertTriangle, Plus, Trash2 } from "lucide-react
 import { useSettings, useSpareAssignments, useRouteSwapLog, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
+import { isScheduledOff } from "../utils/truckStatus";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckNote, TruckStatus } from "../types";
 
@@ -360,7 +361,7 @@ export default function NoteCardsDrawer() {
 
                   {/* Routes Off — non-spare route trucks not running today */}
                   {(() => {
-                    const routeOff = board.filter((t) => t.state?.status === "off" && t.truck_type !== "Spare");
+                    const routeOff = board.filter((t) => t.truck_type !== "Spare" && isScheduledOff(t, loadDay));
                     return routeOff.length > 0 ? (
                       <div className="space-y-2">
                         <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Routes Off</p>
