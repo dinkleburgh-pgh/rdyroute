@@ -167,7 +167,7 @@ export default function NoteCardsDrawer() {
     <>
       {/* Floating panel */}
       {open && (
-        <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ maxHeight: "80svh" }}>
+        <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ maxHeight: "calc(80svh - 3rem)" }}>
           {/* Panel header */}
           <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-4 py-3 rounded-t-xl">
             {/* Tab switcher */}
@@ -356,8 +356,8 @@ export default function NoteCardsDrawer() {
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={clsx(
-          "fixed bottom-[4.5rem] right-4 z-40 flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
-          "px-3 py-2 text-sm font-bold md:bottom-5 md:right-5 md:gap-3 md:px-6 md:py-3.5 md:text-base",
+          "fixed bottom-20 right-4 z-40 flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
+          "px-3 py-2 text-sm font-bold md:bottom-6 md:right-5 md:gap-3 md:px-6 md:py-3.5 md:text-base",
           open
             ? "bg-violet-700 text-white ring-4 ring-violet-500/40 shadow-violet-900/50"
             : "bg-gradient-to-br from-violet-600 to-indigo-700 text-white ring-2 ring-violet-400/30 hover:from-violet-500 hover:to-indigo-600 hover:ring-violet-400/50 hover:scale-105",

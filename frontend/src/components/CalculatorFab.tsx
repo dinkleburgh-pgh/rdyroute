@@ -98,7 +98,7 @@ export default function CalculatorFab() {
     <>
       <button
         onClick={() => setOpen(true)}
-        className="fixed bottom-4 left-4 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg shadow-sky-900/40 transition-all hover:bg-sky-500 hover:scale-110 active:scale-95 md:bottom-6 md:left-auto md:right-24"
+        className="fixed bottom-20 right-20 z-50 flex h-12 w-12 items-center justify-center rounded-full bg-sky-600 text-white shadow-lg shadow-sky-900/40 transition-all hover:bg-sky-500 hover:scale-110 active:scale-95 md:bottom-6 md:right-24"
         aria-label="Open calculator"
       >
         <Calculator className="h-5 w-5" />
