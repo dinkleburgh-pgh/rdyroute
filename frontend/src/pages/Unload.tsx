@@ -48,7 +48,12 @@ export default function Unload() {
   const allTrucks = useMemo(
     () =>
       (data ?? []).filter((t) => {
+        // Coverage trucks always appear (spare has oos_spare_route; route-swap trucks
+        // have route_swap_route). The OOS truck they cover is excluded below.
         if (t.route_swap_route != null || t.state?.oos_spare_route != null) return true;
+        // OOS trucks can't go through the normal unload workflow. Exclude them
+        // here — if coverage is assigned the covering truck appears above instead.
+        if (t.is_oos || t.state?.status === "oos") return false;
         if (t.truck_type === "Spare") return false;
         return holidayUnload || !isScheduledOff(t, unloadsDay);
       }),

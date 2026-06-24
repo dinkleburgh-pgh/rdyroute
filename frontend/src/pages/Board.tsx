@@ -23,7 +23,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { effectiveStatus, effectiveWorkflowStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../utils/truckStatus";
+import { effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, recordSwapHistory } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -624,9 +624,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             rows.push(...filtered);
           }
           const renderTruckCard = (truck: TruckWithState, index: number) => {
+            // Fleet mode uses unloads-day status directly. Non-fleet uses
+            // effectiveWorkflowStatus so that dirty trucks scheduled off for the
+            // load day still show their real dirty/unloaded colour rather than
+            // being greyed out — they're still active in today's unload workflow.
             const status = fleetMode
               ? effectiveStatus(truck, runUnloadsDay, holidayUnload)
-              : effectiveStatus(truck, runDayNum, holidayLoad);
+              : effectiveWorkflowStatus(truck, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
             const isUnloadView = filter === "dirty" || filter === "unloaded";
             const isLoadView = filter === "loaded";
             let chipDay: number | undefined;
@@ -744,37 +748,28 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       )}
                     </div>
                     <span className="flex min-h-[1.5rem] flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
-                      {fleetMode && status === "off" ? (
-                        <span className="badge bg-slate-600 text-slate-200">U Off</span>
+                      {/* 1. Status chip — show underlying dirty/unloaded for off trucks */}
+                      {status === "off" && (truck.state?.status === "dirty" || truck.state?.status === "unloaded") ? (
+                        <span className={clsx("badge", STATUS_BG[truck.state.status as TruckStatus], STATUS_BADGE_TEXT[truck.state.status as TruckStatus])}>
+                          {STATUS_LABELS[truck.state.status as TruckStatus]}
+                        </span>
                       ) : (
                         <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
                           {STATUS_LABELS[status]}
                         </span>
                       )}
-                      {fleetMode && !holidayLoad && isScheduledOff(truck, runDayNum) && status !== "off" && (
-                        <span className="badge bg-slate-600 text-slate-200">L Off</span>
+                      {/* 2. U Off chip — route trucks only; spares are always off unless assigned */}
+                      {fleetMode && status === "off" && truck.truck_type !== "Spare" && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
+                        <span className="badge bg-slate-600 text-slate-200">U Off</span>
                       )}
-                      {!fleetMode && !holidayUnload && isScheduledOff(truck, runUnloadsDay) && (
+                      {!fleetMode && !holidayUnload && truck.truck_type !== "Spare" && isScheduledOff(truck, runUnloadsDay) && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
                         <span className="badge bg-slate-700 text-slate-300">U Off</span>
                       )}
-                      {!fleetMode && !holidayLoad && isScheduledOff(truck, runDayNum) && status !== "off" && (
+                      {/* 3. L Off chip — route trucks only */}
+                      {!holidayLoad && truck.truck_type !== "Spare" && isScheduledOff(truck, runDayNum) && status !== "off" && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
                         <span className="badge bg-slate-600 text-slate-200">L Off</span>
                       )}
-                      {!fleetMode && filter === "dirty" && truck.state?.priority_hold && (
-                        <motion.span
-                          animate={{ opacity: [1, 0.6, 1] }}
-                          transition={{ duration: 1.2, repeat: Infinity }}
-                          className="badge bg-amber-500 font-bold text-black"
-                        >
-                          REQUEST
-                        </motion.span>
-                      )}
-                      {truck.state?.priority_hold && (fleetMode || filter !== "dirty") && (
-                        <span className="badge bg-red-700 text-white">Hold</span>
-                      )}
-                      {truck.state?.needs_checked && (
-                        <span className="badge bg-amber-700 text-white">Needs Checked</span>
-                      )}
+                      {/* 4. OOS coverage (fleet) */}
                       {fleetMode && status === "oos" && (() => {
                         const cov = coveringTruckByRoute.get(truck.truck_number);
                         if (!cov) return <span className="text-[10px] font-semibold text-amber-400">Needs assignment</span>;
@@ -799,11 +794,24 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           </>
                         );
                       })()}
-                      {(fleetMode || filter === "off" || filter === "unloaded") && status === "off" && (truck.state?.status === "dirty" || truck.state?.status === "unloaded") && (
-                        <span className={clsx("badge", STATUS_BG[truck.state.status as TruckStatus], STATUS_BADGE_TEXT[truck.state.status as TruckStatus])}>
-                          {STATUS_LABELS[truck.state.status as TruckStatus]}
-                        </span>
+                      {/* 5. Priority hold / REQUEST */}
+                      {!fleetMode && filter === "dirty" && truck.state?.priority_hold && (
+                        <motion.span
+                          animate={{ opacity: [1, 0.6, 1] }}
+                          transition={{ duration: 1.2, repeat: Infinity }}
+                          className="badge bg-amber-500 font-bold text-black"
+                        >
+                          REQUEST
+                        </motion.span>
                       )}
+                      {truck.state?.priority_hold && (fleetMode || filter !== "dirty") && (
+                        <span className="badge bg-red-700 text-white">Hold</span>
+                      )}
+                      {/* 6. Needs Checked */}
+                      {truck.state?.needs_checked && (
+                        <span className="badge bg-amber-700 text-white">Needs Checked</span>
+                      )}
+                      {/* 7. Dust garment */}
                       {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
                         <span
                           className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"

@@ -53,16 +53,16 @@ export default function RunDayWizard({
   // Base = trucks scheduled to run that ship day normally.
   // Extra = trucks normally off for that ship day (added by holiday).
   const loadBase = board.filter(
-    (t) => t.truck_type !== "Spare" && !isScheduledOff(t, loadDay),
+    (t) => t.truck_type !== "Spare" && !t.is_oos && !isScheduledOff(t, loadDay),
   ).length;
   const loadExtra = board.filter(
-    (t) => t.truck_type !== "Spare" && isScheduledOff(t, loadDay),
+    (t) => t.truck_type !== "Spare" && !t.is_oos && isScheduledOff(t, loadDay),
   ).length;
   const unloadBase = board.filter(
-    (t) => t.truck_type !== "Spare" && !isScheduledOff(t, unloadsDay),
+    (t) => t.truck_type !== "Spare" && !t.is_oos && !isScheduledOff(t, unloadsDay),
   ).length;
   const unloadExtra = board.filter(
-    (t) => t.truck_type !== "Spare" && isScheduledOff(t, unloadsDay),
+    (t) => t.truck_type !== "Spare" && !t.is_oos && isScheduledOff(t, unloadsDay),
   ).length;
   const DAY_NAMES = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
   const upsert = useUpsertTruckState();

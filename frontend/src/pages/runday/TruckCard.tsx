@@ -39,16 +39,12 @@ export default function TruckCard({
   );
   const showNotes = visibleNotes.length > 0 && (status === "in_progress" || status === "unloaded");
 
-  const statusBadge = status === "off" && context ? (
-    <span
-      className={clsx(
-        "rounded px-1.5 py-0.5 text-xs font-semibold",
-        context === "unload"
-          ? "bg-slate-700 text-slate-300"
-          : "bg-blue-950 text-blue-400 ring-1 ring-blue-800/60",
-      )}
-    >
-      {context === "unload" ? "U Off" : "L Off"}
+  const rawStatus = (t.state?.status ?? status) as TruckStatus;
+  // Status chip: show the underlying dirty/unloaded for off trucks so the real
+  // workflow state is always visible first.
+  const statusBadge = status === "off" && (rawStatus === "dirty" || rawStatus === "unloaded") ? (
+    <span className={clsx("rounded px-1.5 py-0.5 text-xs font-semibold text-white", STATUS_BG[rawStatus])}>
+      {STATUS_LABELS[rawStatus]}
     </span>
   ) : (
     <span
@@ -60,6 +56,20 @@ export default function TruckCard({
       {STATUS_LABELS[status]}
     </span>
   );
+  // Off chip shown below the status chip, not instead of it.
+  // Spares are always off unless assigned — the badge is redundant for them.
+  const offChip = status === "off" && context && t.truck_type !== "Spare" ? (
+    <span
+      className={clsx(
+        "rounded px-1.5 py-0.5 text-xs font-semibold",
+        context === "unload"
+          ? "bg-slate-700 text-slate-300"
+          : "bg-blue-950 text-blue-400 ring-1 ring-blue-800/60",
+      )}
+    >
+      {context === "unload" ? "U Off" : "L Off"}
+    </span>
+  ) : null;
 
   const dayChip = dayNum != null ? (
     <span
@@ -111,6 +121,7 @@ export default function TruckCard({
         {t.truck_number}
       </span>
       {statusBadge}
+      {offChip}
       <span className="text-xs text-slate-500">
         {t.truck_type}
       </span>

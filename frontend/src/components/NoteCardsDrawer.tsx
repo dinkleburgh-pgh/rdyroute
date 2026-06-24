@@ -9,7 +9,7 @@ import { Bell, Check, AlertTriangle, Plus, Trash2, X } from "lucide-react";
 import { useSettings, useSpareAssignments, useRouteSwapLog, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
-import { isScheduledOff } from "../utils/truckStatus";
+import { isScheduledOff, getCoverageRouteNumber } from "../utils/truckStatus";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckNote, TruckStatus } from "../types";
 
@@ -118,7 +118,19 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
     [board],
   );
 
-  const { loadDay } = workdayNumbers();
+  const { loadDay, unloadsDay } = workdayNumbers();
+
+  // Trucks scheduled off for the unloads day that actually ran (coverage or special).
+  // These aren't truly "off" — they need attention and shouldn't show U Off badges.
+  const unloadReminders = useMemo(
+    () => board.filter(
+      (t) =>
+        t.truck_type !== "Spare" &&
+        isScheduledOff(t, unloadsDay) &&
+        (getCoverageRouteNumber(t) != null || t.state?.needs_checked),
+    ),
+    [board, unloadsDay],
+  );
 
   const statusByTruck = useMemo(() => {
     const map = new Map<number, TruckStatus>();
@@ -199,7 +211,7 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
                   tab === "reminders" ? "bg-amber-700 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
                 )}
               >
-                Reminders {unreturnedSpares.length > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{unreturnedSpares.length}</span>}
+                Reminders {(unreturnedSpares.length + unloadReminders.length) > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{unreturnedSpares.length + unloadReminders.length}</span>}
               </button>
             </div>
 
@@ -286,6 +298,33 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
             {/* Reminders tab */}
             {tab === "reminders" && (
               <div className="space-y-4">
+
+                {/* Unload Reminders — trucks scheduled off today that actually ran */}
+                {unloadReminders.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-400" />
+                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-wide">Unload Reminders</span>
+                    </div>
+                    {unloadReminders.map((t) => (
+                      <div key={t.truck_number} className="rounded-xl border border-orange-700/30 bg-orange-900/10 p-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black text-orange-300">#{t.truck_number}</span>
+                          {t.state?.needs_checked && (
+                            <span className="rounded-full bg-amber-900/50 px-2 py-0.5 text-xs font-semibold text-amber-300">Ran Special</span>
+                          )}
+                          {getCoverageRouteNumber(t) != null && (
+                            <span className="rounded-full bg-sky-900/50 px-2 py-0.5 text-xs font-semibold text-sky-300">
+                              Cov. #{getCoverageRouteNumber(t)}
+                            </span>
+                          )}
+                          <span className="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-400 uppercase">{t.state?.status ?? "—"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
                 {/* Yesterday's Coverage */}
                 <div className="space-y-3">
                   <div className="flex items-center gap-2">

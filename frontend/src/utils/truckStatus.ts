@@ -34,8 +34,12 @@ export function effectiveStatus(
     t.truck_type !== "Spare" &&
     isScheduledOff(t, dayNum) &&
     (raw === "dirty" || raw === "unloaded")
-  )
-    return "off";
+  ) {
+    // Trucks that actually ran (coverage route or ran special) should not be
+    // suppressed to "off" — they need to go through the real workflow.
+    const actuallyRan = getCoverageRouteNumber(t) != null || (t.state?.needs_checked ?? false);
+    if (!actuallyRan) return "off";
+  }
   // Truck was off yesterday and hasn't been touched today — it's ready.
   if (
     !holidayMode &&

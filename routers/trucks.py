@@ -110,6 +110,16 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             ).all()
         }
 
+    # When force_unloaded is set, close out the previous day first — mark any
+    # trucks that are still dirty/in_progress/unfinished as unloaded so that
+    # the previous day's board reflects a clean end-of-day state.
+    _OPEN_STATUSES = {TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished}
+    if force_unloaded and prev_run_date is not None:
+        for prev_state in prev_states_by_num.values():
+            if prev_state.status in _OPEN_STATUSES:
+                prev_state.status = TruckStatus.unloaded
+                prev_state.state_source = TruckStateSource.workflow.value
+
     today_states = {
         row.truck_number: row
         for row in db.scalars(
@@ -140,9 +150,8 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
         status = TruckStatus.unloaded
 
         if prior is not None:
-            needs_checked = bool(getattr(prior, "needs_checked", False)) or _ran_special(prior.off_note)
-            if _ran_special(prior.off_note):
-                off_note = prior.off_note or ""
+            # needs_checked and ran-special off_note are intentionally NOT carried
+            # forward — both reset each day.
             shop_note = prior.shop_note or ""
             used_yesterday = (
                 prior.status in {TruckStatus.loaded, TruckStatus.in_progress}
@@ -192,10 +201,6 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             # Only reset to unloaded if the spare wasn't already carrying a dirty state forward.
             if prior is None or prior.status != TruckStatus.dirty:
                 status = TruckStatus.unloaded
-
-        # force_unloaded_on_new_day overrides everything — mark all trucks unloaded
-        if force_unloaded:
-            status = TruckStatus.unloaded
 
         row = TruckState(
             truck_number=truck.truck_number,
