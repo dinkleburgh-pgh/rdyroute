@@ -41,12 +41,16 @@ export function effectiveStatus(
     if (!actuallyRan) return "off";
   }
   // Truck was off yesterday and hasn't been touched today — it's ready.
+  // Skip when the user has explicitly set a status via the workflow (bulk edit,
+  // card action, etc.); trust their explicit override over the returning-truck
+  // assumption.
   if (
     !holidayMode &&
     t.truck_type !== "Spare" &&
     !isScheduledOff(t, dayNum) &&
     isScheduledOff(t, previousWorkday(dayNum)) &&
-    (raw === "dirty" || raw === "off")
+    (raw === "dirty" || raw === "off") &&
+    t.state?.state_source !== "workflow"
   )
     return "unloaded";
   return raw;
