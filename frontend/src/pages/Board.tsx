@@ -848,10 +848,38 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         return null;
                       })()}
                       {truck.state?.off_note?.toLowerCase().includes("ran special") && (
-                        <span className="text-amber-300 font-medium">Ran Special</span>
+                        isAdmin && !isReadOnly ? (
+                          <button
+                            type="button"
+                            title="Clear Ran Special flag"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              upsert.mutate({ truck_number: truck.truck_number, run_date: runDate, off_note: "", needs_checked: false, state_source: "workflow" });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-700/40 transition-colors hover:bg-red-900/50 hover:text-red-300 hover:ring-red-700/40"
+                          >
+                            Ran Special ✕
+                          </button>
+                        ) : (
+                          <span className="text-amber-300 font-medium">Ran Special</span>
+                        )
                       )}
                       {truck.state?.needs_checked && !truck.state?.off_note?.toLowerCase().includes("ran special") && (
-                        <span className="text-amber-300 font-medium">Needs Checked</span>
+                        isAdmin && !isReadOnly ? (
+                          <button
+                            type="button"
+                            title="Clear Needs Checked flag"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              upsert.mutate({ truck_number: truck.truck_number, run_date: runDate, needs_checked: false, state_source: "workflow" });
+                            }}
+                            className="inline-flex items-center gap-1 rounded-full bg-amber-900/40 px-2 py-0.5 text-[10px] font-semibold text-amber-300 ring-1 ring-amber-700/40 transition-colors hover:bg-red-900/50 hover:text-red-300 hover:ring-red-700/40"
+                          >
+                            Needs Checked ✕
+                          </button>
+                        ) : (
+                          <span className="text-amber-300 font-medium">Needs Checked</span>
+                        )
                       )}
                       {fleetMode && arrivedTrackingEnabled && truck.state?.arrived_at && (
                         <span className="inline-flex items-center rounded-full border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
