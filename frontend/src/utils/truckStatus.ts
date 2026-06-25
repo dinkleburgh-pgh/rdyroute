@@ -51,7 +51,7 @@ export function effectiveStatus(
     !isScheduledOff(t, dayNum) &&
     isScheduledOff(t, previousWorkday(dayNum)) &&
     (raw === "dirty" || raw === "off") &&
-    t.state?.state_source !== "workflow"
+    t.state?.state_source !== "workflow" && t.state?.state_source !== "wizard"
   ) {
     const actuallyRan = getCoverageRouteNumber(t) != null || (t.state?.needs_checked ?? false);
     if (!actuallyRan) return "unloaded";
