@@ -371,6 +371,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
       // In dirty view, also include unfinished trucks (rendered as a sub-section)
       const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
+      if (!matchStatus && filter === "dirty" && [59, 68, 95].includes(t.truck_number)) {
+        console.log(`TRUCK ${t.truck_number}: raw=${t.state?.status}, ews=${s}, type=${t.truck_type}, oos=${t.is_oos}, state_source=${t.state?.state_source}, route_swap=${t.route_swap_route}, oos_spare=${t.state?.oos_spare_route}`);
+      }
       if (!matchStatus) return false;
       if (t.truck_type === "Spare") {
         // Show a spare card in a lifecycle-status filter when it is
@@ -388,6 +391,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       return true;
     });
   }, [data, filter, fleetMode, fleetFilters, runDayNum, runUnloadsDay, holidayLoad, holidayUnload, truckStatusByNumber]);
+
+  useEffect(() => {
+    if (filter === "dirty" && filtered.length > 0) {
+      const dirty58 = filtered.filter((t) => [59, 68, 95].includes(t.truck_number));
+      console.log(`DIRTY FILTER: ${filtered.length} trucks, includes 59=${dirty58.some(t=>t.truck_number===59)}, 68=${dirty58.some(t=>t.truck_number===68)}, 95=${dirty58.some(t=>t.truck_number===95)}`);
+    }
+  }, [filter, filtered]);
 
   // Live lookup so the open detail modal reflects refreshed board data.
   const detailTruck = useMemo(
