@@ -27,8 +27,8 @@ export function effectiveStatus(
   dayNum: number,
   holidayMode = false,
 ): TruckStatus {
-  if (t.is_oos) return "oos";
   const raw = (t.state?.status ?? "dirty") as TruckStatus;
+  if (t.is_oos && raw !== "dirty") return "oos";
   if (
     !holidayMode &&
     t.truck_type !== "Spare" &&
