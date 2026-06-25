@@ -40,22 +40,6 @@ export function effectiveStatus(
     const actuallyRan = getCoverageRouteNumber(t) != null || (t.state?.needs_checked ?? false);
     if (!actuallyRan) return "off";
   }
-  // Truck was off yesterday and hasn't been touched today — it's ready.
-  // Skip when the user has explicitly set a status via the workflow (bulk edit,
-  // card action, etc.); trust their explicit override over the returning-truck
-  // assumption. Also skip trucks that actually ran (coverage route or ran
-  // special) — they are operationally active regardless of yesterday's schedule.
-  if (
-    !holidayMode &&
-    t.truck_type !== "Spare" &&
-    !isScheduledOff(t, dayNum) &&
-    isScheduledOff(t, previousWorkday(dayNum)) &&
-    (raw === "dirty" || raw === "off") &&
-    t.state?.state_source !== "workflow" && t.state?.state_source !== "wizard"
-  ) {
-    const actuallyRan = getCoverageRouteNumber(t) != null || (t.state?.needs_checked ?? false);
-    if (!actuallyRan) return "unloaded";
-  }
   return raw;
 }
 
