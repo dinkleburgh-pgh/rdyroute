@@ -8,6 +8,44 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-25
+
+### Added
+- **ToolFab** — single draggable wrench FAB replaces individual FAB buttons. Clicking opens a speed-dial wheel with enabled tools (Calculator, Notes, Fleet Schedule) arranged in a rotational arc. Position saved per-user.
+- **Calculator FAB** — full-featured workflow calculator with 50%/80% buttons, pack↔piece conversion for 5 hardcoded items, calculation tape/memory, "Use" button to copy result. Full-screen on mobile.
+- **Calendar FAB** — opens Fleet Schedule in a floating drawer. Compact mode shows only Route + Load + Unload day columns on mobile; clickable bouncing arrow expands to all 5 days.
+- **NoteCardsDrawer "Reminders" tab** — shows yesterday's unreturned spares, today's active spares, route swaps, and routes off today.
+- **Personal notes with sections** — My Notes tab now supports add/remove titled sections with auto-resizing textareas, stored as JSON.
+- **Items management** — Items is now its own management card with a "Configure Items" tab. Pack unit labels and per-unit piece counts are editable. Five default items (Terrys/Grids, White Micros, Red Shops, Black Aprons, White Aprons) with bag sizes ship as defaults.
+- **Trends expansion** — new ShortageKpiSection, QualityRateCard, trend direction badges on all chart cards, enhanced TrendDetail pages with summary KPIs, new backend shortage summary and quality rate endpoints.
+- **Operations settings** — Calculator FAB toggle, Calendar FAB toggle, "Assume all trucks unloaded by next start day" setting all in Settings → Workflows.
+- **Notices moved to Communications card** in Settings — frees up space for the standalone Items card.
+- **Draggable FABs** — pointer-event-based drag wrapper saves position per user to localStorage. FABs stay above overlays (z-[70]).
+- **Persistent collapse state** — Board collapsible sections (unloaded/dirty/oos/spare views) persist their open/closed state in localStorage.
+
+### Changed
+- **Login page** — removed "Continue as Guest" button; guest sessions are ephemeral (never persisted to localStorage). Sidebar shows "Login" for guest users instead of "Logout".
+- **Items panel redesign** — compact pill layout with Bag/Case toggle per item. Click label to edit name/bag amount. Trash2 icon for delete (hover only).
+- **Board "Needs Checked"** — trucks with `needs_checked=true` now only appear in the "Needs Checked" section, excluded from Dirty/Unfinished/Coverage sections (fixes double-counting).
+- **Effective status** — permanently OOS trucks with raw "dirty" status and no coverage truck now fall through to their raw status instead of "oos", so they appear in the dirty workflow.
+- **System events** — Setup Day and setup truck events are attributed to "System" actor instead of the admin user who triggered them.
+
+### Fixed
+- **Dirty count discrepancy** — sidebar and Board dirty counts now match (was off by 3 for permanently OOS trucks with raw dirty status). Removed the frontend "off yesterday → unloaded" rule (backend auto-seed already handles this correctly with proper `used_yesterday` data). Removed `coveredRouteNumbers` skip so covered route trucks count with their own status.
+- **Trend polarity** — trend status labels now correctly reflect that fewer removals = improvement. Down trend = "Improving", up trend = "Critical".
+- **Calculator "C" button** — clears display + tape history.
+- **Notes drawer height** — fixed height prevents header jumping when switching tabs.
+- **FAB z-index** — FABs raised to z-[70] so clicking an open FAB closes its panel.
+- **Fleet Schedule vertical scroll** — fixed overflow-hidden preventing scroll.
+- **Weekend freeze** (from previous session) — workdayNumbers Sat/Sun freeze to Friday.
+
+### Removed
+- **Off-yesterday→unloaded rule** — frontend `effectiveStatus` no longer overrides "dirty" to "unloaded" for trucks that were off the previous workday. The backend auto-seed in `_ensure_day_initialized` already handles this with correct `used_yesterday` context.
+- **`coveredRouteNumbers` skip** — `buildRouteStatusCounts` no longer excludes covered route trucks; they count with their own status.
+- **Guest login option** — removed "Continue as Guest" from login page (hidden behind setting re-add).
+
+---
+
 ## [Unreleased] — 2026-06-16
 
 ### Changed
