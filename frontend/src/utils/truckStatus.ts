@@ -81,8 +81,12 @@ export function isOffDay(truck: TruckWithState, dayNum: number, holidayMode = fa
 
 /**
  * Count of loaded trucks matching the sidebar/board "loaded" filter.
- * Route trucks: effectiveWorkflowStatus === "loaded".
+ * Route trucks: effectiveWorkflowStatus === "loaded", and NOT covered by a swap/OOS spare.
  * Spare trucks: only counted when covering an OOS route and loaded.
+ *
+ * Covered route trucks are excluded because their route is being handled by
+ * the covering truck — including them would over-count relative to the
+ * denominator in buildOperationalDayContext (which already excludes them).
  */
 export function countLoaded(
   board: TruckWithState[],
@@ -94,10 +98,30 @@ export function countLoaded(
   const statusByNumber = new Map<number, TruckStatus>(
     board.map((t) => [t.truck_number, effectiveStatus(t, loadDayNum, holidayLoad)] as [number, TruckStatus]),
   );
+
+  // Build the set of route numbers whose load is being handled by another truck
+  // (same logic as buildOperationalDayContext) so we can exclude them below.
+  const routeTruckByNumber = new Map<number, TruckWithState>();
+  for (const t of board) {
+    if (t.truck_type !== "Spare") routeTruckByNumber.set(t.truck_number, t);
+  }
+  const coveredRouteNumbers = new Set<number>();
+  for (const t of board) {
+    const coveredRoute = getCoverageRouteNumber(t);
+    if (coveredRoute != null && routeTruckByNumber.has(coveredRoute)) {
+      coveredRouteNumbers.add(coveredRoute);
+    }
+  }
+
   return board.filter((t) => {
     const s = effectiveWorkflowStatus(t, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload);
     if (s !== "loaded") return false;
-    if (t.truck_type !== "Spare") return true;
+    if (t.truck_type !== "Spare") {
+      // Skip trucks whose route is being handled by a covering truck — they are
+      // not in the denominator and should not inflate the numerator.
+      if (coveredRouteNumbers.has(t.truck_number)) return false;
+      return true;
+    }
     const coveredRoute = getCoverageRouteNumber(t);
     if (coveredRoute == null) return false;
     const coveredStatus = statusByNumber.get(coveredRoute);
@@ -203,6 +227,16 @@ export function buildRouteStatusCounts(
     }
   }
 
+  // Second pass: find route numbers whose load is being handled by another
+  // truck (route swap or OOS spare). These are excluded from route-truck
+  // counts to mirror buildOperationalDayContext's denominator logic and
+  // prevent numerator > denominator in the progress bars.
+  const coveredRouteNumbers = new Set<number>();
+  for (const t of trucks) {
+    const coveredRoute = getCoverageRouteNumber(t);
+    if (coveredRoute != null) coveredRouteNumbers.add(coveredRoute);
+  }
+
   for (const t of trucks) {
     // Idle spares with no coverage don't participate in load/unload workflow.
     if (t.truck_type === "Spare") {
@@ -213,6 +247,10 @@ export function buildRouteStatusCounts(
       }
       continue;
     }
+
+    // Skip route trucks whose load is handled by a covering truck — the
+    // covering truck is already counted in its own lifecycle bucket.
+    if (coveredRouteNumbers.has(t.truck_number)) continue;
 
     // Route trucks always count in their effective status (OOS stays OOS).
     // Unfinished trucks surface under Dirty in the sidebar.
