@@ -235,10 +235,6 @@ export function buildRouteStatusCounts(
       continue;
     }
 
-    // Skip route trucks whose load is handled by a covering truck — the
-    // covering truck is already counted in its own lifecycle bucket.
-    if (coveredRouteNumbers.has(t.truck_number)) continue;
-
     // Route trucks always count in their effective status (OOS stays OOS).
     // Unfinished trucks surface under Dirty in the sidebar.
     const s = statusFor(t);
