@@ -69,7 +69,13 @@ def _json_response(data: object, filename: str) -> Response:
     )
 
 
-def _host_is_loopback(host: str | None) -> bool:
+def _host_is_local(host: str | None) -> bool:
+    """True for loopback or private-LAN (RFC1918) hosts.
+
+    Allows the production-sync dev tool to be reached from another device on the
+    same LAN (e.g. http://192.168.1.212:5180) while still hard-blocking public
+    hostnames like rdyroute.app, which never resolve to a private address.
+    """
     if not host:
         return False
     normalized = host.strip().lower()
@@ -82,9 +88,10 @@ def _host_is_loopback(host: str | None) -> bool:
     if normalized == "localhost":
         return True
     try:
-        return ipaddress.ip_address(normalized).is_loopback
+        ip = ipaddress.ip_address(normalized)
     except ValueError:
         return False
+    return ip.is_loopback or ip.is_private
 
 
 def _request_is_localhost(request: Request) -> bool:
@@ -101,7 +108,7 @@ def _request_is_localhost(request: Request) -> bool:
             candidates.append(parsed.hostname)
         else:
             candidates.extend(part.strip() for part in raw.split(","))
-    return any(_host_is_loopback(candidate) for candidate in candidates)
+    return any(_host_is_local(candidate) for candidate in candidates)
 
 
 def _parse_date(value: object) -> date | None:
@@ -470,10 +477,18 @@ def _import_route_swaps_for_dates(run_date_rows: dict[date, list[dict]], db: Ses
     return {"route_swaps": imported}
 
 
-def _fetch_remote_bytes(url: str, *, timeout_seconds: int, accept: str | None = None) -> bytes:
+def _fetch_remote_bytes(
+    url: str,
+    *,
+    timeout_seconds: int,
+    accept: str | None = None,
+    auth_token: str | None = None,
+) -> bytes:
     req = urllib_request.Request(url, headers={"User-Agent": "ReadyRouteDevSync/1.0"})
     if accept:
         req.add_header("Accept", accept)
+    if auth_token:
+        req.add_header("Authorization", f"Bearer {auth_token}")
     try:
         with urllib_request.urlopen(req, timeout=timeout_seconds) as response:  # noqa: S310
             return response.read()
@@ -482,6 +497,47 @@ def _fetch_remote_bytes(url: str, *, timeout_seconds: int, accept: str | None = 
         raise HTTPException(status_code=502, detail=f"Production fetch failed for {url}: {detail}") from exc
     except urllib_error.URLError as exc:
         raise HTTPException(status_code=502, detail=f"Production fetch failed for {url}: {exc.reason}") from exc
+
+
+def _fetch_production_token(api_root: str, *, timeout_seconds: int) -> str | None:
+    """Log into production with the configured dev-sync admin credentials and
+    return a fresh JWT access token, or None when no credentials are configured.
+
+    Production export endpoints require an admin Bearer token; the dev sync mints
+    one per run so it never has to store an expiring token in .env.
+    """
+    username = settings.production_sync_username.strip()
+    password = settings.production_sync_password
+    if not username or not password:
+        return None
+
+    token_url = f"{api_root}/auth/token"
+    body = urllib_parse.urlencode({"username": username, "password": password}).encode("utf-8")
+    req = urllib_request.Request(
+        token_url,
+        data=body,
+        headers={
+            "User-Agent": "ReadyRouteDevSync/1.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=timeout_seconds) as response:  # noqa: S310
+            payload = json.loads(response.read())
+    except urllib_error.HTTPError as exc:
+        detail = exc.reason if hasattr(exc, "reason") else str(exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Production login failed for {token_url}: {detail}. Check PRODUCTION_SYNC_USERNAME / PRODUCTION_SYNC_PASSWORD.",
+        ) from exc
+    except urllib_error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Production login failed for {token_url}: {exc.reason}") from exc
+
+    token = payload.get("access_token")
+    if not token:
+        raise HTTPException(status_code=502, detail="Production login succeeded but returned no access_token.")
+    return token
 
 
 # ---------------------------------------------------------------------------
@@ -882,7 +938,12 @@ def sync_from_production(
 
     export_base = settings.production_sync_source_url.rstrip("/")
     timeout_seconds = max(15, int(settings.production_sync_timeout_seconds))
-    backup_bytes = _fetch_remote_bytes(f"{export_base}/backup.zip", timeout_seconds=timeout_seconds, accept="application/zip")
+    api_root = export_base.removesuffix("/exports")
+    # Production export endpoints require an admin Bearer token; mint a fresh one.
+    auth_token = _fetch_production_token(api_root, timeout_seconds=timeout_seconds)
+    backup_bytes = _fetch_remote_bytes(
+        f"{export_base}/backup.zip", timeout_seconds=timeout_seconds, accept="application/zip", auth_token=auth_token
+    )
     run_dates = _extract_backup_run_dates(backup_bytes)
 
     warnings: list[str] = []
@@ -891,12 +952,12 @@ def sync_from_production(
             f"{export_base}/activity-events.json",
             timeout_seconds=timeout_seconds,
             accept="application/json",
+            auth_token=auth_token,
         )
     except HTTPException as exc:
         activity_bytes = b"[]"
         warnings.append(str(exc.detail))
 
-    api_root = export_base.removesuffix("/exports")
     spares_payload_by_date: dict[date, list[dict]] = {}
     swaps_payload_by_date: dict[date, list[dict]] = {}
     coverage_dates = run_dates[-1:] if run_dates else []
@@ -908,6 +969,7 @@ def sync_from_production(
                     f"{api_root}/spares?run_date={run_date_iso}",
                     timeout_seconds=timeout_seconds,
                     accept="application/json",
+                    auth_token=auth_token,
                 ),
                 file_label=f"spares_{run_date_iso}.json",
             )
@@ -920,6 +982,7 @@ def sync_from_production(
                     f"{api_root}/route-swaps?run_date={run_date_iso}",
                     timeout_seconds=timeout_seconds,
                     accept="application/json",
+                    auth_token=auth_token,
                 ),
                 file_label=f"route_swaps_{run_date_iso}.json",
             )

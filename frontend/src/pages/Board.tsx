@@ -644,18 +644,37 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               chipDay = (isScheduledOff(truck, runDayNum) || isScheduledOff(truck, loadNextDay)) ? loadDay2 : runDayNum;
               chipIsExtra = chipDay === loadDay2;
             }
-            const numberColor =
-              status === "loaded"
+            // Fleet board: the big number is greyed out for trucks off the LOAD
+            // day (done for tomorrow); U Off trucks (off only the unload day) keep
+            // their real workflow-status colour instead of the grey "off" tint.
+            const isLoadOff =
+              !holidayLoad &&
+              truck.truck_type !== "Spare" &&
+              isScheduledOff(truck, runDayNum) &&
+              status !== "off" &&
+              !getCoverageRouteNumber(truck) &&
+              !truck.state?.needs_checked;
+            const numberColor = fleetMode
+              ? isLoadOff
+                ? STATUS_TEXT["off"]
+                : status === "loaded"
                 ? "text-sky-300"
-                : !fleetMode && status === "off" && (filter === "off" || filter === "unloaded")
+                : STATUS_TEXT[status === "off" ? ((truck.state?.status ?? "dirty") as TruckStatus) : status]
+              : status === "loaded"
+                ? "text-sky-300"
+                : status === "off" && (filter === "off" || filter === "unloaded")
                 ? STATUS_TEXT[effectiveStatus(truck, runUnloadsDay, holidayLoad)]
-                : fleetMode || filter === "unloaded"
+                : filter === "unloaded"
                 ? STATUS_TEXT[status]
-                : !fleetMode && filter === "dirty" && truck.state?.priority_hold
+                : filter === "dirty" && truck.state?.priority_hold
                 ? "text-amber-300"
                 : "hover:text-blue-300";
             const coverageRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
             const showCoverageBadge = !fleetMode && coverageRoute != null;
+            // Reverse lookup: this truck's own route is being covered by another
+            // truck (route swap / OOS). Show it so the covered card isn't blank.
+            const coveredBy = coverageRoute == null ? coveringTruckByRoute.get(truck.truck_number) : undefined;
+            const showCoveredByBadge = !fleetMode && coveredBy != null;
 
             return (
               <AnimateCard
@@ -744,6 +763,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           {showCoverageBadge ? (
                             <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-sky-900/40 px-3 py-1 text-xs font-bold text-sky-300 ring-1 ring-sky-700/40">
                               → Cov. #{coverageRoute}
+                            </span>
+                          ) : showCoveredByBadge ? (
+                            <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-amber-900/40 px-3 py-1 text-xs font-bold text-amber-300 ring-1 ring-amber-700/40">
+                              ← Covered by #{coveredBy!.num}
                             </span>
                           ) : null}
                         </span>
@@ -1341,10 +1364,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     truck_number: pendingOosTruck.truck_number,
                     is_oos: true,
                   });
+                  // Dev behavior: marking OOS moves the truck straight to
+                  // "unloaded" so its route counts as done on the unload board
+                  // (the route still runs — it gets covered). The is_oos flag is
+                  // kept, so the board still shows it as OOS and coverage works.
+                  // (Future: replace this with a notice telling unload to unload it.)
                   upsert.mutate({
                     truck_number: pendingOosTruck.truck_number,
                     run_date: runDate,
-                    status: "oos",
+                    status: "unloaded",
                     wearers: pendingOosTruck.state?.wearers ?? 0,
                   });
                   setPendingOosTruck(null);

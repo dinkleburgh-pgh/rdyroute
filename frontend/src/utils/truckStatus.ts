@@ -92,8 +92,11 @@ export function countLoaded(
   for (const t of board) {
     if (t.truck_type !== "Spare") routeTruckByNumber.set(t.truck_number, t);
   }
+  // Only spare coverage removes a route truck from the count — a route-truck
+  // swap leaves both trucks running (see buildOperationalDayContext).
   const coveredRouteNumbers = new Set<number>();
   for (const t of board) {
+    if (t.truck_type !== "Spare") continue;
     const coveredRoute = getCoverageRouteNumber(t);
     if (coveredRoute != null && routeTruckByNumber.has(coveredRoute)) {
       coveredRouteNumbers.add(coveredRoute);
@@ -225,13 +228,16 @@ export function buildRouteStatusCounts(
   }
 
   for (const t of trucks) {
-    // Idle spares with no coverage don't participate in load/unload workflow.
     if (t.truck_type === "Spare") {
       const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+      // Covering spares also surface in their live workflow bucket (e.g. unloaded).
       if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
         out[statusFor(t)] += 1;
-        out.spare += 1;
       }
+      // Every available (non-OOS) spare counts in the Spare bucket — including
+      // idle spares sitting unloaded and ready, so the sidebar reflects how many
+      // spares are on hand, not just the ones currently covering a route.
+      if (!t.is_oos) out.spare += 1;
       continue;
     }
 
@@ -270,8 +276,12 @@ export function buildOperationalDayContext(
     }
   }
 
+  // Only a Spare physically takes over a route so the original truck doesn't
+  // run — that route is removed from the count. A route-truck "swap" means BOTH
+  // trucks run (they just swap loads), so a swap must NOT remove either route.
   const coveredRouteNumbers = new Set<number>();
   for (const truck of trucks) {
+    if (truck.truck_type !== "Spare") continue;
     const coveredRoute = getCoverageRouteNumber(truck);
     if (coveredRoute != null) {
       const coveredTruck = routeTruckByNumber.get(coveredRoute);
@@ -286,16 +296,23 @@ export function buildOperationalDayContext(
 
   const activeTrucks: TruckWithState[] = [];
   for (const truck of trucks) {
-    const coveredRoute = getCoverageRouteNumber(truck);
-    if (coveredRoute != null) {
-      const coveredTruck = routeTruckByNumber.get(coveredRoute);
-      if (coveredTruck && (holidayMode || includeOffDayCoverage || !isScheduledOff(coveredTruck, dayNum))) {
-        activeTrucks.push(truck);
+    // Covering spares stand in for the route truck — count the spare instead.
+    if (truck.truck_type === "Spare") {
+      const coveredRoute = getCoverageRouteNumber(truck);
+      if (coveredRoute != null) {
+        const coveredTruck = routeTruckByNumber.get(coveredRoute);
+        if (coveredTruck && (holidayMode || includeOffDayCoverage || !isScheduledOff(coveredTruck, dayNum))) {
+          activeTrucks.push(truck);
+        }
       }
+      // Idle spares (no coverage) never participate in the load/unload count.
       continue;
     }
 
-    if (truck.truck_type === "Spare") continue;
+    // Route trucks count purely by the fleet schedule: a route runs (and must
+    // be unloaded) iff it's not scheduled off that day. Operational state — OOS,
+    // route swaps — never changes this, because a scheduled route always runs
+    // (covered when needed). Only a spare physically taking over removes a route.
     if (!holidayMode && isScheduledOff(truck, dayNum)) continue;
     if (coveredRouteNumbers.has(truck.truck_number)) continue;
     activeTrucks.push(truck);

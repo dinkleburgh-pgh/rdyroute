@@ -32,10 +32,16 @@ export default function DevelopmentPanel() {
     if (typeof window === "undefined") return "";
     return window.location.hostname;
   }, []);
-  const isLoopbackHost = useMemo(
-    () => currentHost === "localhost" || currentHost === "127.0.0.1" || currentHost === "::1",
-    [currentHost],
-  );
+  const isLoopbackHost = useMemo(() => {
+    if (currentHost === "localhost" || currentHost === "127.0.0.1" || currentHost === "::1") return true;
+    // Allow private-LAN access (e.g. http://192.168.1.212:5180 from another device).
+    // Public hostnames like rdyroute.app never match these ranges, so prod stays blocked.
+    return (
+      /^10\.(\d{1,3}\.){2}\d{1,3}$/.test(currentHost) ||
+      /^192\.168\.\d{1,3}\.\d{1,3}$/.test(currentHost) ||
+      /^172\.(1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}$/.test(currentHost)
+    );
+  }, [currentHost]);
 
   const [yr, mo, dy] = runDate.split("-").map(Number);
   const computedNums = workdayNumbers(new Date(yr, mo - 1, dy, 12));
@@ -139,7 +145,7 @@ export default function DevelopmentPanel() {
           <h3 className="text-sm font-semibold text-slate-300">Production Mirror Sync</h3>
           <p className="mt-1 text-xs text-slate-500">
             Pulls the live production export into this local database so the dev app can inspect the day using real data.
-            This replaces the local operational snapshot and is hard-blocked unless the app is running on loopback.
+            This replaces the local operational snapshot and is hard-blocked unless the app is reached over loopback or a private LAN address.
           </p>
         </div>
 
@@ -164,7 +170,7 @@ export default function DevelopmentPanel() {
 
         {!isLoopbackHost && (
           <div className="rounded-lg border border-amber-700 bg-amber-950/30 px-3 py-2 text-xs text-amber-300">
-            Disabled because this page is not running from localhost / 127.0.0.1 / ::1.
+            Disabled because this page is not running from localhost / 127.0.0.1 / ::1 or a private LAN address.
           </div>
         )}
 

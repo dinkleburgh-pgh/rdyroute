@@ -8,6 +8,24 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-26
+
+### Added
+- **Production Mirror Sync — authentication** — the dev "Sync from live production" tool now logs into production with configured admin credentials (`PRODUCTION_SYNC_USERNAME` / `PRODUCTION_SYNC_PASSWORD`), minting a fresh JWT per run and sending it as a Bearer token to the admin-protected export endpoints. Fixes the `401 Unauthorized` on `backup.zip`.
+- **Production Mirror Sync — private LAN access** — the loopback hard-block now also accepts RFC1918 private addresses (`192.168.x.x`, `10.x.x.x`, `172.16–31.x.x`) on both the frontend gate and the backend, so the dev tool can be reached from another device on the LAN. Public hostnames (e.g. `rdyroute.app`) remain blocked.
+- **"Covered by" badge** — a covered route truck's card now shows an amber `← Covered by #X` badge (reverse of the covering truck's `→ Cov. #X`), so swapped/covered cards are no longer blank.
+
+### Changed
+- **Unload / Load denominator = fleet schedule running count** — progress denominators now equal the concrete number of routes scheduled to run that day (non-spare trucks not scheduled off). Route swaps no longer add or remove from the count — a scheduled route always runs (covered when needed). Only a Spare physically taking over a route removes it. Applied consistently across the sidebar, Load page, RunDay, and LiveInProgress.
+- **Sidebar Spare count** — now counts every available (non-OOS) spare, including idle spares sitting unloaded, instead of only spares actively covering an OOS route.
+- **Fleet board number colour** — the big truck number is greyed out for trucks off the **load** day (done for tomorrow); **U Off** trucks (off only the unload day) keep their real workflow-status colour.
+- **OOS → unloaded** — marking a truck OOS now moves its daily status straight to `unloaded` so its route counts as done on the unload board (the `is_oos` flag is kept; the board still shows it as OOS). Dev stand-in for a future "notice to unload it" flow.
+
+### Fixed
+- **Route-swap denominator undercount** — swapping a route between two scheduled trucks no longer drops either route from the unload/load totals (was subtracting covered routes, e.g. showing 29 instead of 33).
+
+---
+
 ## [Unreleased] — 2026-06-25
 
 ### Added
