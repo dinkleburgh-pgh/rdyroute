@@ -22,6 +22,7 @@ import {
   useUpsertTruckState,
 } from "../../api/hooks";
 import { workdayNumbers } from "../../components/Clock";
+import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
 import { effectiveStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../../utils/truckStatus";
 
@@ -362,6 +363,7 @@ export default function RunDayWizard({
           {/* Step 2: Dust Garments */}
           {step === 2 && (
             <div className="space-y-4">
+              <DustGarmentIcon className="mx-auto h-24 w-24 text-amber-300" style={{ color: "#fcd34d" }} />
               <p className="text-center text-xl font-extrabold text-slate-100">Select dust trucks with garments</p>
               <p className="text-center text-xs text-slate-400">Select which dust trucks have garments today.</p>
               {editableDustTrucks.length === 0 ? (
