@@ -12,10 +12,13 @@ import {
   useTruckNotes,
   useUpsertTruckState,
   useHolidayLoad,
+  useAssignSpare,
+  useSpareAssignments,
 } from "../api/hooks";
 import { ShortageLogger } from "../pages/Shorts";
 import { todayIso } from "../api/client";
-import { buildOperationalDayContext } from "../utils/truckStatus";
+import { workdayNumbers } from "./Clock";
+import { buildOperationalDayContext, effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import type { TruckNote, TruckWithState } from "../types";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
@@ -600,6 +603,7 @@ function QueueRow({
   onSelect: () => void;
 }) {
   const coverRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+  const spareNeedsRoute = truck.truck_type === "Spare" && coverRoute == null;
   const parts: string[] = [truck.truck_type];
   if (truck.state?.batch_id != null) parts.push(`Batch ${truck.state.batch_id}`);
   if (coverRoute != null) parts.push(`Cov. #${coverRoute}`);
@@ -618,6 +622,11 @@ function QueueRow({
       <span className="w-4 shrink-0 text-center text-[11px] font-bold tabular-nums text-ink-faint">{index + 1}</span>
       <span className="font-mono tabular-nums text-sm font-bold text-ink">#{truck.truck_number}</span>
       <span className="flex-1 truncate text-[11px] text-ink-muted">{meta}</span>
+      {spareNeedsRoute && (
+        <span className="shrink-0 rounded-pill bg-amber-900/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-300">
+          Needs route
+        </span>
+      )}
       {isNext && (
         <span className="shrink-0 rounded-pill bg-sky-900/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
           NEXT
@@ -642,11 +651,58 @@ function NextUpPanel({
 }) {
   const setNext = useSetNextUp(runDate);
   const clearNext = useClearNextUp(runDate);
+  const assignSpare = useAssignSpare();
+  const { data: board = [] } = useBoard(runDate);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
+  const { data: spareAssignments = [] } = useSpareAssignments(runDate);
+  const { loadDay } = workdayNumbers();
+
+  // A spare with no route assigned can't be queued — it has nothing to load.
+  // Selecting one opens this prompt to pick the route it should cover first.
+  const [assignFor, setAssignFor] = useState<TruckWithState | null>(null);
 
   const options = useMemo(
     () => [...unloaded].sort((a, b) => a.truck_number - b.truck_number),
     [unloaded],
   );
+
+  // Routes already covered (spare assignment or route swap) — excluded / flagged.
+  const coveredRoutes = useMemo(
+    () =>
+      new Set<number>([
+        ...spareAssignments.filter((a) => !a.returned).map((a) => a.covering_route_truck),
+        ...board.filter((t) => t.route_swap_route != null).map((t) => t.route_swap_route as number),
+      ]),
+    [spareAssignments, board],
+  );
+  const routeTrucks = useMemo(
+    () =>
+      board
+        .filter((t) => t.truck_type !== "Spare" && (holidayLoad || !isScheduledOff(t, loadDay)))
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board, holidayLoad, loadDay],
+  );
+  const oosUncovered = routeTrucks.filter(
+    (t) => effectiveStatus(t, loadDay, holidayLoad) === "oos" && !coveredRoutes.has(t.truck_number),
+  );
+  const otherRoutes = routeTrucks.filter(
+    (t) => !(effectiveStatus(t, loadDay, holidayLoad) === "oos" && !coveredRoutes.has(t.truck_number)),
+  );
+
+  function needsRoute(t: TruckWithState) {
+    return t.truck_type === "Spare" && (t.state?.oos_spare_route ?? t.route_swap_route) == null;
+  }
+
+  async function assignAndQueue(spareNum: number, routeNum: number) {
+    try {
+      await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: spareNum, covering_route_truck: routeNum });
+      setNext.mutate(spareNum);
+      setAssignFor(null);
+      onPick?.();
+    } catch (err) {
+      console.error("assign spare route failed", err);
+    }
+  }
 
   const nextStillAvailable = nextUp != null && options.some((t) => t.truck_number === nextUp);
 
@@ -665,6 +721,39 @@ function NextUpPanel({
         </p>
       )}
 
+      {/* Spare route-assignment prompt */}
+      {assignFor && (
+        <div className="space-y-2 rounded-lg border border-amber-700/40 bg-amber-950/20 p-3">
+          <p className="text-xs text-amber-200">
+            Spare <span className="font-black text-amber-100">#{assignFor.truck_number}</span> has no route. Pick the route it should load on:
+          </p>
+          <select
+            className="input w-full text-sm"
+            defaultValue=""
+            onChange={(e) => { if (e.target.value) assignAndQueue(assignFor.truck_number, parseInt(e.target.value)); }}
+          >
+            <option value="">— select route —</option>
+            {oosUncovered.length > 0 && (
+              <optgroup label="OOS — needs covering">
+                {oosUncovered.map((t) => (
+                  <option key={t.truck_number} value={t.truck_number}>#{t.truck_number} — OOS</option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Route trucks">
+              {otherRoutes.map((t) => (
+                <option key={t.truck_number} value={t.truck_number}>
+                  #{t.truck_number}{coveredRoutes.has(t.truck_number) ? " ✓ covered" : ""}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+          <button type="button" className="btn-ghost w-full text-xs" onClick={() => setAssignFor(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
       {options.length === 0 ? (
         <p className="text-center text-xs text-ink-faint">No Unloaded trucks available.</p>
       ) : (
@@ -675,7 +764,11 @@ function NextUpPanel({
               truck={truck}
               index={i}
               isNext={truck.truck_number === nextUp}
-              onSelect={() => { setNext.mutate(truck.truck_number); onPick?.(); }}
+              onSelect={() =>
+                needsRoute(truck)
+                  ? setAssignFor(truck)
+                  : (setNext.mutate(truck.truck_number), onPick?.())
+              }
             />
           ))}
         </div>
