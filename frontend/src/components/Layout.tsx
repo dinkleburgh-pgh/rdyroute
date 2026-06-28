@@ -131,7 +131,7 @@ function BuildInfo() {
   return (
     <div className="pt-2 text-center text-[10px] leading-tight text-ink-faint">
       <p>
-        ReadyRoute V2 · {isDev ? "dev" : version}
+        ReadyRoute V2 · {isDev ? `${version} · dev` : version}
       </p>
       {(shortCommit || dateLabel) && !isDev && (
         <p className="text-ink-faint/60">
@@ -146,7 +146,10 @@ function BuildInfo() {
 
 export default function Layout() {
   const { user, logout } = useAuth();
-  const appVersion = import.meta.env.DEV ? "dev" : (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev");
+  const resolvedVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
+  // In dev show the predicted next build label (from vite.config) with a marker
+  // so it's clear it isn't pushed yet; in prod show the shipped build label.
+  const appVersion = import.meta.env.DEV ? `${resolvedVersion} · dev` : resolvedVersion;
   const { data: allSettings } = useSettings();
   const settingsMap = useMemo(() => allSettings ? new Map(allSettings.map((s) => [s.key, s.value])) : new Map(), [allSettings]);
 

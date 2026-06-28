@@ -17,8 +17,32 @@ function getGitCommit(): string {
   }
 }
 
+// In a local dev build there's no CI run number yet, so predict the build label
+// the next push will produce: CI tags prod as `build.<github_run_number>`, and
+// that number increments by one per workflow run. Query the latest run via the
+// gh CLI and add one. Falls back to null when gh is unavailable / offline.
+function predictNextBuild(): string | null {
+  try {
+    const out = execSync(
+      "gh run list --workflow docker-publish.yml -L 1 --json number",
+      { stdio: ["pipe", "pipe", "ignore"] },
+    )
+      .toString()
+      .trim();
+    const latest = (JSON.parse(out) as { number: number }[])?.[0]?.number;
+    if (typeof latest === "number" && Number.isFinite(latest)) {
+      return `build.${latest + 1}`;
+    }
+  } catch {
+    // gh not installed, not authenticated, or offline — fall through.
+  }
+  return null;
+}
+
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")) as { version: string };
-const appVersion = process.env.VITE_APP_VERSION || pkg.version;
+// CI injects VITE_APP_VERSION (build.<run_number>); locally predict the next
+// build so the dev UI shows the label it will ship as once pushed.
+const appVersion = process.env.VITE_APP_VERSION || predictNextBuild() || pkg.version;
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000";
 const wsProxyTarget = process.env.VITE_WS_PROXY_TARGET || apiProxyTarget.replace(/^http/i, "ws");
 
