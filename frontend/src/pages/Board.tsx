@@ -317,7 +317,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         }
       } else {
         const loadDayEff = effectiveStatus(t, runDayNum, holidayLoad);
-        const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
+        const s = t.is_oos ? "oos" : effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
         c[s] = (c[s] ?? 0) + 1;
         // Also count in "off" when scheduled off for load day but shown in
         // an unload-context bucket (off = not loading tomorrow).
@@ -345,7 +345,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           const isIdle = s === "dirty" || s === "off" || s === "unloaded";
           return isIdle ? fleetFilters.has("spare") : fleetFilters.has(s);
         }
-        return fleetFilters.has(effectiveStatus(t, runUnloadsDay, holidayUnload));
+        return fleetFilters.has(t.is_oos ? "oos" : effectiveStatus(t, runUnloadsDay, holidayUnload));
       });
     }
     if (filter === "all") return data;
@@ -686,7 +686,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 className={clsx(
                   "card cursor-pointer",
                   fleetMode ? "p-2 flex flex-col gap-1 min-h-[4.5rem] md:p-4 md:gap-2 md:min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],
-                  fleetMode && status === "oos" && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
+                  fleetMode && (status === "oos" || truck.is_oos) && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
                   fleetMode && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
                   !fleetMode && filter === "dirty" && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
                   !fleetMode && (filter === "oos" ? oosAssignOpen.has(truck.truck_number) : detailNum === truck.truck_number) && "ring-2 ring-blue-500",
@@ -816,7 +816,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         <span className="badge bg-slate-600 text-slate-200">L Off</span>
                       )}
                       {/* 4. OOS coverage (fleet) */}
-                      {fleetMode && status === "oos" && (() => {
+                      {fleetMode && (status === "oos" || truck.is_oos) && (() => {
                         const cov = coveringTruckByRoute.get(truck.truck_number);
                         if (!cov) return <span className="text-[10px] font-semibold text-amber-400">Needs assignment</span>;
                         const coveringTruck = data?.find((d) => d.truck_number === cov.num);

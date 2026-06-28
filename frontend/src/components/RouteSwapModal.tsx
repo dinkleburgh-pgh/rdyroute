@@ -108,7 +108,7 @@ export default function RouteSwapModal({ onClose }: Props) {
   const unswappedOos = [...board]
     .filter((t) =>
       t.truck_type !== "Spare" &&
-      effectiveStatus(t, loadDay, holidayLoad) === "oos" &&
+      (t.is_oos || effectiveStatus(t, loadDay, holidayLoad) === "oos") &&
       !swapRouteSet.has(t.truck_number) &&
       (holidayLoad || !isScheduledOff(t, loadDay)),
     )
