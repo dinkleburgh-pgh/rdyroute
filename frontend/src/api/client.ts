@@ -1,4 +1,5 @@
 import axios, { AxiosError, AxiosRequestConfig } from "axios";
+import * as offlineQueue from "./offlineQueue";
 
 // All requests go through the Vite dev-server proxy at /api → http://127.0.0.1:8000
 export const api = axios.create({
@@ -109,6 +110,43 @@ api.interceptors.response.use(
     } else if (status === 401) {
       clearSession();
     }
+
+    // Offline-first: any write that fails with a network error gets queued and
+    // resolved as success, so the UI proceeds and useOfflineSync replays it on
+    // reconnect (last-write-wins). Reads are left to reject → React Query serves
+    // the persisted cache. Auth/update endpoints are never queued.
+    const method = (cfg?.method ?? "get").toLowerCase();
+    const isMutation = ["post", "put", "patch", "delete"].includes(method);
+    const queueable =
+      isMutation && !isAuthEndpoint && !url.includes("/auth/") && !url.includes("/updates/") && !url.includes("/exports/");
+    if (cfg && queueable && offlineQueue.isNetworkError(error)) {
+      let endpoint = url;
+      if (cfg.params && typeof cfg.params === "object") {
+        const qs = new URLSearchParams();
+        for (const [k, v] of Object.entries(cfg.params as Record<string, unknown>)) {
+          if (v != null && k !== "_rrts") qs.set(k, String(v));
+        }
+        const s = qs.toString();
+        if (s) endpoint += (endpoint.includes("?") ? "&" : "?") + s;
+      }
+      let payload: unknown = cfg.data;
+      if (typeof payload === "string") {
+        try { payload = JSON.parse(payload); } catch { /* leave as-is */ }
+      }
+      try {
+        await offlineQueue.enqueue("generic", endpoint, method.toUpperCase() as "POST" | "PUT" | "PATCH" | "DELETE", payload);
+      } catch (e) {
+        console.warn("[offline] failed to queue mutation", e);
+      }
+      return {
+        data: { queued: true },
+        status: 202,
+        statusText: "Queued (offline)",
+        headers: {},
+        config: cfg,
+      } as unknown as ReturnType<typeof Promise.resolve>;
+    }
+
     return Promise.reject(error);
   },
 );

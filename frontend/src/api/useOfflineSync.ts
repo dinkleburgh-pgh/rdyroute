@@ -43,15 +43,13 @@ export function useOfflineSync(): OfflineSyncState {
       const items = await offlineQueue.getAll();
       if (items.length === 0) return;
 
-      const invalidatedKeys = new Set<string>();
+      let anyFlushed = false;
 
       for (const item of items) {
         try {
           await api.request({ method: item.method, url: item.endpoint, data: item.payload });
           await offlineQueue.remove(item.id);
-
-          // Track which query keys need invalidation
-          if (item.type === "create_shortage") invalidatedKeys.add("shorts");
+          anyFlushed = true;
         } catch (err: unknown) {
           // 4xx errors are permanent client errors — discard the item and continue
           const status =
@@ -66,12 +64,11 @@ export function useOfflineSync(): OfflineSyncState {
         }
       }
 
-      // Bulk invalidate after flush
-      for (const key of invalidatedKeys) {
-        qc.invalidateQueries({ queryKey: [key] });
+      // After draining queued writes, refresh everything (last-write-wins) so the
+      // UI reflects the now-synced server state.
+      if (anyFlushed) {
+        qc.invalidateQueries();
       }
-      // Also refresh the board so status counts update
-      qc.invalidateQueries({ queryKey: ["board"] });
     } finally {
       flushingRef.current = false;
       setIsFlushing(false);

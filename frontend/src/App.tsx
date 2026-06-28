@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
 import { AnimatePresence } from "framer-motion";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./api/queryClient";
 import { useEffect } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
@@ -30,18 +31,6 @@ import DriverNotes from "./pages/DriverNotes";
 import FleetSchedule from "./pages/FleetSchedule";
 import VerifyShortSheet from "./pages/VerifyShortSheet";
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30_000, refetchOnWindowFocus: false },
-    mutations: {
-      onError: (err) => {
-        // Default fallback: log errors from mutations that don't have their
-        // own onError handler. Call sites can override with a toast as needed.
-        console.error("[mutation error]", err);
-      },
-    },
-  },
-});
 
 const router = createBrowserRouter([
   { path: "/login", element: <Login />, errorElement: <ErrorBoundary /> },

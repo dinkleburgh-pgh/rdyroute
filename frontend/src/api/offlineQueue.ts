@@ -18,7 +18,7 @@ import { openDB, type DBSchema, type IDBPDatabase } from "idb";
 // Types
 // ---------------------------------------------------------------------------
 
-export type MutationType = "create_shortage";
+export type MutationType = "create_shortage" | "generic";
 
 export interface PendingMutation {
   id: string;
