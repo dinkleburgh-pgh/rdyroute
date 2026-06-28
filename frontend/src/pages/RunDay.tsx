@@ -11,6 +11,7 @@ import {
   useLoadDayOverride,
   useUnloadsDayOverride,
   useTruckNotes,
+  useRouteSwapLog,
 } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
@@ -171,8 +172,8 @@ export default function RunDay() {
     [board],
   );
 
-  // Flat list of today's coverages for the summary banner: each route being
-  // covered, the truck covering it, and whether that's a spare or a route swap.
+  // Today's live coverages (shown with the Load section): each route being
+  // covered, the truck covering it, whether that's a spare or a route swap.
   const coverages = useMemo(() => {
     const byNum = new Map(board.map((t) => [t.truck_number, t]));
     return [...coveringTruckMap.entries()]
@@ -185,6 +186,25 @@ export default function RunDay() {
       }))
       .sort((a, b) => a.routeNum - b.routeNum);
   }, [board, coveringTruckMap, loadDay, holidayLoad]);
+
+  // Previous load-day coverage (shown with the Unload section as a reminder):
+  // the trucks being unloaded today were loaded on the prior run day, so surface
+  // who covered which route then, from the route-swap log's most recent prior date.
+  const { data: swapLog = [] } = useRouteSwapLog(30);
+  const prevCoverage = useMemo(() => {
+    const prior = swapLog.filter((e) => e.run_date < runDate);
+    if (prior.length === 0) return { date: null as string | null, items: [] as { route: number; loadOn: number }[] };
+    const latestDate = prior.reduce((m, e) => (e.run_date > m ? e.run_date : m), prior[0].run_date);
+    const byRoute = new Map<number, number>();
+    // log is newest-first; iterate so the most recent entry per route wins
+    for (const e of prior.filter((e) => e.run_date === latestDate)) {
+      if (!byRoute.has(e.route_truck)) byRoute.set(e.route_truck, e.load_on_truck);
+    }
+    const items = [...byRoute.entries()]
+      .map(([route, loadOn]) => ({ route, loadOn }))
+      .sort((a, b) => a.route - b.route);
+    return { date: latestDate, items };
+  }, [swapLog, runDate]);
 
   return (
     <>
@@ -267,46 +287,6 @@ export default function RunDay() {
         </div>
       )}
 
-      {/* Coverages summary — who's covering which route today */}
-      {coverages.length > 0 && (
-        <div className="rounded-xl border border-sky-800/40 bg-sky-950/15 px-4 py-3">
-          <div className="mb-2 flex items-center gap-2">
-            <ArrowLeftRight className="h-4 w-4 shrink-0 text-sky-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-sky-300">Coverages</span>
-            <span className="rounded-full bg-sky-800/50 px-2 py-0.5 text-[10px] font-bold text-sky-200">{coverages.length}</span>
-          </div>
-          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-            {coverages.map((c) => {
-              const routeOos = c.routeTruck?.state?.status === "oos" || c.routeTruck?.is_oos;
-              return (
-                <div
-                  key={c.routeNum}
-                  className="flex items-center gap-2 rounded-lg border border-sky-800/30 bg-slate-900/50 px-3 py-2"
-                >
-                  <span className="text-base font-black text-red-400">#{c.routeNum}</span>
-                  <span className="text-[10px] font-semibold uppercase tracking-wide text-red-400/70">
-                    {routeOos ? "OOS" : "swap"}
-                  </span>
-                  <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-slate-600" />
-                  <span className="text-base font-black text-sky-300">#{c.cover.truck_number}</span>
-                  <span className="rounded-full bg-sky-900/50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                    {c.kind === "spare" ? "Spare" : "Route"}
-                  </span>
-                  <span
-                    className={clsx(
-                      "ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold text-white",
-                      STATUS_BG[c.coverStatus],
-                    )}
-                  >
-                    {STATUS_LABELS[c.coverStatus]}
-                  </span>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <section>
         <button
           type="button"
@@ -342,6 +322,31 @@ export default function RunDay() {
           }}
         >
         <div style={{ overflow: "hidden" }}>
+        {/* Reminder: coverage that was in place on the previous load day — the
+            loads now being unloaded today were covered by these trucks. */}
+        {prevCoverage.items.length > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2.5">
+            <div className="mb-1.5 flex items-center gap-2">
+              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+                Previous load-day coverage
+              </span>
+              <span className="text-[10px] text-amber-500/70">({prevCoverage.date})</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {prevCoverage.items.map((c) => (
+                <span
+                  key={c.route}
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-xs"
+                >
+                  <span className="font-black text-red-300">#{c.route}</span>
+                  <ArrowLeftRight className="h-3 w-3 text-slate-600" />
+                  <span className="font-black text-amber-200">#{c.loadOn}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
             // Spare-type covering trucks are absorbed into their OOS route truck's card.
@@ -415,6 +420,45 @@ export default function RunDay() {
           }}
         >
         <div style={{ overflow: "hidden" }}>
+        {/* Today's live coverages — who is covering which route on this load day. */}
+        {coverages.length > 0 && (
+          <div className="mb-3 rounded-lg border border-sky-800/40 bg-sky-950/15 px-3 py-2.5">
+            <div className="mb-1.5 flex items-center gap-2">
+              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">Coverages</span>
+              <span className="rounded-full bg-sky-800/50 px-2 py-0.5 text-[10px] font-bold text-sky-200">{coverages.length}</span>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {coverages.map((c) => {
+                const routeOos = c.routeTruck?.state?.status === "oos" || c.routeTruck?.is_oos;
+                return (
+                  <div
+                    key={c.routeNum}
+                    className="flex items-center gap-2 rounded-md border border-sky-800/30 bg-slate-900/50 px-2.5 py-1.5"
+                  >
+                    <span className="text-sm font-black text-red-400">#{c.routeNum}</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-red-400/70">
+                      {routeOos ? "OOS" : "swap"}
+                    </span>
+                    <ArrowLeftRight className="h-3 w-3 shrink-0 text-slate-600" />
+                    <span className="text-sm font-black text-sky-300">#{c.cover.truck_number}</span>
+                    <span className="rounded-full bg-sky-900/50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                      {c.kind === "spare" ? "Spare" : "Route"}
+                    </span>
+                    <span
+                      className={clsx(
+                        "ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold text-white",
+                        STATUS_BG[c.coverStatus],
+                      )}
+                    >
+                      {STATUS_LABELS[c.coverStatus]}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {loadTrucks
             // Spare-type covering trucks are absorbed into their OOS route truck's card.
