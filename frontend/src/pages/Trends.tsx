@@ -21,6 +21,7 @@ import {
 import "../components/trends/chartSetup";
 import TrendsHeader from "../components/trends/TrendsHeader";
 import TrendTabBar from "../components/trends/TrendTabBar";
+import SnapshotPanel from "../components/trends/SnapshotPanel";
 import KpiSection from "../components/trends/KpiSection";
 import DailyVolumeChart from "../components/trends/DailyVolumeChart";
 import ComparisonChart from "../components/trends/ComparisonChart";
@@ -39,7 +40,7 @@ import AnomalyPanel from "../components/trends/AnomalyPanel";
 export default function Trends() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
-  const tab = params.get("tab") || "overview";
+  const tab = params.get("tab") || "snapshot";
   const [days, setDays] = useState(14);
   const [swapDays, setSwapDays] = useState(30);
 
@@ -126,7 +127,7 @@ export default function Trends() {
 
   function setTab(id: string) {
     const next = new URLSearchParams(params);
-    if (id === "overview") next.delete("tab");
+    if (id === "snapshot") next.delete("tab");
     else next.set("tab", id);
     setParams(next, { replace: true });
   }
@@ -145,6 +146,8 @@ export default function Trends() {
       />
 
       <TrendTabBar active={tab} onChange={setTab} />
+
+      {tab === "snapshot" && <SnapshotPanel />}
 
       {tab === "overview" && (
         <>

@@ -2,7 +2,14 @@ import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useTrackedItems, useUpdateTrackedItems, type TrackedItem } from "../../api/hooks";
 import ConfirmDialog from "../ConfirmDialog";
-import { Plus, Trash2, Save, RotateCcw, Upload, Package, X } from "lucide-react";
+import { Plus, Trash2, Save, RotateCcw, Upload, Package, X, AlertTriangle } from "lucide-react";
+
+const UNIT_PRESETS = ["Case", "Bag", "Bundle", "Roll", "Box", "Pack"];
+
+/** A pack quantity is set but its unit name (Case/Bag/…) is missing. */
+function needsConfig(it: TrackedItem): boolean {
+  return it.pack_size != null && it.pack_size > 0 && !it.unit_label?.trim();
+}
 
 export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const { data: items, isLoading } = useTrackedItems();
@@ -12,10 +19,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ label: string; packSize: string }>({ label: "", packSize: "" });
+  const [editForm, setEditForm] = useState<{ label: string; packSize: string; unitLabel: string }>({ label: "", packSize: "", unitLabel: "" });
   const [confirmRemoveLabel, setConfirmRemoveLabel] = useState<string | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
-  const [addForm, setAddForm] = useState({ label: "", packSize: "" });
+  const [addForm, setAddForm] = useState({ label: "", packSize: "", unitLabel: "" });
   const [extraCategories, setExtraCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
 
@@ -44,9 +51,17 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     return uncategorised.length > 0 ? [...named, ["", uncategorised] as [string, TrackedItem[]]] : named;
   }, [categories, draft]);
 
-  const visibleGroups = activeTab === "__all__"
-    ? groups
-    : groups.filter(([k]) => k === activeTab || (activeTab === "" && k === ""));
+  const needsConfigCount = useMemo(() => draft.filter(needsConfig).length, [draft]);
+
+  const visibleGroups = useMemo<[string, TrackedItem[]][]>(() => {
+    if (activeTab === "__needscfg__") {
+      return groups
+        .map(([k, its]) => [k, its.filter(needsConfig)] as [string, TrackedItem[]])
+        .filter(([, its]) => its.length > 0);
+    }
+    if (activeTab === "__all__") return groups;
+    return groups.filter(([k]) => k === activeTab || (activeTab === "" && k === ""));
+  }, [activeTab, groups]);
 
   function removeItem(label: string) {
     setConfirmRemoveLabel(label);
@@ -61,7 +76,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   function startEdit(it: TrackedItem) {
     setEditingLabel(it.label);
-    setEditForm({ label: it.label, packSize: it.pack_size ? String(it.pack_size) : "" });
+    setEditForm({ label: it.label, packSize: it.pack_size ? String(it.pack_size) : "", unitLabel: it.unit_label ?? "" });
   }
 
   function cancelEdit() {
@@ -74,9 +89,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     if (!newLabel) return;
     const parsedPack = parseInt(editForm.packSize, 10);
     const packSize = editForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
+    const unitLabel = packSize ? (editForm.unitLabel.trim() || undefined) : undefined;
     setDraft((d) => d.map((it) =>
       it.label === editingLabel
-        ? { ...it, label: newLabel, pack_size: packSize, unit_label: packSize ? undefined : undefined }
+        ? { ...it, label: newLabel, pack_size: packSize, unit_label: unitLabel }
         : it,
     ));
     setEditingLabel(null);
@@ -97,9 +113,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     if (!finalCat) return;
     const parsedPack = parseInt(addForm.packSize, 10);
     const packSize = addForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
-    setDraft((d) => [...d, { label, qty_default: 1, category: finalCat, pack_size: packSize }]);
+    const unitLabel = packSize ? (addForm.unitLabel.trim() || undefined) : undefined;
+    setDraft((d) => [...d, { label, qty_default: 1, category: finalCat, pack_size: packSize, unit_label: unitLabel }]);
     setExtraCategories((current) => current.filter((category) => category !== finalCat));
-    setAddForm({ label: "", packSize: "" });
+    setAddForm({ label: "", packSize: "", unitLabel: "" });
     setAddingToCategory(null);
   }
 
@@ -111,7 +128,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     setNewCategoryName("");
     setActiveTab(category);
     setAddingToCategory(category);
-    setAddForm({ label: "", packSize: "" });
+    setAddForm({ label: "", packSize: "", unitLabel: "" });
   }
 
   function applyBulkImport() {
@@ -147,7 +164,14 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Tracked Items</h3>
-          <p className="text-xs text-slate-500">{draft.length} item{draft.length !== 1 ? "s" : ""} across {categories.length} categor{categories.length !== 1 ? "ies" : "y"}</p>
+          <p className="text-xs text-slate-500">
+            {draft.length} item{draft.length !== 1 ? "s" : ""} across {categories.length} categor{categories.length !== 1 ? "ies" : "y"}
+            {needsConfigCount > 0 && (
+              <button onClick={() => setActiveTab("__needscfg__")} className="ml-2 inline-flex items-center gap-1 text-amber-400 hover:underline">
+                <AlertTriangle className="h-3 w-3" /> {needsConfigCount} need{needsConfigCount !== 1 ? "" : "s"} a unit
+              </button>
+            )}
+          </p>
         </div>
         <div className="flex items-center gap-2">
           {dirty && <span className="text-xs font-medium text-amber-400">{unsavedCount} unsaved</span>}
@@ -169,6 +193,13 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
             {label}
           </button>
         ))}
+        {needsConfigCount > 0 && (
+          <button onClick={() => setActiveTab("__needscfg__")}
+            className={clsx("flex items-center gap-1 rounded-md px-3 py-1 text-xs font-semibold transition-colors",
+              activeTab === "__needscfg__" ? "bg-amber-600 text-white" : "text-amber-400 hover:bg-amber-900/30")}>
+            <AlertTriangle className="h-3 w-3" /> Needs unit ({needsConfigCount})
+          </button>
+        )}
       </div>
 
       {draft.length === 0 && (
@@ -207,7 +238,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
               </span>
               {!disabled && cat !== "" && (
                 <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
-                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", packSize: "" }); }}>
+                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", packSize: "", unitLabel: "" }); }}>
                   <Plus className="h-3 w-3" /> {isAdding ? "Cancel" : "Add Item"}
                 </button>
               )}
@@ -217,6 +248,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
               {catItems.map((it) => {
                 const isEditing = editingLabel === it.label;
                 const hasPack = it.pack_size != null && it.pack_size > 0;
+                const missingUnit = needsConfig(it);
 
                 if (isEditing) {
                   return (
@@ -228,10 +260,18 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                           onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
                       </div>
                       <div>
-                        <label className="label">Bag/Case amount</label>
+                        <label className="label">Pieces / unit</label>
                         <input type="number" min={1} className="input w-20" placeholder="12" value={editForm.packSize}
                           onChange={(e) => setEditForm({ ...editForm, packSize: e.target.value })} />
                       </div>
+                      {editForm.packSize.trim() && (
+                        <div className="min-w-0 flex-1">
+                          <label className="label">Unit name</label>
+                          <input className="input w-full" placeholder="Case / Bag / Bundle" value={editForm.unitLabel} list="unit-presets"
+                            onChange={(e) => setEditForm({ ...editForm, unitLabel: e.target.value })}
+                            onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
+                        </div>
+                      )}
                       <div className="flex gap-1 pb-0.5">
                         <button className="btn-primary text-xs px-2 py-1" onClick={commitEdit}><Save className="h-3 w-3" /></button>
                         <button className="btn-ghost text-xs px-2 py-1" onClick={cancelEdit}><X className="h-3 w-3" /></button>
@@ -246,17 +286,19 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                       {it.label}
                     </button>
                     <button
-                      onClick={() => togglePack(it.label)}
+                      onClick={() => (missingUnit ? startEdit(it) : togglePack(it.label))}
                       className={clsx(
                         "ml-1 flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold transition-all",
-                        hasPack
-                          ? "bg-emerald-900/40 text-emerald-400"
-                          : "bg-slate-700/50 text-slate-500 hover:bg-slate-700 hover:text-slate-300",
+                        missingUnit
+                          ? "bg-amber-900/40 text-amber-400 hover:bg-amber-900/60"
+                          : hasPack
+                            ? "bg-emerald-900/40 text-emerald-400"
+                            : "bg-slate-700/50 text-slate-500 hover:bg-slate-700 hover:text-slate-300",
                       )}
-                      title={hasPack ? `${it.pack_size} per bag/case` : "Click to set bag/case amount"}
+                      title={missingUnit ? "Pack size set but no unit name — click to add (Case/Bag/…)" : hasPack ? `${it.pack_size} per ${it.unit_label}` : "Click to set pieces per pack"}
                     >
-                      <Package className="h-2.5 w-2.5" />
-                      {hasPack ? `${it.pack_size}/bag` : "Single"}
+                      {missingUnit ? <AlertTriangle className="h-2.5 w-2.5" /> : <Package className="h-2.5 w-2.5" />}
+                      {hasPack ? `${it.pack_size}/${it.unit_label || "?"}` : "Single"}
                     </button>
                     {!disabled && (
                       <button onClick={() => removeItem(it.label)}
@@ -280,10 +322,18 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                       onKeyDown={(e) => { if (e.key === "Enter") addItemToCategory(cat); if (e.key === "Escape") setAddingToCategory(null); }} />
                   </div>
                   <div>
-                    <label className="label">Bag/Case amount</label>
+                    <label className="label">Pieces / unit</label>
                     <input type="number" min={1} className="input w-20" placeholder="12" value={addForm.packSize}
                       onChange={(e) => setAddForm({ ...addForm, packSize: e.target.value })} />
                   </div>
+                  {addForm.packSize.trim() && (
+                    <div className="sm:min-w-[8rem]">
+                      <label className="label">Unit name</label>
+                      <input className="input w-full" placeholder="Case / Bag / Bundle" value={addForm.unitLabel} list="unit-presets"
+                        onChange={(e) => setAddForm({ ...addForm, unitLabel: e.target.value })}
+                        onKeyDown={(e) => { if (e.key === "Enter") addItemToCategory(cat); if (e.key === "Escape") setAddingToCategory(null); }} />
+                    </div>
+                  )}
                   <button className="btn-primary text-xs" disabled={!addForm.label.trim()} onClick={() => addItemToCategory(cat)}>
                     <Plus className="mr-1 h-3 w-3" /> Add
                   </button>
@@ -296,6 +346,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
       <datalist id="items-category-datalist">
         {categories.map((c) => <option key={c} value={c} />)}
+      </datalist>
+
+      <datalist id="unit-presets">
+        {UNIT_PRESETS.map((u) => <option key={u} value={u} />)}
       </datalist>
 
       {/* Bulk import */}

@@ -61,10 +61,14 @@ export default function KpiSection({ summary, isLoading }: Props) {
 
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+    <div className="space-y-2">
+      <p className="text-[11px] text-slate-500">
+        Piece totals across all item types — open the <span className="font-medium text-slate-300">Snapshot</span> tab for per-category units (cases / bags / bundles).
+      </p>
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }}>
         <KpiCard
-          label="Items Removed"
+          label="Total Pieces"
           value={summary.total_qty.toLocaleString()}
           change={summary.change_vs_prior_pct}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
@@ -93,7 +97,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
           status="Watch"
         >
           {summary.peak_qty > 0 && (
-            <span className="text-xs text-slate-500">{summary.peak_qty} items</span>
+            <span className="text-xs text-slate-500">{summary.peak_qty.toLocaleString()} pieces</span>
           )}
         </KpiCard>
       </motion.div>
@@ -125,6 +129,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
           status="Stable"
         />
       </motion.div>
+      </div>
     </div>
   );
 }

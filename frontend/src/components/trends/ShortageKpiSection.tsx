@@ -63,7 +63,7 @@ export default function ShortageKpiSection({ summary, isLoading }: Props) {
     <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }}>
         <KpiCard
-          label="Shortage Items"
+          label="Total Pieces"
           value={summary.total_qty.toLocaleString()}
           change={summary.change_vs_prior_pct}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
@@ -90,7 +90,7 @@ export default function ShortageKpiSection({ summary, isLoading }: Props) {
           status="Watch"
         >
           {summary.peak_qty > 0 && (
-            <span className="text-xs text-slate-500">{summary.peak_qty.toLocaleString()} items</span>
+            <span className="text-xs text-slate-500">{summary.peak_qty.toLocaleString()} pieces</span>
           )}
         </KpiCard>
       </motion.div>

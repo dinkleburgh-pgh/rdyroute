@@ -1960,11 +1960,11 @@ export interface TrackedItem {
 }
 
 const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
-  { label: "Terrys/Grids",  qty_default: 1, category: "Towels", pack_size: 20 },
-  { label: "White Micros",  qty_default: 1, category: "Towels", pack_size: 20 },
-  { label: "Red Shops",     qty_default: 1, category: "Towels", pack_size: 50 },
-  { label: "Black Aprons",  qty_default: 1, category: "Aprons", pack_size: 10 },
-  { label: "White Aprons",  qty_default: 1, category: "Aprons", pack_size: 10 },
+  { label: "Terrys/Grids",  qty_default: 1, category: "Towels", unit_label: "Bag",    pack_size: 20 },
+  { label: "White Micros",  qty_default: 1, category: "Towels", unit_label: "Bag",    pack_size: 20 },
+  { label: "Red Shops",     qty_default: 1, category: "Towels", unit_label: "Bundle", pack_size: 50 },
+  { label: "Black Aprons",  qty_default: 1, category: "Aprons", unit_label: "Bag",    pack_size: 10 },
+  { label: "White Aprons",  qty_default: 1, category: "Aprons", unit_label: "Bag",    pack_size: 10 },
 ];
 
 export function useTrackedItems() {
