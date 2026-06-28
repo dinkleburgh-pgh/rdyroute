@@ -17,24 +17,38 @@ function getGitCommit(): string {
   }
 }
 
-// In a local dev build there's no CI run number yet, so predict the build label
-// the next push will produce: CI tags prod as `build.<github_run_number>`, and
-// that number increments by one per workflow run. Query the latest run via the
-// gh CLI and add one. Falls back to null when gh is unavailable / offline.
-function predictNextBuild(): string | null {
+// In a local dev build there's no CI run number yet, so figure out which live
+// build label this working tree corresponds to. CI tags prod as
+// `build.<github_run_number>`, incrementing once per workflow run.
+//   • If the tree is clean and HEAD already has a run (it's pushed / building),
+//     show THAT run's number — the code you're looking at is/will be that build.
+//   • Otherwise (uncommitted or unpushed changes) show latest + 1 — this code
+//     will ship as the next build once pushed.
+// Falls back to null when git/gh is unavailable or offline.
+function predictBuildLabel(): string | null {
   try {
+    const head = execSync("git rev-parse HEAD", { stdio: ["pipe", "pipe", "ignore"] })
+      .toString()
+      .trim();
+    const dirty =
+      execSync("git status --porcelain", { stdio: ["pipe", "pipe", "ignore"] })
+        .toString()
+        .trim().length > 0;
     const out = execSync(
-      "gh run list --workflow docker-publish.yml -L 1 --json number",
+      "gh run list --workflow docker-publish.yml -L 20 --json number,headSha",
       { stdio: ["pipe", "pipe", "ignore"] },
     )
       .toString()
       .trim();
-    const latest = (JSON.parse(out) as { number: number }[])?.[0]?.number;
-    if (typeof latest === "number" && Number.isFinite(latest)) {
-      return `build.${latest + 1}`;
+    const runs = JSON.parse(out) as { number: number; headSha: string }[];
+    if (!Array.isArray(runs) || runs.length === 0) return null;
+    if (!dirty && head) {
+      const match = runs.find((r) => r.headSha === head);
+      if (match) return `build.${match.number}`;
     }
+    return `build.${runs[0].number + 1}`;
   } catch {
-    // gh not installed, not authenticated, or offline — fall through.
+    // git/gh not available or offline — fall through.
   }
   return null;
 }
@@ -42,7 +56,7 @@ function predictNextBuild(): string | null {
 const pkg = JSON.parse(readFileSync(resolve(__dirname, "package.json"), "utf-8")) as { version: string };
 // CI injects VITE_APP_VERSION (build.<run_number>); locally predict the next
 // build so the dev UI shows the label it will ship as once pushed.
-const appVersion = process.env.VITE_APP_VERSION || predictNextBuild() || pkg.version;
+const appVersion = process.env.VITE_APP_VERSION || predictBuildLabel() || pkg.version;
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000";
 const wsProxyTarget = process.env.VITE_WS_PROXY_TARGET || apiProxyTarget.replace(/^http/i, "ws");
 
