@@ -197,8 +197,8 @@ export default function Unload() {
     const isPriority = t.state?.priority_hold === true;
 
     const cardClass = isPriority
-      ? "card animate-priority-glow flex flex-col gap-2 p-3 min-h-[8rem] border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900"
-      : "card flex flex-col gap-2 p-3 min-h-[8rem]";
+      ? "card animate-priority-glow flex flex-col gap-2 p-3 border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900"
+      : "card flex flex-col gap-2 p-3";
 
     const numberColor = isPriority ? "text-amber-300" : "text-red-400";
 
@@ -233,10 +233,11 @@ export default function Unload() {
           </div>
         </div>
 
-        {/* Action region — fixed min-height + bottom-aligned so marking a truck
-            unloaded swaps in the Undo button without changing the card height or
-            the button position (no grid reflow / jitter). */}
-        <div className="mt-auto flex min-h-[6rem] flex-col justify-end gap-2">
+        {/* Action region — bottom-aligned. When batch chips are shown a min
+            height keeps the Mark Unloaded ↔ Undo swap from changing the card
+            height (no reflow); with batching off the chips are gone, so no
+            reserved space is needed and the card stays compact. */}
+        <div className={clsx("mt-auto flex flex-col justify-end gap-2", !batchingDisabled && "min-h-[6rem]")}>
         {isUndo ? (
           /* ── Undo state ── */
           <button
@@ -407,7 +408,7 @@ export default function Unload() {
             const isBusy = busy === t.truck_number;
 
             return (
-              <AnimateCard key={t.truck_number} delay={index * 0.03} className="card flex flex-col gap-2 p-3 min-h-[8rem]">
+              <AnimateCard key={t.truck_number} delay={index * 0.03} className="card flex flex-col gap-2 p-3">
                 {/* Header */}
                 <div className="flex items-start justify-between gap-1">
                   <div>
