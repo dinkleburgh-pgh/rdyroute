@@ -87,21 +87,27 @@ jobs:
         env:
           PROD_UPDATE_URL: ${{ secrets.PROD_UPDATE_URL }}
           PROD_UPDATE_SECRET: ${{ secrets.PROD_UPDATE_SECRET }}
+          # Passed as env (not interpolated into the script) so arbitrary commit
+          # message characters (quotes, apostrophes, parens) can't break the shell.
+          HEAD_SHA: ${{ github.sha }}
+          COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
         run: |
-          curl -fsS \
+          if [ -z "$PROD_UPDATE_URL" ]; then
+            echo "[notify] PROD_UPDATE_URL not configured — skipping."
+            exit 0
+          fi
+          payload="$(jq -n --arg sha "$HEAD_SHA" --arg msg "$COMMIT_MESSAGE" \
+            '{ref: "refs/heads/main", head_commit: {id: $sha, message: $msg}}')"
+          if curl -fsS \
             -X POST "$PROD_UPDATE_URL" \
             -H "Content-Type: application/json" \
             -H "x-readyroute-secret: $PROD_UPDATE_SECRET" \
-            -d '{
-              "ref": "refs/heads/main",
-              "head_commit": {
-                "id": "${{ github.sha }}",
-                "message": ${{ toJson(github.event.head_commit.message) }}
-              }
-            }' \
-            --max-time 15 \
-          && echo "[notify] Production redeploy triggered." \
-          || echo "[notify] WARNING: could not reach production (non-fatal)."
+            -d "$payload" \
+            --max-time 15; then
+            echo "[notify] Production redeploy triggered."
+          else
+            echo "[notify] WARNING: could not reach production (non-fatal)."
+          fi
 
       # ── Direct Portainer redeploy (bypasses app webhook) ──────────────
       # For compose-file (type-2) stacks: sends the current docker-compose.prod.yml
