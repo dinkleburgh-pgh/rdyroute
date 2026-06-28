@@ -1,7 +1,6 @@
 import clsx from "clsx";
 
 const TABS = [
-  { id: "snapshot", label: "Snapshot" },
   { id: "overview", label: "Overview" },
   { id: "load-ops", label: "Load Ops" },
   { id: "shortages", label: "Shortages" },
