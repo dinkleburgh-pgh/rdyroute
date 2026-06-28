@@ -13,7 +13,6 @@ import ColorsPanel from "../components/management/ColorsPanel";
 import WorkflowsPanel from "../components/management/WorkflowsPanel";
 import CommunicationsPanel from "../components/management/CommunicationsPanel";
 import AdvancedPanel from "../components/management/AdvancedPanel";
-import UpdatesPanel from "../components/management/UpdatesPanel";
 import DevelopmentPanel from "../components/management/DevelopmentPanel";
 import ConnectionsPanel from "../components/management/ConnectionsPanel";
 import RecoveryPanel from "../components/management/RecoveryPanel";
@@ -45,7 +44,6 @@ type Category =
   | "off_day_schedule"
   | "bulk_status"
   | "advanced"
-  | "updates"
   | "development"
   | "recovery"
   | "resets"
@@ -176,7 +174,6 @@ const CARD_GROUPS: CardGroup[] = [
     adminOnly: true,
     tabs: [
       { id: "advanced",     label: "Advanced" },
-      { id: "updates",      label: "Update" },
       { id: "development",  label: "Development" },
       { id: "connections",  label: "Connections" },
     ],
@@ -285,7 +282,6 @@ export default function Management() {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
-      case "updates":        return <UpdatesPanel map={map} />;
       case "development":    return <DevelopmentPanel />;
       case "connections":    return <ConnectionsPanel />;
       case "communications": return <CommunicationsPanel />;

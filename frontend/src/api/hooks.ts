@@ -962,66 +962,6 @@ export async function fetchNotificationPublicKey(): Promise<NotificationPublicKe
   return (await api.get<NotificationPublicKey>("/notifications/public-key")).data;
 }
 
-export interface UpdateStatus {
-  enabled: boolean;
-  has_secret: boolean;
-  command: string;
-  running: boolean;
-  last: {
-    state?: string;
-    started_at?: string;
-    finished_at?: string;
-    exit_code?: number;
-    error?: string;
-    [key: string]: unknown;
-  };
-}
-
-export function useUpdateStatus() {
-  return useQuery({
-    queryKey: ["update-status"],
-    queryFn: async () => (await api.get<UpdateStatus>("/updates/status")).data,
-    refetchInterval: 5000,
-    staleTime: 4500,
-  });
-}
-
-export function useTriggerUpdate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () => (await api.post("/updates/trigger")).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["update-status"] }),
-  });
-}
-
-export function useTriggerPushUpdate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: { ref?: string; head_commit?: { id?: string } }) =>
-      (await api.post("/updates/push", payload)).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["update-status"] }),
-  });
-}
-
-export interface UpdateCheckResult {
-  local_sha: string | null;
-  remote_sha: string | null;
-  remote_message: string | null;
-  remote_date: string | null;
-  update_available: boolean;
-  check_error: string | null;
-}
-
-export function useCheckForUpdate(enabled = true) {
-  return useQuery({
-    queryKey: ["update-check"],
-    queryFn: async () => (await api.get<UpdateCheckResult>("/updates/check")).data,
-    refetchInterval: 5 * 60 * 1000, // poll every 5 minutes
-    staleTime: 4 * 60 * 1000,
-    enabled,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Holiday mode (per run-date)
 // ---------------------------------------------------------------------------
