@@ -155,11 +155,12 @@ function TruckPicker({
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
-                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.02 }}
-                whileHover={{ scale: 1.03 }}
+                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow hover:bg-slate-600 hover:shadow-lg"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 30, delay: i * 0.02 }}
+                whileHover={{ scale: 1.06, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                whileTap={{ scale: 0.93 }}
               >
                 <span className="text-2xl font-black leading-none">{t.truck_number}</span>
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
@@ -183,11 +184,12 @@ function TruckPicker({
                   key={t.truck_number}
                   type="button"
                   onClick={() => onSelect(t)}
-                  className="flex aspect-square flex-col items-center justify-center rounded-xl bg-amber-900/60 text-white shadow ring-1 ring-amber-700/60 transition active:scale-95 hover:bg-amber-800/60"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: i * 0.02 }}
-                  whileHover={{ scale: 1.03 }}
+                  className="flex aspect-square flex-col items-center justify-center rounded-xl bg-amber-900/60 text-white shadow ring-1 ring-amber-700/60 hover:bg-amber-800/60"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30, delay: i * 0.02 }}
+                  whileHover={{ scale: 1.06, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                  whileTap={{ scale: 0.93 }}
                 >
                   <span className="text-xl font-black leading-none text-amber-200">{t.truck_number}</span>
                   <span className="mt-0.5 text-[10px] font-semibold text-amber-400">
@@ -237,14 +239,15 @@ function ItemGrid({
             disabled={isPending}
             onClick={() => onSelect(cat, detail)}
             className={clsx(
-              "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+              "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg disabled:opacity-50",
               LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
               MAT_COLOR_PALETTE[disp] ?? btnClass,
             )}
-            initial={{ opacity: 0, y: 12 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.35, delay: i * 0.02 }}
-            whileHover={{ scale: 1.03 }}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 380, damping: 28, delay: i * 0.025 }}
+            whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+            whileTap={{ scale: 0.94 }}
           >
             {disp}
           </motion.button>
@@ -471,13 +474,14 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setTopCat(cat)}
                 className={clsx(
-                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
                   TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.02 }}
-                whileHover={{ scale: 1.03 }}
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28, delay: i * 0.025 }}
+                whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                whileTap={{ scale: 0.94 }}
               >
                 {cat}
               </motion.button>
@@ -505,13 +509,14 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
-                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
                   SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.02 }}
-                whileHover={{ scale: 1.03 }}
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28, delay: i * 0.025 }}
+                whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                whileTap={{ scale: 0.94 }}
               >
                 {sub}
               </motion.button>
