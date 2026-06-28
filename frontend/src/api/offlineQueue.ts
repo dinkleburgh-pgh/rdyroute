@@ -63,9 +63,19 @@ export async function enqueue(
   method: PendingMutation["method"],
   payload: unknown,
 ): Promise<string> {
+  const db = await getDb();
+  // Coalesce idempotent updates: a newer PUT/PATCH to the same endpoint replaces
+  // any pending one, so repeated status changes to the same truck don't replay
+  // stale intermediate states. (POST/DELETE are distinct — never coalesced.)
+  if (method === "PUT" || method === "PATCH") {
+    for (const existing of await db.getAll("pending-mutations")) {
+      if (existing.endpoint === endpoint && existing.method === method) {
+        await db.delete("pending-mutations", existing.id);
+      }
+    }
+  }
   const id = `${Date.now()}-${Math.random().toString(36).slice(2)}`;
   const item: PendingMutation = { id, type, endpoint, method, payload, timestamp: Date.now() };
-  const db = await getDb();
   await db.put("pending-mutations", item);
   return id;
 }

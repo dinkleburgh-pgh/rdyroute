@@ -20,12 +20,19 @@ export interface OfflineSyncState {
   isFlushing: boolean;
 }
 
-export function useOfflineSync(): OfflineSyncState {
+export interface UseOfflineSyncOptions {
+  /** Called after a flush if any queued writes were rejected (4xx) and dropped. */
+  onConflict?: (discardedCount: number) => void;
+}
+
+export function useOfflineSync(opts: UseOfflineSyncOptions = {}): OfflineSyncState {
   const qc = useQueryClient();
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [pendingCount, setPendingCount] = useState(0);
   const [isFlushing, setIsFlushing] = useState(false);
   const flushingRef = useRef(false);
+  const onConflictRef = useRef(opts.onConflict);
+  onConflictRef.current = opts.onConflict;
 
   // Refresh the pending count from IndexedDB
   const refreshCount = useCallback(async () => {
@@ -44,6 +51,7 @@ export function useOfflineSync(): OfflineSyncState {
       if (items.length === 0) return;
 
       let anyFlushed = false;
+      let discarded = 0;
 
       for (const item of items) {
         try {
@@ -57,6 +65,7 @@ export function useOfflineSync(): OfflineSyncState {
           if (status !== undefined && status >= 400 && status < 500) {
             console.warn("[offlineSync] discarding permanently-rejected item", item.id, status);
             await offlineQueue.remove(item.id);
+            discarded += 1;
             continue;
           }
           // Network error or 5xx — stop replaying; retry on next online event
@@ -69,6 +78,7 @@ export function useOfflineSync(): OfflineSyncState {
       if (anyFlushed) {
         qc.invalidateQueries();
       }
+      if (discarded > 0) onConflictRef.current?.(discarded);
     } finally {
       flushingRef.current = false;
       setIsFlushing(false);

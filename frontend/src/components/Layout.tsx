@@ -12,6 +12,7 @@ import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
+import { useToast } from "../contexts/ToastContext";
 import { OfflineIndicator } from "./OfflineIndicator";
 import type { AuthRole, TruckStatus, TruckWithState } from "../types";
 import {
@@ -174,7 +175,13 @@ export default function Layout() {
   const { isWsConnected } = useRealtimeSync();
 
   // Offline sync: queue + flush + connectivity state
-  const offlineState = useOfflineSync();
+  const toast = useToast();
+  const offlineState = useOfflineSync({
+    onConflict: (n) =>
+      toast.info(
+        `${n} offline change${n === 1 ? "" : "s"} couldn't be synced — already updated on the server.`,
+      ),
+  });
 
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {
