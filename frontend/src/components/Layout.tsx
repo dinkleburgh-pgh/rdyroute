@@ -533,7 +533,15 @@ export default function Layout() {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <span className="hidden min-[380px]:inline truncate text-sm font-semibold text-ink-soft md:hidden">ReadyRoute</span>
+          <div className="flex items-center gap-2 md:hidden">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-teal-500 text-sm font-black text-white shadow-md shadow-cyan-500/30">
+              R
+            </div>
+            <div className="hidden min-[380px]:flex flex-col justify-center leading-none">
+              <span className="text-sm font-semibold text-ink-soft">ReadyRoute</span>
+              <span className="mt-0.5 font-mono text-[10px] text-ink-faint">{appVersion}</span>
+            </div>
+          </div>
           <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1 md:hidden">
             <span className="shrink-0 font-mono tabular-nums text-xs text-ink-soft"><Clock compact /></span>
             <span className="inline-flex shrink-0 items-center rounded-[9px] border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-[11px] py-[4px] text-xs font-semibold text-[#c4b5fd]">
