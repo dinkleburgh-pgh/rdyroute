@@ -39,8 +39,15 @@ function BatchCard({
   shouldFocus: boolean;
 }) {
   const assign = useAssignBatch();
-  const [wearers, setWearers] = useState("");
+  // Pre-fill the wearers field with the Operations wearer_cap setting; still
+  // editable before assigning.
+  const [wearers, setWearers] = useState(String(cap));
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep the field in sync when the wearer_cap setting changes.
+  useEffect(() => {
+    setWearers(String(cap));
+  }, [cap]);
 
   useEffect(() => {
     if (shouldFocus && truckNumber) {
@@ -64,7 +71,7 @@ function BatchCard({
       truck_number: Number(truckNumber),
       wearers: previewWearers,
     });
-    setWearers("");
+    setWearers(String(cap));
     onAssigned();
   }
 
