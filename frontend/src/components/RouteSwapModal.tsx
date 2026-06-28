@@ -271,40 +271,42 @@ export default function RouteSwapModal({ onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
+          {/* Needs Assignment — OOS routes with no covering truck yet */}
+          {unswappedOos.length > 0 && (
+            <section className="rounded-lg border border-amber-700/50 bg-amber-950/20 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">Needs Assignment</p>
+                <span className="rounded-full bg-amber-700/50 px-2 py-0.5 text-[10px] font-bold text-amber-300">{unswappedOos.length}</span>
+              </div>
+              {unswappedOos.map((t) => (
+                <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-slate-900/60 px-3 py-2">
+                  <span className="whitespace-nowrap text-sm font-black text-amber-300">
+                    #{t.truck_number} <span className="text-[10px] font-semibold text-amber-500">OOS</span>
+                  </span>
+                  <span className="text-sm text-slate-500">→</span>
+                  <select
+                    className="input flex-1 text-sm"
+                    value={oosLoadOns[t.truck_number] ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setOosLoadOns((prev) => ({ ...prev, [t.truck_number]: val }));
+                      if (val) addOosSwap(t.truck_number, parseInt(val));
+                    }}
+                  >
+                    <option value="">— Assign truck —</option>
+                    <LoadOnOptions forRoute={t.truck_number} />
+                  </select>
+                </div>
+              ))}
+            </section>
+          )}
+
           {/* Current swaps */}
           <section>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Active swaps {swaps.length > 0 && <span className="ml-1 rounded-full bg-blue-800/60 px-2 py-0.5 text-blue-300">{swaps.length}</span>}
             </p>
 
-            {/* OOS prefill rows */}
-            {unswappedOos.length > 0 && (
-              <div className="mb-3 space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
-                  OOS — Select covering truck
-                </p>
-                {unswappedOos.map((t) => (
-                  <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 px-3 py-2">
-                    <span className="whitespace-nowrap text-sm font-bold text-amber-300">
-                      #{t.truck_number} <span className="text-[10px] font-semibold text-amber-500">OOS</span>
-                    </span>
-                    <span className="text-sm text-slate-500">→</span>
-                    <select
-                      className="input flex-1 text-sm"
-                      value={oosLoadOns[t.truck_number] ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setOosLoadOns((prev) => ({ ...prev, [t.truck_number]: val }));
-                        if (val) addOosSwap(t.truck_number, parseInt(val));
-                      }}
-                    >
-                      <option value="">— Load on —</option>
-                      <LoadOnOptions forRoute={t.truck_number} />
-                    </select>
-                  </div>
-                ))}
-              </div>
-            )}
             {swapsLoading ? (
               <p className="text-sm text-slate-500">Loading…</p>
             ) : swaps.length === 0 ? (
