@@ -201,6 +201,11 @@ export function buildRouteStatusCounts(
   };
 
   function statusFor(t: TruckWithState): TruckStatus {
+    // is_oos is authoritative for route trucks: a truck flagged out of service
+    // counts as OOS regardless of its physical workflow status (which may still
+    // read "dirty"). This mirrors how RouteCardPanel and the fleet board
+    // identify OOS routes that need assignment.
+    if (t.truck_type !== "Spare" && t.is_oos) return "oos";
     const coveredRoute = getCoverageRouteNumber(t);
     if (coveredRoute != null) {
       return effectiveOperationalStatus(t, loadDayNum, holidayLoad);

@@ -636,6 +636,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             const status = fleetMode
               ? effectiveStatus(truck, runUnloadsDay, holidayUnload)
               : effectiveWorkflowStatus(truck, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
+            // Fleet display: a truck flagged is_oos reads as OOS even when its
+            // physical workflow status is still "dirty" — keeps the fleet grid
+            // in sync with the Route Card / live-status OOS counts.
+            const displayStatus: TruckStatus =
+              fleetMode && truck.truck_type !== "Spare" && truck.is_oos ? "oos" : status;
             const isUnloadView = filter === "dirty" || filter === "unloaded";
             const isLoadView = filter === "loaded";
             let chipDay: number | undefined;
@@ -658,7 +663,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               !getCoverageRouteNumber(truck) &&
               !truck.state?.needs_checked;
             const numberColor = fleetMode
-              ? isLoadOff
+              ? displayStatus === "oos"
+                ? STATUS_TEXT["oos"]
+                : isLoadOff
                 ? STATUS_TEXT["off"]
                 : status === "loaded"
                 ? "text-sky-300"
@@ -686,7 +693,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 className={clsx(
                   "card cursor-pointer",
                   fleetMode ? "p-2 flex flex-col gap-1 min-h-[4.5rem] md:p-4 md:gap-2 md:min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],
-                  fleetMode && (status === "oos" || truck.is_oos) && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
+                  fleetMode && displayStatus === "oos" && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
                   fleetMode && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
                   !fleetMode && filter === "dirty" && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
                   !fleetMode && (filter === "oos" ? oosAssignOpen.has(truck.truck_number) : detailNum === truck.truck_number) && "ring-2 ring-blue-500",
@@ -795,7 +802,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     </div>
                     <span className="flex min-h-[1.5rem] shrink-0 flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
                       {/* 1. Status chip — show underlying dirty/unloaded for off trucks */}
-                      {status === "off" && (truck.state?.status === "dirty" || truck.state?.status === "unloaded") ? (
+                      {displayStatus === "oos" ? (
+                        <span className={clsx("badge", STATUS_BG["oos"], STATUS_BADGE_TEXT["oos"])}>
+                          {STATUS_LABELS["oos"]}
+                        </span>
+                      ) : status === "off" && (truck.state?.status === "dirty" || truck.state?.status === "unloaded") ? (
                         <span className={clsx("badge", STATUS_BG[truck.state.status as TruckStatus], STATUS_BADGE_TEXT[truck.state.status as TruckStatus])}>
                           {STATUS_LABELS[truck.state.status as TruckStatus]}
                         </span>
@@ -816,7 +827,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         <span className="badge bg-slate-600 text-slate-200">L Off</span>
                       )}
                       {/* 4. OOS coverage (fleet) */}
-                      {fleetMode && (status === "oos" || truck.is_oos) && (() => {
+                      {fleetMode && displayStatus === "oos" && (() => {
                         const cov = coveringTruckByRoute.get(truck.truck_number);
                         if (!cov) return <span className="text-[10px] font-semibold text-amber-400">Needs assignment</span>;
                         const coveringTruck = data?.find((d) => d.truck_number === cov.num);
