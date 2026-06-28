@@ -337,111 +337,14 @@ export default function RouteSwapModal({ onClose }: Props) {
             )}
           </section>
 
-          {/* Recurring rules */}
-          <section className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Recurring rules</p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Applied automatically when the board is set up for a matching load day.</p>
-            </div>
-
-            {recurringRules.length > 0 ? (
-              <div className="space-y-1.5">
-                {recurringRules.map((rule, idx) => (
-                  <div key={`${rule.route_truck}-${idx}`} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2">
-                    <span className="text-base font-black text-sky-300">{rule.route_truck}</span>
-                    <span className="text-sm font-bold text-slate-500">→</span>
-                    <span className="text-base font-black text-slate-100">{rule.load_on_truck}</span>
-                    <span className="ml-2 flex flex-wrap gap-1">
-                      {[1, 2, 3, 4, 5].map((d) => (
-                        <span
-                          key={d}
-                          className={
-                            rule.days.includes(d)
-                              ? "rounded bg-amber-500 px-1.5 py-0.5 text-[10px] font-semibold text-slate-900"
-                              : "px-1.5 py-0.5 text-[10px] text-slate-600"
-                          }
-                        >
-                          {DAY_ABBR[d][0]}
-                        </span>
-                      ))}
-                    </span>
-                    <button
-                      className="ml-auto rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
-                      disabled={upsertSetting.isPending}
-                      onClick={() => removeRule(idx)}
-                      aria-label="Remove rule"
-                    >
-                      ✕
-                    </button>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="rounded-md border border-slate-700 bg-slate-800/50 px-4 py-3 text-center text-xs text-slate-500">
-                No recurring rules.
-              </p>
-            )}
-
-            {/* Add rule form */}
-            <div className="space-y-2 rounded-lg border border-slate-700/70 bg-slate-900/40 p-3">
-              <div className="grid grid-cols-2 items-end gap-3">
-                <div>
-                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">Route</label>
-                  <select className="input w-full text-sm" value={ruleRoute} onChange={(e) => { setRuleRoute(e.target.value); setRuleError(null); }}>
-                    <option value="">— select —</option>
-                    {sorted.filter((t) => t.truck_type !== "Spare").map((t) => (
-                      <option key={t.truck_number} value={t.truck_number}>#{t.truck_number}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">Load On</label>
-                  <select className="input w-full text-sm" value={ruleLoadOn} onChange={(e) => { setRuleLoadOn(e.target.value); setRuleError(null); }}>
-                    <option value="">— select —</option>
-                    {sorted.map((t) => (
-                      <option key={t.truck_number} value={t.truck_number}>#{t.truck_number}{t.truck_type === "Spare" ? " — Spare" : ""}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-[11px] text-slate-500">Days:</span>
-                {[1, 2, 3, 4, 5].map((d) => (
-                  <button
-                    key={d}
-                    type="button"
-                    onClick={() => toggleRuleDay(d)}
-                    className={
-                      ruleDays.has(d)
-                        ? "rounded-md bg-amber-500 px-2.5 py-1 text-xs font-semibold text-slate-900"
-                        : "rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
-                    }
-                  >
-                    {DAY_ABBR[d]}
-                  </button>
-                ))}
-              </div>
-              {ruleError && (
-                <p className="rounded-md border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">{ruleError}</p>
-              )}
-              <button
-                className="btn-primary w-full"
-                disabled={!ruleRoute || !ruleLoadOn || ruleDays.size === 0 || upsertSetting.isPending}
-                onClick={addRule}
-              >
-                {upsertSetting.isPending ? "Saving…" : "Add rule"}
-              </button>
-            </div>
-          </section>
-
           {/* Add swap form */}
-          <section className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Add swap</p>
+          <section className="rounded-lg border border-sky-800/50 bg-sky-950/20 p-4 space-y-3">
+            <p className="text-xs font-semibold uppercase tracking-wide text-sky-300">Add swap</p>
 
             <div className="grid grid-cols-2 items-end gap-3">
               {/* Route Truck selector */}
               <div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-400/80">
                   Route Truck
                   <span className="ml-1 hidden normal-case font-normal text-slate-500 sm:inline">(whose route?)</span>
                 </label>
@@ -477,7 +380,7 @@ export default function RouteSwapModal({ onClose }: Props) {
 
               {/* Load On selector */}
               <div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-400/80">
                   Load On
                   <span className="ml-1 hidden normal-case font-normal text-slate-500 sm:inline">(who loads it?)</span>
                 </label>
@@ -505,6 +408,103 @@ export default function RouteSwapModal({ onClose }: Props) {
             >
               {assignSpare.isPending ? "Saving…" : "Add Swap"}
             </button>
+          </section>
+
+          {/* Recurring rules */}
+          <section className="rounded-lg border border-violet-800/50 bg-violet-950/20 p-4 space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-violet-300">Recurring rules</p>
+              <p className="mt-0.5 text-[11px] text-slate-500">Applied automatically when the board is set up for a matching load day.</p>
+            </div>
+
+            {recurringRules.length > 0 ? (
+              <div className="space-y-1.5">
+                {recurringRules.map((rule, idx) => (
+                  <div key={`${rule.route_truck}-${idx}`} className="flex items-center gap-2 rounded-lg border border-violet-800/40 bg-slate-900/60 px-3 py-2">
+                    <span className="text-base font-black text-violet-300">{rule.route_truck}</span>
+                    <span className="text-sm font-bold text-slate-500">→</span>
+                    <span className="text-base font-black text-slate-100">{rule.load_on_truck}</span>
+                    <span className="ml-2 flex flex-wrap gap-1">
+                      {[1, 2, 3, 4, 5].map((d) => (
+                        <span
+                          key={d}
+                          className={
+                            rule.days.includes(d)
+                              ? "rounded bg-violet-500 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                              : "px-1.5 py-0.5 text-[10px] text-slate-600"
+                          }
+                        >
+                          {DAY_ABBR[d][0]}
+                        </span>
+                      ))}
+                    </span>
+                    <button
+                      className="ml-auto rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                      disabled={upsertSetting.isPending}
+                      onClick={() => removeRule(idx)}
+                      aria-label="Remove rule"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-md border border-violet-800/30 bg-slate-800/50 px-4 py-3 text-center text-xs text-slate-500">
+                No recurring rules.
+              </p>
+            )}
+
+            {/* Add rule form */}
+            <div className="space-y-2 rounded-lg border border-violet-800/30 bg-slate-900/40 p-3">
+              <div className="grid grid-cols-2 items-end gap-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-violet-400/80">Route</label>
+                  <select className="input w-full text-sm" value={ruleRoute} onChange={(e) => { setRuleRoute(e.target.value); setRuleError(null); }}>
+                    <option value="">— select —</option>
+                    {sorted.filter((t) => t.truck_type !== "Spare").map((t) => (
+                      <option key={t.truck_number} value={t.truck_number}>#{t.truck_number}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-violet-400/80">Load On</label>
+                  <select className="input w-full text-sm" value={ruleLoadOn} onChange={(e) => { setRuleLoadOn(e.target.value); setRuleError(null); }}>
+                    <option value="">— select —</option>
+                    {sorted.map((t) => (
+                      <option key={t.truck_number} value={t.truck_number}>#{t.truck_number}{t.truck_type === "Spare" ? " — Spare" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-[11px] text-slate-500">Days:</span>
+                {[1, 2, 3, 4, 5].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleRuleDay(d)}
+                    className={
+                      ruleDays.has(d)
+                        ? "rounded-md bg-violet-500 px-2.5 py-1 text-xs font-semibold text-white"
+                        : "rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                    }
+                  >
+                    {DAY_ABBR[d]}
+                  </button>
+                ))}
+              </div>
+              {ruleError && (
+                <p className="rounded-md border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">{ruleError}</p>
+              )}
+              <button
+                className="w-full rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-40"
+                disabled={!ruleRoute || !ruleLoadOn || ruleDays.size === 0 || upsertSetting.isPending}
+                onClick={addRule}
+              >
+                {upsertSetting.isPending ? "Saving…" : "Add rule"}
+              </button>
+            </div>
           </section>
         </div>
 
