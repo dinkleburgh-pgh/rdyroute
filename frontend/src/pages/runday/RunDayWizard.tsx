@@ -363,9 +363,8 @@ export default function RunDayWizard({
           {/* Step 2: Dust Garments */}
           {step === 2 && (
             <div className="space-y-4">
-              <DustGarmentIcon className="mx-auto h-24 w-24 text-amber-300" style={{ color: "#fcd34d" }} />
+              <DustGarmentIcon className="mx-auto h-16 w-16 text-amber-300" style={{ color: "#fcd34d" }} />
               <p className="text-center text-xl font-extrabold text-slate-100">Select dust trucks with garments</p>
-              <p className="text-center text-xs text-slate-400">Select which dust trucks have garments today.</p>
               {editableDustTrucks.length === 0 ? (
                 <p className="text-center text-sm text-slate-500">No dust trucks in fleet.</p>
               ) : (
