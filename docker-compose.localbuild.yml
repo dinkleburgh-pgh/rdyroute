@@ -1,0 +1,33 @@
+# Local-build override for the rdyroute2 stack.
+#
+# Builds the backend/frontend images ON THE DOCKER HOST instead of pulling them
+# from GHCR, so on-box iteration skips both GitHub Actions and the registry
+# round-trip. Layered on top of docker-compose.prod.yml and driven by
+# deploy-local.sh:
+#
+#   docker compose -p rdyroute2 --env-file production.env \
+#     -f docker-compose.prod.yml -f docker-compose.localbuild.yml up -d --build
+#
+# Same image tags + container names as prod, so it's the same stack — just built
+# locally. pull_policy: never guarantees no GHCR fetch even though prod sets
+# pull_policy: always.
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: ${GIT_SHA:-local}
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${BACKEND_IMAGE:-ghcr.io/dinkleburgh-pgh/rdyroute-backend}:${IMAGE_TAG:-latest}
+    pull_policy: never
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        GIT_COMMIT: ${GIT_SHA:-local}
+        APP_VERSION: ${APP_VERSION:-local}
+    image: ${FRONTEND_IMAGE:-ghcr.io/dinkleburgh-pgh/rdyroute-frontend}:${IMAGE_TAG:-latest}
+    pull_policy: never
