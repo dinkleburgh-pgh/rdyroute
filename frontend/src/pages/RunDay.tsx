@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { Clock, Calendar, Check } from "lucide-react";
+import { Clock, Calendar, Check, ArrowLeftRight } from "lucide-react";
 import {
   useBoard,
   useDailyNotes,
@@ -171,6 +171,21 @@ export default function RunDay() {
     [board],
   );
 
+  // Flat list of today's coverages for the summary banner: each route being
+  // covered, the truck covering it, and whether that's a spare or a route swap.
+  const coverages = useMemo(() => {
+    const byNum = new Map(board.map((t) => [t.truck_number, t]));
+    return [...coveringTruckMap.entries()]
+      .map(([routeNum, cover]) => ({
+        routeNum,
+        routeTruck: byNum.get(routeNum),
+        cover,
+        kind: (cover.truck_type === "Spare" ? "spare" : "swap") as "spare" | "swap",
+        coverStatus: effectiveStatus(cover, loadDay, holidayLoad),
+      }))
+      .sort((a, b) => a.routeNum - b.routeNum);
+  }, [board, coveringTruckMap, loadDay, holidayLoad]);
+
   return (
     <>
       {/* Page header — matches PageHeader component style */}
@@ -249,6 +264,46 @@ export default function RunDay() {
           ) : (
             <p className="text-xs text-slate-500 italic">No shift notes for today. Click Edit to add.</p>
           )}
+        </div>
+      )}
+
+      {/* Coverages summary — who's covering which route today */}
+      {coverages.length > 0 && (
+        <div className="rounded-xl border border-sky-800/40 bg-sky-950/15 px-4 py-3">
+          <div className="mb-2 flex items-center gap-2">
+            <ArrowLeftRight className="h-4 w-4 shrink-0 text-sky-400" />
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-300">Coverages</span>
+            <span className="rounded-full bg-sky-800/50 px-2 py-0.5 text-[10px] font-bold text-sky-200">{coverages.length}</span>
+          </div>
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+            {coverages.map((c) => {
+              const routeOos = c.routeTruck?.state?.status === "oos" || c.routeTruck?.is_oos;
+              return (
+                <div
+                  key={c.routeNum}
+                  className="flex items-center gap-2 rounded-lg border border-sky-800/30 bg-slate-900/50 px-3 py-2"
+                >
+                  <span className="text-base font-black text-red-400">#{c.routeNum}</span>
+                  <span className="text-[10px] font-semibold uppercase tracking-wide text-red-400/70">
+                    {routeOos ? "OOS" : "swap"}
+                  </span>
+                  <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-slate-600" />
+                  <span className="text-base font-black text-sky-300">#{c.cover.truck_number}</span>
+                  <span className="rounded-full bg-sky-900/50 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                    {c.kind === "spare" ? "Spare" : "Route"}
+                  </span>
+                  <span
+                    className={clsx(
+                      "ml-auto rounded-full px-2 py-0.5 text-[10px] font-semibold text-white",
+                      STATUS_BG[c.coverStatus],
+                    )}
+                  >
+                    {STATUS_LABELS[c.coverStatus]}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         </div>
       )}
 
