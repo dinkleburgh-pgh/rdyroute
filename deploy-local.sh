@@ -9,12 +9,13 @@
 #   2. on the NAS:  ./deploy-local.sh        (or: ./deploy-local.sh --build-only)
 #
 # Requires a production.env in this directory (same vars as the Portainer stack,
-# DATABASE_URL pointing at 192.168.1.132:5432). docker runs via sudo.
+# DATABASE_URL pointing at 192.168.1.132:5432). The running user must be in the
+# docker group (no sudo needed).
 set -euo pipefail
 cd "$(dirname "$0")"
 
 PROJECT="rdyroute2"
-COMPOSE=(sudo docker compose -p "$PROJECT" --env-file production.env \
+COMPOSE=(docker compose -p "$PROJECT" --env-file production.env \
   -f docker-compose.prod.yml -f docker-compose.localbuild.yml)
 
 BUILD_ONLY=0
@@ -39,4 +40,4 @@ echo "[local-deploy] recreating stack…"
 "${COMPOSE[@]}" up -d --remove-orphans
 
 echo "[local-deploy] done → ${APP_VERSION}"
-sudo docker ps --filter name=readyroutev2 --format '{{.Names}}\t{{.Status}}'
+docker ps --filter name=readyroutev2 --format '{{.Names}}\t{{.Status}}'
