@@ -131,6 +131,11 @@ export default function Unload() {
   async function markUnloaded(t: TruckWithState) {
     setBusy(t.truck_number);
     setOverflowOpen(null);
+    // Mark recently-unloaded *before* the mutation so the card stays pinned in
+    // the Dirty section (with Undo) the moment the optimistic update flips its
+    // status to "unloaded". Otherwise it briefly drops into the Unloaded section
+    // and snaps back, which reads as a page flash/jitter.
+    setRecentlyUnloaded((prev) => new Set([...prev, t.truck_number]));
     try {
       await upsert.mutateAsync({
         truck_number: t.truck_number,
@@ -138,7 +143,13 @@ export default function Unload() {
         status: "unloaded",
         wearers: t.state?.wearers ?? 0,
       });
-      setRecentlyUnloaded((prev) => new Set([...prev, t.truck_number]));
+    } catch {
+      // Roll back the optimistic pin if the save failed.
+      setRecentlyUnloaded((prev) => {
+        const next = new Set(prev);
+        next.delete(t.truck_number);
+        return next;
+      });
     } finally {
       setBusy(null);
     }
