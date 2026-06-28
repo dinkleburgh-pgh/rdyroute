@@ -408,9 +408,12 @@ export default function RunDayWizard({
               {/* OOS trucks needing a covering truck */}
               {unswappedOos.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
-                    OOS — Select covering truck
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+                      Needs Assignment
+                    </p>
+                    <span className="rounded-full bg-amber-700/50 px-2 py-0.5 text-[10px] font-bold text-amber-300">{unswappedOos.length}</span>
+                  </div>
                   {unswappedOos.map((t) => (
                     <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 px-3 py-2">
                       <span className="text-sm font-bold text-amber-300 whitespace-nowrap">
@@ -484,7 +487,10 @@ export default function RunDayWizard({
 
               {swaps.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Current Assignments</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Active Route Swaps</p>
+                    <span className="rounded-full bg-blue-800/60 px-2 py-0.5 text-[10px] font-bold text-blue-300">{swaps.length}</span>
+                  </div>
                   {swaps.map((s) => (
                     <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-blue-900/50 bg-blue-950/20 px-3 py-2">
                       <span className="text-sm font-bold text-slate-200">
