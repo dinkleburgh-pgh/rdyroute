@@ -6,6 +6,7 @@ import { workdayNumbers } from "../components/Clock";
 import { isScheduledOff } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import WorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import clsx from "clsx";
@@ -85,12 +86,12 @@ export default function Unload() {
     () => allTrucks.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
     [allTrucks, recentlyUnloaded],
   );
+  // Unloaded today reflects status immediately (including trucks just marked
+  // this session) so the card appears the moment Mark Unloaded is clicked. The
+  // truck also remains pinned in the Dirty section with Undo via recentlyUnloaded.
   const unloaded = useMemo(
-    () =>
-      allTrucks.filter(
-        (t) => t.state?.status === "unloaded" && !recentlyUnloaded.has(t.truck_number),
-      ),
-    [allTrucks, recentlyUnloaded],
+    () => allTrucks.filter((t) => t.state?.status === "unloaded"),
+    [allTrucks],
   );
   const needsChecked = useMemo(
     () =>
@@ -477,19 +478,19 @@ export default function Unload() {
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-400">
           Unloaded today ({unloaded.length})
         </h3>
-        <div className="flex flex-wrap gap-2">
-          {unloaded.map((t) => (
-            <span key={t.truck_number} className="inline-flex items-center gap-1 rounded-full bg-status-unloaded px-3 py-1 text-xs font-semibold text-white">
-              #{t.truck_number}
-              {t.state?.needs_checked && (
-                <span className="rounded-full bg-amber-900/70 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-                  Check
-                </span>
-              )}
-            </span>
+        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]">
+          {unloaded.map((t, index) => (
+            <AnimateCard key={t.truck_number} delay={index * 0.03}>
+              <WorkflowCard
+                truck={t}
+                accent="text-st-unloaded"
+                statusLabel="Unloaded"
+                statusClassName="bg-[#16a34a] text-white"
+              />
+            </AnimateCard>
           ))}
           {unloaded.length === 0 && (
-            <p className="text-sm text-slate-500">Nothing unloaded yet.</p>
+            <p className="col-span-full text-sm text-slate-500">Nothing unloaded yet.</p>
           )}
         </div>
       </section>
