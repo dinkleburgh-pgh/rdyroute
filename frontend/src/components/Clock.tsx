@@ -47,14 +47,19 @@ export function todayLong(): string {
 }
 
 /**
- * Returns the operational run date: backs up to the previous calendar day
- * if the current time is before 6am (still in 3rd shift).
+ * Returns the operational run date: backs up to the previous calendar day if
+ * before 6am (still in 3rd shift), and freezes the weekend to the preceding
+ * Friday — the weekend is one continuous run period that only rolls over at
+ * 6am Monday (1st shift). Mirrors the run_date logic in todayIso().
  */
 export function shiftRunDate(d = new Date()): Date {
-  if (d.getHours() < 6) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
-  }
-  return d;
+  let r = d.getHours() < 6
+    ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1)
+    : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const wd = r.getDay(); // 0=Sun .. 6=Sat
+  if (wd === 6) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 1);
+  else if (wd === 0) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 2);
+  return r;
 }
 
 /**

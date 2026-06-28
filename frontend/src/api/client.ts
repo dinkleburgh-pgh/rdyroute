@@ -153,9 +153,16 @@ api.interceptors.response.use(
 
 export function todayIso(): string {
   const now = new Date();
-  // Before 6am we're still in the previous calendar day's 3rd shift
+  // Before 6am we're still in the previous calendar day's 3rd shift.
   const d = now.getHours() < 6
     ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-    : now;
+    : new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  // The weekend is one continuous run period: there's no nightly rollover on
+  // Sat/Sun. Map both back to the preceding Friday so the board (and all its
+  // state) holds from Friday's last shift change until Monday 6am, when 1st
+  // shift starts a fresh run day. Mirrors workdayNumbers()'s weekend freeze.
+  const wd = d.getDay(); // 0=Sun .. 6=Sat
+  if (wd === 6) d.setDate(d.getDate() - 1);       // Sat → Fri
+  else if (wd === 0) d.setDate(d.getDate() - 2);  // Sun → Fri
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
