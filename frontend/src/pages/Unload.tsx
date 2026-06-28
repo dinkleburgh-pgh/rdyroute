@@ -32,6 +32,14 @@ export default function Unload() {
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
     [settings],
   );
+  const noCap = useMemo(
+    () => (settings ?? []).some((s) => s.key === "batch_no_cap" && s.value === true),
+    [settings],
+  );
+  const wearerCap = useMemo(() => {
+    const v = Number((settings ?? []).find((s) => s.key === "wearer_cap")?.value);
+    return Number.isFinite(v) && v > 0 ? v : 1800;
+  }, [settings]);
   const upsert = useUpsertTruckState();
   const assign = useAssignBatch();
   const navigate = useNavigate();
@@ -533,7 +541,7 @@ export default function Unload() {
                 <span className={b.total_wearers > 0 ? "text-emerald-400 font-semibold" : ""}>
                   {b.total_wearers}
                 </span>{" "}
-                / 400
+                / {noCap ? "∞" : wearerCap}
               </p>
             </AnimateCard>
           ))}
