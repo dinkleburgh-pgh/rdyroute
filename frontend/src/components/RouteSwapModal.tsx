@@ -7,6 +7,7 @@
  * Accessible from the sidebar "Route Swap" button.
  */
 import { useState, useMemo } from "react";
+import clsx from "clsx";
 import { todayIso } from "../api/client";
 import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useRouteSwapLog, useSettings, useUpsertSetting } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
@@ -56,6 +57,11 @@ export default function RouteSwapModal({ onClose }: Props) {
   const [loadOnTruck, setLoadOnTruck] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
+
+  // Accordion: only one of Add swap / Recurring rules is open at a time.
+  const [openSection, setOpenSection] = useState<"add" | "recurring" | null>("add");
+  const toggleSection = (s: "add" | "recurring") =>
+    setOpenSection((prev) => (prev === s ? null : s));
 
   // Recurring rules — stored in the `recurring_route_swaps` app setting.
   const { data: settings = [] } = useSettings();
@@ -340,9 +346,18 @@ export default function RouteSwapModal({ onClose }: Props) {
           </section>
 
           {/* Add swap form */}
-          <section className="rounded-lg border border-sky-800/50 bg-sky-950/20 p-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-sky-300">Add swap</p>
-
+          <section className="overflow-hidden rounded-lg border border-sky-800/50 bg-sky-950/20">
+            <button
+              type="button"
+              onClick={() => toggleSection("add")}
+              aria-expanded={openSection === "add"}
+              className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-sky-900/20"
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-300">Add swap</span>
+              <span className={clsx("text-sky-400/70 transition-transform", openSection === "add" && "rotate-90")}>▸</span>
+            </button>
+            {openSection === "add" && (
+            <div className="space-y-3 px-4 pb-4">
             <div className="grid grid-cols-2 items-end gap-3">
               {/* Route Truck selector */}
               <div>
@@ -410,14 +425,29 @@ export default function RouteSwapModal({ onClose }: Props) {
             >
               {assignSpare.isPending ? "Saving…" : "Add Swap"}
             </button>
+            </div>
+            )}
           </section>
 
           {/* Recurring rules */}
-          <section className="rounded-lg border border-violet-800/50 bg-violet-950/20 p-4 space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-violet-300">Recurring rules</p>
-              <p className="mt-0.5 text-[11px] text-slate-500">Applied automatically when the board is set up for a matching load day.</p>
-            </div>
+          <section className="overflow-hidden rounded-lg border border-violet-800/50 bg-violet-950/20">
+            <button
+              type="button"
+              onClick={() => toggleSection("recurring")}
+              aria-expanded={openSection === "recurring"}
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-violet-900/20"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-violet-300">Recurring rules</span>
+                {recurringRules.length > 0 && (
+                  <span className="rounded-full bg-violet-700/50 px-2 py-0.5 text-[10px] font-bold text-violet-200">{recurringRules.length}</span>
+                )}
+              </span>
+              <span className={clsx("text-violet-400/70 transition-transform", openSection === "recurring" && "rotate-90")}>▸</span>
+            </button>
+            {openSection === "recurring" && (
+            <div className="space-y-3 px-4 pb-4">
+            <p className="text-[11px] text-slate-500">Applied automatically when the board is set up for a matching load day.</p>
 
             {recurringRules.length > 0 ? (
               <div className="space-y-1.5">
@@ -507,6 +537,8 @@ export default function RouteSwapModal({ onClose }: Props) {
                 {upsertSetting.isPending ? "Saving…" : "Add rule"}
               </button>
             </div>
+            </div>
+            )}
           </section>
         </div>
 
