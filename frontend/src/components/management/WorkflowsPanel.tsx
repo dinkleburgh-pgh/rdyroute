@@ -11,6 +11,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
     () => ({
       batching_disabled: asBool(map.get("batching_disabled"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
+      wearer_cap: Number(map.get("wearer_cap") ?? 1800),
       outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
       outside_timer_minutes: Number(map.get("outside_timer_minutes") ?? 20),
       paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
@@ -54,7 +55,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       <FieldRow
         label="No wearer cap"
-        hint="Remove the 400-wearer batch capacity limit. Useful for holiday or overflow loads."
+        hint="Remove the per-batch wearer capacity limit. Useful for holiday or overflow loads."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -63,6 +64,21 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, batch_no_cap: e.target.checked })}
           />
           No limit
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Wearers cap"
+        hint="Maximum total wearers allowed per batch during unload. Ignored when 'No wearer cap' is on."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="number"
+            min={1}
+            value={form.wearer_cap}
+            onChange={(e) => setForm({ ...form, wearer_cap: Number(e.target.value) || 1800 })}
+            className="input w-24"
+          />
+          <span className="text-xs text-slate-500">wearers</span>
         </label>
       </FieldRow>
       <FieldRow

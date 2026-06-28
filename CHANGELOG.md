@@ -17,6 +17,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Verify Short Sheet — holiday mode** — a Holiday toggle adds a second-day selector and expands the sheet to the full 38 routes: main-day routes plus the routes off the main day (which run the second day). Each card shows a day tag.
 
 ### Changed
+- **Wearers cap** — the per-batch wearer cap default is raised 400 → 1800 and is now configurable via a new "Wearers cap" number setting in Management → Operations (`wearer_cap`). Backend enforcement and the batch UI both read it. The "No wearer cap" toggle now also bypasses the cap server-side (it was previously frontend-only).
 - **Coverage card — paired headline** — a covering truck's card now leads with `route → truck` (e.g. `4 → 17`, route number first) instead of the tiny `→ Cov.` pill, so the coverage is legible. The covered route's card keeps a compact `← Cov. #X` badge.
 - **Mobile bottom nav** — bottom bar is now Fleet Sch. · Audit · Communications · Short Sheet; Management moved into the "More" menu.
 - **Run Day holiday load label** — now reads `Day N + N+1` (load gets ahead on the next ship day) to match the sidebar/board; unload keeps `Day N-1 + N` (catching up on the previous day).
