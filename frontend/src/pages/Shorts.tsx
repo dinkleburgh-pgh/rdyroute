@@ -207,6 +207,53 @@ function TruckPicker({
 // HierarchyPicker — driven by tracked items
 // ---------------------------------------------------------------------------
 
+// Module-level so it keeps a stable component identity — defined inside
+// HierarchyPicker it was recreated every render, remounting these buttons and
+// replaying their entrance animation endlessly.
+function ItemGrid({
+  gridItems,
+  cat,
+  btnClass,
+  isPending,
+  onSelect,
+}: {
+  gridItems: TrackedItem[];
+  cat: string;
+  btnClass: string;
+  isPending: boolean;
+  onSelect: (category: string, detail: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {gridItems.map((item, i) => {
+        const disp = MAT_SIZES_S.has(cat) && item.label.startsWith(cat + " ")
+          ? item.label.slice(cat.length + 1)
+          : item.label;
+        const detail = disp; // for mats: just color; for others: full label
+        return (
+          <motion.button
+            key={item.label}
+            type="button"
+            disabled={isPending}
+            onClick={() => onSelect(cat, detail)}
+            className={clsx(
+              "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
+              LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
+              MAT_COLOR_PALETTE[disp] ?? btnClass,
+            )}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.35, delay: i * 0.02 }}
+            whileHover={{ scale: 1.03 }}
+          >
+            {disp}
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
+
 function HierarchyPicker({
   items,
   onLog,
@@ -296,38 +343,6 @@ function HierarchyPicker({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkSub]);
-
-  function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
-    return (
-      <div className="grid grid-cols-3 gap-2">
-        {gridItems.map((item, i) => {
-          const disp = MAT_SIZES_S.has(cat) && item.label.startsWith(cat + " ")
-            ? item.label.slice(cat.length + 1)
-            : item.label;
-          const detail = disp; // for mats: just color; for others: full label
-          return (
-            <motion.button
-              key={item.label}
-              type="button"
-              disabled={isPending}
-              onClick={() => selectItem(cat, detail)}
-              className={clsx(
-                "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
-                LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
-                MAT_COLOR_PALETTE[disp] ?? btnClass,
-              )}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: i * 0.02 }}
-              whileHover={{ scale: 1.03 }}
-            >
-              {disp}
-            </motion.button>
-          );
-        })}
-      </div>
-    );
-  }
 
   // Build the selection trail from current state — deduplicate consecutive identical labels
   const trailRaw: { label: string; palette: string; onClick: () => void }[] = [];
@@ -476,6 +491,8 @@ function HierarchyPicker({
             gridItems={flatItems}
             cat={topCat}
             btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            isPending={isPending}
+            onSelect={selectItem}
           />
         </div>
       ) : bulkSub === null ? (
@@ -508,6 +525,8 @@ function HierarchyPicker({
             gridItems={subItemsFor(topCat, bulkSub)}
             cat={bulkSub}
             btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            isPending={isPending}
+            onSelect={selectItem}
           />
         </div>
       )}

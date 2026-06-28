@@ -26,6 +26,7 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - **Route Swap tool** — Route/Load-On dropdowns align evenly on mobile (hint text drops on small screens).
 
 ### Fixed
+- **Inline shortage item buttons animation-looping** on the in-progress page — `ItemGrid` was defined inside `HierarchyPicker`, so it got a new component identity every render and remounted the buttons (replaying their entrance fade endlessly on each board refetch/WS tick). Hoisted it to module level.
 - **Unload progress could exceed total** (e.g. 29/28) — numerator now counts "done" from the same context as the denominator, so a spare covering an off-day route can't push it over.
 - **Dirty-page card badges overflowing** — coverage badges compacted and the card columns constrained so chips stay inside the card.
 - **Duplicate "Arrived" marker on the fleet board** (desktop) — the top badge is now hidden where the bottom action row already shows it; same guard applied to the Outside / Paper Bay markers.
