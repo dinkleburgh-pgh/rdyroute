@@ -369,6 +369,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         if (t.truck_type !== "Spare") return false;
         return true;
       }
+      // OOS filter: is_oos is authoritative — a route truck flagged out of
+      // service belongs here even when its physical workflow status reads
+      // "dirty" (effectiveWorkflowStatus would otherwise exclude it).
+      if (filter === "oos") {
+        if (t.truck_type === "Spare") return false;
+        return t.is_oos || effectiveStatus(t, runDayNum, holidayLoad) === "oos";
+      }
       // For all other filters, re-evaluate auto-off trucks against unloadsDay
       // so they surface under their real workflow status.
       const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
@@ -636,11 +643,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             const status = fleetMode
               ? effectiveStatus(truck, runUnloadsDay, holidayUnload)
               : effectiveWorkflowStatus(truck, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
-            // Fleet display: a truck flagged is_oos reads as OOS even when its
-            // physical workflow status is still "dirty" — keeps the fleet grid
-            // in sync with the Route Card / live-status OOS counts.
+            // Display status: a route truck flagged is_oos reads as OOS even
+            // when its physical workflow status is still "dirty" — keeps the
+            // fleet grid and the OOS board in sync with the Route Card /
+            // live-status OOS counts.
             const displayStatus: TruckStatus =
-              fleetMode && truck.truck_type !== "Spare" && truck.is_oos ? "oos" : status;
+              (fleetMode || filter === "oos") && truck.truck_type !== "Spare" && truck.is_oos
+                ? "oos"
+                : status;
             const isUnloadView = filter === "dirty" || filter === "unloaded";
             const isLoadView = filter === "loaded";
             let chipDay: number | undefined;
@@ -998,7 +1008,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   </div>
                 )}
 
-                {!fleetMode && filter === "oos" && status === "oos" && (() => {
+                {!fleetMode && filter === "oos" && displayStatus === "oos" && (() => {
                   const cov = coveringTruckByRoute.get(truck.truck_number);
                   const spareAsgn = spareAssignments.find((a) => a.covering_route_truck === truck.truck_number);
                   const swap = routeSwaps.find((s) => s.route_truck === truck.truck_number);
