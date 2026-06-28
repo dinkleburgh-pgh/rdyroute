@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
 from database import get_db
-from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, User
+from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin, require_non_guest
 from schemas import (
@@ -334,7 +334,7 @@ def create_truck_state(
     if payload.truck_number != truck_number:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="truck_number mismatch")
 
-    _assert_truck_exists(truck_number, db)
+    truck = _assert_truck_exists(truck_number, db)
 
     existing = db.scalars(
         select(TruckState).where(
@@ -350,6 +350,7 @@ def create_truck_state(
 
     if payload.status and payload.status.value == "in_progress":
         _assert_no_other_in_progress(truck_number, payload.run_date, db)
+        _assert_spare_has_coverage(truck, payload.run_date, db)
 
     row_payload = payload.model_dump()
     row_payload["state_source"] = payload.state_source or TruckStateSource.workflow.value
@@ -430,6 +431,7 @@ def update_truck_state(
 
     if updates.get("status") and updates["status"].value == "in_progress":
         _assert_no_other_in_progress(truck_number, run_date, db)
+        _assert_spare_has_coverage(_assert_truck_exists(truck_number, db), run_date, db)
 
     for field, value in updates.items():
         setattr(row, field, value)
@@ -666,6 +668,13 @@ def bulk_update_status(
     except ValueError:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid status '{new_status}'")
 
+    # A spare can't be bulk-started into loading without a route to cover.
+    if validated_status == TruckStatus.in_progress:
+        for num in truck_numbers:
+            truck = db.scalars(select(Truck).where(Truck.truck_number == num)).first()
+            if truck is not None:
+                _assert_spare_has_coverage(truck, run_date, db)
+
     rows = db.scalars(
         select(TruckState).where(
             TruckState.run_date == run_date,
@@ -777,6 +786,41 @@ def _assert_no_other_in_progress(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Truck {conflict.truck_number} is already in progress for {run_date}. Finish it before starting another.",
         )
+
+
+def _assert_spare_has_coverage(truck: Truck, run_date, db: Session) -> None:
+    """Raise 409 if a Spare is asked to start loading with no route assigned.
+
+    A spare only loads to cover another route, so before it can go in_progress
+    it must either be the load_on_truck of a RouteSwap or have an active
+    SpareAssignment for the run_date. Non-spare trucks are never blocked here.
+    """
+    if truck.truck_type != TruckType.spare:
+        return
+
+    covered_by_swap = db.scalars(
+        select(RouteSwap).where(
+            RouteSwap.run_date == run_date,
+            RouteSwap.load_on_truck == truck.truck_number,
+        )
+    ).first()
+    if covered_by_swap:
+        return
+
+    covered_by_assignment = db.scalars(
+        select(SpareAssignment).where(
+            SpareAssignment.run_date == run_date,
+            SpareAssignment.spare_truck_number == truck.truck_number,
+            SpareAssignment.returned.is_(False),
+        )
+    ).first()
+    if covered_by_assignment:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"Spare {truck.truck_number} has no route to cover. Assign a route before loading.",
+    )
 
 
 # ---------------------------------------------------------------------------

@@ -180,6 +180,12 @@ export default function Load() {
   const unloadPct = unloadTotal > 0 ? Math.round((unloadDone / unloadTotal) * 100) : 0;
 
   const anyInProgress = Boolean(inProgress);
+  // A spare can't load until it's covering a route (enforced on the backend too).
+  const confirmIsUncoveredSpare =
+    confirmLoadTruck != null &&
+    confirmLoadTruck.truck_type === "Spare" &&
+    confirmLoadTruck.route_swap_route == null &&
+    confirmLoadTruck.state?.oos_spare_route == null;
 
   async function startLoad(t: TruckWithState) {
     if (anyInProgress) return;
@@ -590,6 +596,8 @@ export default function Load() {
             <p className="mb-4 text-sm text-ink-muted">
               {anyInProgress
                 ? "Another truck is already in progress. Finish it first."
+                : confirmIsUncoveredSpare
+                ? "This spare has no route to cover yet. Assign a route to it on the board before loading."
                 : `${confirmLoadTruck.truck_type}${confirmLoadTruck.state?.batch_id != null ? ` · Batch ${confirmLoadTruck.state.batch_id}` : ""}${confirmLoadTruck.state?.wearers ? ` · ${confirmLoadTruck.state.wearers} wearers` : ""}`}
             </p>
             <div className="flex justify-end gap-2">
@@ -597,7 +605,7 @@ export default function Load() {
               <button
                 className="rounded-lg px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ background: "#16a34a" }}
-                disabled={anyInProgress || busy === confirmLoadTruck.truck_number}
+                disabled={anyInProgress || confirmIsUncoveredSpare || busy === confirmLoadTruck.truck_number}
                 onClick={() => {
                   startLoad(confirmLoadTruck);
                   setConfirmLoadTruck(null);

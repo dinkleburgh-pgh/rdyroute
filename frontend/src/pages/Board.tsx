@@ -72,6 +72,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [offCoverageTruck, setOffCoverageTruck] = useState<TruckWithState | null>(null);
   const [offCoverageLoadOn, setOffCoverageLoadOn] = useState<string>("");
   const [offCoverageError, setOffCoverageError] = useState<string | null>(null);
+  const [spareCoverageTruck, setSpareCoverageTruck] = useState<TruckWithState | null>(null);
+  const [spareCoverageRoute, setSpareCoverageRoute] = useState<string>("");
+  const [spareCoverageError, setSpareCoverageError] = useState<string | null>(null);
   const [offScheduleDialogOpen, setOffScheduleDialogOpen] = useState(false);
   const isArchive = runDate < todayIso();
   const isFuture  = runDate > todayIso();
@@ -716,7 +719,16 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       setHoldAlertTruck(truck);
                       return;
                     }
-                    if (effectiveStatus(truck, runDayNum, holidayLoad) === "off") {
+                    if (
+                      truck.truck_type === "Spare" &&
+                      truck.route_swap_route == null &&
+                      truck.state?.oos_spare_route == null
+                    ) {
+                      // A spare only loads to cover a route — make them pick one first.
+                      setSpareCoverageTruck(truck);
+                      setSpareCoverageRoute("");
+                      setSpareCoverageError(null);
+                    } else if (effectiveStatus(truck, runDayNum, holidayLoad) === "off") {
                       const alreadyCovered = routeSwaps.some((s) => s.route_truck === truck.truck_number);
                       if (alreadyCovered) {
                         setConfirmTruck(truck);
@@ -1339,6 +1351,92 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 }}
               >
                 {createSwap.isPending ? "Saving…" : "Assign Coverage & Start Loading"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {spareCoverageTruck && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => { setSpareCoverageTruck(null); setSpareCoverageRoute(""); setSpareCoverageError(null); }}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-base font-semibold">
+              Spare #{spareCoverageTruck.truck_number} — which route is it covering?
+            </h3>
+            <p className="mb-4 text-sm text-slate-400">
+              A spare only loads to cover another truck's route. Pick the route it's running
+              so the load can proceed. Coverage is required.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Route to cover (required)</label>
+                <select
+                  className="input"
+                  value={spareCoverageRoute}
+                  onChange={(e) => setSpareCoverageRoute(e.target.value)}
+                >
+                  <option value="">— pick route —</option>
+                  {(data ?? [])
+                    .filter((x) =>
+                      x.truck_type !== "Spare" &&
+                      x.truck_number !== spareCoverageTruck.truck_number &&
+                      !routeSwaps.some((s) => s.route_truck === x.truck_number) &&
+                      !spareAssignments.some((a) => a.covering_route_truck === x.truck_number && !a.returned)
+                    )
+                    .sort((a, b) => a.truck_number - b.truck_number)
+                    .map((x) => (
+                      <option key={x.truck_number} value={x.truck_number}>
+                        #{x.truck_number} ({effectiveStatus(x, runDayNum, holidayLoad)})
+                      </option>
+                    ))}
+                </select>
+              </div>
+              {spareCoverageError && (
+                <p className="text-sm text-red-400">{spareCoverageError}</p>
+              )}
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button
+                className="btn-ghost"
+                onClick={() => { setSpareCoverageTruck(null); setSpareCoverageRoute(""); setSpareCoverageError(null); }}
+              >
+                Cancel
+              </button>
+              <button
+                className="rounded-md bg-green-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-60 transition-colors"
+                disabled={assignSpare.isPending || spareCoverageRoute === ""}
+                onClick={async () => {
+                  const routeNum = parseInt(spareCoverageRoute, 10);
+                  if (!Number.isFinite(routeNum)) {
+                    setSpareCoverageError("Pick a route to cover first.");
+                    return;
+                  }
+                  try {
+                    // Spare cover → SpareAssignment (the canonical spare path),
+                    // matching the OOS-card assign flow above.
+                    await assignSpare.mutateAsync({
+                      run_date: runDate,
+                      spare_truck_number: spareCoverageTruck.truck_number,
+                      covering_route_truck: routeNum,
+                    });
+                    const t = spareCoverageTruck;
+                    setSpareCoverageTruck(null);
+                    setSpareCoverageRoute("");
+                    setSpareCoverageError(null);
+                    setConfirmTruck(t);
+                  } catch (err: unknown) {
+                    const e = err as { response?: { data?: { detail?: string } } };
+                    setSpareCoverageError(e?.response?.data?.detail ?? "Failed to assign coverage.");
+                  }
+                }}
+              >
+                {assignSpare.isPending ? "Saving…" : "Assign Route & Start Loading"}
               </button>
             </div>
           </div>
