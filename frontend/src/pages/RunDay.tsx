@@ -139,12 +139,11 @@ export default function RunDay() {
   );
   const unloadSpareCount = unloadActiveTrucks.filter((t) => t.truck_type === "Spare").length;
 
-  // On holiday, two days' worth of routes are loaded/unloaded in one shift.
-  // The "second" day is the PREVIOUS ship day (Mon → Fri wraps back).
-  const loadDay2 = loadDay === 1 ? 5 : loadDay - 1;
+  // On holiday, two days' worth of routes run in one shift.
+  // Unload catches up on the PREVIOUS ship day; load gets ahead on the NEXT
+  // ship day. So unload's second day is unloadsDay-1, load's is loadDay+1
+  // (matches the sidebar/board "Day N + N+1" load label).
   const unloadsDay2 = unloadsDay === 1 ? 5 : unloadsDay - 1;
-  // Trucks off on loadDay (the normal load day) OR the day after (the holiday-affected next day)
-  // are both treated as the Day 3 catch-up batch in holiday load mode.
   const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
 
   const loadContext = useMemo(
@@ -336,7 +335,7 @@ export default function RunDay() {
             className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", loadCollapsed && "-rotate-90")}
           />
           <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
-            Load &mdash; Day {holidayLoad ? `${loadDay2} + ` : ""}{loadDay}
+            Load &mdash; Day {loadDay}{holidayLoad ? ` + ${loadNextDay}` : ""}
           </h2>
           <span className="w-24 shrink-0 text-sm text-slate-400">
             {loadDone} / {loadTotal} done
@@ -373,8 +372,8 @@ export default function RunDay() {
                 ? effectiveStatus(coveringTruck, loadDay, holidayLoad)
                 : effectiveStatus(t, loadDay, holidayLoad);
               const truckLoadDay = holidayLoad
-                ? (isScheduledOff(t, loadDay) || isScheduledOff(t, loadNextDay)) ? loadDay2 : loadDay
-                  : loadDay;
+                ? isScheduledOff(t, loadDay) ? loadNextDay : loadDay
+                : loadDay;
               return (
                 <TruckCard
                   key={t.truck_number}
@@ -383,7 +382,7 @@ export default function RunDay() {
                   done={isLoadDone(status)}
                   coveringSpare={coveringTruck}
                   dayNum={truckLoadDay}
-                  isExtraDay={truckLoadDay === loadDay2}
+                  isExtraDay={truckLoadDay === loadNextDay}
                   notes={notesByTruck.get(t.truck_number)}
                   context="load"
                 />

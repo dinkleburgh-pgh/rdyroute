@@ -8,6 +8,28 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-27
+
+### Added
+- **Recurring route-swap rules** — define coverage that repeats on chosen load days (e.g. "route 4 loads on 70 every Fri") in the Route Swap tool. Stored in the `recurring_route_swaps` app setting and **auto-applied** when each matching day's board is initialized (`apply_recurring_swaps` in `routers/spares.py`, called from `_ensure_day_initialized`). Creates the same `SpareAssignment` coverage as a manual swap, so it flows through Load, next-day Unload, and all coverage displays. Idempotent — never clobbers a manual swap.
+- **Load "Coverage today" notice** — a collapsible banner at the top of the Load page listing each active coverage as `route → loads on → truck`, with a `recurring` tag on auto-applied ones, so loaders know which route's freight goes on which truck.
+- **Verify Short Sheet — holiday mode** — a Holiday toggle adds a second-day selector and expands the sheet to the full 38 routes: main-day routes plus the routes off the main day (which run the second day). Each card shows a day tag.
+
+### Changed
+- **Coverage card — paired headline** — a covering truck's card now leads with `route → truck` (e.g. `4 → 17`, route number first) instead of the tiny `→ Cov.` pill, so the coverage is legible. The covered route's card keeps a compact `← Cov. #X` badge.
+- **Mobile bottom nav** — bottom bar is now Fleet Sch. · Audit · Communications · Short Sheet; Management moved into the "More" menu.
+- **Run Day holiday load label** — now reads `Day N + N+1` (load gets ahead on the next ship day) to match the sidebar/board; unload keeps `Day N-1 + N` (catching up on the previous day).
+- **Snappier card animations** — `AnimateCard` entrance shortened (0.35s→0.14s, smaller rise) and the stagger delay hard-capped, so boards load and re-render far faster; honors OS reduce-motion.
+- **Setup wizard counts** — load/unload route counts now include OOS routes (a covered OOS route still runs), fixing e.g. 27 → 28 for Friday.
+- **Route Swap tool** — Route/Load-On dropdowns align evenly on mobile (hint text drops on small screens).
+
+### Fixed
+- **Unload progress could exceed total** (e.g. 29/28) — numerator now counts "done" from the same context as the denominator, so a spare covering an off-day route can't push it over.
+- **Dirty-page card badges overflowing** — coverage badges compacted and the card columns constrained so chips stay inside the card.
+- **Duplicate "Arrived" marker on the fleet board** (desktop) — the top badge is now hidden where the bottom action row already shows it; same guard applied to the Outside / Paper Bay markers.
+
+---
+
 ## [Unreleased] — 2026-06-26
 
 ### Added

@@ -747,32 +747,41 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 }}
               >
                 <div className="flex w-full flex-col gap-0.5 md:gap-1">
-                  <div className="flex w-full items-start justify-between gap-2">
-                    <div className="flex min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
-                      <span
-                        className={clsx(
-                          "font-extrabold tracking-tight tabular-nums leading-none",
-                          fleetMode ? "text-2xl md:text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                          numberColor,
-                        )}
-                      >
-                        {truck.truck_number}
-                      </span>
-                      {!fleetMode && (
-                        <span className="flex min-h-[1.5rem] items-center">
-                          {showCoverageBadge ? (
-                            <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-sky-900/40 px-3 py-1 text-xs font-bold text-sky-300 ring-1 ring-sky-700/40">
-                              → Cov. #{coverageRoute}
-                            </span>
-                          ) : showCoveredByBadge ? (
-                            <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-amber-900/40 px-3 py-1 text-xs font-bold text-amber-300 ring-1 ring-amber-700/40">
-                              ← Covered by #{coveredBy!.num}
-                            </span>
-                          ) : null}
+                  <div className="flex w-full min-w-0 items-start justify-between gap-2">
+                    <div className="flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
+                      {!fleetMode && showCoverageBadge ? (
+                        /* Covering truck — paired headline: route → covering truck. */
+                        <div className="flex items-center gap-1.5">
+                          <span className="flex flex-col items-center leading-none">
+                            <span className="text-2xl font-extrabold tracking-tight tabular-nums text-[#7cc4ff] md:text-3xl">{coverageRoute}</span>
+                            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#5b87b3]">route</span>
+                          </span>
+                          <span className="text-xl font-bold text-[#7cc4ff] md:text-2xl">→</span>
+                          <span className="flex flex-col items-center leading-none">
+                            <span className={clsx("text-2xl font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>{truck.truck_number}</span>
+                            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">truck</span>
+                          </span>
+                        </div>
+                      ) : (
+                        <span
+                          className={clsx(
+                            "font-extrabold tracking-tight tabular-nums leading-none",
+                            fleetMode ? "text-2xl md:text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                            numberColor,
+                          )}
+                        >
+                          {truck.truck_number}
+                        </span>
+                      )}
+                      {!fleetMode && showCoveredByBadge && (
+                        <span className="flex min-h-[1.5rem] min-w-0 items-center">
+                          <span className="inline-flex max-w-full items-center self-start truncate rounded-full bg-amber-900/40 px-2 py-1 text-[11px] font-bold text-amber-300 ring-1 ring-amber-700/40">
+                            ← Cov. #{coveredBy!.num}
+                          </span>
                         </span>
                       )}
                     </div>
-                    <span className="flex min-h-[1.5rem] flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
+                    <span className="flex min-h-[1.5rem] shrink-0 flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
                       {/* 1. Status chip — show underlying dirty/unloaded for off trucks */}
                       {status === "off" && (truck.state?.status === "dirty" || truck.state?.status === "unloaded") ? (
                         <span className={clsx("badge", STATUS_BG[truck.state.status as TruckStatus], STATUS_BADGE_TEXT[truck.state.status as TruckStatus])}>
@@ -907,12 +916,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         )
                       )}
                       {fleetMode && arrivedTrackingEnabled && truck.state?.arrived_at && (
-                        <span className="inline-flex items-center rounded-full border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300">
+                        <span className="inline-flex items-center rounded-full border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300 md:hidden">
                           📍 Arrived {formatArrivedAt(truck.state.arrived_at)}
                         </span>
                       )}
                       {(outsideTimers.has(truck.truck_number) || paperBayTimers.has(truck.truck_number)) && (
-                        <div className="flex flex-wrap gap-1 pt-1">
+                        <div className={clsx("flex flex-wrap gap-1 pt-1", fleetMode && "md:hidden")}>
                           {outsideTimerEnabled && outsideTimers.has(truck.truck_number) && (
                             <span className="inline-flex items-center rounded-full border border-orange-700/50 bg-orange-950/70 px-2 py-0.5 text-[10px] font-bold text-orange-300">
                               ⏱ Outside {fmtCountdown(outsideCountdowns.get(truck.truck_number) ?? 0)}

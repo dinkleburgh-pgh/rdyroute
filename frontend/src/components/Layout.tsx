@@ -66,10 +66,10 @@ const SIDEBAR_SECONDARY_NAV = [
 ];
 
 const MOBILE_PRIMARY_NAV = [
-  { to: "/shorts", label: "Short Sheet" },
+  { to: "/fleet-schedule", label: "Fleet Sch." },
   { to: "/audit", label: "Audit" },
   { to: "/communications", label: "Communications" },
-  { to: "/management", label: "Management" },
+  { to: "/shorts", label: "Short Sheet" },
 ];
 
 const MOBILE_SECONDARY_NAV = [
@@ -78,6 +78,7 @@ const MOBILE_SECONDARY_NAV = [
   { to: "/fleet", label: "Fleet" },
   { to: "/notes", label: "Notes" },
   { to: "/trends", label: "Trends" },
+  { to: "/management", label: "Management" },
 ];
 
 // Mirrors V1 ROLE_SCREEN_ACCESS — which nav links each role can see.
@@ -230,20 +231,17 @@ export default function Layout() {
   );
 
   // Unload denominator = routes scheduled to run today (not off, not replaced by spare).
-  // Numerator = routes that have been unloaded. Two contexts: schedule context (no off-day
-  // spare coverage) for the total; work context (with off-day coverage) for done count.
+  // Numerator = how many of THOSE same routes are unloaded — counted from the same
+  // context as the denominator so a spare covering an off-day route can't push the
+  // numerator above the total (was causing e.g. 29/28).
   const unloadScheduleContext = useMemo(
     () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, false),
     [board, unloadsDay, holidayUnload],
   );
   const totalScheduledUnload = unloadScheduleContext.activeTrucks.length;
-  const unloadContext = useMemo(
-    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, true),
-    [board, unloadsDay, holidayUnload],
-  );
   const unloadedScheduled = useMemo(
-    () => countUnloadedFromContext(unloadContext),
-    [unloadContext],
+    () => countUnloadedFromContext(unloadScheduleContext),
+    [unloadScheduleContext],
   );
 
   const loadedPct =

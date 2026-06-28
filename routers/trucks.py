@@ -246,6 +246,9 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             seeded_truck_numbers,
         ),
     )
+    # Auto-apply recurring route-swap rules for this load day (once per run-date).
+    from routers.spares import apply_recurring_swaps
+    apply_recurring_swaps(db, run_date, load_day_num)
     db.commit()
 
 

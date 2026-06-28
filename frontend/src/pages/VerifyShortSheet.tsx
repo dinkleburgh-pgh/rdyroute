@@ -25,13 +25,15 @@ const DAY_LABELS: Record<number, string> = {
   5: "Fri",
 };
 
-function storageKey(dateStr: string, day: number) {
-  return `verify_short_sheet_${dateStr}_d${day}`;
+function storageKey(dateStr: string, day: number, holiday: boolean, secondDay: number) {
+  return holiday
+    ? `verify_short_sheet_${dateStr}_h${day}_${secondDay}`
+    : `verify_short_sheet_${dateStr}_d${day}`;
 }
 
-function loadChecked(dateStr: string, day: number): Set<number> {
+function loadChecked(dateStr: string, day: number, holiday: boolean, secondDay: number): Set<number> {
   try {
-    const raw = localStorage.getItem(storageKey(dateStr, day));
+    const raw = localStorage.getItem(storageKey(dateStr, day, holiday, secondDay));
     if (!raw) return new Set();
     const parsed = JSON.parse(raw);
     if (Array.isArray(parsed)) return new Set<number>(parsed);
@@ -41,9 +43,9 @@ function loadChecked(dateStr: string, day: number): Set<number> {
   return new Set();
 }
 
-function saveChecked(dateStr: string, day: number, checked: Set<number>) {
+function saveChecked(dateStr: string, day: number, holiday: boolean, secondDay: number, checked: Set<number>) {
   try {
-    localStorage.setItem(storageKey(dateStr, day), JSON.stringify([...checked]));
+    localStorage.setItem(storageKey(dateStr, day, holiday, secondDay), JSON.stringify([...checked]));
   } catch {
     // ignore
   }
@@ -55,25 +57,46 @@ export default function VerifyShortSheet() {
   const dateStr = todayIso();
 
   const [selectedDay, setSelectedDay] = useState<number>(todayLoadDay);
-  const [checked, setChecked] = useState<Set<number>>(() => loadChecked(dateStr, todayLoadDay));
+  const [holiday, setHoliday] = useState<boolean>(false);
+  const [secondDay, setSecondDay] = useState<number>(todayLoadDay === 5 ? 1 : todayLoadDay + 1);
+  const [checked, setChecked] = useState<Set<number>>(() => loadChecked(dateStr, todayLoadDay, false, secondDay));
 
-  // Reload checked state from localStorage when day changes
+  // Reload checked state from localStorage when the day / holiday selection changes
   useEffect(() => {
-    setChecked(loadChecked(dateStr, selectedDay));
-  }, [selectedDay, dateStr]);
+    setChecked(loadChecked(dateStr, selectedDay, holiday, secondDay));
+  }, [selectedDay, dateStr, holiday, secondDay]);
 
   // Persist on every change
   useEffect(() => {
-    saveChecked(dateStr, selectedDay, checked);
-  }, [checked, dateStr, selectedDay]);
+    saveChecked(dateStr, selectedDay, holiday, secondDay, checked);
+  }, [checked, dateStr, selectedDay, holiday, secondDay]);
 
-  // All non-spare trucks running on the selected day
+  // The route trucks that make up the short sheet.
+  //  - Normal: just the trucks running on the selected (main) day.
+  //  - Holiday: the full sheet (38) — main-day routes PLUS the routes off the
+  //    main day, which run on the second day to make up the total.
   const runningTrucks = useMemo(() => {
     if (!fleet) return [];
     return fleet
-      .filter((t) => t.is_active && t.truck_type !== "Spare" && !isScheduledOff(t, selectedDay))
+      .filter(
+        (t) =>
+          t.is_active &&
+          t.truck_type !== "Spare" &&
+          (holiday || !isScheduledOff(t, selectedDay)),
+      )
       .sort((a, b) => a.truck_number - b.truck_number);
-  }, [fleet, selectedDay]);
+  }, [fleet, selectedDay, holiday]);
+
+  // In holiday mode, which day a route belongs to: main day if it runs then,
+  // otherwise the second (catch-up) day.
+  const routeDay = useCallback(
+    (truckNum: number): number => {
+      const t = fleet?.find((x) => x.truck_number === truckNum);
+      if (!holiday || !t) return selectedDay;
+      return isScheduledOff(t, selectedDay) ? secondDay : selectedDay;
+    },
+    [fleet, holiday, selectedDay, secondDay],
+  );
 
   const notDone = useMemo(
     () => runningTrucks.filter((t) => !checked.has(t.truck_number)),
@@ -126,7 +149,7 @@ export default function VerifyShortSheet() {
         {/* Day selector */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted shrink-0">
-            Load Day
+            {holiday ? "Main Day" : "Load Day"}
           </span>
           <div className="flex gap-1.5 flex-wrap">
             {([1, 2, 3, 4, 5] as const).map((day) => (
@@ -147,6 +170,17 @@ export default function VerifyShortSheet() {
                 )}
               </button>
             ))}
+            <button
+              onClick={() => setHoliday((h) => !h)}
+              className={clsx(
+                "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                holiday
+                  ? "border-amber-500/60 bg-amber-500/15 text-amber-300"
+                  : "border-hairline bg-surface text-ink-soft hover:bg-surface-2 hover:text-ink",
+              )}
+            >
+              Holiday
+            </button>
             {checked.size > 0 && (
               <button
                 onClick={reset}
@@ -158,6 +192,34 @@ export default function VerifyShortSheet() {
             )}
           </div>
         </div>
+
+        {/* Second-day selector — holiday only. The routes off the main day run
+            on this day to make up the full short sheet. */}
+        {holiday && (
+          <div className="flex items-center gap-2.5 flex-wrap">
+            <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted shrink-0">
+              Second Day
+            </span>
+            <div className="flex gap-1.5 flex-wrap">
+              {([1, 2, 3, 4, 5] as const).map((day) => (
+                <button
+                  key={day}
+                  onClick={() => setSecondDay(day)}
+                  disabled={day === selectedDay}
+                  className={clsx(
+                    "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+                    secondDay === day
+                      ? "border-amber-500/60 bg-amber-500/15 text-amber-300"
+                      : "border-hairline bg-surface text-ink-soft hover:bg-surface-2 hover:text-ink",
+                    day === selectedDay && "opacity-30 cursor-not-allowed",
+                  )}
+                >
+                  {DAY_LABELS[day]}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Summary bar */}
         <div className="rounded-xl border border-hairline bg-surface px-4 py-3 flex items-center justify-between gap-4">
@@ -229,7 +291,9 @@ export default function VerifyShortSheet() {
             <ClipboardCheck className="h-8 w-8 text-emerald-400" />
             <p className="text-base font-semibold text-emerald-300">All routes verified</p>
             <p className="text-sm text-ink-muted">
-              Every scheduled route for {DAY_LABELS[selectedDay]} has been written up.
+              {holiday
+                ? `All ${runningTrucks.length} routes for the holiday (${DAY_LABELS[selectedDay]} + ${DAY_LABELS[secondDay]}) have been written up.`
+                : `Every scheduled route for ${DAY_LABELS[selectedDay]} has been written up.`}
             </p>
           </div>
         )}
@@ -256,6 +320,18 @@ export default function VerifyShortSheet() {
                   <span className="text-[10px] text-ink-muted">
                     {TYPE_LABEL[truck.truck_type] ?? truck.truck_type}
                   </span>
+                  {holiday && (
+                    <span
+                      className={clsx(
+                        "rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none",
+                        routeDay(truck.truck_number) === selectedDay
+                          ? "bg-indigo-500/20 text-[#7cc4ff]"
+                          : "bg-amber-500/20 text-amber-300",
+                      )}
+                    >
+                      {DAY_LABELS[routeDay(truck.truck_number)]}
+                    </span>
+                  )}
                   <Circle className="mt-1 h-4 w-4 text-amber-500/50 group-hover:text-amber-400 transition-colors" />
                 </button>
               ))}
@@ -285,6 +361,18 @@ export default function VerifyShortSheet() {
                   <span className="text-[10px] text-ink-muted">
                     {TYPE_LABEL[truck.truck_type] ?? truck.truck_type}
                   </span>
+                  {holiday && (
+                    <span
+                      className={clsx(
+                        "rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none",
+                        routeDay(truck.truck_number) === selectedDay
+                          ? "bg-indigo-500/20 text-[#7cc4ff]"
+                          : "bg-amber-500/20 text-amber-300",
+                      )}
+                    >
+                      {DAY_LABELS[routeDay(truck.truck_number)]}
+                    </span>
+                  )}
                   <CheckCircle2 className="mt-1 h-4 w-4 text-emerald-500 transition-colors" />
                 </button>
               ))}

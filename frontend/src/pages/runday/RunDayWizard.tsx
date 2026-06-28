@@ -52,17 +52,19 @@ export default function RunDayWizard({
   // Counts per side, derived from the actual fleet roster.
   // Base = trucks scheduled to run that ship day normally.
   // Extra = trucks normally off for that ship day (added by holiday).
+  // OOS trucks are still counted — a scheduled route always runs (it gets
+  // covered), so excluding OOS would undercount the routes (e.g. 27 vs 28).
   const loadBase = board.filter(
-    (t) => t.truck_type !== "Spare" && !t.is_oos && !isScheduledOff(t, loadDay),
+    (t) => t.truck_type !== "Spare" && !isScheduledOff(t, loadDay),
   ).length;
   const loadExtra = board.filter(
-    (t) => t.truck_type !== "Spare" && !t.is_oos && isScheduledOff(t, loadDay),
+    (t) => t.truck_type !== "Spare" && isScheduledOff(t, loadDay),
   ).length;
   const unloadBase = board.filter(
-    (t) => t.truck_type !== "Spare" && !t.is_oos && !isScheduledOff(t, unloadsDay),
+    (t) => t.truck_type !== "Spare" && !isScheduledOff(t, unloadsDay),
   ).length;
   const unloadExtra = board.filter(
-    (t) => t.truck_type !== "Spare" && !t.is_oos && isScheduledOff(t, unloadsDay),
+    (t) => t.truck_type !== "Spare" && isScheduledOff(t, unloadsDay),
   ).length;
   const DAY_NAMES = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
   const upsert = useUpsertTruckState();

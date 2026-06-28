@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import SpareAssignment, TruckState, TruckStateSource, TruckStatus, User
+from models import AppSetting, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, User
 from notification_service import (
     coverage_assigned_notification,
     coverage_removed_notification,
@@ -124,6 +124,118 @@ def assign_spare(
         ),
     )
     return row
+
+
+def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int) -> list[SpareAssignment]:
+    """Auto-apply recurring coverage rules whose day matches the load day.
+
+    Reads the ``recurring_route_swaps`` app setting — a list of
+    ``{route_truck, load_on_truck, days, two_way?}`` — and creates a
+    SpareAssignment (covering_route_truck=route_truck, spare_truck_number=
+    load_on_truck) for every rule that runs on ``load_day_num``. Mirrors the core
+    of ``assign_spare`` (create row + activate the covering truck) without the
+    interactive validation/notifications.
+
+    Idempotent: never clobbers an existing assignment for the same route or
+    covering truck on this date, so re-initializing a day is safe and manual
+    swaps are preserved. Called once per run-date from ``_ensure_day_initialized``.
+    The caller is responsible for committing the surrounding transaction.
+    """
+    setting = db.get(AppSetting, "recurring_route_swaps")
+    rules = setting.value if (setting is not None and isinstance(setting.value, list)) else []
+    if not rules:
+        return []
+
+    # The caller (_ensure_day_initialized) seeds today's TruckState rows but the
+    # session has autoflush disabled, so flush them first — otherwise the lookups
+    # below won't see them and we'd insert a duplicate (run_date, truck) row.
+    db.flush()
+
+    existing = db.scalars(
+        select(SpareAssignment).where(
+            SpareAssignment.run_date == run_date,
+            SpareAssignment.returned == False,
+        )
+    ).all()
+    covered_routes = {a.covering_route_truck for a in existing}
+    used_spares = {a.spare_truck_number for a in existing}
+    active_truck_numbers = {
+        n for (n,) in db.execute(select(Truck.truck_number).where(Truck.is_active == True)).all()
+    }
+
+    applied: list[SpareAssignment] = []
+
+    def _apply(route_truck: int, load_on_truck: int) -> None:
+        if route_truck == load_on_truck:
+            return
+        if route_truck in covered_routes or load_on_truck in used_spares:
+            return
+        if route_truck not in active_truck_numbers or load_on_truck not in active_truck_numbers:
+            return
+        row = SpareAssignment(
+            run_date=run_date,
+            spare_truck_number=load_on_truck,
+            covering_route_truck=route_truck,
+        )
+        db.add(row)
+        # Activate the covering truck and record which route it covers.
+        st = db.scalars(
+            select(TruckState).where(
+                TruckState.truck_number == load_on_truck,
+                TruckState.run_date == run_date,
+            )
+        ).first()
+        if st is None:
+            db.add(TruckState(
+                truck_number=load_on_truck,
+                run_date=run_date,
+                status=TruckStatus.dirty,
+                wearers=0,
+                oos_spare_route=route_truck,
+                state_source=TruckStateSource.workflow.value,
+            ))
+        else:
+            if st.status in (TruckStatus.spare, TruckStatus.dirty):
+                st.status = TruckStatus.dirty
+            st.oos_spare_route = route_truck
+            st.state_source = TruckStateSource.workflow.value
+        covered_routes.add(route_truck)
+        used_spares.add(load_on_truck)
+        applied.append(row)
+
+    for rule in rules:
+        if not isinstance(rule, dict):
+            continue
+        days = rule.get("days") or []
+        if load_day_num not in days:
+            continue
+        try:
+            route_truck = int(rule["route_truck"])
+            load_on_truck = int(rule["load_on_truck"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        _apply(route_truck, load_on_truck)
+        if rule.get("two_way"):
+            _apply(load_on_truck, route_truck)
+
+    if applied:
+        db.flush()
+        append_activity_event(
+            db,
+            actor_type="system",
+            event_family="coverage",
+            event_type="recurring_swaps_applied",
+            run_date=run_date,
+            summary=f"Auto-applied {len(applied)} recurring route swap(s) for load day {load_day_num}",
+            diff_json={
+                "swaps": [
+                    {"covering_route_truck": a.covering_route_truck, "spare_truck_number": a.spare_truck_number}
+                    for a in applied
+                ],
+            },
+            context_json={"load_day_num": load_day_num},
+        )
+    return applied
 
 
 @router.post("/{assignment_id}/return", response_model=SpareAssignOut)

@@ -10,6 +10,8 @@ import {
   usePaceAverage,
   useRecordLoadDuration,
   useShortages,
+  useSpareAssignments,
+  useSettings,
   useUpsertTruckState,
 } from "../api/hooks";
 import { ShortageLogger } from "./Shorts";
@@ -27,7 +29,7 @@ import {
 import { PaceBar, useElapsed } from "../components/LiveInProgress";
 import { ChevronDown } from "lucide-react";
 import { DustGarmentIcon } from "../components/icons";
-import type { TruckWithState } from "../types";
+import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
@@ -51,6 +53,7 @@ export default function Load() {
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
   const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
   const [dustCollapsed, setDustCollapsed] = useState(() => localStorage.getItem("load:dustCollapsed") === "1");
+  const [coverageCollapsed, setCoverageCollapsed] = useState(() => localStorage.getItem("load:coverageCollapsed") === "1");
 
   const board = data ?? [];
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
@@ -60,6 +63,21 @@ export default function Load() {
   const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
+
+  // Today's coverage assignments (manual + auto-applied recurring) — surfaced as
+  // a notice so loaders know which route's freight loads on which truck.
+  const { data: spareAssignments = [] } = useSpareAssignments(runDate);
+  const { data: appSettings = [] } = useSettings();
+  const recurringRules = useMemo<RecurringRouteSwap[]>(() => {
+    const row = appSettings.find((s) => s.key === "recurring_route_swaps");
+    return Array.isArray(row?.value) ? (row!.value as RecurringRouteSwap[]) : [];
+  }, [appSettings]);
+  const activeCoverage = useMemo(() => spareAssignments.filter((s) => !s.returned), [spareAssignments]);
+  function isRecurringCoverage(routeTruck: number, loadOnTruck: number): boolean {
+    return recurringRules.some(
+      (r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay),
+    );
+  }
 
   const inProgress = useMemo(
     () => board.find((t) => t.state?.status === "in_progress"),
@@ -153,13 +171,11 @@ export default function Load() {
     [board, unloadsDay, holidayUnload],
   );
   const unloadTotal = unloadScheduleContext.activeTrucks.length;
-  const unloadContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, true),
-    [board, unloadsDay, holidayUnload],
-  );
+  // Count "done" from the same context as the total so a spare covering an
+  // off-day route can't push the numerator above the denominator (29/28 bug).
   const unloadDone = useMemo(
-    () => countUnloadedFromContext(unloadContext),
-    [unloadContext],
+    () => countUnloadedFromContext(unloadScheduleContext),
+    [unloadScheduleContext],
   );
   const unloadPct = unloadTotal > 0 ? Math.round((unloadDone / unloadTotal) * 100) : 0;
 
@@ -253,6 +269,42 @@ export default function Load() {
         ) : undefined}
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
+
+      {/* Coverage notice — which route's freight loads on which truck today */}
+      {activeCoverage.length > 0 && (
+        <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+            onClick={() => setCoverageCollapsed((c) => { const next = !c; localStorage.setItem("load:coverageCollapsed", next ? "1" : "0"); return next; })}
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage today</span>
+            <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
+              <span className="font-mono tabular-nums">{activeCoverage.length} route{activeCoverage.length === 1 ? "" : "s"}</span>
+              <ChevronDown className={clsx("h-3.5 w-3.5 text-sky-400/60 transition-transform", coverageCollapsed && "-rotate-90")} />
+            </span>
+          </button>
+          {!coverageCollapsed && (
+            <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
+              <div className="flex flex-col gap-1.5">
+                {activeCoverage
+                  .slice()
+                  .sort((a, b) => a.covering_route_truck - b.covering_route_truck)
+                  .map((s) => (
+                    <div key={s.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-base font-black text-sky-300">{s.covering_route_truck}</span>
+                      <span className="text-xs text-ink-muted">loads on</span>
+                      <span className="text-base font-black text-ink">{s.spare_truck_number}</span>
+                      {isRecurringCoverage(s.covering_route_truck, s.spare_truck_number) && (
+                        <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Dust Garments — read-only, collapsible */}
       <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>

@@ -245,6 +245,18 @@ export interface AppSetting {
   updated_at: string;
 }
 
+/**
+ * A recurring route-swap rule (stored in the `recurring_route_swaps` app setting).
+ * route_truck's load runs on load_on_truck on each ship/load day in `days` (1=Mon..5=Fri).
+ * Auto-applied when the board for a matching load day is initialized.
+ */
+export interface RecurringRouteSwap {
+  route_truck: number;
+  load_on_truck: number;
+  days: number[];
+  two_way?: boolean;
+}
+
 export interface ProductionSyncResult {
   source: string;
   run_dates: string[];
