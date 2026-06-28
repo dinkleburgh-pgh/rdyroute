@@ -146,6 +146,7 @@ function BuildInfo() {
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const appVersion = import.meta.env.DEV ? "dev" : (typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev");
   const { data: allSettings } = useSettings();
   const settingsMap = useMemo(() => allSettings ? new Map(allSettings.map((s) => [s.key, s.value])) : new Map(), [allSettings]);
 
@@ -313,6 +314,17 @@ export default function Layout() {
         )}
       >
         <div className="flex-1 space-y-3 overflow-y-auto p-[14px] pt-safe">
+          {/* Brand header */}
+          <div className="flex items-center gap-3 px-1 pt-1">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-teal-500 text-lg font-black text-white shadow-lg shadow-cyan-500/30">
+              R
+            </div>
+            <div className="leading-tight">
+              <p className="text-base font-bold text-white">ReadyRoute</p>
+              <p className="font-mono text-xs text-ink-faint">{appVersion}</p>
+            </div>
+          </div>
+
           {/* Setup Day button */}
           {!isGuest && (
             <button
