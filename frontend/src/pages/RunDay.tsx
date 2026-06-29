@@ -80,6 +80,28 @@ export default function RunDay() {
   const [notesEditing, setNotesEditing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
 
+  // Map from route truck number → the truck covering its route today.
+  // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
+  // non-spare trucks assigned via a route swap.  Spares are hidden from the
+  // grid; non-spare covering trucks still render their own card.
+  const coveringTruckMap = useMemo(
+    () =>
+      new Map<number, TruckWithState>(
+        board
+          .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
+          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
+      ),
+    [board],
+  );
+
+  // The status a card actually displays: an OOS route that's covered reflects
+  // its covering truck's status. Sorting by this (not the route truck's own
+  // "oos") keeps covered-dirty trucks grouped with the dirty trucks at the top.
+  function displayStatusFor(t: TruckWithState, dayNum: number, holiday: boolean): TruckStatus {
+    const cov = t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+    return effectiveStatus(cov ?? t, dayNum, holiday);
+  }
+
   const unloadTrucks = useMemo(
     () =>
       board
@@ -91,8 +113,8 @@ export default function RunDay() {
         .sort((a, b) => {
           // Clamp loaded→unloaded in unload sort: from this section's POV,
           // "loaded" is just a downstream state of "unloaded".
-          const sa = effectiveStatus(a, unloadsDay, holidayUnload);
-          const sb = effectiveStatus(b, unloadsDay, holidayUnload);
+          const sa = displayStatusFor(a, unloadsDay, holidayUnload);
+          const sb = displayStatusFor(b, unloadsDay, holidayUnload);
           const ka: TruckStatus = sa === "loaded" ? "unloaded" : sa;
           const kb: TruckStatus = sb === "loaded" ? "unloaded" : sb;
           const oa = UNLOAD_SORT[ka] ?? 9;
@@ -100,7 +122,8 @@ export default function RunDay() {
           if (oa !== ob) return oa - ob;
           return a.truck_number - b.truck_number;
         }),
-    [board, unloadsDay, holidayUnload],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [board, unloadsDay, holidayUnload, coveringTruckMap],
   );
 
   const loadTrucks = useMemo(
@@ -112,14 +135,15 @@ export default function RunDay() {
             (holidayLoad || !isScheduledOff(t, loadDay)),
         )
         .sort((a, b) => {
-          const sa = effectiveStatus(a, loadDay, holidayLoad);
-          const sb = effectiveStatus(b, loadDay, holidayLoad);
+          const sa = displayStatusFor(a, loadDay, holidayLoad);
+          const sb = displayStatusFor(b, loadDay, holidayLoad);
           const oa = LOAD_SORT[sa] ?? 9;
           const ob = LOAD_SORT[sb] ?? 9;
           if (oa !== ob) return oa - ob;
           return a.truck_number - b.truck_number;
         }),
-    [board, loadDay, holidayLoad],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [board, loadDay, holidayLoad, coveringTruckMap],
   );
 
   // Unload active trucks = exactly the routes running on unloadsDay per Fleet Schedule.
@@ -158,20 +182,6 @@ export default function RunDay() {
     [board, loadDay, unloadsDay, holidayLoad, holidayUnload],
   );
   const loadSpareCount = loadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
-
-  // Map from route truck number → the truck covering its route today.
-  // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
-  // non-spare trucks assigned via a route swap.  Spares are hidden from the
-  // grid; non-spare covering trucks still render their own card.
-  const coveringTruckMap = useMemo(
-    () =>
-      new Map<number, TruckWithState>(
-        board
-          .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
-          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
-      ),
-    [board],
-  );
 
   // Today's live coverages (shown with the Load section): each route being
   // covered, the truck covering it, whether that's a spare or a route swap.
