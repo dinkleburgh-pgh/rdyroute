@@ -703,10 +703,6 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 className={clsx(
                   "card cursor-pointer",
                   fleetMode ? "p-2 flex flex-col gap-1 min-h-[4.5rem] md:p-4 md:gap-2 md:min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],
-                  // Coverage cards carry a wider "route → truck" headline; give them
-                  // the full row on the 2-col mobile grid so the status badge doesn't
-                  // crowd/overlap the truck number.
-                  !fleetMode && showCoverageBadge && "col-span-2 sm:col-span-1",
                   fleetMode && displayStatus === "oos" && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
                   fleetMode && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
                   !fleetMode && filter === "dirty" && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
@@ -784,15 +780,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     <div className="flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
                       {!fleetMode && showCoverageBadge ? (
                         /* Covering truck — paired headline: route → covering truck. */
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1 md:gap-1.5">
                           <span className="flex flex-col items-center leading-none">
-                            <span className="text-2xl font-extrabold tracking-tight tabular-nums text-[#7cc4ff] md:text-3xl">{coverageRoute}</span>
-                            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-[#5b87b3]">route</span>
+                            <span className="text-lg font-extrabold tracking-tight tabular-nums text-[#7cc4ff] md:text-3xl">{coverageRoute}</span>
+                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5b87b3] md:text-[10px]">route</span>
                           </span>
-                          <span className="text-xl font-bold text-[#7cc4ff] md:text-2xl">→</span>
+                          <span className="text-base font-bold text-[#7cc4ff] md:text-2xl">→</span>
                           <span className="flex flex-col items-center leading-none">
-                            <span className={clsx("text-2xl font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>{truck.truck_number}</span>
-                            <span className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-slate-500">truck</span>
+                            <span className={clsx("text-lg font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>{truck.truck_number}</span>
+                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 md:text-[10px]">truck</span>
                           </span>
                         </div>
                       ) : (
