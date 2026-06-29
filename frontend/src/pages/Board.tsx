@@ -703,6 +703,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 className={clsx(
                   "card cursor-pointer",
                   fleetMode ? "p-2 flex flex-col gap-1 min-h-[4.5rem] md:p-4 md:gap-2 md:min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],
+                  // Coverage cards carry a wider "route → truck" headline; give them
+                  // the full row on the 2-col mobile grid so the status badge doesn't
+                  // crowd/overlap the truck number.
+                  !fleetMode && showCoverageBadge && "col-span-2 sm:col-span-1",
                   fleetMode && displayStatus === "oos" && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
                   fleetMode && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
                   !fleetMode && filter === "dirty" && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
