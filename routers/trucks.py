@@ -83,6 +83,18 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     # truck with prior status "unloaded" was scheduled off that day (and therefore
     # didn't run a route) vs. was active and dispatched (and came back dirty).
     prev_load_day_num = _load_day_number(prev_run_date) if prev_run_date is not None else None
+    # Did the previous run day load on a holiday? If so, TWO ship days ran in one
+    # shift (prev load day + the next ship day), so a truck only sat out if it was
+    # scheduled off BOTH days — everything else ran and comes back dirty today.
+    prev_holiday_load = False
+    if prev_run_date is not None:
+        _hl = db.get(AppSetting, f"holiday_load_{prev_run_date}")
+        prev_holiday_load = _hl is not None and _hl.value is True
+    prev_second_load_day = (
+        (1 if prev_load_day_num == 5 else prev_load_day_num + 1)
+        if prev_load_day_num is not None
+        else None
+    )
 
     prev_states_by_num: dict[int, TruckState] = {}
     prev_loaded_on = set[int]()
@@ -176,10 +188,19 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 # at the UNLOAD day schedule (prev_load_day_num = today's unload day number).
                 # Resolve this BEFORE scheduled_off_today so a truck scheduled off for
                 # tomorrow's load doesn't wrongly get "off" status when it ran today.
-                prev_sched_off = (
-                    prev_load_day_num is not None
-                    and prev_load_day_num in (truck.scheduled_off_days or [])
-                )
+                off_days = truck.scheduled_off_days or []
+                if prev_holiday_load and prev_load_day_num is not None:
+                    # Holiday ran both ship days — the truck only sat out if it was
+                    # scheduled off BOTH, otherwise it ran and returned dirty.
+                    prev_sched_off = (
+                        prev_load_day_num in off_days
+                        and (prev_second_load_day is None or prev_second_load_day in off_days)
+                    )
+                else:
+                    prev_sched_off = (
+                        prev_load_day_num is not None
+                        and prev_load_day_num in off_days
+                    )
                 if not prev_sched_off:
                     status = TruckStatus.dirty    # dispatched → came back dirty
                 elif scheduled_off_today:
