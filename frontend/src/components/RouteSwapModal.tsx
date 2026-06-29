@@ -12,6 +12,7 @@ import { todayIso } from "../api/client";
 import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useRouteSwapLog, useSettings, useUpsertSetting } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
+import { formatRunDate } from "../utils/dates";
 import type { TruckWithState, SpareAssignment, RecurringRouteSwap } from "../types";
 
 const DAY_ABBR = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
@@ -264,7 +265,7 @@ export default function RouteSwapModal({ onClose }: Props) {
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <div>
             <h2 className="text-base font-bold text-slate-100">Route Swaps</h2>
-            <p className="text-xs text-slate-400">{runDate}</p>
+            <p className="text-xs text-slate-400">{formatRunDate(runDate)}</p>
           </div>
           <button
             className="rounded p-1 text-slate-500 hover:text-slate-200"

@@ -4,6 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useLoadDayOverride, useSetLoadDayOverride, useSetUnloadsDayOverride, useSyncProductionData, useUnloadsDayOverride } from "../../api/hooks";
 import { todayIso } from "../../api/client";
+import { formatRunDate } from "../../utils/dates";
 import { workdayNumbers } from "../../components/Clock";
 import ConfirmDialog from "../ConfirmDialog";
 import { useToast } from "../../contexts/ToastContext";
@@ -110,7 +111,7 @@ export default function DevelopmentPanel() {
 
         {hasActive && (
           <div className="rounded-lg border border-amber-700 bg-amber-900/30 px-3 py-2 text-xs text-amber-300">
-            Overrides active for {runDate}
+            Overrides active for {formatRunDate(runDate)}
             {loadOverride    != null && ` · Load → ${DAY_NAMES[loadOverride]} (${loadOverride})`}
             {unloadsOverride != null && ` · Unloads → ${DAY_NAMES[unloadsOverride]} (${unloadsOverride})`}
           </div>

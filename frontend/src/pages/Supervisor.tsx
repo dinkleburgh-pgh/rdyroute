@@ -16,6 +16,7 @@ import { todayIso } from "../api/client";
 import type { TruckStatus, TruckWithState } from "../types";
 import { useAuth } from "../contexts/AuthContext";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
+import { formatRunDate } from "../utils/dates";
 import { workdayNumbers } from "../components/Clock";
 import AnimateCard from "../components/AnimateCard";
 
@@ -155,7 +156,7 @@ export default function Supervisor() {
         <div>
           <h2 className="text-2xl font-semibold">Supervisor</h2>
           <p className="text-sm text-slate-400">
-            Bulk actions & stuck-truck recovery for {runDate}
+            Bulk actions & stuck-truck recovery for {formatRunDate(runDate)}
           </p>
         </div>
         <div>

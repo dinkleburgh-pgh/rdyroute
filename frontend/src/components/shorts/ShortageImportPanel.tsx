@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import ConfirmDialog from "../ConfirmDialog";
+import { formatRunDate } from "../../utils/dates";
 import {
   shortageSheetOcrDatasetExportUrl,
   shortageSheetOcrHeaderDatasetExportUrl,
@@ -1297,7 +1298,7 @@ export default function ShortageImportPanel({
                     )}
                   >
                     <div className="flex items-center justify-between gap-2">
-                      <span className="text-sm font-semibold text-slate-200">{entry.run_date}</span>
+                      <span className="text-sm font-semibold text-slate-200">{formatRunDate(entry.run_date)}</span>
                       <span className={clsx("rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", statusBadgeClass(entry.status))}>{entry.status.replace("_", " ")}</span>
                     </div>
                     <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-[11px] text-slate-500">
@@ -1325,7 +1326,7 @@ export default function ShortageImportPanel({
                 <div className="flex flex-wrap items-start justify-between gap-3">
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="text-base font-semibold text-slate-100">Import {selectedImport.run_date}</h4>
+                      <h4 className="text-base font-semibold text-slate-100">Import {formatRunDate(selectedImport.run_date)}</h4>
                       <span className={clsx("rounded-full px-2 py-0.5 text-[11px] font-semibold ring-1", statusBadgeClass(selectedImport.status))}>{selectedImport.status.replace("_", " ")}</span>
                     </div>
                     <p className="mt-1 text-xs text-slate-500">Uploaded by {selectedImport.uploaded_by_username} · {selectedImport.photo_count} photos · {selectedImport.row_count} rows</p>

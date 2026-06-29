@@ -3,6 +3,7 @@ import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import type { ActivityEvent, ActivityEventFamily, TruckStatus } from "../../types";
 import { STATUS_BG, STATUS_LABELS, STATUS_TEXT } from "../../constants/truckStatus";
+import { formatRunDate } from "../../utils/dates";
 import RoleBadge, { UserAvatar } from "../management/RoleBadge";
 
 const FAMILY_BADGE: Record<ActivityEventFamily, string> = {
@@ -140,7 +141,7 @@ export default function ActivityEventCard({
             <div className="mt-2 flex flex-wrap items-center gap-2">
               <p className="text-xs text-slate-500">{format(parseISO(event.occurred_at), compact ? "Pp" : "PPpp")}</p>
               {event.run_date && (
-                <span className="text-xs text-slate-500">Run {event.run_date}</span>
+                <span className="text-xs text-slate-500">Run {formatRunDate(event.run_date)}</span>
               )}
               {(event.status_before || event.status_after) && (
                 <div className="flex items-center gap-1.5">

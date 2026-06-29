@@ -25,6 +25,7 @@ import {
   isScheduledOff,
 } from "../utils/truckStatus";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
+import { formatRunDate } from "../utils/dates";
 import TruckCard from "./runday/TruckCard";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
@@ -221,7 +222,7 @@ export default function RunDay() {
             Day Overview
           </h2>
           <p className="mt-1.5 text-[13.5px] text-ink-muted">
-            {runDate} · Unload Day {unloadsDay} · Load Day {loadDay}
+            {formatRunDate(runDate)} · Unload Day {unloadsDay} · Load Day {loadDay}
           </p>
         </div>
       </div>
@@ -331,7 +332,7 @@ export default function RunDay() {
               <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
                 Previous load-day coverage
               </span>
-              <span className="text-[10px] text-amber-500/70">({prevCoverage.date})</span>
+              <span className="text-[10px] text-amber-500/70">({formatRunDate(prevCoverage.date)})</span>
             </div>
             <div className="flex flex-wrap gap-1.5">
               {prevCoverage.items.map((c) => (
