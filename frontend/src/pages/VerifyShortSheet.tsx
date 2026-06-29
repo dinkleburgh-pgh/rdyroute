@@ -157,7 +157,7 @@ export default function VerifyShortSheet() {
         {/* Day selector */}
         <div className="flex items-center gap-2.5 flex-wrap">
           <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted shrink-0">
-            {holiday ? "Main Day" : "Load Day"}
+            {holiday ? "Main Day" : "Load Day"} · Day {selectedDay}
           </span>
           <div className="flex gap-1.5 flex-wrap">
             {([1, 2, 3, 4, 5] as const).map((day) => (
@@ -206,7 +206,7 @@ export default function VerifyShortSheet() {
         {holiday && (
           <div className="flex items-center gap-2.5 flex-wrap">
             <span className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted shrink-0">
-              Second Day
+              Second Day · Day {secondDay}
             </span>
             <div className="flex gap-1.5 flex-wrap">
               {([1, 2, 3, 4, 5] as const).map((day) => (
