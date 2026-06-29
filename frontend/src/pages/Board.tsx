@@ -995,7 +995,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   <div className="text-xs text-slate-400">Batch {truck.state.batch_id}</div>
                 )}
 
-                {chipDay != null && (
+                {/* Spares have no scheduled day, so a day chip only makes sense
+                    when they're covering a route (they run that route's day). */}
+                {chipDay != null && !(truck.truck_type === "Spare" && coverageRoute == null) && (
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span
                       className={clsx(
