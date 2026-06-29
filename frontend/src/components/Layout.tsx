@@ -536,13 +536,9 @@ export default function Layout() {
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex min-w-0 shrink items-center gap-2 md:hidden">
+          <div className="flex shrink-0 items-center md:hidden">
             <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-teal-500 text-sm font-black text-white shadow-md shadow-cyan-500/30">
               R
-            </div>
-            <div className="hidden min-w-0 min-[380px]:flex flex-col justify-center leading-none">
-              <span className="truncate text-sm font-semibold text-ink-soft">ReadyRoute</span>
-              <span className="truncate font-mono text-[10px] text-ink-faint">{appVersion}</span>
             </div>
           </div>
           <div className="ml-auto flex shrink-0 items-center justify-end gap-1 md:hidden">
