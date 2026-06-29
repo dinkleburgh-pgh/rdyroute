@@ -6,7 +6,7 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import { CheckCircle2, Circle, RotateCcw, ClipboardCheck } from "lucide-react";
 import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
-import { useFleet } from "../api/hooks";
+import { useFleet, useHolidayLoad } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
@@ -56,9 +56,17 @@ export default function VerifyShortSheet() {
   const { loadDay: todayLoadDay } = useMemo(() => workdayNumbers(), []);
   const dateStr = todayIso();
 
+  // Auto-detect holiday from the actual load-day holiday setting. The toggle
+  // still lets the user override; once they tap it we stop auto-syncing.
+  const { data: detectedHoliday = false } = useHolidayLoad(dateStr);
   const [selectedDay, setSelectedDay] = useState<number>(todayLoadDay);
   const [holiday, setHoliday] = useState<boolean>(false);
+  const [holidayTouched, setHolidayTouched] = useState<boolean>(false);
   const [secondDay, setSecondDay] = useState<number>(todayLoadDay === 5 ? 1 : todayLoadDay + 1);
+
+  useEffect(() => {
+    if (!holidayTouched) setHoliday(detectedHoliday);
+  }, [detectedHoliday, holidayTouched]);
   const [checked, setChecked] = useState<Set<number>>(() => loadChecked(dateStr, todayLoadDay, false, secondDay));
 
   // Reload checked state from localStorage when the day / holiday selection changes
@@ -171,7 +179,7 @@ export default function VerifyShortSheet() {
               </button>
             ))}
             <button
-              onClick={() => setHoliday((h) => !h)}
+              onClick={() => { setHolidayTouched(true); setHoliday((h) => !h); }}
               className={clsx(
                 "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
                 holiday
@@ -179,7 +187,7 @@ export default function VerifyShortSheet() {
                   : "border-hairline bg-surface text-ink-soft hover:bg-surface-2 hover:text-ink",
               )}
             >
-              Holiday
+              Holiday{!holidayTouched && detectedHoliday ? " (auto)" : ""}
             </button>
             {checked.size > 0 && (
               <button
