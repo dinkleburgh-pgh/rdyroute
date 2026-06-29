@@ -27,6 +27,24 @@ if ("serviceWorker" in navigator && !isLocalDevOrigin) {
     _reloading = true;
     window.location.reload();
   });
+
+  // Proactively check for a new build so deploys reach already-open clients.
+  // A foregrounded PWA otherwise never re-checks for a new service worker, so a
+  // deploy wouldn't show until the user fully quits and relaunches. Ask the SW
+  // to update when the app regains focus/visibility and every 60s; if a newer
+  // SW is found it skipWaiting + clientsClaim → the controllerchange handler
+  // above reloads to the fresh build.
+  const checkForUpdate = () => {
+    navigator.serviceWorker
+      .getRegistration()
+      .then((reg) => reg?.update())
+      .catch(() => {});
+  };
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") checkForUpdate();
+  });
+  window.addEventListener("focus", checkForUpdate);
+  setInterval(checkForUpdate, 60_000);
 }
 
 sessionStorage.removeItem(DEV_SW_RESET_KEY);
