@@ -94,12 +94,20 @@ export default function RunDay() {
     [board],
   );
 
-  // The status a card actually displays: an OOS route that's covered reflects
-  // its covering truck's status. Sorting by this (not the route truck's own
-  // "oos") keeps covered-dirty trucks grouped with the dirty trucks at the top.
+  // The status a card actually displays, used for sorting so the order matches
+  // the visible badge:
+  //  - an OOS route that's covered reflects its covering truck's status, and
+  //  - an "off" truck that physically came back dirty/unloaded shows that
+  //    underlying badge (a dirty truck still needs unloading even if it's off
+  //    the next load day), so sort it by that — keeping dirty trucks at the top.
   function displayStatusFor(t: TruckWithState, dayNum: number, holiday: boolean): TruckStatus {
     const cov = t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
-    return effectiveStatus(cov ?? t, dayNum, holiday);
+    const base = cov ?? t;
+    const eff = effectiveStatus(base, dayNum, holiday);
+    if (eff === "off" && (base.state?.status === "dirty" || base.state?.status === "unloaded")) {
+      return base.state.status as TruckStatus;
+    }
+    return eff;
   }
 
   const unloadTrucks = useMemo(
