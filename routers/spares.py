@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import AppSetting, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, User
+from models import AppSetting, RouteSwapLog, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, User
 from notification_service import (
     coverage_assigned_notification,
     coverage_removed_notification,
@@ -112,6 +112,14 @@ def assign_spare(
             [payload.spare_truck_number, payload.covering_route_truck],
         ),
     )
+
+    # Record in the append-only swap log (route_truck → load_on_truck) so the
+    # coverage is "known" for the next day's unload view, same as route swaps.
+    db.add(RouteSwapLog(
+        run_date=payload.run_date,
+        route_truck=payload.covering_route_truck,
+        load_on_truck=payload.spare_truck_number,
+    ))
 
     db.commit()
     db.refresh(row)

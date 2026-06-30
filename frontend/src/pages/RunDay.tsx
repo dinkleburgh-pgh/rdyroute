@@ -225,6 +225,23 @@ export default function RunDay() {
     return { date: latestDate, items };
   }, [swapLog, runDate]);
 
+  // Lookups so the Unload grid can show each route's covering truck from the
+  // PREVIOUS load day (what's being unloaded today was covered then).
+  const boardByNum = useMemo(() => new Map(board.map((t) => [t.truck_number, t])), [board]);
+  const prevCoverByRoute = useMemo(
+    () => new Map(prevCoverage.items.map((c) => [c.route, c.loadOn])),
+    [prevCoverage],
+  );
+  // Covering spares from the previous load day — rendered in place of the route
+  // they covered, so drop their standalone card from the unload grid.
+  const prevSpareCoverNums = useMemo(() => {
+    const s = new Set<number>();
+    for (const c of prevCoverage.items) {
+      if (boardByNum.get(c.loadOn)?.truck_type === "Spare") s.add(c.loadOn);
+    }
+    return s;
+  }, [prevCoverage, boardByNum]);
+
   return (
     <>
       {/* Page header — matches PageHeader component style */}
@@ -368,14 +385,23 @@ export default function RunDay() {
         )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
-            // Spare covering trucks are rendered in place of the OOS route they
-            // cover (below), so drop their standalone card here.
-            .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
+            // Spare covering trucks are rendered in place of the route they
+            // cover (below), so drop their standalone card here — both today's
+            // covering spares and the previous load day's covering spares.
+            .filter((t) =>
+              !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)) &&
+              !prevSpareCoverNums.has(t.truck_number),
+            )
             .map((t) => {
-              const coveringTruck =
+              // Unload reflects the PREVIOUS load day: prefer who covered this
+              // route then (if known), falling back to today's coverage.
+              const prevCoverNum = prevCoverByRoute.get(t.truck_number);
+              const prevCover = prevCoverNum != null ? boardByNum.get(prevCoverNum) : undefined;
+              const todayCover =
                 t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
-              // Once a spare covers an OOS route, show the covering spare's card
-              // (labeled "Covers #route") instead of the empty OOS truck.
+              const coveringTruck = prevCover ?? todayCover;
+              // Once a spare covers a route, show the covering spare's card
+              // (labeled "Covers #route") instead of the empty route truck.
               const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
               const displayTruck = spareCover ?? t;
               const ownRaw = effectiveStatus(displayTruck, unloadsDay, holidayUnload);
