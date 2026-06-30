@@ -88,17 +88,27 @@ export default function RunDayWizard({
   const deleteSwap = useDeleteRouteSwap();
   const returnSpare = useDeleteSpare();
 
-  // Pull coverage already set via EITHER mechanism: Setup Day route swaps
-  // (route_swaps) AND the Route Swaps modal's spare assignments. The board
-  // treats both as coverage, so the wizard must show/update both.
+  // Active coverages = exactly what the board shows as covered right now, via
+  // EITHER mechanism: Setup Day route swaps (route_swap_route) or the Route
+  // Swaps modal's spare assignments (oos_spare_route). Deriving from the board
+  // (instead of the two raw tables) guarantees the list matches the Day
+  // Overview and dedupes routes covered by both mechanisms. Each row is matched
+  // back to its underlying record(s) so removal clears the right source.
   const coverages = useMemo(
-    () => [
-      ...swaps.map((s) => ({ key: `swap-${s.id}`, id: s.id, route_truck: s.route_truck, load_on_truck: s.load_on_truck, source: "swap" as const })),
-      ...spareAssignments
-        .filter((a) => !a.returned)
-        .map((a) => ({ key: `spare-${a.id}`, id: a.id, route_truck: a.covering_route_truck, load_on_truck: a.spare_truck_number, source: "spare" as const })),
-    ],
-    [swaps, spareAssignments],
+    () =>
+      board
+        .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
+        .map((t) => {
+          const route = (t.route_swap_route ?? t.state?.oos_spare_route) as number;
+          const load = t.truck_number;
+          const swap = swaps.find((s) => s.route_truck === route && s.load_on_truck === load);
+          const spare = spareAssignments.find(
+            (a) => !a.returned && a.covering_route_truck === route && a.spare_truck_number === load,
+          );
+          return { key: `cov-${route}-${load}`, route_truck: route, load_on_truck: load, swapId: swap?.id, spareId: spare?.id };
+        })
+        .sort((a, b) => a.route_truck - b.route_truck),
+    [board, swaps, spareAssignments],
   );
   const coveredRouteSet = useMemo(() => new Set(coverages.map((c) => c.route_truck)), [coverages]);
   const [swapRoute, setSwapRoute] = useState<string>("");
@@ -187,7 +197,12 @@ export default function RunDayWizard({
 
   async function saveAbsentAndAdvance() {
     const tasks: Promise<unknown>[] = [];
-    // Absent trucks: flag needs_checked (don't touch status — they may be unloaded, spare, etc.)
+    // Absent trucks: flag needs_checked and park them in a non-dirty status.
+    // An absent truck isn't here to unload, so it must NOT land in the dirty
+    // pile — give spares "spare" and route trucks "unloaded", and let the
+    // Needs Checked badge prompt a manual verify when it actually arrives.
+    // (Passing an explicit status also stops the backend defaulting a freshly
+    // created state row — e.g. an unseeded spare — to "dirty".)
     for (const num of absentSelected) {
       const truck = specialTrucks.find((t) => t.truck_number === num);
       if (!truck) continue;
@@ -195,6 +210,7 @@ export default function RunDayWizard({
         truck_number: num,
         run_date: runDate,
         needs_checked: true,
+        status: truck.truck_type === "Spare" ? "spare" : "unloaded",
         wearers: truck.state?.wearers ?? 0,
         state_source: "wizard",
       }));
@@ -520,13 +536,13 @@ export default function RunDayWizard({
                         Load On <span className="text-blue-300">#{c.load_on_truck}</span>
                       </span>
                       <button
-                        className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-slate-700"
-                        disabled={deleteSwap.isPending || returnSpare.isPending}
-                        onClick={() =>
-                          c.source === "swap"
-                            ? deleteSwap.mutate({ id: c.id, runDate, alsoReciprocal: false })
-                            : returnSpare.mutate(c.id)
-                        }
+                        className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-slate-700 disabled:opacity-40"
+                        disabled={deleteSwap.isPending || returnSpare.isPending || (c.swapId == null && c.spareId == null)}
+                        onClick={() => {
+                          // Clear coverage from whichever mechanism(s) set it.
+                          if (c.swapId != null) deleteSwap.mutate({ id: c.swapId, runDate, alsoReciprocal: false });
+                          if (c.spareId != null) returnSpare.mutate(c.spareId);
+                        }}
                       >✕</button>
                     </div>
                   ))}
