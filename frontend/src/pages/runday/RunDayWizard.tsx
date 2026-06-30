@@ -88,28 +88,29 @@ export default function RunDayWizard({
   const deleteSwap = useDeleteRouteSwap();
   const returnSpare = useDeleteSpare();
 
-  // Active coverages, pulled straight from the same raw tables the Route Swaps
-  // modal reads — the non-returned spare assignments (the modal's source) plus
-  // the Setup Day route_swaps. Deriving from the tables (not the board's
-  // resolved coverage fields) guarantees the wizard lists exactly what the
-  // modal does. Rows are deduped by route→load and keep BOTH underlying ids so
-  // removal clears whichever mechanism(s) set the coverage.
+  // Active coverages, unioned across EVERY source so none are missed:
+  //  - the board's resolved coverage for the current run day (route_swap_route /
+  //    oos_spare_route) — reflects recurring rules and the day rollover,
+  //  - the raw route_swaps (Setup Day mechanism), and
+  //  - the non-returned spare_assignments (the Route Swaps modal's source).
+  // Deduped by route→load; each row keeps whatever underlying ids exist so the
+  // ✕ clears the right record(s). A board-only coverage with no raw id can't be
+  // removed here, but it still shows so the list is never short.
   const coverages = useMemo(() => {
     const out: { key: string; route_truck: number; load_on_truck: number; swapId?: number; spareId?: number }[] = [];
-    const find = (route: number, load: number) =>
-      out.find((o) => o.route_truck === route && o.load_on_truck === load);
-    for (const s of swaps) {
-      const ex = find(s.route_truck, s.load_on_truck);
-      if (ex) ex.swapId = s.id;
-      else out.push({ key: `cov-${s.route_truck}-${s.load_on_truck}`, route_truck: s.route_truck, load_on_truck: s.load_on_truck, swapId: s.id });
+    const upsert = (route: number, load: number, patch: { swapId?: number; spareId?: number }) => {
+      const ex = out.find((o) => o.route_truck === route && o.load_on_truck === load);
+      if (ex) Object.assign(ex, patch);
+      else out.push({ key: `cov-${route}-${load}`, route_truck: route, load_on_truck: load, ...patch });
+    };
+    for (const t of board) {
+      const route = t.route_swap_route ?? t.state?.oos_spare_route;
+      if (route != null) upsert(route, t.truck_number, {});
     }
-    for (const a of spareAssignments.filter((a) => !a.returned)) {
-      const ex = find(a.covering_route_truck, a.spare_truck_number);
-      if (ex) ex.spareId = a.id;
-      else out.push({ key: `cov-${a.covering_route_truck}-${a.spare_truck_number}`, route_truck: a.covering_route_truck, load_on_truck: a.spare_truck_number, spareId: a.id });
-    }
+    for (const s of swaps) upsert(s.route_truck, s.load_on_truck, { swapId: s.id });
+    for (const a of spareAssignments.filter((a) => !a.returned)) upsert(a.covering_route_truck, a.spare_truck_number, { spareId: a.id });
     return out.sort((a, b) => a.route_truck - b.route_truck);
-  }, [swaps, spareAssignments]);
+  }, [board, swaps, spareAssignments]);
   const coveredRouteSet = useMemo(() => new Set(coverages.map((c) => c.route_truck)), [coverages]);
   const [swapRoute, setSwapRoute] = useState<string>("");
   const [swapLoadOn, setSwapLoadOn] = useState<string>("");
