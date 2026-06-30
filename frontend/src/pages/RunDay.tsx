@@ -401,8 +401,10 @@ export default function RunDay() {
               // route then (if known), falling back to today's coverage.
               const prevCoverNum = prevCoverByRoute.get(t.truck_number);
               const prevCover = prevCoverNum != null ? boardByNum.get(prevCoverNum) : undefined;
-              const todayCover =
-                t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+              // A truck can be OOS via the is_oos flag while its status reads
+              // dirty/unloaded, so substitute whenever coverage exists for the
+              // route rather than gating on status === "oos".
+              const todayCover = coveringTruckMap.get(t.truck_number);
               const coveringTruck = prevCover ?? todayCover;
               // Once a spare covers a route, show the covering spare's card
               // (labeled "Covers #route") instead of the empty route truck.
@@ -521,8 +523,10 @@ export default function RunDay() {
             // cover (below), so drop their standalone card here.
             .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
             .map((t) => {
-              const coveringTruck =
-                t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+              // A truck can be OOS via the is_oos flag while its status reads
+              // dirty/unloaded, so substitute whenever coverage exists for the
+              // route rather than gating on status === "oos".
+              const coveringTruck = coveringTruckMap.get(t.truck_number);
               // Once a spare covers an OOS route, show the covering spare's card
               // (labeled "Covers #route") instead of the empty OOS truck.
               const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
