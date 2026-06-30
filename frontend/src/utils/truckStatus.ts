@@ -82,10 +82,6 @@ export function countLoaded(
   unloadsDayNum: number,
   holidayUnload: boolean,
 ): number {
-  const statusByNumber = new Map<number, TruckStatus>(
-    board.map((t) => [t.truck_number, effectiveStatus(t, loadDayNum, holidayLoad)] as [number, TruckStatus]),
-  );
-
   // Build the set of route numbers whose load is being handled by another truck
   // (same logic as buildOperationalDayContext) so we can exclude them below.
   const routeTruckByNumber = new Map<number, TruckWithState>();
@@ -114,8 +110,13 @@ export function countLoaded(
     }
     const coveredRoute = getCoverageRouteNumber(t);
     if (coveredRoute == null) return false;
-    const coveredStatus = statusByNumber.get(coveredRoute);
-    return coveredStatus === "oos";
+    const coveredTruck = routeTruckByNumber.get(coveredRoute);
+    if (coveredTruck == null) return false;
+    // Mirror buildOperationalDayContext (the denominator): a loaded covering
+    // spare counts when its covered route runs today. Don't require the covered
+    // route to read status "oos" — an is_oos route can show "dirty", which would
+    // hold the numerator below the denominator so the bar never reaches 100%.
+    return holidayLoad || !isScheduledOff(coveredTruck, loadDayNum);
   }).length;
 }
 
