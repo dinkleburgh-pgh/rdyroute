@@ -12,6 +12,7 @@ import {
   useUnloadsDayOverride,
   useTruckNotes,
   useRouteSwapLog,
+  useSettings,
 } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
@@ -79,6 +80,9 @@ export default function RunDay() {
   const setDailyNotesMutation = useSetDailyNotes();
   const [notesEditing, setNotesEditing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
+  // Shift Notes can be toggled off in Operations settings (default on).
+  const { data: settings = [] } = useSettings();
+  const shiftNotesEnabled = settings.find((s) => s.key === "shift_notes_enabled")?.value !== false;
 
   // Map from route truck number → the truck covering its route today.
   // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
@@ -263,8 +267,8 @@ export default function RunDay() {
       </div>
       <div className="space-y-6 p-4 md:p-6">
 
-      {/* Shift Handoff Notes */}
-      {(dailyNotes || canEditNotes) && (
+      {/* Shift Handoff Notes — toggleable in Operations settings */}
+      {shiftNotesEnabled && (dailyNotes || canEditNotes) && (
         <div className={clsx(
           "rounded-xl border px-4 py-3",
           dailyNotes

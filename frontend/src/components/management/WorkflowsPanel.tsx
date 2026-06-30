@@ -18,6 +18,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
+      shift_notes_enabled: asBool(map.get("shift_notes_enabled"), true),
       calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), true),
       calendar_fab_enabled: asBool(map.get("calendar_fab_enabled"), false),
       force_unloaded_on_new_day: asBool(map.get("force_unloaded_on_new_day"), false),
@@ -149,6 +150,19 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, note_cards_enabled: e.target.checked })}
           />
           Enable Note Cards
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Shift Notes"
+        hint="Show the Shift Notes handoff panel at the top of the Day Overview."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.shift_notes_enabled}
+            onChange={(e) => setForm({ ...form, shift_notes_enabled: e.target.checked })}
+          />
+          Show Shift Notes on Day Overview
         </label>
       </FieldRow>
       <FieldRow
