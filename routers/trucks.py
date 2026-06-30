@@ -96,6 +96,17 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
         else None
     )
 
+    # Carry the run mode forward: a new day inherits the previous run day's
+    # holiday Load/Unload mode, so once Setup Day step 1 sets it the choice
+    # persists day to day until it's explicitly changed again.
+    if prev_run_date is not None:
+        for base in ("holiday_load", "holiday_unload", "holiday_mode"):
+            cur_key = f"{base}_{run_date}"
+            if db.get(AppSetting, cur_key) is None:
+                prev_setting = db.get(AppSetting, f"{base}_{prev_run_date}")
+                if prev_setting is not None:
+                    db.add(AppSetting(key=cur_key, value=prev_setting.value))
+
     prev_states_by_num: dict[int, TruckState] = {}
     prev_loaded_on = set[int]()
     prev_spares_used = set[int]()
