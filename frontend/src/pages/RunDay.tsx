@@ -210,12 +210,27 @@ export default function RunDay() {
       .sort((a, b) => a.routeNum - b.routeNum);
   }, [board, coveringTruckMap, loadDay, holidayLoad]);
 
+  // The previous OPERATING day, stepping over the weekend — Monday's unload is
+  // Friday's load, so the prior run day is the most recent weekday before today.
+  const prevRunDate = useMemo(() => {
+    const d = new Date(`${runDate}T12:00:00`);
+    do {
+      d.setDate(d.getDate() - 1);
+    } while (d.getDay() === 0 || d.getDay() === 6); // skip Sun(0)/Sat(6)
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, [runDate]);
+
   // Previous load-day coverage (shown with the Unload section as a reminder):
   // the trucks being unloaded today were loaded on the prior run day, so surface
-  // who covered which route then, from the route-swap log's most recent prior date.
-  const { data: swapLog = [] } = useRouteSwapLog(30);
+  // who covered which route then, from the route-swap log — pulling the most
+  // recent coverage on or before that previous operating day (so it follows the
+  // ship day across weekends and ignores any stray weekend-dated entries).
+  const { data: swapLog = [] } = useRouteSwapLog(60);
   const prevCoverage = useMemo(() => {
-    const prior = swapLog.filter((e) => e.run_date < runDate);
+    const prior = swapLog.filter((e) => e.run_date <= prevRunDate);
     if (prior.length === 0) return { date: null as string | null, items: [] as { route: number; loadOn: number }[] };
     const latestDate = prior.reduce((m, e) => (e.run_date > m ? e.run_date : m), prior[0].run_date);
     const byRoute = new Map<number, number>();
@@ -227,7 +242,7 @@ export default function RunDay() {
       .map(([route, loadOn]) => ({ route, loadOn }))
       .sort((a, b) => a.route - b.route);
     return { date: latestDate, items };
-  }, [swapLog, runDate]);
+  }, [swapLog, prevRunDate]);
 
   // Lookups so the Unload grid can show each route's covering truck from the
   // PREVIOUS load day (what's being unloaded today was covered then).
