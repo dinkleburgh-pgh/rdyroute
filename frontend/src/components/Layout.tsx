@@ -20,7 +20,6 @@ import {
   buildRouteStatusCounts,
   countLoaded,
   countUnloadedFromContext,
-  effectiveWorkflowStatus,
 } from "../utils/truckStatus";
 import { STATUS_LABELS } from "../constants/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
@@ -220,14 +219,6 @@ export default function Layout() {
   );
 
   // Non-spare unloaded count for the sidebar — spares are excluded from this bucket.
-  const unloadedNonSpare = useMemo(
-    () => (board ?? []).filter((t) => {
-      if (t.truck_type === "Spare") return false;
-      return effectiveWorkflowStatus(t, loadDayNum, holidayLoad, unloadsDay, holidayUnload) === "unloaded";
-    }).length,
-    [board, loadDayNum, holidayLoad, unloadsDay, holidayUnload],
-  );
-
   // Load progress mirrors the Day Overview: denominator = route trucks scheduled
   // for load; a route counts as done when the route truck is loaded OR its covering spare is.
   const loadContext = useMemo(
@@ -453,8 +444,6 @@ export default function Layout() {
                     ? inProgressTruck
                       ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{inProgressTruck.truck_number}</span>
                       : <span className="text-ink-faint">None</span>
-                    : s === "unloaded"
-                    ? unloadedNonSpare
                     : counts[s]}
                 </span>
               </button>
