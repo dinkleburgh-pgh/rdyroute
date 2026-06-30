@@ -16,6 +16,7 @@ export default function TruckCard({
   status,
   done,
   coveringSpare,
+  coversRoute,
   dayNum,
   isExtraDay,
   notes,
@@ -25,6 +26,8 @@ export default function TruckCard({
   status: TruckStatus;
   done: boolean;
   coveringSpare?: TruckWithState;
+  /** When set, this card IS the covering truck — show which route it covers. */
+  coversRoute?: number;
   dayNum?: number;
   isExtraDay?: boolean;
   notes?: TruckNote[];
@@ -84,7 +87,11 @@ export default function TruckCard({
     </span>
   ) : null;
 
-  const coverageBadge = coveringSpare ? (
+  const coverageBadge = coversRoute != null ? (
+    <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
+      Covers #{coversRoute}
+    </span>
+  ) : coveringSpare ? (
     <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
       Cov. #{coveringSpare.truck_number}
     </span>
