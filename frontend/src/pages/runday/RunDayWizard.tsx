@@ -3,7 +3,7 @@
  *
  * Steps: Run Mode → Dust Garments → Route Swaps → Trucks Not Here → Daily Notes.
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import clsx from "clsx";
 import {
   useCreateRouteSwap,
@@ -13,6 +13,8 @@ import {
   useHolidayMode,
   useHolidayUnload,
   useRouteSwaps,
+  useSpareAssignments,
+  useDeleteSpare,
   useSetDailyNotes,
   useSetHolidayLoad,
   useSetHolidayMode,
@@ -81,8 +83,24 @@ export default function RunDayWizard({
   );
 
   const { data: swaps = [] } = useRouteSwaps(runDate);
+  const { data: spareAssignments = [] } = useSpareAssignments(runDate);
   const createSwap = useCreateRouteSwap();
   const deleteSwap = useDeleteRouteSwap();
+  const returnSpare = useDeleteSpare();
+
+  // Pull coverage already set via EITHER mechanism: Setup Day route swaps
+  // (route_swaps) AND the Route Swaps modal's spare assignments. The board
+  // treats both as coverage, so the wizard must show/update both.
+  const coverages = useMemo(
+    () => [
+      ...swaps.map((s) => ({ key: `swap-${s.id}`, id: s.id, route_truck: s.route_truck, load_on_truck: s.load_on_truck, source: "swap" as const })),
+      ...spareAssignments
+        .filter((a) => !a.returned)
+        .map((a) => ({ key: `spare-${a.id}`, id: a.id, route_truck: a.covering_route_truck, load_on_truck: a.spare_truck_number, source: "spare" as const })),
+    ],
+    [swaps, spareAssignments],
+  );
+  const coveredRouteSet = useMemo(() => new Set(coverages.map((c) => c.route_truck)), [coverages]);
   const [swapRoute, setSwapRoute] = useState<string>("");
   const [swapLoadOn, setSwapLoadOn] = useState<string>("");
   const [swapError, setSwapError] = useState<string | null>(null);
@@ -395,8 +413,9 @@ export default function RunDayWizard({
 
           {/* Step 3: Route Swaps */}
           {step === 3 && (() => {
-            // OOS trucks that don't yet have a swap assigned
-            const swappedRoutes = new Set(swaps.map((s) => s.route_truck));
+            // OOS trucks that don't yet have a swap assigned (covered via either
+            // a route swap or a spare assignment).
+            const swappedRoutes = coveredRouteSet;
             const unswappedOos = board.filter(
               (t) => t.truck_type !== "Spare" && t.state?.status === "oos" && !swappedRoutes.has(t.truck_number),
             ).sort((a, b) => a.truck_number - b.truck_number);
@@ -436,7 +455,7 @@ export default function RunDayWizard({
                           const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                           const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
                           const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "off");
-                          const swappedRouteSet = new Set(swaps.map((s) => s.route_truck));
+                          const swappedRouteSet = coveredRouteSet;
                           const oosRouteless = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(x.truck_number) && x.truck_number !== t.truck_number);
                           const otherTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) !== "off" && effectiveStatus(x, loadDay, holidayLoad) !== "oos");
                           return (
@@ -485,23 +504,27 @@ export default function RunDayWizard({
                 </div>
               )}
 
-              {swaps.length > 0 && (
+              {coverages.length > 0 && (
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
                     <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Active Route Swaps</p>
-                    <span className="rounded-full bg-blue-800/60 px-2 py-0.5 text-[10px] font-bold text-blue-300">{swaps.length}</span>
+                    <span className="rounded-full bg-blue-800/60 px-2 py-0.5 text-[10px] font-bold text-blue-300">{coverages.length}</span>
                   </div>
-                  {swaps.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-blue-900/50 bg-blue-950/20 px-3 py-2">
+                  {coverages.map((c) => (
+                    <div key={c.key} className="flex items-center justify-between gap-2 rounded-md border border-blue-900/50 bg-blue-950/20 px-3 py-2">
                       <span className="text-sm font-bold text-slate-200">
-                        Route <span className="text-red-400">#{s.route_truck}</span>
+                        Route <span className="text-red-400">#{c.route_truck}</span>
                         <span className="mx-1 text-slate-500">→</span>
-                        Load On <span className="text-blue-300">#{s.load_on_truck}</span>
+                        Load On <span className="text-blue-300">#{c.load_on_truck}</span>
                       </span>
                       <button
                         className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-slate-700"
-                        disabled={deleteSwap.isPending}
-                        onClick={() => deleteSwap.mutate({ id: s.id, runDate, alsoReciprocal: false })}
+                        disabled={deleteSwap.isPending || returnSpare.isPending}
+                        onClick={() =>
+                          c.source === "swap"
+                            ? deleteSwap.mutate({ id: c.id, runDate, alsoReciprocal: false })
+                            : returnSpare.mutate(c.id)
+                        }
                       >✕</button>
                     </div>
                   ))}
@@ -549,7 +572,7 @@ export default function RunDayWizard({
                         const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
                         const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off");
                         // OOS trucks whose route is already covered are routeless and available
-                        const swappedRouteSet = new Set(swaps.map((s) => s.route_truck));
+                        const swappedRouteSet = coveredRouteSet;
                         const oosRouteless = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(t.truck_number));
                         const oosUncovered = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swappedRouteSet.has(t.truck_number));
                         const otherTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
