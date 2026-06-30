@@ -278,8 +278,10 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             seeded_truck_numbers,
         ),
     )
-    # Auto-apply recurring route-swap rules for this load day (once per run-date).
-    from routers.spares import apply_recurring_swaps
+    # Carry forward coverage for trucks still OOS, then auto-apply recurring
+    # route-swap rules for this load day (both once per run-date, idempotent).
+    from routers.spares import apply_recurring_swaps, carry_forward_oos_coverage
+    carry_forward_oos_coverage(db, run_date, prev_run_date)
     apply_recurring_swaps(db, run_date, load_day_num)
     db.commit()
 

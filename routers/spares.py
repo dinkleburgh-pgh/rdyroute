@@ -134,6 +134,114 @@ def assign_spare(
     return row
 
 
+def carry_forward_oos_coverage(
+    db: Session, run_date: date, prev_run_date: date | None
+) -> list[SpareAssignment]:
+    """Carry active OOS coverage forward into a new run day.
+
+    For every non-returned spare assignment on the previous run date whose
+    covered route truck is STILL out of service (``Truck.is_oos``), re-create
+    the assignment for today, so coverage persists until the truck is taken off
+    OOS. Mirrors the core of ``assign_spare`` (create row + activate covering
+    truck) without validation/notifications.
+
+    Idempotent: never clobbers an assignment already present for the same route
+    or covering truck today, so manual swaps and recurring rules are preserved.
+    Called once per run-date from ``_ensure_day_initialized`` (before
+    ``apply_recurring_swaps``); the caller commits.
+    """
+    if prev_run_date is None:
+        return []
+
+    prev = db.scalars(
+        select(SpareAssignment).where(
+            SpareAssignment.run_date == prev_run_date,
+            SpareAssignment.returned == False,
+        )
+    ).all()
+    if not prev:
+        return []
+
+    # The caller seeds today's TruckState rows with autoflush off; flush so the
+    # lookups below see them (avoids duplicate (run_date, truck) inserts).
+    db.flush()
+
+    oos_route_nums = {
+        n for (n,) in db.execute(
+            select(Truck.truck_number).where(Truck.is_active == True, Truck.is_oos == True)
+        ).all()
+    }
+    active_truck_numbers = {
+        n for (n,) in db.execute(select(Truck.truck_number).where(Truck.is_active == True)).all()
+    }
+    existing = db.scalars(
+        select(SpareAssignment).where(
+            SpareAssignment.run_date == run_date,
+            SpareAssignment.returned == False,
+        )
+    ).all()
+    covered_routes = {a.covering_route_truck for a in existing}
+    used_spares = {a.spare_truck_number for a in existing}
+
+    applied: list[SpareAssignment] = []
+    for pa in prev:
+        route_truck = pa.covering_route_truck
+        load_on_truck = pa.spare_truck_number
+        if route_truck not in oos_route_nums:
+            continue
+        if route_truck in covered_routes or load_on_truck in used_spares:
+            continue
+        if route_truck not in active_truck_numbers or load_on_truck not in active_truck_numbers:
+            continue
+        row = SpareAssignment(
+            run_date=run_date,
+            spare_truck_number=load_on_truck,
+            covering_route_truck=route_truck,
+        )
+        db.add(row)
+        st = db.scalars(
+            select(TruckState).where(
+                TruckState.truck_number == load_on_truck,
+                TruckState.run_date == run_date,
+            )
+        ).first()
+        if st is None:
+            db.add(TruckState(
+                truck_number=load_on_truck,
+                run_date=run_date,
+                status=TruckStatus.dirty,
+                wearers=0,
+                oos_spare_route=route_truck,
+                state_source=TruckStateSource.workflow.value,
+            ))
+        else:
+            if st.status in (TruckStatus.spare, TruckStatus.dirty):
+                st.status = TruckStatus.dirty
+            st.oos_spare_route = route_truck
+            st.state_source = TruckStateSource.workflow.value
+        covered_routes.add(route_truck)
+        used_spares.add(load_on_truck)
+        applied.append(row)
+
+    if applied:
+        db.flush()
+        append_activity_event(
+            db,
+            actor_type="system",
+            event_family="coverage",
+            event_type="oos_coverage_carried_forward",
+            run_date=run_date,
+            summary=f"Carried forward {len(applied)} OOS coverage assignment(s) from {prev_run_date}",
+            diff_json={
+                "swaps": [
+                    {"covering_route_truck": a.covering_route_truck, "spare_truck_number": a.spare_truck_number}
+                    for a in applied
+                ],
+            },
+        )
+    return applied
+
+
 def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int) -> list[SpareAssignment]:
     """Auto-apply recurring coverage rules whose day matches the load day.
 
