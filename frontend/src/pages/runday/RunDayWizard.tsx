@@ -203,15 +203,17 @@ export default function RunDayWizard({
     // Non-absent returning trucks: auto-set to unloaded.
     // These trucks were off yesterday and are back today — they were already
     // loaded/pushed the day before, so they return in an unloaded state.
+    // Guard: don't downgrade a truck that's already further along this shift —
+    // re-running Setup Day must not reset in-progress/loaded work back to unloaded.
     for (const t of returningTrucks) {
-      if (!absentSelected.has(t.truck_number)) {
-        tasks.push(upsert.mutateAsync({
-          truck_number: t.truck_number,
-          run_date: runDate,
-          status: "unloaded",
-          state_source: "wizard",
-        }));
-      }
+      if (absentSelected.has(t.truck_number)) continue;
+      if (t.state?.status === "in_progress" || t.state?.status === "loaded") continue;
+      tasks.push(upsert.mutateAsync({
+        truck_number: t.truck_number,
+        run_date: runDate,
+        status: "unloaded",
+        state_source: "wizard",
+      }));
     }
 
     await Promise.all(tasks);
