@@ -88,28 +88,28 @@ export default function RunDayWizard({
   const deleteSwap = useDeleteRouteSwap();
   const returnSpare = useDeleteSpare();
 
-  // Active coverages = exactly what the board shows as covered right now, via
-  // EITHER mechanism: Setup Day route swaps (route_swap_route) or the Route
-  // Swaps modal's spare assignments (oos_spare_route). Deriving from the board
-  // (instead of the two raw tables) guarantees the list matches the Day
-  // Overview and dedupes routes covered by both mechanisms. Each row is matched
-  // back to its underlying record(s) so removal clears the right source.
-  const coverages = useMemo(
-    () =>
-      board
-        .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
-        .map((t) => {
-          const route = (t.route_swap_route ?? t.state?.oos_spare_route) as number;
-          const load = t.truck_number;
-          const swap = swaps.find((s) => s.route_truck === route && s.load_on_truck === load);
-          const spare = spareAssignments.find(
-            (a) => !a.returned && a.covering_route_truck === route && a.spare_truck_number === load,
-          );
-          return { key: `cov-${route}-${load}`, route_truck: route, load_on_truck: load, swapId: swap?.id, spareId: spare?.id };
-        })
-        .sort((a, b) => a.route_truck - b.route_truck),
-    [board, swaps, spareAssignments],
-  );
+  // Active coverages, pulled straight from the same raw tables the Route Swaps
+  // modal reads — the non-returned spare assignments (the modal's source) plus
+  // the Setup Day route_swaps. Deriving from the tables (not the board's
+  // resolved coverage fields) guarantees the wizard lists exactly what the
+  // modal does. Rows are deduped by route→load and keep BOTH underlying ids so
+  // removal clears whichever mechanism(s) set the coverage.
+  const coverages = useMemo(() => {
+    const out: { key: string; route_truck: number; load_on_truck: number; swapId?: number; spareId?: number }[] = [];
+    const find = (route: number, load: number) =>
+      out.find((o) => o.route_truck === route && o.load_on_truck === load);
+    for (const s of swaps) {
+      const ex = find(s.route_truck, s.load_on_truck);
+      if (ex) ex.swapId = s.id;
+      else out.push({ key: `cov-${s.route_truck}-${s.load_on_truck}`, route_truck: s.route_truck, load_on_truck: s.load_on_truck, swapId: s.id });
+    }
+    for (const a of spareAssignments.filter((a) => !a.returned)) {
+      const ex = find(a.covering_route_truck, a.spare_truck_number);
+      if (ex) ex.spareId = a.id;
+      else out.push({ key: `cov-${a.covering_route_truck}-${a.spare_truck_number}`, route_truck: a.covering_route_truck, load_on_truck: a.spare_truck_number, spareId: a.id });
+    }
+    return out.sort((a, b) => a.route_truck - b.route_truck);
+  }, [swaps, spareAssignments]);
   const coveredRouteSet = useMemo(() => new Set(coverages.map((c) => c.route_truck)), [coverages]);
   const [swapRoute, setSwapRoute] = useState<string>("");
   const [swapLoadOn, setSwapLoadOn] = useState<string>("");
