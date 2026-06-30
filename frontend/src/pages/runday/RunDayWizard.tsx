@@ -435,8 +435,11 @@ export default function RunDayWizard({
             // OOS trucks that don't yet have a swap assigned (covered via either
             // a route swap or a spare assignment).
             const swappedRoutes = coveredRouteSet;
+            // Match the Fleet board's "Needs assignment" detection exactly: a
+            // route truck is OOS via the is_oos FLAG (its status may read
+            // dirty/unloaded), not only when status is literally "oos".
             const unswappedOos = board.filter(
-              (t) => t.truck_type !== "Spare" && t.state?.status === "oos" && !swappedRoutes.has(t.truck_number),
+              (t) => t.truck_type !== "Spare" && t.is_oos && !swappedRoutes.has(t.truck_number),
             ).sort((a, b) => a.truck_number - b.truck_number);
             return (
             <div className="space-y-3 max-h-[70vh] overflow-y-auto">
