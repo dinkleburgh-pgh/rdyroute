@@ -694,7 +694,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             // Reverse lookup: this truck's own route is being covered by another
             // truck (route swap / OOS). Show it so the covered card isn't blank.
             const coveredBy = coverageRoute == null ? coveringTruckByRoute.get(truck.truck_number) : undefined;
-            const showCoveredByBadge = !fleetMode && coveredBy != null;
+            // In the OOS filter the "Covered by …" assignment row already shows
+            // the covering truck, so suppress the duplicate ← Cov. badge there.
+            const showCoveredByBadge = !fleetMode && coveredBy != null && filter !== "oos";
 
             return (
               <AnimateCard
@@ -1022,10 +1024,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         className="mt-1 border-t border-slate-700 pt-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
+                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                             <span className="text-xs text-slate-400">Covered by</span>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-3 py-1 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
+                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2.5 py-0.5 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
                               #{cov.num}
                             </span>
                             {cov.status && (
@@ -1035,7 +1037,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                             )}
                           </div>
                           <button
-                            className="rounded px-2 py-1 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                            className="ml-auto shrink-0 rounded px-2 py-1 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
                             disabled={returnSpare.isPending || deleteSwap.isPending}
                             onClick={() => {
                               if (spareAsgn) returnSpare.mutate(spareAsgn.id);
