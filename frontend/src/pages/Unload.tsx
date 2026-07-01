@@ -90,11 +90,21 @@ export default function Unload() {
     () => allTrucks.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
     [allTrucks, recentlyUnloaded],
   );
-  // Unloaded today reflects status immediately (including trucks just marked
-  // this session) so the card appears the moment Mark Unloaded is clicked. The
-  // truck also remains pinned in the Dirty section with Undo via recentlyUnloaded.
+  // Unloaded today = every truck that went dirty → unloaded this shift, i.e.
+  // status "unloaded" AND anything further along that lifecycle ("in_progress"
+  // /"loaded" — already loading/loaded, but was unloaded to get there). Without
+  // in_progress/loaded here, a truck would drop OUT of this list the moment it
+  // starts loading, making the card read like "what's still waiting" instead of
+  // "everyone unloaded today." Reflects status immediately (including trucks
+  // just marked this session) so the card appears the moment Mark Unloaded is
+  // clicked; the truck also stays pinned in the Dirty section with Undo via
+  // recentlyUnloaded.
   const unloaded = useMemo(
-    () => allTrucks.filter((t) => t.state?.status === "unloaded"),
+    () =>
+      allTrucks.filter((t) => {
+        const s = t.state?.status;
+        return s === "unloaded" || s === "in_progress" || s === "loaded";
+      }),
     [allTrucks],
   );
   const needsChecked = useMemo(
