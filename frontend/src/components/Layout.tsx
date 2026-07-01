@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayLoad, useHolidayUnload, useSettings, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import ToolFab from "./ToolFab";
@@ -16,6 +16,7 @@ import { useToast } from "../contexts/ToastContext";
 import { OfflineIndicator } from "./OfflineIndicator";
 import type { AuthRole, TruckStatus, TruckWithState } from "../types";
 import {
+  buildHistoricalCoverageFallback,
   buildOperationalDayContext,
   buildRouteStatusCounts,
   countLoaded,
@@ -155,6 +156,7 @@ export default function Layout() {
   const nav = useNavigate();
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
+  const { data: swapLog = [] } = useRouteSwapLog(60);
   const { data: holidayLoad = false } = useHolidayLoad(todayIso());
   const { data: holidayUnload = false } = useHolidayUnload(todayIso());
   const { data: wizardDone = false } = useWizardCompleted(todayIso());
@@ -202,9 +204,13 @@ export default function Layout() {
   const { loadDay, unloadsDay } = workdayNumbers();
   const loadDayNum = loadDay;
 
+  const historicalCoverageFallback = useMemo(
+    () => buildHistoricalCoverageFallback(board ?? [], swapLog, todayIso()),
+    [board, swapLog],
+  );
   const counts = useMemo(
-    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload),
-    [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload],
+    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload, historicalCoverageFallback),
+    [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload, historicalCoverageFallback],
   );
 
   // Hold count for nav badges — priority_hold trucks on the Unload page.

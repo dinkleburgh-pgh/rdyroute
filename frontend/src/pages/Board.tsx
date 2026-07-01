@@ -9,6 +9,7 @@ import {
   useHolidayLoad,
   useHolidayUnload,
   useReturnSpare,
+  useRouteSwapLog,
   useRouteSwaps,
   useSettings,
   useShortages,
@@ -23,7 +24,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, recordSwapHistory } from "../utils/truckStatus";
+import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, recordSwapHistory } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -82,6 +83,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const { data, isLoading, error } = useBoard(runDate);
   const { data: spareAssignments = [] } = useSpareAssignments(runDate, false);
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
+  const { data: swapLog = [] } = useRouteSwapLog(60);
   const { data: settings } = useSettings();
   const upsert = useUpsertTruckState();
   const updateTruck = useUpdateTruck();
@@ -205,8 +207,24 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         });
       }
     }
+    // Read-only fallback: a route truck that's STILL is_oos but has no live
+    // assignment today (e.g. nobody has re-confirmed the swap yet this shift)
+    // is still represented by whoever covered it most recently — it didn't
+    // suddenly become dirty just because today's coverage record lapsed. Never
+    // writes a new assignment; only fills the display gap until the swap is
+    // re-confirmed or the truck is returned to service. Shared with the
+    // sidebar's Live Status counts so the two always agree.
+    const fallback = buildHistoricalCoverageFallback(data ?? [], swapLog, runDate);
+    for (const [route, truckNum] of fallback) {
+      if (m.has(route)) continue;
+      const st = (data ?? []).find((d) => d.truck_number === truckNum);
+      m.set(route, {
+        num: truckNum,
+        status: st ? effectiveStatus(st, runDayNum, holidayLoad) : undefined,
+      });
+    }
     return m;
-  }, [spareAssignments, routeSwaps, data, runDayNum, holidayLoad]);
+  }, [spareAssignments, routeSwaps, swapLog, data, runDate, runDayNum, holidayLoad]);
 
   const truckStatusByNumber = useMemo(
     () => new Map<number, TruckStatus>((data ?? []).map((t) => [t.truck_number, effectiveStatus(t, runDayNum, holidayLoad)])),

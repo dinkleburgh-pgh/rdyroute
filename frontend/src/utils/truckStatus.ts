@@ -136,6 +136,49 @@ export function getCoverageRouteNumber(t: TruckWithState): number | null {
   return t.route_swap_route ?? t.state?.oos_spare_route ?? null;
 }
 
+export interface RouteSwapLogEntryLike {
+  run_date: string;
+  route_truck: number;
+  load_on_truck: number;
+}
+
+/**
+ * Read-only fallback coverage for routes still flagged is_oos with no LIVE
+ * assignment as of asOfDate (e.g. nobody has re-confirmed the swap yet this
+ * shift). The route truck didn't suddenly become dirty just because today's
+ * coverage record lapsed — it's still represented by whoever covered it most
+ * recently, per the route-swap log. Never writes anything; it only fills the
+ * display gap until the swap is re-confirmed or the truck leaves OOS. Used by
+ * both the Board's coverage map and the sidebar's Live Status counts so the
+ * two always agree.
+ */
+export function buildHistoricalCoverageFallback(
+  trucks: TruckWithState[],
+  swapLog: RouteSwapLogEntryLike[],
+  asOfDate: string,
+): Map<number, number> {
+  const liveCovered = new Set<number>();
+  for (const t of trucks) {
+    const r = getCoverageRouteNumber(t);
+    if (r != null) liveCovered.add(r);
+  }
+  const fallback = new Map<number, number>();
+  for (const t of trucks) {
+    if (t.truck_type === "Spare" || !t.is_oos || liveCovered.has(t.truck_number)) continue;
+    let bestDate: string | null = null;
+    let bestLoadOn: number | null = null;
+    for (const e of swapLog) {
+      if (e.route_truck !== t.truck_number || e.run_date > asOfDate) continue;
+      if (bestDate === null || e.run_date > bestDate) {
+        bestDate = e.run_date;
+        bestLoadOn = e.load_on_truck;
+      }
+    }
+    if (bestLoadOn != null) fallback.set(t.truck_number, bestLoadOn);
+  }
+  return fallback;
+}
+
 export function effectiveOperationalStatus(
   t: TruckWithState,
   dayNum: number,
@@ -188,6 +231,7 @@ export function buildRouteStatusCounts(
   holidayLoad: boolean,
   unloadsDayNum?: number,
   holidayUnload?: boolean,
+  historicalCoverageFallback?: Map<number, number>,
 ): Record<TruckStatus, number> {
   const out: Record<TruckStatus, number> = {
     dirty: 0,
@@ -210,6 +254,9 @@ export function buildRouteStatusCounts(
   for (const t of trucks) {
     const coveredRoute = getCoverageRouteNumber(t);
     if (coveredRoute != null) coveredRouteNumbers.add(coveredRoute);
+  }
+  if (historicalCoverageFallback) {
+    for (const route of historicalCoverageFallback.keys()) coveredRouteNumbers.add(route);
   }
 
   function statusFor(t: TruckWithState): TruckStatus {
@@ -236,9 +283,17 @@ export function buildRouteStatusCounts(
     }
   }
 
+  // Reverse the historical fallback (route -> covering truck) so a spare found
+  // only via history (no live coverage field on its own state) still resolves
+  // which route it's standing in for, below.
+  const fallbackRouteByTruck = new Map<number, number>();
+  if (historicalCoverageFallback) {
+    for (const [route, truckNum] of historicalCoverageFallback) fallbackRouteByTruck.set(truckNum, route);
+  }
+
   for (const t of trucks) {
     if (t.truck_type === "Spare") {
-      const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+      const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? fallbackRouteByTruck.get(t.truck_number) ?? null;
       // Covering spares also surface in their live workflow bucket (e.g. unloaded).
       if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
         out[statusFor(t)] += 1;
