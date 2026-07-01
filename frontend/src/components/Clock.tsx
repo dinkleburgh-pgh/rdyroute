@@ -13,7 +13,7 @@ export function currentShift(d = new Date()): ShiftInfo {
   return { name: "3rd", label: "3rd Shift", hours: "10pm – 6am" };
 }
 
-export default function Clock({ compact = false }: { compact?: boolean }) {
+export default function Clock({ compact = false, className }: { compact?: boolean; className?: string }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -22,7 +22,7 @@ export default function Clock({ compact = false }: { compact?: boolean }) {
   const shift = currentShift(now);
   if (compact) {
     return (
-      <span className="text-sm font-semibold tabular-nums text-blue-400">
+      <span className={className ?? "text-sm font-semibold tabular-nums text-blue-400"}>
         {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
       </span>
     );

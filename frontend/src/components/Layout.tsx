@@ -543,7 +543,7 @@ export default function Layout() {
             </span>
           </div>
           <div className="ml-auto hidden items-center gap-3 text-sm md:flex">
-            <span className="font-mono text-base text-ink-soft"><Clock compact /></span>
+            <Clock compact className="font-mono text-2xl font-bold tabular-nums text-blue-400" />
             <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-4 py-2 font-semibold text-[#c4b5fd]">
               <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8b6fd1]">Shift</span>
               {shiftName}
