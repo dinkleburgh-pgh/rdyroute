@@ -332,6 +332,21 @@ export function useSpareAssignments(runDate: string = todayIso(), returnedOnly?:
   });
 }
 
+// Every spare assignment nobody has returned yet, regardless of which day it
+// was made — the authoritative "is this coverage still active" signal. Used
+// as the historical-coverage fallback source (a truck's dirty status often
+// traces back to an assignment from a prior day whose record was never
+// re-created for today, but was also never explicitly returned).
+export function useOpenSpareAssignments() {
+  return useQuery({
+    queryKey: ["spares", "all-dates", "open"],
+    queryFn: async () =>
+      (await api.get<SpareAssignment[]>("/spares", { params: { returned: false } })).data,
+    refetchInterval: 15000,
+    staleTime: 14500,
+  });
+}
+
 export function useAssignSpare() {
   const qc = useQueryClient();
   return useMutation({
@@ -381,6 +396,19 @@ export function useRouteSwaps(runDate: string = todayIso()) {
       (await api.get<RouteSwap[]>("/route-swaps", { params: { run_date: runDate } })).data,
     refetchInterval: 10000,
     staleTime: 9500,
+  });
+}
+
+// Every route swap currently on file, regardless of run date — a RouteSwap
+// row is deleted when cleared, so anything still present is implicitly still
+// active. Used alongside useOpenSpareAssignments for the historical-coverage
+// fallback.
+export function useAllRouteSwaps() {
+  return useQuery({
+    queryKey: ["route-swaps", "all-dates"],
+    queryFn: async () => (await api.get<RouteSwap[]>("/route-swaps")).data,
+    refetchInterval: 15000,
+    staleTime: 14500,
   });
 }
 

@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayLoad, useHolidayUnload, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import ToolFab from "./ToolFab";
@@ -157,6 +157,7 @@ export default function Layout() {
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
   const { data: swapLog = [] } = useRouteSwapLog(60);
+  const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
   const { data: holidayLoad = false } = useHolidayLoad(todayIso());
   const { data: holidayUnload = false } = useHolidayUnload(todayIso());
   const { data: wizardDone = false } = useWizardCompleted(todayIso());
@@ -205,8 +206,8 @@ export default function Layout() {
   const loadDayNum = loadDay;
 
   const historicalCoverageFallback = useMemo(
-    () => buildHistoricalCoverageFallback(board ?? [], swapLog, todayIso()),
-    [board, swapLog],
+    () => buildHistoricalCoverageFallback(board ?? [], openSpareAssignments, swapLog, todayIso()),
+    [board, openSpareAssignments, swapLog],
   );
   const counts = useMemo(
     () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload, historicalCoverageFallback),

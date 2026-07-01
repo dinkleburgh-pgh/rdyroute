@@ -32,12 +32,18 @@ router = APIRouter(prefix="/spares", tags=["spares"])
 
 @router.get("", response_model=list[SpareAssignOut])
 def list_assignments(
-    run_date: date = Query(...),
+    run_date: date | None = Query(default=None),
     returned: bool | None = Query(default=None, description="Filter by return status"),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    q = select(SpareAssignment).where(SpareAssignment.run_date == run_date)
+    """List spare assignments. Filtered to a run date if given, else across
+    every date on file (e.g. GET /spares?returned=false returns every spare
+    assignment nobody has returned yet, regardless of which day it was made —
+    the authoritative "is this coverage still active" signal)."""
+    q = select(SpareAssignment)
+    if run_date is not None:
+        q = q.where(SpareAssignment.run_date == run_date)
     if returned is not None:
         q = q.where(SpareAssignment.returned == returned)
     return db.scalars(q.order_by(SpareAssignment.assigned_at)).all()

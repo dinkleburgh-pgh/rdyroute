@@ -11,6 +11,7 @@ import {
   useLoadDayOverride,
   useUnloadsDayOverride,
   useTruckNotes,
+  useOpenSpareAssignments,
   useRouteSwapLog,
   useSettings,
 } from "../api/hooks";
@@ -86,6 +87,7 @@ export default function RunDay() {
   const shiftNotesEnabled = settings.find((s) => s.key === "shift_notes_enabled")?.value !== false;
 
   const { data: swapLog = [] } = useRouteSwapLog(60);
+  const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
 
   // Map from route truck number → the truck covering its route today.
   // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
@@ -104,14 +106,14 @@ export default function RunDay() {
         .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
         .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
     );
-    const fallback = buildHistoricalCoverageFallback(board, swapLog, runDate);
+    const fallback = buildHistoricalCoverageFallback(board, openSpareAssignments, swapLog, runDate);
     for (const [route, truckNum] of fallback) {
       if (m.has(route)) continue;
       const cover = boardByNum.get(truckNum);
       if (cover) m.set(route, cover);
     }
     return m;
-  }, [board, swapLog, runDate]);
+  }, [board, swapLog, openSpareAssignments, runDate]);
 
   // The status a card actually displays, used for sorting so the order matches
   // the visible badge:

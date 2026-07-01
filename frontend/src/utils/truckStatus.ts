@@ -142,18 +142,36 @@ export interface RouteSwapLogEntryLike {
   load_on_truck: number;
 }
 
+export interface OpenSpareAssignmentLike {
+  covering_route_truck: number;
+  spare_truck_number: number;
+  assigned_at: string;
+}
+
 /**
  * Read-only fallback coverage for routes still flagged is_oos with no LIVE
  * assignment as of asOfDate (e.g. nobody has re-confirmed the swap yet this
  * shift). The route truck didn't suddenly become dirty just because today's
  * coverage record lapsed — it's still represented by whoever covered it most
- * recently, per the route-swap log. Never writes anything; it only fills the
- * display gap until the swap is re-confirmed or the truck leaves OOS. Used by
- * both the Board's coverage map and the sidebar's Live Status counts so the
- * two always agree.
+ * recently. Never writes anything; it only fills the display gap until the
+ * swap is re-confirmed or the truck leaves OOS. Used by the Board's coverage
+ * map, the sidebar's Live Status counts, and the Day Overview, so all three
+ * always agree.
+ *
+ * Primary source: an open (never-returned) spare_assignments row for the
+ * route, regardless of which day it was created — returned=false is the
+ * authoritative "still active" signal, so it doesn't matter whether that row
+ * is from yesterday or three weeks ago (unlike a date-recency heuristic,
+ * which breaks the moment a covering spare's status.dirty is inherited from
+ * an assignment that's older than the swap log's lookback window, or was
+ * never logged at all — e.g. seeded directly rather than through the API).
+ * Secondary source: the route-swap log's most recent entry on/before asOfDate
+ * — RouteSwap rows are hard-deleted when cleared, so there's no "still open"
+ * signal for route-truck swaps; the log is the best available signal there.
  */
 export function buildHistoricalCoverageFallback(
   trucks: TruckWithState[],
+  openSpareAssignments: OpenSpareAssignmentLike[],
   swapLog: RouteSwapLogEntryLike[],
   asOfDate: string,
 ): Map<number, number> {
@@ -165,6 +183,15 @@ export function buildHistoricalCoverageFallback(
   const fallback = new Map<number, number>();
   for (const t of trucks) {
     if (t.truck_type === "Spare" || !t.is_oos || liveCovered.has(t.truck_number)) continue;
+
+    const open = openSpareAssignments
+      .filter((a) => a.covering_route_truck === t.truck_number)
+      .sort((a, b) => (a.assigned_at < b.assigned_at ? 1 : -1))[0];
+    if (open) {
+      fallback.set(t.truck_number, open.spare_truck_number);
+      continue;
+    }
+
     let bestDate: string | null = null;
     let bestLoadOn: number | null = null;
     for (const e of swapLog) {

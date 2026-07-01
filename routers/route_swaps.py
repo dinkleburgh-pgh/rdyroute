@@ -31,17 +31,17 @@ router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
 
 @router.get("", response_model=list[RouteSwapOut])
 def list_swaps(
-    run_date: date = Query(...),
+    run_date: date | None = Query(default=None),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return all route swap assignments for a run date."""
-    rows = db.scalars(
-        select(RouteSwap)
-        .where(RouteSwap.run_date == run_date)
-        .order_by(RouteSwap.route_truck)
-    ).all()
-    return rows
+    """Return route swap assignments. Filtered to a run date if given, else
+    every row currently on file (a RouteSwap row is deleted when cleared, so
+    any row that still exists is implicitly still active)."""
+    q = select(RouteSwap).order_by(RouteSwap.route_truck)
+    if run_date is not None:
+        q = q.where(RouteSwap.run_date == run_date)
+    return db.scalars(q).all()
 
 
 @router.post("", response_model=list[RouteSwapOut], status_code=status.HTTP_201_CREATED)
