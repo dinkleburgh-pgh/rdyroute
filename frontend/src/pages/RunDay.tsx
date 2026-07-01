@@ -19,6 +19,7 @@ import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckNote, TruckStatus, TruckWithState } from "../types";
 import {
+  buildHistoricalCoverageFallback,
   buildOperationalDayContext,
   countLoaded,
   effectiveOperationalStatus,
@@ -84,19 +85,33 @@ export default function RunDay() {
   const { data: settings = [] } = useSettings();
   const shiftNotesEnabled = settings.find((s) => s.key === "shift_notes_enabled")?.value !== false;
 
+  const { data: swapLog = [] } = useRouteSwapLog(60);
+
   // Map from route truck number → the truck covering its route today.
   // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
   // non-spare trucks assigned via a route swap.  Spares are hidden from the
   // grid; non-spare covering trucks still render their own card.
-  const coveringTruckMap = useMemo(
-    () =>
-      new Map<number, TruckWithState>(
-        board
-          .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
-          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
-      ),
-    [board],
-  );
+  //
+  // Also folds in the read-only historical fallback: an is_oos route truck
+  // with no LIVE coverage today (nobody has re-confirmed the swap yet this
+  // shift) is still represented by whoever covered it most recently, per the
+  // route-swap log — it didn't suddenly become dirty just because today's
+  // coverage record lapsed. Matches Board.tsx/the sidebar so all three agree.
+  const coveringTruckMap = useMemo(() => {
+    const boardByNum = new Map(board.map((t) => [t.truck_number, t]));
+    const m = new Map<number, TruckWithState>(
+      board
+        .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
+        .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
+    );
+    const fallback = buildHistoricalCoverageFallback(board, swapLog, runDate);
+    for (const [route, truckNum] of fallback) {
+      if (m.has(route)) continue;
+      const cover = boardByNum.get(truckNum);
+      if (cover) m.set(route, cover);
+    }
+    return m;
+  }, [board, swapLog, runDate]);
 
   // The status a card actually displays, used for sorting so the order matches
   // the visible badge:
@@ -228,7 +243,6 @@ export default function RunDay() {
   // who covered which route then, from the route-swap log — pulling the most
   // recent coverage on or before that previous operating day (so it follows the
   // ship day across weekends and ignores any stray weekend-dated entries).
-  const { data: swapLog = [] } = useRouteSwapLog(60);
   const prevCoverage = useMemo(() => {
     const prior = swapLog.filter((e) => e.run_date <= prevRunDate);
     if (prior.length === 0) return { date: null as string | null, items: [] as { route: number; loadOn: number }[] };
