@@ -567,16 +567,20 @@ function Show-ArrowMenu {
         [string]$Title = 'Select an action'
     )
     $selected = 0
-    $top = -1
     while ($true) {
-        if ($top -lt 0) {
-            Write-Host ""
-            Write-Host "  $Title" -ForegroundColor Gray
-            Write-Host "  $([string]::new([char]0x2500, $Title.Length + 2))" -ForegroundColor DarkGray
-            $top = [Console]::CursorTop
-        } else {
-            [Console]::SetCursorPosition(0, $top)
-        }
+        # Redraw by clearing the screen rather than repositioning the cursor —
+        # SetCursorPosition doesn't reliably overwrite in every terminal host
+        # (some just keep printing new lines below instead of in place).
+        # Clear-Host is a bit more flicker but works consistently everywhere.
+        Clear-Host
+        Write-Banner
+        Write-Host "    App    " -NoNewline -ForegroundColor DarkGray
+        Write-Host $frontendUrl -ForegroundColor Cyan
+        Write-Host "    API    " -NoNewline -ForegroundColor DarkGray
+        Write-Host "$backendUrl/docs" -ForegroundColor DarkCyan
+        Write-Host ""
+        Write-Host "  $Title" -ForegroundColor Gray
+        Write-Host "  $([string]::new([char]0x2500, $Title.Length + 2))" -ForegroundColor DarkGray
         for ($i = 0; $i -lt $Items.Count; $i++) {
             $prefix = if ($i -eq $selected) { "$([char]0x25B8) " } else { '  ' }
             $row = "$prefix$($i + 1). $($Items[$i])".PadRight([Console]::WindowWidth - 1)
