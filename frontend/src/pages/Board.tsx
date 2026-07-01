@@ -323,19 +323,32 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           c[s] = (c[s] ?? 0) + 1;
         }
       } else if (!fleetMode && t.truck_type === "Spare") {
-        // In non-fleet mode, a spare counts in lifecycle buckets only when it
-        // is actively covering an OOS route — same predicate as `filtered`
-        // below. This keeps the filter dropdown count and the rendered card
-        // list in lockstep (was previously divergent for route-swap spares,
-        // which made the page look like it "wasn't updating").
-        const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
-        if (coveredRoute != null && truckStatusByNumber.get(coveredRoute) === "oos") {
-          const s = effectiveStatus(t, runDayNum, holidayLoad);
-          c[s] = (c[s] ?? 0) + 1;
+        // Mirror `filtered`'s spare inclusion rules exactly so the count badge
+        // always matches the rendered card list (was previously divergent: this
+        // required the covered route's OWN effectiveStatus to read literally
+        // "oos", which never happens for an is_oos truck whose raw status is
+        // "dirty" -- see effectiveStatus's intentional dirty-stays-dirty rule --
+        // so a covering spare like this was silently dropped from every bucket).
+        const rawSpareStatus = t.state?.status;
+        if (rawSpareStatus === "dirty" || rawSpareStatus === "unfinished" || t.state == null) {
+          c.dirty = (c.dirty ?? 0) + 1;
+        } else if (rawSpareStatus === "unloaded") {
+          c.unloaded = (c.unloaded ?? 0) + 1;
+        } else {
+          const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+          if (coveredRoute != null && coveringTruckByRoute.has(coveredRoute)) {
+            const s = effectiveStatus(t, runDayNum, holidayLoad);
+            c[s] = (c[s] ?? 0) + 1;
+          }
         }
       } else {
         const loadDayEff = effectiveStatus(t, runDayNum, holidayLoad);
-        const s = t.is_oos ? "oos" : effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
+        // Only force "oos" once a covering truck is actually assigned (live or
+        // historical fallback) -- matches the Dirty/etc. filter's exclusion
+        // rule below and the sidebar's Live Status counts, so a still-dirty,
+        // not-yet-covered OOS truck keeps counting as Dirty everywhere.
+        const isCoveredOos = t.truck_type !== "Spare" && t.is_oos && coveringTruckByRoute.has(t.truck_number);
+        const s = isCoveredOos ? "oos" : effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
         c[s] = (c[s] ?? 0) + 1;
         // Also count in "off" when scheduled off for load day but shown in
         // an unload-context bucket (off = not loading tomorrow).
@@ -346,7 +359,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     });
 
     return c;
-  }, [data, runDayNum, runUnloadsDay, holidayLoad, fleetMode, truckStatusByNumber]);
+  }, [data, runDayNum, runUnloadsDay, holidayLoad, fleetMode, truckStatusByNumber, coveringTruckByRoute]);
 
   const filtered = useMemo(() => {
     if (!data) return [];
