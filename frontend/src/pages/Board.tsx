@@ -651,8 +651,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               (fleetMode || filter === "oos") && truck.truck_type !== "Spare" && truck.is_oos
                 ? "oos"
                 : status;
-            const isUnloadView = filter === "dirty" || filter === "unloaded";
-            const isLoadView = filter === "loaded";
+            // The Unloaded board is part of the LOAD workflow (unloaded trucks
+            // are ready to load), so it uses load-day chips — only the Dirty
+            // board is the unload workflow.
+            const isUnloadView = filter === "dirty";
+            const isLoadView = filter === "loaded" || filter === "unloaded";
             let chipDay: number | undefined;
             let chipIsExtra = false;
             if (isUnloadView && holidayUnload) {
