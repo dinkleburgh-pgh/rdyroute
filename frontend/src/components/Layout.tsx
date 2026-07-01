@@ -516,7 +516,7 @@ export default function Layout() {
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* App top bar — mobile shows hamburger + brand, all sizes show clock/shift/day badges */}
-        <header className="sticky top-0 z-10 flex min-h-[54px] items-center gap-2 border-b border-hairline bg-[rgba(13,18,28,0.7)] backdrop-blur px-[22px] pt-safe">
+        <header className="sticky top-0 z-10 flex min-h-[54px] items-center gap-2 border-b border-hairline bg-[rgba(13,18,28,0.7)] backdrop-blur px-[22px] pt-safe md:min-h-[68px]">
           <button
             type="button"
             aria-label="Open menu"
@@ -542,18 +542,18 @@ export default function Layout() {
               {unloadBadgeText}
             </span>
           </div>
-          <div className="ml-auto hidden items-center gap-2 text-xs md:flex">
-            <span className="font-mono text-[13px] text-ink-soft"><Clock compact /></span>
-            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-[11px] py-[4px] font-semibold text-[#c4b5fd]">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#8b6fd1]">Shift</span>
+          <div className="ml-auto hidden items-center gap-3 text-sm md:flex">
+            <span className="font-mono text-base text-ink-soft"><Clock compact /></span>
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-4 py-2 font-semibold text-[#c4b5fd]">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8b6fd1]">Shift</span>
               {shiftName}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-[11px] py-[4px] font-semibold text-[#93c5fd]">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#5a8fd6]">Load</span>
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-4 py-2 font-semibold text-[#93c5fd]">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#5a8fd6]">Load</span>
               Day {loadDay}{holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-[11px] py-[4px] font-semibold text-[#6ee7b7]">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#4f9e84]">Unload</span>
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-4 py-2 font-semibold text-[#6ee7b7]">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#4f9e84]">Unload</span>
               Day {unloadsDay}{holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}
             </span>
           </div>
