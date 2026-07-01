@@ -314,7 +314,7 @@ export default function Layout() {
               R
             </div>
             <div className="leading-tight">
-              <p className="text-base font-bold text-white">ReadyRoute</p>
+              <p className="text-base font-bold text-white">rdyroute.app</p>
               <p className="font-mono text-xs text-ink-faint">{appVersion}</p>
             </div>
           </div>
