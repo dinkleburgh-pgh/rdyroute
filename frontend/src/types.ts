@@ -260,7 +260,6 @@ export interface RecurringRouteSwap {
 export interface ProductionSyncResult {
   source: string;
   run_dates: string[];
-  coverage_run_dates: string[];
   backup_bytes: number;
   warnings: string[];
   summary: Record<string, number>;

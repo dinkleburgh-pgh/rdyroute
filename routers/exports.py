@@ -37,6 +37,7 @@ from models import (
     LoadDuration,
     Notice,
     RouteSwap,
+    RouteSwapLog,
     Shortage,
     SpareAssignment,
     Truck,
@@ -174,6 +175,11 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             TruckState,
             LoadDuration,
             Truck,
+            AppSetting,
+            RouteSwap,
+            SpareAssignment,
+            RouteSwapLog,
+            TruckNote,
         ):
             db.execute(delete(model))
         db.flush()
@@ -384,6 +390,147 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
         summary["batches_imported"] = imported
         summary["batches_updated"] = updated
 
+    if "app_settings.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("app_settings.json"), file_label="app_settings.json")
+        imported = 0
+        updated = 0
+        for item in rows_data:
+            key = str(item.get("key") or "").strip()
+            if not key:
+                continue
+            existing = db.get(AppSetting, key)
+            if existing is None:
+                db.add(AppSetting(key=key, value=item.get("value")))
+                imported += 1
+            else:
+                existing.value = item.get("value")
+                updated += 1
+        db.flush()
+        summary["app_settings_imported"] = imported
+        summary["app_settings_updated"] = updated
+
+    if "route_swaps.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("route_swaps.json"), file_label="route_swaps.json")
+        imported = 0
+        for item in rows_data:
+            run_date = _parse_date(item.get("run_date"))
+            route_truck = int(item.get("route_truck", 0) or 0)
+            load_on_truck = int(item.get("load_on_truck", 0) or 0)
+            if run_date is None or route_truck <= 0 or load_on_truck <= 0:
+                continue
+            if not replace_existing:
+                existing = db.scalars(
+                    select(RouteSwap).where(RouteSwap.run_date == run_date, RouteSwap.route_truck == route_truck)
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(RouteSwap(
+                run_date=run_date,
+                route_truck=route_truck,
+                load_on_truck=load_on_truck,
+                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
+            ))
+            imported += 1
+        db.flush()
+        summary["route_swaps"] = imported
+
+    if "spare_assignments.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("spare_assignments.json"), file_label="spare_assignments.json")
+        imported = 0
+        for item in rows_data:
+            run_date = _parse_date(item.get("run_date"))
+            spare_truck_number = int(item.get("spare_truck_number", 0) or 0)
+            covering_route_truck = int(item.get("covering_route_truck", 0) or 0)
+            if run_date is None or spare_truck_number <= 0 or covering_route_truck <= 0:
+                continue
+            assigned_at = _parse_datetime(item.get("assigned_at")) or datetime.utcnow()
+            if not replace_existing:
+                existing = db.scalars(
+                    select(SpareAssignment).where(
+                        SpareAssignment.run_date == run_date,
+                        SpareAssignment.spare_truck_number == spare_truck_number,
+                        SpareAssignment.covering_route_truck == covering_route_truck,
+                        SpareAssignment.assigned_at == assigned_at,
+                    )
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(SpareAssignment(
+                run_date=run_date,
+                spare_truck_number=spare_truck_number,
+                covering_route_truck=covering_route_truck,
+                returned=bool(item.get("returned", False)),
+                assigned_at=assigned_at,
+                returned_at=_parse_datetime(item.get("returned_at")),
+            ))
+            imported += 1
+        db.flush()
+        summary["spare_assignments"] = imported
+
+    if "route_swap_log.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("route_swap_log.json"), file_label="route_swap_log.json")
+        imported = 0
+        for item in rows_data:
+            run_date = _parse_date(item.get("run_date"))
+            route_truck = int(item.get("route_truck", 0) or 0)
+            load_on_truck = int(item.get("load_on_truck", 0) or 0)
+            if run_date is None or route_truck <= 0 or load_on_truck <= 0:
+                continue
+            if not replace_existing:
+                existing = db.scalars(
+                    select(RouteSwapLog).where(
+                        RouteSwapLog.run_date == run_date,
+                        RouteSwapLog.route_truck == route_truck,
+                        RouteSwapLog.load_on_truck == load_on_truck,
+                    )
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(RouteSwapLog(
+                run_date=run_date,
+                route_truck=route_truck,
+                load_on_truck=load_on_truck,
+                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
+            ))
+            imported += 1
+        db.flush()
+        summary["route_swap_log"] = imported
+
+    if "truck_notes.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("truck_notes.json"), file_label="truck_notes.json")
+        imported = 0
+        for item in rows_data:
+            truck_number = int(item.get("truck_number", 0) or 0)
+            body = str(item.get("body") or "")
+            note_type = str(item.get("note_type") or "constant")
+            if truck_number <= 0 or not body:
+                continue
+            if not replace_existing:
+                existing = db.scalars(
+                    select(TruckNote).where(
+                        TruckNote.truck_number == truck_number,
+                        TruckNote.note_type == note_type,
+                        TruckNote.body == body,
+                        TruckNote.workday_num == item.get("workday_num"),
+                    )
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(TruckNote(
+                truck_number=truck_number,
+                note_type=note_type,
+                body=body,
+                workday_num=item.get("workday_num"),
+                expires_on=_parse_date(item.get("expires_on")),
+                is_active=bool(item.get("is_active", True)),
+                created_by=str(item.get("created_by") or ""),
+                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
+                updated_at=_parse_datetime(item.get("updated_at")) or datetime.utcnow(),
+            ))
+            imported += 1
+        db.flush()
+        summary["truck_notes"] = imported
+
     return summary
 
 
@@ -429,52 +576,6 @@ def _import_activity_events_payload(payload: bytes, db: Session, *, replace_exis
         imported += 1
     db.flush()
     return {"activity_events": imported}
-
-
-def _import_spares_for_dates(run_date_rows: dict[date, list[dict]], db: Session, *, replace_existing: bool = False) -> dict[str, int]:
-    imported = 0
-    if replace_existing:
-        db.execute(delete(SpareAssignment))
-        db.flush()
-    for run_date, rows in run_date_rows.items():
-        for item in rows:
-            spare_truck_number = int(item.get("spare_truck_number", 0) or 0)
-            covering_route_truck = int(item.get("covering_route_truck", 0) or 0)
-            if spare_truck_number <= 0 or covering_route_truck <= 0:
-                continue
-            db.add(SpareAssignment(
-                run_date=run_date,
-                spare_truck_number=spare_truck_number,
-                covering_route_truck=covering_route_truck,
-                returned=bool(item.get("returned", False)),
-                assigned_at=_parse_datetime(item.get("assigned_at")) or datetime.utcnow(),
-                returned_at=_parse_datetime(item.get("returned_at")),
-            ))
-            imported += 1
-    db.flush()
-    return {"spare_assignments": imported}
-
-
-def _import_route_swaps_for_dates(run_date_rows: dict[date, list[dict]], db: Session, *, replace_existing: bool = False) -> dict[str, int]:
-    imported = 0
-    if replace_existing:
-        db.execute(delete(RouteSwap))
-        db.flush()
-    for run_date, rows in run_date_rows.items():
-        for item in rows:
-            route_truck = int(item.get("route_truck", 0) or 0)
-            load_on_truck = int(item.get("load_on_truck", 0) or 0)
-            if route_truck <= 0 or load_on_truck <= 0:
-                continue
-            db.add(RouteSwap(
-                run_date=run_date,
-                route_truck=route_truck,
-                load_on_truck=load_on_truck,
-                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
-            ))
-            imported += 1
-    db.flush()
-    return {"route_swaps": imported}
 
 
 def _fetch_remote_bytes(
@@ -856,6 +957,103 @@ def download_backup(_admin: User = Depends(require_admin), db: Session = Depends
             json.dumps([activity_event_to_dict(row) for row in activity_rows], indent=2),
         )
 
+        # App settings (holiday flags, wearer_cap, recurring_route_swaps, daily
+        # notes, feature toggles, day_setup_source_* -- everything Setup Day and
+        # Operations settings read/write).
+        setting_rows = db.scalars(select(AppSetting).order_by(AppSetting.key)).all()
+        zf.writestr(
+            "app_settings.json",
+            json.dumps(
+                [
+                    {"key": r.key, "value": r.value, "updated_at": r.updated_at.isoformat()}
+                    for r in setting_rows
+                ],
+                indent=2,
+                default=_ser,
+            ),
+        )
+
+        # Route swaps -- full history (not just the current day), so the wizard
+        # and Route Swaps modal see historical coverage in dev too.
+        rs_rows = db.scalars(select(RouteSwap).order_by(RouteSwap.run_date)).all()
+        zf.writestr(
+            "route_swaps.json",
+            json.dumps(
+                [
+                    {
+                        "run_date": r.run_date.isoformat(),
+                        "route_truck": r.route_truck,
+                        "load_on_truck": r.load_on_truck,
+                        "created_at": r.created_at.isoformat(),
+                    }
+                    for r in rs_rows
+                ],
+                indent=2,
+            ),
+        )
+
+        # Spare assignments -- full history.
+        sa_rows = db.scalars(select(SpareAssignment).order_by(SpareAssignment.run_date)).all()
+        zf.writestr(
+            "spare_assignments.json",
+            json.dumps(
+                [
+                    {
+                        "run_date": r.run_date.isoformat(),
+                        "spare_truck_number": r.spare_truck_number,
+                        "covering_route_truck": r.covering_route_truck,
+                        "returned": r.returned,
+                        "assigned_at": r.assigned_at.isoformat(),
+                        "returned_at": r.returned_at.isoformat() if r.returned_at else None,
+                    }
+                    for r in sa_rows
+                ],
+                indent=2,
+            ),
+        )
+
+        # Route swap log -- append-only history behind the "previous load-day
+        # coverage" unload view and the Trends OOS/swap history.
+        rsl_rows = db.scalars(select(RouteSwapLog).order_by(RouteSwapLog.run_date)).all()
+        zf.writestr(
+            "route_swap_log.json",
+            json.dumps(
+                [
+                    {
+                        "run_date": r.run_date.isoformat(),
+                        "route_truck": r.route_truck,
+                        "load_on_truck": r.load_on_truck,
+                        "created_at": r.created_at.isoformat(),
+                    }
+                    for r in rsl_rows
+                ],
+                indent=2,
+            ),
+        )
+
+        # Truck notes -- persistent per-truck notes (constant/workday/one_off).
+        tn_rows = db.scalars(select(TruckNote).order_by(TruckNote.truck_number)).all()
+        zf.writestr(
+            "truck_notes.json",
+            json.dumps(
+                [
+                    {
+                        "truck_number": r.truck_number,
+                        "note_type": r.note_type.value if hasattr(r.note_type, "value") else str(r.note_type),
+                        "body": r.body,
+                        "workday_num": r.workday_num,
+                        "expires_on": r.expires_on.isoformat() if r.expires_on else None,
+                        "is_active": r.is_active,
+                        "created_by": r.created_by,
+                        "created_at": r.created_at.isoformat(),
+                        "updated_at": r.updated_at.isoformat(),
+                    }
+                    for r in tn_rows
+                ],
+                indent=2,
+            ),
+        )
+
     buf.seek(0)
     today = date.today().isoformat()
     return StreamingResponse(
@@ -958,43 +1156,12 @@ def sync_from_production(
         activity_bytes = b"[]"
         warnings.append(str(exc.detail))
 
-    spares_payload_by_date: dict[date, list[dict]] = {}
-    swaps_payload_by_date: dict[date, list[dict]] = {}
-    coverage_dates = run_dates[-1:] if run_dates else []
-    for run_date in coverage_dates:
-        run_date_iso = run_date.isoformat()
-        try:
-            spares_payload_by_date[run_date] = _coerce_json_rows(
-                _fetch_remote_bytes(
-                    f"{api_root}/spares?run_date={run_date_iso}",
-                    timeout_seconds=timeout_seconds,
-                    accept="application/json",
-                    auth_token=auth_token,
-                ),
-                file_label=f"spares_{run_date_iso}.json",
-            )
-        except HTTPException as exc:
-            warnings.append(str(exc.detail))
-            spares_payload_by_date[run_date] = []
-        try:
-            swaps_payload_by_date[run_date] = _coerce_json_rows(
-                _fetch_remote_bytes(
-                    f"{api_root}/route-swaps?run_date={run_date_iso}",
-                    timeout_seconds=timeout_seconds,
-                    accept="application/json",
-                    auth_token=auth_token,
-                ),
-                file_label=f"route_swaps_{run_date_iso}.json",
-            )
-        except HTTPException as exc:
-            warnings.append(str(exc.detail))
-            swaps_payload_by_date[run_date] = []
-
+    # Route swaps, spare assignments, route swap log, app settings, and truck
+    # notes now all travel inside backup.zip itself (full history, not just the
+    # latest run-date), so no separate per-date fetch is needed here.
     try:
         summary = _import_backup_package(backup_bytes, db, replace_existing=True)
         summary.update(_import_activity_events_payload(activity_bytes, db, replace_existing=True))
-        summary.update(_import_spares_for_dates(spares_payload_by_date, db, replace_existing=True))
-        summary.update(_import_route_swaps_for_dates(swaps_payload_by_date, db, replace_existing=True))
         db.commit()
     except Exception:
         db.rollback()
@@ -1003,7 +1170,6 @@ def sync_from_production(
     return {
         "source": export_base,
         "run_dates": [run_date.isoformat() for run_date in run_dates],
-        "coverage_run_dates": [run_date.isoformat() for run_date in coverage_dates],
         "backup_bytes": len(backup_bytes),
         "warnings": warnings,
         "summary": summary,
