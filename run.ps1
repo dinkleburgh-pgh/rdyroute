@@ -37,7 +37,8 @@
 param(
     [switch]$Stop,
     [switch]$Restart,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$NoMenu
 )
 
 $ErrorActionPreference = 'Stop'
@@ -408,27 +409,28 @@ if (Test-Path 'requirements.txt') {
 }
 
 # ---------------------------------------------------------------------------
-# Backend (uvicorn)
+# Backend (uvicorn) / Frontend (vite) — reusable so the interactive menu below
+# can restart either one without re-running the whole script.
 # ---------------------------------------------------------------------------
-Write-Divider
-Write-Step "$([char]0x25B6)" "Backend" "FastAPI + uvicorn  :$BackendPort"
-$existing = Test-Pid -PidFile $BackendPid
-if ($existing) {
-    $healthy = $false
-    try {
-        $null = Invoke-RestMethod "http://${BackendHost}:${BackendPort}/health" -TimeoutSec 2 -ErrorAction Stop
-        $healthy = $true
-    } catch { }
+function Start-Backend {
+    Write-Divider
+    Write-Step "$([char]0x25B6)" "Backend" "FastAPI + uvicorn  :$BackendPort"
+    $existing = Test-Pid -PidFile $BackendPid
+    if ($existing) {
+        $healthy = $false
+        try {
+            $null = Invoke-RestMethod "http://${BackendHost}:${BackendPort}/health" -TimeoutSec 2 -ErrorAction Stop
+            $healthy = $true
+        } catch { }
 
-    if ($healthy) {
-        Write-Ok "Already running" "PID $($existing.Id)  http://${BackendHost}:${BackendPort}"
-    } else {
-        Write-Warn2 "PID $($existing.Id) alive but not responding — restarting..."
-        Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
-        $existing = $null
+        if ($healthy) {
+            Write-Ok "Already running" "PID $($existing.Id)  http://${BackendHost}:${BackendPort}"
+            return
+        } else {
+            Write-Warn2 "PID $($existing.Id) alive but not responding — restarting..."
+            Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
+        }
     }
-}
-if (-not $existing) {
     Clear-Port -Label 'backend (uvicorn)' -Port ([int]$BackendPort)
     Write-Info "Launching uvicorn..."
     $backendArgs = @('-m', 'uvicorn', 'main:app', '--host', $BackendHost, '--port', $BackendPort, '--reload')
@@ -442,71 +444,71 @@ if (-not $existing) {
         Write-Err "Backend failed to start. Recent log:"
         if (Test-Path $BackendLog) { Get-Content $BackendLog -Tail 40 }
         if (Test-Path "$BackendLog.err") { Get-Content "$BackendLog.err" -Tail 40 }
-        exit 1
+        return
     }
     Write-Ok "Backend started" "PID $($proc.Id)  http://${BackendHost}:${BackendPort}"
 }
 
-# ---------------------------------------------------------------------------
-# Frontend (vite)
-# ---------------------------------------------------------------------------
-Write-Divider
-Write-Step "$([char]0x25B6)" "Frontend" "React + Vite  :$FrontendPort"
-if (-not (Test-Path $FrontendDir)) {
-    Write-Warn2 "frontend/ not found — skipping frontend startup."
-} else {
+function Start-Frontend {
+    Write-Divider
+    Write-Step "$([char]0x25B6)" "Frontend" "React + Vite  :$FrontendPort"
+    if (-not (Test-Path $FrontendDir)) {
+        Write-Warn2 "frontend/ not found — skipping frontend startup."
+        return
+    }
     $npm = Get-Command npm -ErrorAction SilentlyContinue
     if (-not $npm) {
         Write-Warn2 "npm not found in PATH. Install Node.js LTS to run the frontend."
-    } else {
-        if (-not (Test-Path (Join-Path $FrontendDir 'node_modules'))) {
-            Write-Info "Installing npm dependencies (first run, may take a minute)..."
-            Push-Location $FrontendDir
-            try { & $npm.Source install | Out-Null } finally { Pop-Location }
-            Write-Ok "npm packages installed"
-        }
+        return
+    }
+    if (-not (Test-Path (Join-Path $FrontendDir 'node_modules'))) {
+        Write-Info "Installing npm dependencies (first run, may take a minute)..."
+        Push-Location $FrontendDir
+        try { & $npm.Source install | Out-Null } finally { Pop-Location }
+        Write-Ok "npm packages installed"
+    }
 
-        $existingFE = Test-Pid -PidFile $FrontendPidF
-        if ($existingFE) {
-            $feHealthy = $false
-            try {
-                $null = Invoke-WebRequest "http://localhost:${FrontendPort}" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
-                $feHealthy = $true
-            } catch { }
+    $existingFE = Test-Pid -PidFile $FrontendPidF
+    if ($existingFE) {
+        $feHealthy = $false
+        try {
+            $null = Invoke-WebRequest "http://localhost:${FrontendPort}" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+            $feHealthy = $true
+        } catch { }
 
-            if ($feHealthy) {
-                Write-Ok "Already running" "PID $($existingFE.Id)  http://localhost:${FrontendPort}"
-            } else {
-                Write-Warn2 "PID $($existingFE.Id) alive but port $FrontendPort not responding — restarting..."
-                Stop-Frontend
-                $existingFE = $null
-            }
-        }
-        if (-not $existingFE) {
-            Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
-            Write-Info "Launching Vite dev server..."
-            $frontendArgs = @('run', 'dev', '--', '--host', '0.0.0.0', '--port', $FrontendPort)
-            $proc = Start-FrontendProcess -ArgumentList $frontendArgs
-            $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
-            if ($proc.HasExited -or -not $frontendHealthy) {
-                Write-Warn2 "Vite didn't respond in time — retrying once..."
-                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
-                if (Test-Path $FrontendPidF) { Remove-Item $FrontendPidF -Force -ErrorAction SilentlyContinue }
-                Start-Sleep -Seconds 1
-                $proc = Start-FrontendProcess -ArgumentList $frontendArgs
-                $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
-            }
-
-            if ($proc.HasExited -or -not $frontendHealthy) {
-                Write-Err "Frontend failed to start cleanly. Recent log:"
-                if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
-                if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
-            } else {
-                Write-Ok "Frontend started" "PID $($proc.Id)  http://localhost:${FrontendPort}"
-            }
+        if ($feHealthy) {
+            Write-Ok "Already running" "PID $($existingFE.Id)  http://localhost:${FrontendPort}"
+            return
+        } else {
+            Write-Warn2 "PID $($existingFE.Id) alive but port $FrontendPort not responding — restarting..."
+            Stop-Frontend
         }
     }
+    Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
+    Write-Info "Launching Vite dev server..."
+    $frontendArgs = @('run', 'dev', '--', '--host', '0.0.0.0', '--port', $FrontendPort)
+    $proc = Start-FrontendProcess -ArgumentList $frontendArgs
+    $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
+    if ($proc.HasExited -or -not $frontendHealthy) {
+        Write-Warn2 "Vite didn't respond in time — retrying once..."
+        try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
+        if (Test-Path $FrontendPidF) { Remove-Item $FrontendPidF -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Seconds 1
+        $proc = Start-FrontendProcess -ArgumentList $frontendArgs
+        $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
+    }
+
+    if ($proc.HasExited -or -not $frontendHealthy) {
+        Write-Err "Frontend failed to start cleanly. Recent log:"
+        if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
+        if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
+    } else {
+        Write-Ok "Frontend started" "PID $($proc.Id)  http://localhost:${FrontendPort}"
+    }
 }
+
+Start-Backend
+Start-Frontend
 
 # ---------------------------------------------------------------------------
 # Summary
@@ -533,4 +535,92 @@ if (-not $NoBrowser) {
     try {
         Start-Process $frontendUrl | Out-Null
     } catch { }
+}
+
+# ---------------------------------------------------------------------------
+# Interactive console menu — Up/Down + Enter to control the running stack
+# without leaving this window. Skipped automatically when input/output isn't
+# a real interactive console (redirected output, CI, non-console hosts), or
+# when -NoMenu is passed for scripted/one-shot use.
+# ---------------------------------------------------------------------------
+function Show-ArrowMenu {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Items,
+        [string]$Title = 'Select an action'
+    )
+    $selected = 0
+    $top = -1
+    while ($true) {
+        if ($top -lt 0) {
+            Write-Host ""
+            Write-Host "  $Title" -ForegroundColor Gray
+            Write-Host "  $([string]::new([char]0x2500, $Title.Length + 2))" -ForegroundColor DarkGray
+            $top = [Console]::CursorTop
+        } else {
+            [Console]::SetCursorPosition(0, $top)
+        }
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            $line = "  $($Items[$i])".PadRight([Console]::WindowWidth - 1)
+            if ($i -eq $selected) {
+                Write-Host "  $([char]0x25B8) $($Items[$i])".PadRight([Console]::WindowWidth - 1) -ForegroundColor Black -BackgroundColor Cyan
+            } else {
+                Write-Host $line -ForegroundColor Gray
+            }
+        }
+        $key = [Console]::ReadKey($true)
+        switch ($key.Key) {
+            'UpArrow'   { $selected = ($selected - 1 + $Items.Count) % $Items.Count }
+            'DownArrow' { $selected = ($selected + 1) % $Items.Count }
+            'W'         { $selected = ($selected - 1 + $Items.Count) % $Items.Count }
+            'S'         { $selected = ($selected + 1) % $Items.Count }
+            'Enter'     { return $selected }
+            'Escape'    { return -1 }
+            'Q'         { return -1 }
+        }
+    }
+}
+
+function Test-InteractiveConsole {
+    if ($NoMenu) { return $false }
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { return $false }
+    try { [void][Console]::CursorTop; return $true } catch { return $false }
+}
+
+if (Test-InteractiveConsole) {
+  try {
+    $menuItems = @(
+        'Restart Frontend (Vite)'
+        'Stop Frontend (Vite)'
+        'Restart Backend (uvicorn)'
+        'Stop Backend (uvicorn)'
+        'Restart All'
+        'Open App in Browser'
+        'Tail Frontend Log'
+        'Tail Backend Log'
+        'Stop All && Exit'
+        'Leave Running && Exit Menu'
+    )
+    while ($true) {
+        $menuTitle = "ReadyRoute V2 - dev console  ($([char]0x2191)/$([char]0x2193) navigate, Enter select, Q quit)"
+        $choice = Show-ArrowMenu -Items $menuItems -Title $menuTitle
+        Write-Host ""
+        switch ($choice) {
+            0 { Stop-Frontend; Start-Frontend }
+            1 { Stop-Frontend; Write-Ok "Frontend stopped." }
+            2 { Stop-Backend;  Start-Backend }
+            3 { Stop-Backend;  Write-Ok "Backend stopped." }
+            4 { Stop-Backend; Stop-Frontend; Start-Backend; Start-Frontend }
+            5 { try { Start-Process $frontendUrl | Out-Null } catch { } }
+            6 { if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 } else { Write-Warn2 "No frontend log yet." }; Write-Host ""; Write-Host "  (press any key to return)" -ForegroundColor DarkGray; [Console]::ReadKey($true) | Out-Null }
+            7 { if (Test-Path $BackendLog)  { Get-Content $BackendLog  -Tail 40 } else { Write-Warn2 "No backend log yet." };  Write-Host ""; Write-Host "  (press any key to return)" -ForegroundColor DarkGray; [Console]::ReadKey($true) | Out-Null }
+            8 { Stop-Backend; Stop-Frontend; Write-Ok "All services stopped."; break }
+            default { break }
+        }
+        if ($choice -eq 8 -or $choice -eq -1) { break }
+    }
+    Write-Host ""
+  } catch {
+    Write-Warn2 "Interactive menu unavailable in this console ($($_.Exception.Message)); services are still running in the background."
+    Write-Host "  Use .\run.ps1 -Stop / -Restart from a normal terminal instead." -ForegroundColor DarkGray
+  }
 }
