@@ -543,6 +543,24 @@ if (-not $NoBrowser) {
 # a real interactive console (redirected output, CI, non-console hosts), or
 # when -NoMenu is passed for scripted/one-shot use.
 # ---------------------------------------------------------------------------
+# Reads one keypress in a way that works across the widest range of PowerShell
+# hosts. $Host.UI.RawUI.ReadKey is tried first (the technique that plays nicest
+# with Windows Terminal / conhost's arrow-key escape sequences); if the host
+# doesn't support it at all, falls back to [Console]::ReadKey. Returns an
+# object with .VirtualKeyCode and .Character so callers don't care which path
+# was used.
+function Read-MenuKey {
+    try {
+        $k = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+        return [pscustomobject]@{ VirtualKeyCode = $k.VirtualKeyCode; Character = $k.Character }
+    } catch {
+        $k = [Console]::ReadKey($true)
+        $vkMap = @{ UpArrow = 38; DownArrow = 40; Enter = 13; Escape = 27; W = 87; S = 83; J = 74; K = 75; Q = 81 }
+        $vk = if ($vkMap.ContainsKey($k.Key.ToString())) { $vkMap[$k.Key.ToString()] } else { 0 }
+        return [pscustomobject]@{ VirtualKeyCode = $vk; Character = $k.KeyChar }
+    }
+}
+
 function Show-ArrowMenu {
     param(
         [Parameter(Mandatory = $true)][string[]]$Items,
@@ -560,22 +578,34 @@ function Show-ArrowMenu {
             [Console]::SetCursorPosition(0, $top)
         }
         for ($i = 0; $i -lt $Items.Count; $i++) {
-            $line = "  $($Items[$i])".PadRight([Console]::WindowWidth - 1)
+            $prefix = if ($i -eq $selected) { "$([char]0x25B8) " } else { '  ' }
+            $row = "$prefix$($i + 1). $($Items[$i])".PadRight([Console]::WindowWidth - 1)
             if ($i -eq $selected) {
-                Write-Host "  $([char]0x25B8) $($Items[$i])".PadRight([Console]::WindowWidth - 1) -ForegroundColor Black -BackgroundColor Cyan
+                Write-Host $row -ForegroundColor Black -BackgroundColor Cyan
             } else {
-                Write-Host $line -ForegroundColor Gray
+                Write-Host $row -ForegroundColor Gray
             }
         }
-        $key = [Console]::ReadKey($true)
-        switch ($key.Key) {
-            'UpArrow'   { $selected = ($selected - 1 + $Items.Count) % $Items.Count }
-            'DownArrow' { $selected = ($selected + 1) % $Items.Count }
-            'W'         { $selected = ($selected - 1 + $Items.Count) % $Items.Count }
-            'S'         { $selected = ($selected + 1) % $Items.Count }
-            'Enter'     { return $selected }
-            'Escape'    { return -1 }
-            'Q'         { return -1 }
+        # Number keys jump straight to that item — a guaranteed-to-work
+        # fallback in case arrow-key escape sequences don't parse correctly
+        # in a particular terminal/host.
+        $k = Read-MenuKey
+        switch ($k.VirtualKeyCode) {
+            38 { $selected = ($selected - 1 + $Items.Count) % $Items.Count } # Up
+            40 { $selected = ($selected + 1) % $Items.Count }               # Down
+            87 { $selected = ($selected - 1 + $Items.Count) % $Items.Count } # W
+            83 { $selected = ($selected + 1) % $Items.Count }               # S
+            75 { $selected = ($selected - 1 + $Items.Count) % $Items.Count } # K
+            74 { $selected = ($selected + 1) % $Items.Count }               # J
+            13 { return $selected }  # Enter
+            27 { return -1 }         # Escape
+            81 { return -1 }         # Q
+            default {
+                if ($k.Character -match '^[1-9]$') {
+                    $n = [int]"$($k.Character)" - 1
+                    if ($n -ge 0 -and $n -lt $Items.Count) { return $n }
+                }
+            }
         }
     }
 }
@@ -601,7 +631,7 @@ if (Test-InteractiveConsole) {
         'Leave Running && Exit Menu'
     )
     while ($true) {
-        $menuTitle = "ReadyRoute V2 - dev console  ($([char]0x2191)/$([char]0x2193) navigate, Enter select, Q quit)"
+        $menuTitle = "ReadyRoute V2 - dev console  ($([char]0x2191)/$([char]0x2193) navigate, Enter select, number to jump, Q quit)"
         $choice = Show-ArrowMenu -Items $menuItems -Title $menuTitle
         Write-Host ""
         switch ($choice) {
