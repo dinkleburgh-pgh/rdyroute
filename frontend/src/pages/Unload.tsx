@@ -44,6 +44,7 @@ export default function Unload() {
   const [batchNum, setBatchNum] = useState("1");
   const [wearers, setWearers] = useState("0");
   const [overflowOpen, setOverflowOpen] = useState<number | null>(null);
+  const [unloadedSort, setUnloadedSort] = useState<"number" | "order">("number");
   // Trucks marked unloaded this session — card stays in dirty section with Undo until navigation.
   const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
 
@@ -107,6 +108,28 @@ export default function Unload() {
       }),
     [allTrucks],
   );
+  // Sort variant for the "Unloaded today" grid — mirrors the Load page's
+  // Number/Load order toggle. There's no dedicated unload-finish timestamp (the
+  // unload workflow is single-click, no timed step), so updated_at is the order
+  // proxy — the same fallback the Load page uses for trucks that skip the timed
+  // workflow.
+  const unloadedSorted = useMemo(() => {
+    const arr = [...unloaded];
+    if (unloadedSort === "order") {
+      const toEpoch = (t: TruckWithState): number => {
+        const ua = t.state?.updated_at;
+        return ua ? new Date(ua).getTime() / 1000 : Number.POSITIVE_INFINITY;
+      };
+      arr.sort((a, b) => {
+        const diff = toEpoch(a) - toEpoch(b);
+        if (diff !== 0) return diff;
+        return a.truck_number - b.truck_number;
+      });
+    } else {
+      arr.sort((a, b) => a.truck_number - b.truck_number);
+    }
+    return arr;
+  }, [unloaded, unloadedSort]);
   const needsChecked = useMemo(
     () =>
       allTrucks.filter(
@@ -490,18 +513,55 @@ export default function Unload() {
 
       {/* ── Unloaded ───────────────────────────────────────────────────── */}
       <section>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-400">
-          Unloaded today ({unloaded.length})
-        </h3>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-emerald-400">
+            Unloaded today ({unloaded.length})
+          </h3>
+          {unloaded.length > 1 && (
+            <div className="inline-flex overflow-hidden rounded-md border border-hairline text-[11px] font-semibold">
+              <button
+                type="button"
+                onClick={() => setUnloadedSort("number")}
+                className={clsx(
+                  "px-2 py-1 transition-colors",
+                  unloadedSort === "number"
+                    ? "bg-st-unloaded text-white"
+                    : "bg-surface-2 text-ink-muted hover:bg-surface",
+                )}
+              >
+                # Number
+              </button>
+              <button
+                type="button"
+                onClick={() => setUnloadedSort("order")}
+                className={clsx(
+                  "border-l border-hairline px-2 py-1 transition-colors",
+                  unloadedSort === "order"
+                    ? "bg-st-unloaded text-white"
+                    : "bg-surface-2 text-ink-muted hover:bg-surface",
+                )}
+              >
+                Unload order
+              </button>
+            </div>
+          )}
+        </div>
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]">
-          {unloaded.map((t, index) => (
+          {unloadedSorted.map((t, index) => (
             <AnimateCard key={t.truck_number} delay={index * 0.03}>
+              <div className="relative">
+                {unloadedSort === "order" && (
+                  <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-unloaded ring-1 ring-st-unloaded/60">
+                    {index + 1}
+                  </span>
+                )}
               <WorkflowCard
                 truck={t}
                 accent="text-st-unloaded"
                 statusLabel="Unloaded"
                 statusClassName="bg-[#16a34a] text-white"
               />
+              </div>
             </AnimateCard>
           ))}
           {unloaded.length === 0 && (
