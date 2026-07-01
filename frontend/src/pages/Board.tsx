@@ -376,11 +376,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         if (t.truck_type === "Spare") return false;
         return t.is_oos || effectiveStatus(t, runDayNum, holidayLoad) === "oos";
       }
-      // is_oos is authoritative (matches the sidebar's Live Status counts and
-      // the "oos" filter above): a route truck flagged out of service belongs
-      // under OOS, not its lifecycle status, even if that status still reads
-      // "dirty"/"unloaded". Exclude it from every other lifecycle filter here.
-      if (t.truck_type !== "Spare" && t.is_oos) return false;
+      // An is_oos route truck with a covering truck assigned is represented by
+      // that covering truck's card instead (matches the sidebar's Live Status
+      // counts), so exclude it here to avoid a duplicate. But an is_oos truck
+      // with NO coverage yet is still physically sitting there — if it's dirty,
+      // someone still has to unload it, so it must stay in the normal workflow
+      // (Dirty, etc.) until it's covered or unloaded, not disappear the moment
+      // it's flagged OOS.
+      if (t.truck_type !== "Spare" && t.is_oos && coveringTruckByRoute.has(t.truck_number)) return false;
       // For all other filters, re-evaluate auto-off trucks against unloadsDay
       // so they surface under their real workflow status.
       const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
