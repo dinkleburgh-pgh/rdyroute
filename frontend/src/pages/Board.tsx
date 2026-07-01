@@ -231,6 +231,17 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     [data, runDayNum, holidayLoad],
   );
 
+  // Reverse of coveringTruckByRoute (route -> covering truck) so a covering
+  // truck's OWN card can show which route it covers even when that coverage
+  // is only known via the historical fallback (no live route_swap_route /
+  // oos_spare_route field on its own state, e.g. truck 1 covering 68 after
+  // today's assignment lapsed but is still recognized from the swap log).
+  const coveringRouteByTruckNum = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const [route, cover] of coveringTruckByRoute) m.set(cover.num, route);
+    return m;
+  }, [coveringTruckByRoute]);
+
   async function startLoad(t: TruckWithState) {
     if (t.state?.priority_hold) return;
     await upsert.mutateAsync({
@@ -731,7 +742,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 : filter === "dirty" && truck.state?.priority_hold
                 ? "text-amber-300"
                 : "hover:text-blue-300";
-            const coverageRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+            const coverageRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? coveringRouteByTruckNum.get(truck.truck_number) ?? null;
             const showCoverageBadge = !fleetMode && coverageRoute != null;
             // Reverse lookup: this truck's own route is being covered by another
             // truck (route swap / OOS). Show it so the covered card isn't blank.
@@ -944,7 +955,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         if (status === "oos") {
                           return null;
                         }
-                        const coverageRoute = truck.route_swap_route ?? truck.state?.oos_spare_route ?? null;
+                        const coverageRoute = truck.route_swap_route ?? truck.state?.oos_spare_route ?? coveringRouteByTruckNum.get(truck.truck_number) ?? null;
                         if (coverageRoute != null) {
                           return (
                             <button
