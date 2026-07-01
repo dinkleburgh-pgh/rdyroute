@@ -293,10 +293,23 @@ export function buildRouteStatusCounts(
 
   for (const t of trucks) {
     if (t.truck_type === "Spare") {
-      const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? fallbackRouteByTruck.get(t.truck_number) ?? null;
-      // Covering spares also surface in their live workflow bucket (e.g. unloaded).
-      if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
-        out[statusFor(t)] += 1;
+      // Mirror the Board's Dirty/Unloaded filters exactly: ANY spare sitting
+      // dirty/unfinished counts there whether or not it's covering a route
+      // (it's a truck sitting there either way), same for unloaded. Only fall
+      // back to the covering-route bucket for other statuses (e.g. a covering
+      // spare that's in_progress/loaded). Otherwise the sidebar undercounted
+      // Dirty by however many idle (non-covering) dirty spares existed.
+      const rawSpareStatus = t.state?.status;
+      if (rawSpareStatus === "dirty" || rawSpareStatus === "unfinished" || t.state == null) {
+        out.dirty += 1;
+      } else if (rawSpareStatus === "unloaded") {
+        out.unloaded += 1;
+      } else {
+        const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? fallbackRouteByTruck.get(t.truck_number) ?? null;
+        // Covering spares also surface in their live workflow bucket (e.g. unloaded).
+        if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
+          out[statusFor(t)] += 1;
+        }
       }
       // Every available (non-OOS) spare counts in the Spare bucket — including
       // idle spares sitting unloaded and ready, so the sidebar reflects how many
