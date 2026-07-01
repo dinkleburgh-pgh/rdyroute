@@ -201,12 +201,25 @@ export function buildRouteStatusCounts(
     spare: 0,
   };
 
+  // Find route numbers whose load is being handled by another truck (route
+  // swap or OOS spare). These are excluded from route-truck counts to mirror
+  // buildOperationalDayContext's denominator logic and prevent numerator >
+  // denominator in the progress bars. Computed up front (independent of
+  // statusFor) so statusFor can consult it below.
+  const coveredRouteNumbers = new Set<number>();
+  for (const t of trucks) {
+    const coveredRoute = getCoverageRouteNumber(t);
+    if (coveredRoute != null) coveredRouteNumbers.add(coveredRoute);
+  }
+
   function statusFor(t: TruckWithState): TruckStatus {
-    // is_oos is authoritative for route trucks: a truck flagged out of service
-    // counts as OOS regardless of its physical workflow status (which may still
-    // read "dirty"). This mirrors how RouteCardPanel and the fleet board
-    // identify OOS routes that need assignment.
-    if (t.truck_type !== "Spare" && t.is_oos) return "oos";
+    // is_oos only overrides the workflow status once a covering truck is
+    // actually assigned (matches the Board's Dirty/etc. filters): the covering
+    // truck's card represents the route from then on. An is_oos truck with no
+    // coverage yet is still physically sitting there — if it's dirty, someone
+    // still has to unload it, so its real workflow status stands until it's
+    // covered or unloaded.
+    if (t.truck_type !== "Spare" && t.is_oos && coveredRouteNumbers.has(t.truck_number)) return "oos";
     const coveredRoute = getCoverageRouteNumber(t);
     if (coveredRoute != null) {
       return effectiveOperationalStatus(t, loadDayNum, holidayLoad);
@@ -214,23 +227,13 @@ export function buildRouteStatusCounts(
     return effectiveWorkflowStatus(t, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload);
   }
 
-  // First pass: identify which route numbers are currently OOS so covering
-  // spares can be bucketed into their lifecycle status rather than "spare".
+  // Identify which route numbers are currently OOS so covering spares can be
+  // bucketed into their lifecycle status rather than "spare".
   const oosRouteNumbers = new Set<number>();
   for (const t of trucks) {
     if (t.truck_type !== "Spare" && statusFor(t) === "oos") {
       oosRouteNumbers.add(t.truck_number);
     }
-  }
-
-  // Second pass: find route numbers whose load is being handled by another
-  // truck (route swap or OOS spare). These are excluded from route-truck
-  // counts to mirror buildOperationalDayContext's denominator logic and
-  // prevent numerator > denominator in the progress bars.
-  const coveredRouteNumbers = new Set<number>();
-  for (const t of trucks) {
-    const coveredRoute = getCoverageRouteNumber(t);
-    if (coveredRoute != null) coveredRouteNumbers.add(coveredRoute);
   }
 
   for (const t of trucks) {
