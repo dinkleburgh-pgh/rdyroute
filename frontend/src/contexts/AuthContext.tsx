@@ -78,11 +78,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         localStorage.setItem(LS_USER_KEY, JSON.stringify(fresh));
       }
       setUser(fresh);
-    }).catch(() => {
+    }).catch((err: unknown) => {
       if (cancelled) return;
-      // 401 = no valid session → clear cached user
-      localStorage.removeItem(LS_USER_KEY);
-      setUser(null);
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
+        // Server explicitly rejected the session — clear it.
+        localStorage.removeItem(LS_USER_KEY);
+        setUser(null);
+      }
+      // Network error (no response) while offline: keep the cached user so the
+      // app stays usable. The next successful /auth/me will re-sync.
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });
