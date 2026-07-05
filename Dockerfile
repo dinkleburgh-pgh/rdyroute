@@ -25,10 +25,14 @@ RUN set -eux; \
     apt-get install -y --no-install-recommends postgresql-client-18; \
     rm -rf /var/lib/apt/lists/*
 
-# Install Python deps first for better layer caching.
-COPY requirements.txt ./
+# Install Python deps first for better layer caching. Install from the pinned
+# lock (not requirements.txt) so a rebuild of unchanged code can't silently
+# resolve a newer/breaking release. requirements.txt is copied too so the
+# top-level intent ships with the image; regenerate the lock deliberately (see
+# the header in requirements.lock).
+COPY requirements.txt requirements.lock ./
 RUN pip install --upgrade pip setuptools wheel \
- && pip install -r requirements.txt
+ && pip install -r requirements.lock
 
 # App source.
 COPY . .
