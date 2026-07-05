@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAuditEntries,
@@ -49,6 +49,58 @@ import FleetUtilityBar from "./board/FleetUtilityBar";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import { CalendarDays, X } from "lucide-react";
+
+// A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
+// MODULE scope, not inside Board's render — otherwise React sees a brand-new
+// component type on every render and unmounts/remounts every truck card under
+// it (replaying entrance animations and re-reading localStorage) on every 5s
+// poll, websocket push, and 1s timer tick. renderTruckCard is passed in as a
+// prop since it closes over Board's render state.
+function CollapsibleSection({
+  sectionKey,
+  title,
+  titleClassName,
+  sectionRows,
+  renderTruckCard,
+}: {
+  sectionKey: string;
+  title: string;
+  titleClassName: string;
+  sectionRows: TruckWithState[];
+  renderTruckCard: (truck: TruckWithState, index: number) => ReactNode;
+}) {
+  const initOpen = useRef(
+    localStorage.getItem(`readyroutev2_collapse_board-${sectionKey}`) !== "false"
+  ).current;
+  if (sectionRows.length === 0) return null;
+  return (
+    <details
+      open={initOpen ? true : undefined}
+      onToggle={(e) => {
+        const val = (e.target as HTMLDetailsElement).open;
+        try { localStorage.setItem(`readyroutev2_collapse_board-${sectionKey}`, String(val)); } catch { }
+      }}
+      className="group col-span-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/50"
+    >
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-900/80 px-4 py-3">
+        <div className="min-w-0">
+          <div className={clsx("text-xl font-black uppercase tracking-[0.3em] sm:text-2xl", titleClassName)}>
+            {title}
+          </div>
+          <div className="text-xs font-medium text-slate-500">
+            {sectionRows.length} truck{sectionRows.length !== 1 ? "s" : ""}
+          </div>
+        </div>
+        <span className="text-lg text-slate-500 transition-transform group-open:rotate-180">⌄</span>
+      </summary>
+      <div className="border-t border-slate-800/80 p-3">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {sectionRows.map((truck, sectionIndex) => renderTruckCard(truck, sectionIndex))}
+        </div>
+      </div>
+    </details>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Board
@@ -1257,70 +1309,36 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             );
           };
 
-          const CollapsibleSection = ({ sectionKey, title, titleClassName, sectionRows }: { sectionKey: string; title: string; titleClassName: string; sectionRows: TruckWithState[] }) => {
-            const initOpen = useRef(
-              localStorage.getItem(`readyroutev2_collapse_board-${sectionKey}`) !== "false"
-            ).current;
-            if (sectionRows.length === 0) return null;
-            return (
-              <details
-                key={sectionKey}
-                open={initOpen ? true : undefined}
-                onToggle={(e) => {
-                  const val = (e.target as HTMLDetailsElement).open;
-                  try { localStorage.setItem(`readyroutev2_collapse_board-${sectionKey}`, String(val)); } catch { }
-                }}
-                className="group col-span-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/50"
-              >
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-900/80 px-4 py-3">
-                  <div className="min-w-0">
-                    <div className={clsx("text-xl font-black uppercase tracking-[0.3em] sm:text-2xl", titleClassName)}>
-                      {title}
-                    </div>
-                    <div className="text-xs font-medium text-slate-500">
-                      {sectionRows.length} truck{sectionRows.length !== 1 ? "s" : ""}
-                    </div>
-                  </div>
-                  <span className="text-lg text-slate-500 transition-transform group-open:rotate-180">⌄</span>
-                </summary>
-                <div className="border-t border-slate-800/80 p-3">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-                    {sectionRows.map((truck, sectionIndex) => renderTruckCard(truck, sectionIndex))}
-                  </div>
-                </div>
-              </details>
-            );
-          };
 
           if (!fleetMode && filter === "unloaded") {
             return [
-              <CollapsibleSection key="unloaded-running" sectionKey="unloaded-running" title={`Day ${runDayNum}`} titleClassName="text-emerald-400" sectionRows={unloadedRunningRows} />,
-              <CollapsibleSection key="unloaded-spare" sectionKey="unloaded-spare" title="Spare" titleClassName="text-cyan-400" sectionRows={unloadedSpareRows} />,
-              <CollapsibleSection key="unloaded-off" sectionKey="unloaded-off" title="Off" titleClassName="text-slate-400" sectionRows={unloadedOffRows} />,
+              <CollapsibleSection key="unloaded-running" sectionKey="unloaded-running" title={`Day ${runDayNum}`} titleClassName="text-emerald-400" sectionRows={unloadedRunningRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="unloaded-spare" sectionKey="unloaded-spare" title="Spare" titleClassName="text-cyan-400" sectionRows={unloadedSpareRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="unloaded-off" sectionKey="unloaded-off" title="Off" titleClassName="text-slate-400" sectionRows={unloadedOffRows} renderTruckCard={renderTruckCard} />,
             ];
           }
 
           if (!fleetMode && filter === "dirty") {
             return [
-              <CollapsibleSection key="dirty-requests" sectionKey="dirty-requests" title="Requests" titleClassName="text-amber-400" sectionRows={priorityRows} />,
-              <CollapsibleSection key="dirty-coverages" sectionKey="dirty-coverages" title="Spares / Coverages" titleClassName="text-violet-400" sectionRows={dirtyCoverageRows} />,
-              <CollapsibleSection key="dirty-needs-checked" sectionKey="dirty-needs-checked" title="Needs Checked" titleClassName="text-amber-400" sectionRows={needsCheckedRows} />,
-              <CollapsibleSection key="dirty-dirty" sectionKey="dirty-dirty" title="Dirty" titleClassName="text-red-400" sectionRows={dirtyRouteRows} />,
-              <CollapsibleSection key="dirty-unfinished" sectionKey="dirty-unfinished" title="Unfinished" titleClassName="text-status-unfinished" sectionRows={unfinishedRows} />,
+              <CollapsibleSection key="dirty-requests" sectionKey="dirty-requests" title="Requests" titleClassName="text-amber-400" sectionRows={priorityRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="dirty-coverages" sectionKey="dirty-coverages" title="Spares / Coverages" titleClassName="text-violet-400" sectionRows={dirtyCoverageRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="dirty-needs-checked" sectionKey="dirty-needs-checked" title="Needs Checked" titleClassName="text-amber-400" sectionRows={needsCheckedRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="dirty-dirty" sectionKey="dirty-dirty" title="Dirty" titleClassName="text-red-400" sectionRows={dirtyRouteRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="dirty-unfinished" sectionKey="dirty-unfinished" title="Unfinished" titleClassName="text-status-unfinished" sectionRows={unfinishedRows} renderTruckCard={renderTruckCard} />,
             ];
           }
 
           if (!fleetMode && filter === "oos") {
             return [
-              <CollapsibleSection key="oos-hold" sectionKey="oos-hold" title="Requests" titleClassName="text-amber-400" sectionRows={holdRows} />,
-              <CollapsibleSection key="oos-out" sectionKey="oos-out" title="Out of Service" titleClassName="text-slate-400" sectionRows={outOfServiceRows} />,
+              <CollapsibleSection key="oos-hold" sectionKey="oos-hold" title="Requests" titleClassName="text-amber-400" sectionRows={holdRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="oos-out" sectionKey="oos-out" title="Out of Service" titleClassName="text-slate-400" sectionRows={outOfServiceRows} renderTruckCard={renderTruckCard} />,
             ];
           }
 
           if (!fleetMode && filter === "spare") {
             return [
-              <CollapsibleSection key="spare-cov" sectionKey="spare-cov" title="Coverage" titleClassName="text-violet-400" sectionRows={coveringSpares} />,
-              <CollapsibleSection key="spare-idle" sectionKey="spare-idle" title="Idle Spare" titleClassName="text-cyan-400" sectionRows={idleSpares} />,
+              <CollapsibleSection key="spare-cov" sectionKey="spare-cov" title="Coverage" titleClassName="text-violet-400" sectionRows={coveringSpares} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="spare-idle" sectionKey="spare-idle" title="Idle Spare" titleClassName="text-cyan-400" sectionRows={idleSpares} renderTruckCard={renderTruckCard} />,
             ];
           }
 
