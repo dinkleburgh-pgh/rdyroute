@@ -52,19 +52,6 @@ export function isScheduledOff(truck: { scheduled_off_days: number[] }, dayNum: 
   return (truck.scheduled_off_days ?? []).includes(dayNum);
 }
 
-/**
- * Status-aware off-day check — matches the logic inside effectiveStatus.
- * Returns true only for route trucks (not spares) that are scheduled off
- * AND haven't entered an active workflow (status is dirty or unloaded).
- * Holiday mode disables the check entirely.
- */
-export function isOffDay(truck: TruckWithState, dayNum: number, holidayMode = false): boolean {
-  if (holidayMode) return false;
-  if (truck.truck_type === "Spare") return false;
-  if (!(truck.scheduled_off_days ?? []).includes(dayNum)) return false;
-  const raw = (truck.state?.status ?? "dirty") as TruckStatus;
-  return raw === "dirty" || raw === "unloaded";
-}
 
 /**
  * Count of loaded trucks matching the sidebar/board "loaded" filter.

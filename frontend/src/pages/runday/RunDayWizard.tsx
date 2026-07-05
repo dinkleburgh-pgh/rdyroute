@@ -26,7 +26,7 @@ import {
 import { workdayNumbers } from "../../components/Clock";
 import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
-import { effectiveStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../../utils/truckStatus";
+import { effectiveStatus, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
 
 export default function RunDayWizard({
   runDate,
@@ -119,7 +119,7 @@ export default function RunDayWizard({
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   const { loadDay: todayLoad } = workdayNumbers(new Date(`${runDate}T12:00:00`));
-  const prevDay = todayLoad === 1 ? 5 : todayLoad - 1;
+  const prevDay = previousWorkday(todayLoad);
   const returningTrucks = board.filter(
     (t) =>
       t.truck_type !== "Spare" &&

@@ -25,7 +25,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, recordSwapHistory } from "../utils/truckStatus";
+import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -107,8 +107,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
 
   // Holiday "extra" day is the previous ship day (Mon=1 wraps to Fri=5)
-  const loadDay2 = runDayNum === 1 ? 5 : runDayNum - 1;
-  const unloadsDay2 = runUnloadsDay === 1 ? 5 : runUnloadsDay - 1;
+  const loadDay2 = previousWorkday(runDayNum);
+  const unloadsDay2 = previousWorkday(runUnloadsDay);
   // Trucks off on loadDay OR the day after are both in the Day-minus-1 catch-up batch.
   const loadNextDay = runDayNum === 5 ? 1 : runDayNum + 1;
 
@@ -182,11 +182,6 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const inProgressTruck = useMemo(
     () => (data ?? []).find((t) => t.state?.status === "in_progress"),
     [data],
-  );
-
-  const coveringSpareByRoute = useMemo(
-    () => new Map<number, number>(spareAssignments.map((a) => [a.covering_route_truck, a.spare_truck_number])),
-    [spareAssignments],
   );
 
   // Unified: OOS route truck number → {truckNumber, status} of the covering truck

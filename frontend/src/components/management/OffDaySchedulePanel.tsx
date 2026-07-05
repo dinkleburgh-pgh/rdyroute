@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { useFleet, useHolidayLoad, useHolidayUnload } from "../../api/hooks";
-import { isScheduledOff } from "../../utils/truckStatus";
+import { isScheduledOff, previousWorkday } from "../../utils/truckStatus";
 import { workdayNumbers } from "../Clock";
 import { todayIso } from "../../api/client";
 import clsx from "clsx";
@@ -32,7 +32,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
   // (unloadsDay-1). Track every active load/unload day so the compact view and
   // highlighting include the holiday's extra day.
   const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
-  const unloadPrevDay = unloadsDay === 1 ? 5 : unloadsDay - 1;
+  const unloadPrevDay = previousWorkday(unloadsDay);
   const loadDays = holidayLoad ? [loadDay, loadNextDay] : [loadDay];
   const unloadDays = holidayUnload ? [unloadsDay, unloadPrevDay] : [unloadsDay];
   const isLoadDay = (d: number) => loadDays.includes(d);

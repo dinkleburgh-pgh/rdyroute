@@ -404,19 +404,6 @@ export function useRouteSwaps(runDate: string = todayIso()) {
   });
 }
 
-// Every route swap currently on file, regardless of run date — a RouteSwap
-// row is deleted when cleared, so anything still present is implicitly still
-// active. Used alongside useOpenSpareAssignments for the historical-coverage
-// fallback.
-export function useAllRouteSwaps() {
-  return useQuery({
-    queryKey: ["route-swaps", "all-dates"],
-    queryFn: async () => (await api.get<RouteSwap[]>("/route-swaps")).data,
-    refetchInterval: 15000,
-    staleTime: 14500,
-  });
-}
-
 export function useCreateRouteSwap() {
   const qc = useQueryClient();
   return useMutation({
@@ -431,8 +418,7 @@ export function useCreateRouteSwap() {
         two_way: payload.two_way ?? false,
       })).data,
     onSuccess: (_data, vars) => {
-      // Prefix key invalidates both the per-date query and the "all-dates"
-      // variant (useAllRouteSwaps) — the specific-date key missed the latter.
+      // Prefix key invalidates every ["route-swaps", *] query at once.
       qc.invalidateQueries({ queryKey: ["route-swaps"] });
       qc.invalidateQueries({ queryKey: ["board", vars.run_date] });
       qc.invalidateQueries({ queryKey: ["route-swap-log"] });

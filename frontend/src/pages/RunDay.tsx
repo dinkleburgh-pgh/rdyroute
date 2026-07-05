@@ -26,6 +26,7 @@ import {
   effectiveOperationalStatus,
   effectiveStatus,
   isScheduledOff,
+  previousWorkday,
 } from "../utils/truckStatus";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
 import { formatRunDate } from "../utils/dates";
@@ -198,7 +199,7 @@ export default function RunDay() {
   // Unload catches up on the PREVIOUS ship day; load gets ahead on the NEXT
   // ship day. So unload's second day is unloadsDay-1, load's is loadDay+1
   // (matches the sidebar/board "Day N + N+1" load label).
-  const unloadsDay2 = unloadsDay === 1 ? 5 : unloadsDay - 1;
+  const unloadsDay2 = previousWorkday(unloadsDay);
   const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
 
   const loadContext = useMemo(
