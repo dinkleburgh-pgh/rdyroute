@@ -3,9 +3,10 @@ Startup seeding helpers.
 
 Two responsibilities:
 
-1.  ``ensure_default_user`` — guarantee that the credentials
-    ``ready`` / ``ready`` always work, regardless of what is (or isn't)
-    in the database.  Runs on every startup.
+1.  ``ensure_default_user`` — seed a first admin account ONLY on a genuinely
+    empty database (initial password from ``INITIAL_ADMIN_PASSWORD`` or a random
+    one logged once). Never resets or re-enables an existing account, so an
+    admin can durably change the password or disable it.
 
 2.  ``import_v1_users`` — one-shot import of users from the V1 Streamlit
     app's ``auth_users.json``.  Bcrypt hashes are copied verbatim
@@ -18,6 +19,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 from pathlib import Path
 
 import bcrypt
@@ -57,43 +59,48 @@ def _hash(plain: str) -> str:
 def ensure_default_user(
     db: Session,
     username: str = "ready",
-    password: str = "ready",
     display_name: str = "Ready",
     role: AuthRole = AuthRole.admin,
 ) -> None:
-    """Create or refresh a guaranteed admin account.
+    """Seed an initial admin ONLY when the database has no users at all.
 
-    If the row exists we leave the stored hash alone *unless* the supplied
-    password no longer verifies — in that case we reset it so the documented
-    credentials always work.
+    Previously this ran every startup and force-reset the ``ready`` account's
+    password back to ``ready`` and re-enabled it whenever the stored hash didn't
+    verify — so an admin could never durably change the password or disable the
+    account (a restart undid it), and the credentials stayed trivially guessable
+    on an internet-facing app.
+
+    Now it only creates a first admin on a genuinely empty database, and never
+    touches an existing account. The initial password comes from
+    ``INITIAL_ADMIN_PASSWORD`` if set, otherwise a random one printed once to the
+    startup log so the operator can retrieve it and change it immediately.
     """
-    user = db.query(User).filter(User.username == username).one_or_none()
-    if user is None:
-        db.add(
-            User(
-                username=username,
-                hashed_password=_hash(password),
-                role=role,
-                display_name=display_name,
-                is_enabled=True,
-            )
-        )
-        db.commit()
+    if db.query(User.id).first() is not None:
+        # DB already has users — the admin account is managed normally from here.
         return
 
-    needs_reset = False
-    try:
-        if not bcrypt.checkpw(password.encode(), user.hashed_password.encode()):
-            needs_reset = True
-    except Exception:
-        needs_reset = True
+    initial_pw = os.environ.get("INITIAL_ADMIN_PASSWORD", "").strip()
+    generated = not initial_pw
+    if generated:
+        initial_pw = secrets.token_urlsafe(15)
 
-    if needs_reset:
-        user.hashed_password = _hash(password)
-    user.is_enabled = True
-    if not user.display_name:
-        user.display_name = display_name
+    db.add(
+        User(
+            username=username,
+            hashed_password=_hash(initial_pw),
+            role=role,
+            display_name=display_name,
+            is_enabled=True,
+        )
+    )
     db.commit()
+
+    if generated:
+        print(
+            f"[seed] Created initial admin '{username}' with a GENERATED password: {initial_pw}\n"
+            f"[seed] Log in and change it immediately (or set INITIAL_ADMIN_PASSWORD before first boot).",
+            flush=True,
+        )
 
 
 # ---------------------------------------------------------------------------
