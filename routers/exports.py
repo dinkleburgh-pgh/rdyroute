@@ -1071,6 +1071,7 @@ def download_backup(_admin: User = Depends(require_admin), db: Session = Depends
 async def import_load_durations(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ) -> dict:
     """Import load durations from a JSON array file."""
     content = await file.read()
@@ -1102,6 +1103,7 @@ async def import_load_durations(
 async def import_backup(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ) -> dict:
     """
     Import a backup ZIP package produced by GET /exports/backup.zip.
@@ -1109,11 +1111,15 @@ async def import_backup(
     possible to avoid duplicates.
     """
     content = await file.read()
-    summary = _import_backup_package(content, db, replace_existing=False)
-    zf = zipfile.ZipFile(io.BytesIO(content))
-    if "activity_events.json" in zf.namelist():
-        summary.update(_import_activity_events_payload(zf.read("activity_events.json"), db, replace_existing=False))
-    db.commit()
+    try:
+        summary = _import_backup_package(content, db, replace_existing=False)
+        zf = zipfile.ZipFile(io.BytesIO(content))
+        if "activity_events.json" in zf.namelist():
+            summary.update(_import_activity_events_payload(zf.read("activity_events.json"), db, replace_existing=False))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return summary
 
 

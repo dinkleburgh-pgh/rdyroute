@@ -18,7 +18,7 @@ Business logic preserved from V1:
 from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
 from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
@@ -871,7 +871,7 @@ def truck_completion_trend(
             TruckState.run_date,
             func.count(TruckState.id).label("total"),
             func.sum(
-                func.case((TruckState.status == "loaded", 1), else_=0)
+                case((TruckState.status == "loaded", 1), else_=0)
             ).label("loaded"),
         )
         .where(TruckState.run_date >= cutoff)
@@ -964,15 +964,15 @@ def truck_anomalies(
         select(
             TruckState.run_date,
             func.count(TruckState.id).label("tot"),
-            func.sum(func.case((TruckState.status == "loaded", 1), else_=0)).label("lod"),
+            func.sum(case((TruckState.status == "loaded", 1), else_=0)).label("lod"),
             func.avg(
-                func.case(
+                case(
                     (TruckState.status == "loaded", TruckState.load_duration_seconds),
                     else_=None,
                 )
             ).label("pac"),
             func.avg(
-                func.case(
+                case(
                     (TruckState.status == "loaded", TruckState.wearers),
                     else_=None,
                 )

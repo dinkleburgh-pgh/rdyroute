@@ -7,6 +7,7 @@ and mandatory human review before live shortages are created.
 
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import mimetypes
@@ -1775,7 +1776,14 @@ async def create_shortage_sheet_import(
         content_by_photo_id = {photo.id: uploads[index][1] for index, photo in enumerate(photo_rows)}
         for photo in photo_rows:
             try:
-                extracted_rows, extraction_notes, extracted_columns = extract_shortage_rows_with_llm(
+                # The LLM/OCR pipeline makes several sequential blocking HTTP
+                # calls to Ollama (up to timeout_seconds each). Run it in a
+                # worker thread so a single photo upload doesn't stall the event
+                # loop — and thus the board, chat, and websockets — for every
+                # other connected client. DB work stays on the main thread
+                # (the SQLAlchemy session is not thread-safe to share).
+                extracted_rows, extraction_notes, extracted_columns = await asyncio.to_thread(
+                    extract_shortage_rows_with_llm,
                     content=content_by_photo_id[photo.id],
                     file_name=photo.file_name,
                     source_photo_id=photo.id,

@@ -169,16 +169,25 @@ def get_current_user(
     sid = claims.get("sid")
     if not username:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Token missing subject")
-    # Validate server-side session first (primary-key lookup = single index hit).
-    if sid:
-        now_ts = datetime.now(timezone.utc).timestamp()
-        sess = db.get(SessionModel, sid)
-        if sess is None or sess.expires_ts <= now_ts:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Session revoked or expired",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
+    # Validate server-side session. sid is REQUIRED — every token minted by
+    # _create_access_token carries one, so a token without a sid can only be
+    # forged (or a stale pre-session format). Rejecting it outright closes the
+    # bypass where an attacker who knows the signing key mints a sid-less token
+    # to skip session revocation entirely. Primary-key lookup = single index hit.
+    if not sid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Token missing session",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    now_ts = datetime.now(timezone.utc).timestamp()
+    sess = db.get(SessionModel, sid)
+    if sess is None or sess.expires_ts <= now_ts:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Session revoked or expired",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
     user = db.scalars(select(User).where(User.username == username)).first()
     if user is None or not user.is_enabled:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found or disabled")
@@ -299,9 +308,17 @@ def guest_login(request: Request, response: Response, db: Session = Depends(get_
 
 # OAuth2 form-compatible endpoint used by the OpenAPI /docs "Authorize" button
 @router.post("/token", response_model=TokenResponse, include_in_schema=False)
-def token_form(form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+def token_form(request: Request, form: OAuth2PasswordRequestForm = Depends(), db: Session = Depends(get_db)):
+    # Same brute-force rate limit as /login — this endpoint validates the same
+    # credentials and mints the same JWT, so it must not be an unthrottled
+    # side door (include_in_schema=False only hides it from /docs).
+    client_ip = request.client.host if request.client else "unknown"
+    _bypass_usernames = {u.strip() for u in os.getenv("RATE_LIMIT_BYPASS_USERS", "").split(",") if u.strip()}
+    if form.username.lower() not in _bypass_usernames:
+        _check_rate_limit(client_ip, db)
     user = db.scalars(select(User).where(User.username == form.username.lower())).first()
     if user is None or not user.is_enabled or not _verify_password(form.password, user.hashed_password):
+        db.commit()  # persist the failed attempt row
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
     sid = _write_server_session(user.username, user.role.value, db)
     token = _create_access_token(user.username, user.role.value, sid)
