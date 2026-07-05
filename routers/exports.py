@@ -269,7 +269,9 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
                 truck_number = int(item.get("truck_number", 0) or 0)
                 if truck_number <= 0:
                     continue
-                existing = db.get(Truck, truck_number)
+                # Under replace_existing the table was just emptied, so the row
+                # can't exist — skip the guaranteed-miss lookup and insert.
+                existing = None if replace_existing else db.get(Truck, truck_number)
                 truck_type = TruckType(item["truck_type"]) if item.get("truck_type") else TruckType.uniform
                 if existing is None:
                     db.add(Truck(
@@ -303,7 +305,9 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             truck_number = int(item.get("truck_number", 0) or 0)
             if run_date is None or truck_number <= 0:
                 continue
-            existing = db.scalars(
+            # Under replace_existing the table was just emptied, so skip the
+            # per-row lookup (10k+ guaranteed-miss round trips on a real mirror).
+            existing = None if replace_existing else db.scalars(
                 select(TruckState).where(
                     TruckState.truck_number == truck_number,
                     TruckState.run_date == run_date,
@@ -386,7 +390,7 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             truck_number = int(item.get("truck_number", 0) or 0)
             if run_date is None or batch_number <= 0 or truck_number <= 0:
                 continue
-            existing = db.scalars(
+            existing = None if replace_existing else db.scalars(
                 select(Batch).where(
                     Batch.run_date == run_date,
                     Batch.batch_number == batch_number,
@@ -416,7 +420,7 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             key = str(item.get("key") or "").strip()
             if not key:
                 continue
-            existing = db.get(AppSetting, key)
+            existing = None if replace_existing else db.get(AppSetting, key)
             if existing is None:
                 db.add(AppSetting(key=key, value=item.get("value")))
                 imported += 1
