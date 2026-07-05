@@ -19,6 +19,7 @@ from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import case, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
@@ -68,7 +69,10 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     ).all()
     if not trucks:
         db.add(AppSetting(key=source_key, value="auto"))
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
         return
 
     # Check force_unloaded_on_new_day setting — overrides all prior-status logic
@@ -281,7 +285,16 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     # Auto-apply recurring route-swap rules for this load day (once per run-date).
     from routers.spares import apply_recurring_swaps
     apply_recurring_swaps(db, run_date, load_day_num)
-    db.commit()
+    # Day init is a check-then-act with no lock: at rollover two concurrent board
+    # polls can both pass the "already initialized" check at the top and both try
+    # to insert the same sentinel / TruckState rows here. The whole init is one
+    # transaction, so the loser's commit hits a unique-constraint violation —
+    # catch it, roll back, and return. The winner's initialization already stands;
+    # this request just sees the fully-initialized day on its next read.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
 
 
 # ---------------------------------------------------------------------------

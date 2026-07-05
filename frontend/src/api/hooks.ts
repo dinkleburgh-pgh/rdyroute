@@ -358,6 +358,9 @@ export function useAssignSpare() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["spares"] });
       qc.invalidateQueries({ queryKey: ["board", vars.run_date] });
+      // Coverage overlays on Board/RunDay/Supervisor read the swap log; it must
+      // refresh when coverage changes or those views show stale pre-swap state.
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -370,6 +373,7 @@ export function useReturnSpare() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["spares"] });
       qc.invalidateQueries({ queryKey: ["board"] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -381,6 +385,7 @@ export function useDeleteSpare() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["spares"] });
       qc.invalidateQueries({ queryKey: ["board"] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -426,8 +431,11 @@ export function useCreateRouteSwap() {
         two_way: payload.two_way ?? false,
       })).data,
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["route-swaps", vars.run_date] });
+      // Prefix key invalidates both the per-date query and the "all-dates"
+      // variant (useAllRouteSwaps) — the specific-date key missed the latter.
+      qc.invalidateQueries({ queryKey: ["route-swaps"] });
       qc.invalidateQueries({ queryKey: ["board", vars.run_date] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -440,8 +448,9 @@ export function useDeleteRouteSwap() {
         params: { also_reciprocal: alsoReciprocal ?? false },
       }),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["route-swaps", vars.runDate] });
+      qc.invalidateQueries({ queryKey: ["route-swaps"] });
       qc.invalidateQueries({ queryKey: ["board", vars.runDate] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }

@@ -168,6 +168,24 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     summary: dict[str, int] = {}
 
     if replace_existing:
+        # Guard against a partial/older backup silently wiping local data:
+        # under replace_existing every listed table is deleted, but each is only
+        # refilled if its JSON member is present below. If any expected member is
+        # missing, that table would be wiped with nothing to restore — so abort
+        # loudly instead of destroying data. (Merge mode, replace_existing=False,
+        # is safe: a missing member just means nothing to merge for that table.)
+        required_members = {
+            "batches.json", "shortages.json", "audit_entries.json",
+            "truck_states.json", "load_durations.json", "fleet.json",
+            "app_settings.json", "route_swaps.json", "spare_assignments.json",
+            "route_swap_log.json", "truck_notes.json",
+        }
+        missing = sorted(required_members - set(zf.namelist()))
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Backup is missing required members, refusing to replace data: {', '.join(missing)}",
+            )
         for model in (
             Batch,
             Shortage,
