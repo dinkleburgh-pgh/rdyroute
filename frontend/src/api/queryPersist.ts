@@ -53,6 +53,13 @@ export async function loadPersistedCache(qc: QueryClient): Promise<void> {
   }
 }
 
+// How long to coalesce cache-change bursts before writing to IndexedDB. The
+// full cache is dehydrated + structured-cloned + written on each flush, so a
+// tight interval means recurring main-thread work on low-end tablets; the whole
+// cache polls/refetches constantly. A long debounce is safe because the
+// pagehide handler below flushes synchronously on tab close/hide.
+const SAVE_DEBOUNCE_MS = 20000;
+
 /** Begin saving the cache (debounced) on every change and on page hide. */
 export function startPersisting(qc: QueryClient): void {
   let timer: number | undefined;
@@ -66,7 +73,7 @@ export function startPersisting(qc: QueryClient): void {
       } catch (err) {
         console.warn("[queryPersist] save failed", err);
       }
-    }, 1000);
+    }, SAVE_DEBOUNCE_MS);
   };
 
   qc.getQueryCache().subscribe(save);
