@@ -23,6 +23,7 @@ import {
   countUnloadedFromContext,
   effectiveOperationalStatus,
   effectiveStatus,
+  getCoverageRouteNumber,
   getOperationalTruckType,
   isScheduledOff,
 } from "../utils/truckStatus";
@@ -400,7 +401,7 @@ export default function Load() {
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
                 const st = t.state?.status ?? "dirty";
-                const cr = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
+                const cr = getCoverageRouteNumber(t);
                 return (
                   <span
                     key={t.truck_number}
@@ -788,7 +789,7 @@ function InProgressPanel({
                       #{nextUp.truck_number}
                     </div>
                     {(() => {
-                      const cr = nextUp.state?.oos_spare_route ?? nextUp.route_swap_route ?? null;
+                      const cr = getCoverageRouteNumber(nextUp);
                       return cr != null ? (
                         <span className="mt-1 inline-flex items-center gap-1 rounded-pill bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
                           Cov. #{cr}

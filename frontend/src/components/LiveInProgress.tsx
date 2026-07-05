@@ -18,7 +18,7 @@ import {
 import { ShortageLogger } from "../pages/Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
-import { buildOperationalDayContext, effectiveStatus, isScheduledOff } from "../utils/truckStatus";
+import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
 import type { TruckNote, TruckWithState } from "../types";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
@@ -602,7 +602,7 @@ function QueueRow({
   isNext: boolean;
   onSelect: () => void;
 }) {
-  const coverRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+  const coverRoute = getCoverageRouteNumber(truck);
   const spareNeedsRoute = truck.truck_type === "Spare" && coverRoute == null;
   const parts: string[] = [truck.truck_type];
   if (truck.state?.batch_id != null) parts.push(`Batch ${truck.state.batch_id}`);
@@ -690,7 +690,7 @@ function NextUpPanel({
   );
 
   function needsRoute(t: TruckWithState) {
-    return t.truck_type === "Spare" && (t.state?.oos_spare_route ?? t.route_swap_route) == null;
+    return t.truck_type === "Spare" && getCoverageRouteNumber(t) == null;
   }
 
   async function assignAndQueue(spareNum: number, routeNum: number) {

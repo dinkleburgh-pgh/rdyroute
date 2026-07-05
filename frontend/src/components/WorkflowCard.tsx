@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 import type { TruckWithState } from "../types";
+import { getCoverageRouteNumber } from "../utils/truckStatus";
 import { DustGarmentIcon } from "./icons";
 
 /**
@@ -28,7 +29,7 @@ export default function WorkflowCard({
   interactive?: boolean;
   ringClassName?: string;
 }) {
-  const coverRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+  const coverRoute = getCoverageRouteNumber(truck);
   return (
     <div
       className={clsx(

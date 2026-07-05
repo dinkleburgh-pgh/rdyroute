@@ -744,7 +744,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 : filter === "dirty" && truck.state?.priority_hold
                 ? "text-amber-300"
                 : "hover:text-blue-300";
-            const coverageRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? coveringRouteByTruckNum.get(truck.truck_number) ?? null;
+            const coverageRoute = getCoverageRouteNumber(truck) ?? coveringRouteByTruckNum.get(truck.truck_number) ?? null;
             const showCoverageBadge = !fleetMode && coverageRoute != null;
             // Reverse lookup: this truck's own route is being covered by another
             // truck (route swap / OOS). Show it so the covered card isn't blank.

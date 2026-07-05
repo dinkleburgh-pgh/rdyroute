@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
-import { isScheduledOff } from "../utils/truckStatus";
+import { getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import WorkflowCard from "../components/WorkflowCard";
@@ -48,6 +48,18 @@ export default function Unload() {
   // Trucks marked unloaded this session — card stays in dirty section with Undo until navigation.
   const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
 
+  // Route numbers that ARE being covered by some other truck today — derived
+  // from the board itself (the covering truck carries route_swap_route /
+  // oos_spare_route pointing at the route it covers).
+  const coveredRouteNumbers = useMemo(() => {
+    const s = new Set<number>();
+    for (const t of data ?? []) {
+      const r = getCoverageRouteNumber(t);
+      if (r != null) s.add(r);
+    }
+    return s;
+  }, [data]);
+
   // Fleet Schedule is the single source of truth for which trucks appear.
   // Covering spares always included; pure spares excluded; route trucks included
   // iff they run on unloadsDay per scheduled_off_days.
@@ -57,13 +69,16 @@ export default function Unload() {
         // Coverage trucks always appear (spare has oos_spare_route; route-swap trucks
         // have route_swap_route). The OOS truck they cover is excluded below.
         if (t.route_swap_route != null || t.state?.oos_spare_route != null) return true;
-        // OOS trucks can't go through the normal unload workflow. Exclude them
-        // here — if coverage is assigned the covering truck appears above instead.
-        if (t.is_oos || t.state?.status === "oos") return false;
+        // An OOS route truck is only dropped once it's actually COVERED — the
+        // covering truck (above) represents it then. An uncovered OOS truck is
+        // still physically here; if it's dirty someone must unload it, so keep
+        // it in the workflow. Matches truckStatus.ts / the Board / the sidebar,
+        // which only reclassify is_oos as OOS once coverage exists.
+        if ((t.is_oos || t.state?.status === "oos") && coveredRouteNumbers.has(t.truck_number)) return false;
         if (t.truck_type === "Spare") return false;
         return holidayUnload || !isScheduledOff(t, unloadsDay);
       }),
-    [data, unloadsDay, holidayUnload],
+    [data, unloadsDay, holidayUnload, coveredRouteNumbers],
   );
   // "Needs unloading" = any truck in allTrucks not yet unloaded/loaded/unfinished.
   const dirty = useMemo(
