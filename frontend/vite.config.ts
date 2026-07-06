@@ -100,6 +100,20 @@ export default defineConfig({
     __BUILD_DATE__: JSON.stringify(process.env.VITE_BUILD_DATE ?? new Date().toISOString()),
     __GIT_COMMIT__: JSON.stringify(getGitCommit()),
   },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split large, stable vendor libs into their own long-lived chunks so a
+        // routine app deploy doesn't invalidate them — the browser keeps the
+        // cached vendor files and only re-downloads the changed app code.
+        manualChunks: {
+          "vendor-react": ["react", "react-dom", "react-router-dom"],
+          "vendor-query": ["@tanstack/react-query"],
+          "vendor-motion": ["framer-motion"],
+        },
+      },
+    },
+  },
   server: {
     host: true,
     allowedHosts: true,
