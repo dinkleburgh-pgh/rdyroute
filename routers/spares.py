@@ -192,6 +192,15 @@ def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int) -> lis
             covering_route_truck=route_truck,
         )
         db.add(row)
+        # Record in the append-only swap log, same as assign_spare — otherwise
+        # auto-applied recurring coverage never appears in swap history and the
+        # "previous load-day coverage" fallback can't see it once this
+        # assignment is returned/deleted.
+        db.add(RouteSwapLog(
+            run_date=run_date,
+            route_truck=route_truck,
+            load_on_truck=load_on_truck,
+        ))
         # Activate the covering truck and record which route it covers.
         st = db.scalars(
             select(TruckState).where(
