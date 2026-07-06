@@ -96,20 +96,12 @@ def _host_is_local(host: str | None) -> bool:
 
 
 def _request_is_localhost(request: Request) -> bool:
-    candidates: list[str | None] = [
-        request.url.hostname,
-        request.client.host if request.client else None,
-    ]
-    for header_name in ("host", "x-forwarded-host", "origin", "referer"):
-        raw = request.headers.get(header_name)
-        if not raw:
-            continue
-        if header_name in {"origin", "referer"}:
-            parsed = urllib_parse.urlparse(raw)
-            candidates.append(parsed.hostname)
-        else:
-            candidates.extend(part.strip() for part in raw.split(","))
-    return any(_host_is_local(candidate) for candidate in candidates)
+    # Only trust the actual TCP peer (request.client.host). The Host /
+    # X-Forwarded-Host / Origin / Referer headers are all attacker-controlled —
+    # trusting them let a remote caller send "X-Forwarded-Host: 127.0.0.1" and
+    # pass this gate. This is a secondary check anyway; the primary gate on the
+    # sync route is "local DB is SQLite" (see sync_from_production).
+    return _host_is_local(request.client.host if request.client else None)
 
 
 def _parse_date(value: object) -> date | None:
@@ -1153,9 +1145,19 @@ def sync_from_production(
 ) -> dict:
     """
     Local-development helper that mirrors the live production export into the
-    current local database. Hard-blocked unless the request originates from a
-    loopback host.
+    current local database. Only valid on a dev box: it pulls prod's export
+    INTO the local DB, which is nonsensical (and destructive) to run against
+    production itself.
     """
+    # Primary gate — unspoofable: this only makes sense when the local database
+    # is SQLite (the dev DB). Production runs Postgres, so the endpoint refuses
+    # there regardless of any forwarded/host headers.
+    if not settings.database_url.startswith("sqlite"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Production sync is only available on a SQLite (local dev) database.",
+        )
+    # Secondary defense-in-depth: request must come from a loopback/LAN peer.
     if not _request_is_localhost(request):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
