@@ -19,7 +19,8 @@ from datetime import datetime, timezone
 import bcrypt
 from fastapi import APIRouter, Cookie, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
-from jose import JWTError, jwt
+import jwt
+from jwt.exceptions import PyJWTError
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
@@ -140,7 +141,7 @@ def _create_access_token(username: str, role: str, session_id: str) -> str:
 def _decode_token(token: str) -> dict:
     try:
         return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
-    except JWTError:
+    except PyJWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
