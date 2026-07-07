@@ -158,6 +158,16 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
 
     for truck in trucks:
         if truck.truck_number in today_states:
+            # A row already exists for this run date (rare — created before init
+            # ran). Day init is the start of a fresh run day, so priority_hold and
+            # needs_checked must not carry into it — clear them here too so the
+            # reset is guaranteed for every truck, not just the freshly-seeded
+            # ones. (Legitimate same-day holds/checks are set by wizard/workflow
+            # AFTER init, which no longer runs once day_setup_source is set.)
+            existing_today = today_states[truck.truck_number]
+            if existing_today.priority_hold or existing_today.needs_checked:
+                existing_today.priority_hold = False
+                existing_today.needs_checked = False
             continue
 
         prior = prev_states_by_num.get(truck.truck_number)
