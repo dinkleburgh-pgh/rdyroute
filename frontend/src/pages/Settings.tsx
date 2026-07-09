@@ -27,6 +27,7 @@ import ExportImportPanel from "../components/management/ExportImportPanel";
 import PDFReportsPanel from "../components/management/PDFReportsPanel";
 import DriverQRPanel from "../components/management/DriverQRPanel";
 import TruckOpsActivityPanel from "../components/management/TruckOpsActivityPanel";
+import PrevDayCoveragePanel from "../components/management/PrevDayCoveragePanel";
 import PageHeader from "../components/PageHeader";
 import { ShortsWorkspace } from "./Shorts";
 
@@ -59,7 +60,8 @@ type Category =
   | "pdf_reports"
   | "driver_qr"
   | "connections"
-  | "short_imports";
+  | "short_imports"
+  | "prev_coverage";
 
 // Two-level navigation: Cards (groups) → Tabs (sub-categories)
 type GroupId = "app" | "users" | "content" | "fleet" | "comms" | "ops" | "advanced" | "data" | "shortages";
@@ -159,9 +161,10 @@ const CARD_GROUPS: CardGroup[] = [
     borderColor: "border-l-orange-500",
     bgTint: "bg-orange-950/35",
     tabs: [
-      { id: "workflows", label: "Workflows" },
-      { id: "recovery",  label: "Recovery" },
-      { id: "resets",    label: "Resets" },
+      { id: "workflows",    label: "Workflows" },
+      { id: "recovery",     label: "Recovery" },
+      { id: "resets",       label: "Resets" },
+      { id: "prev_coverage", label: "Prev Day Coverage" },
     ],
   },
   {
@@ -303,6 +306,7 @@ export default function Management() {
       case "driver_qr":      return <DriverQRPanel />;
       case "export_import":  return <ExportImportPanel />;
       case "pdf_reports":    return <PDFReportsPanel />;
+      case "prev_coverage":  return <PrevDayCoveragePanel />;
       default:               return null;
     }
   }
