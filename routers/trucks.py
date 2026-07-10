@@ -15,6 +15,7 @@ Business logic preserved from V1:
     single fetch.
 """
 
+import time
 from datetime import date, timedelta
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -247,6 +248,16 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             # Only reset to unloaded if the spare wasn't already carrying a dirty state forward.
             if prior is None or prior.status != TruckStatus.dirty:
                 status = TruckStatus.unloaded
+
+        # Auto-unload all trucks: when enabled, every truck starts the new run day
+        # already Unloaded (or Off if it's scheduled off today), overriding the
+        # normal dirty / carried-forward inference so the next day begins from a
+        # clean slate. Without this, the seeding above would re-derive "ran
+        # yesterday → dirty today" and the setting would do nothing. Physical
+        # conditions (OOS, shop) are left untouched — a truck in the shop or out
+        # of service didn't get unloaded.
+        if force_unloaded and not truck.is_oos and status not in (TruckStatus.oos, TruckStatus.shop):
+            status = TruckStatus.off if scheduled_off_today else TruckStatus.unloaded
 
         row = TruckState(
             truck_number=truck.truck_number,
@@ -490,6 +501,21 @@ def update_truck_state(
 
     for field, value in updates.items():
         setattr(row, field, value)
+
+    # Auto-baseline arrival: the first time a truck actually enters the unload
+    # workflow, capture arrived_at if nobody set it manually. This guarantees an
+    # arrival timestamp is recorded even when no one taps "Arrived"; a manual tap
+    # made earlier (while still dirty) is preserved because we only fill when the
+    # value is still null. Only the deliberate per-truck transition stamps —
+    # bulk/admin status changes never do, keeping the arrival data clean.
+    entered_unload = (
+        previous_status not in (TruckStatus.in_progress, TruckStatus.unloaded, TruckStatus.loaded)
+        and row.status in (TruckStatus.in_progress, TruckStatus.unloaded)
+    )
+    if row.arrived_at is None and entered_unload:
+        arrived_setting = db.get(AppSetting, "arrived_tracking_enabled")
+        if arrived_setting is not None and arrived_setting.value is True:
+            row.arrived_at = time.time()
 
     append_truck_state_activity(
         db,

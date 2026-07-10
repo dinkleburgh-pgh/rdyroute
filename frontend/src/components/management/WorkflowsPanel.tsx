@@ -128,7 +128,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       <FieldRow
         label="Arrived tracking"
-        hint="Adds a development-only Arrived quick action so fleet can timestamp when a truck parks back in the yard."
+        hint="Records when each truck parks back in the yard — auto-captured when unloading starts, or tap 'Mark Arrived' on a dirty truck to log the exact time earlier."
       >
         <label className="flex items-center gap-2 text-sm">
           <input

@@ -16,6 +16,7 @@ import {
   useCreateShortage,
   useUpdateShortage,
   useDeleteShortage,
+  useHolidayLoad,
   type TrackedItem,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
@@ -24,6 +25,8 @@ import type { Shortage, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
+import { isScheduledOff } from "../utils/truckStatus";
+import { workdayNumbers } from "../components/Clock";
 
 // ---------------------------------------------------------------------------
 // Colour palette
@@ -115,21 +118,37 @@ const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
 function TruckPicker({
   board,
   shortsByTruck,
+  loadDay,
+  holiday,
   onSelect,
 }: {
   board: TruckWithState[];
   shortsByTruck: Map<number, Shortage[]>;
+  loadDay: number;
+  holiday: boolean;
   onSelect: (t: TruckWithState) => void;
 }) {
-  const trucks = board
+  const routeTrucks = board
     .filter((t) => t.truck_type !== "Spare")
     .sort((a, b) => a.truck_number - b.truck_number);
 
-  const withShorts    = trucks.filter((t) =>  shortsByTruck.has(t.truck_number));
-  const withoutShorts = trucks.filter((t) => !shortsByTruck.has(t.truck_number));
+  // Running routes = the route trucks actually scheduled to run this load day
+  // (holiday runs every route). Mirrors VerifyShortSheet / the board, so the
+  // sheet lists exactly the routes that need writing up and re-derives live
+  // whenever the fleet schedule changes.
+  const running = routeTrucks.filter(
+    (t) => t.is_active && (holiday || !isScheduledOff(t, loadDay)),
+  );
 
-  if (trucks.length === 0) {
-    return <p className="p-6 text-sm text-slate-500">No trucks found for this date.</p>;
+  // A route that already has shorts logged is always shown (even if it's off or
+  // inactive) so nothing anyone logged can be hidden. "To log" is limited to
+  // running routes that don't have shorts yet.
+  const withShorts    = routeTrucks.filter((t) => shortsByTruck.has(t.truck_number));
+  const withoutShorts = running.filter((t) => !shortsByTruck.has(t.truck_number));
+  const runningLogged = running.filter((t) => shortsByTruck.has(t.truck_number)).length;
+
+  if (running.length === 0 && withShorts.length === 0) {
+    return <p className="p-6 text-sm text-slate-500">No routes running for this date.</p>;
   }
 
   return (
@@ -138,7 +157,7 @@ function TruckPicker({
       {withShorts.length > 0 && (
         <div className="flex flex-wrap gap-3 text-sm">
           <span className="rounded-full bg-amber-900/50 px-3 py-1 font-semibold text-amber-300">
-            {withShorts.length} / {trucks.length} routes logged
+            {runningLogged} / {running.length} routes logged
           </span>
         </div>
       )}
@@ -781,6 +800,16 @@ export function ShortsWorkspace() {
   const { data: board  = [] } = useBoard(runDate);
   const { data: shorts = [] } = useShortages(runDate);
 
+  // Which routes run on this sheet's date, per the fleet schedule. loadDay is
+  // derived from the run date the same way the rest of the app does it, and the
+  // holiday flag makes every route run. Both feed TruckPicker so the route list
+  // stays in lock-step with the fleet schedule (and its Verify companion).
+  const loadDay = useMemo(
+    () => workdayNumbers(new Date(`${runDate}T12:00:00`)).loadDay,
+    [runDate],
+  );
+  const { data: holiday = false } = useHolidayLoad(runDate);
+
   // Auto-select only when arriving with a ?truck= param (e.g. from in_progress page)
   useEffect(() => {
     if (selectedTruck !== null || board.length === 0) return;
@@ -873,6 +902,8 @@ export function ShortsWorkspace() {
             <TruckPicker
               board={board}
               shortsByTruck={shortsByTruck}
+              loadDay={loadDay}
+              holiday={holiday}
               onSelect={(t) => setSelected(t)}
             />
           ) : (
