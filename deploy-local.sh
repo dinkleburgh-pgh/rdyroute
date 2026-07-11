@@ -41,3 +41,27 @@ echo "[local-deploy] recreating stack…"
 
 echo "[local-deploy] done → ${APP_VERSION}"
 docker ps --filter name=readyroutev2 --format '{{.Names}}\t{{.Status}}'
+
+# ---------------------------------------------------------------------------
+# Chain the off-site standby. Now that prod is up, tell the Oracle box to pull
+# the same commit and rebuild its images so a failover serves current code. The
+# key's forced command runs update.sh on the standby (build only — it never
+# recreates a live failover's containers). Non-fatal: a standby hiccup must not
+# fail an otherwise-good prod deploy. Skip with SKIP_STANDBY=1 for fast local
+# iteration.
+# ---------------------------------------------------------------------------
+STANDBY_HOST="${STANDBY_HOST:-ubuntu@157.151.152.151}"
+STANDBY_KEY="${STANDBY_KEY:-$HOME/.ssh/rdyroute_update}"
+if [ -n "${SKIP_STANDBY:-}" ]; then
+  echo "[local-deploy] SKIP_STANDBY set — leaving standby untouched"
+elif [ ! -f "$STANDBY_KEY" ]; then
+  echo "[local-deploy] WARNING: $STANDBY_KEY missing — standby NOT updated" >&2
+else
+  echo "[local-deploy] chaining standby update (${STANDBY_HOST})…"
+  if timeout 600 ssh -i "$STANDBY_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$STANDBY_HOST" true; then
+    echo "[local-deploy] standby update OK → in sync with ${APP_VERSION}"
+  else
+    echo "[local-deploy] WARNING: standby update FAILED (prod is deployed & fine)." >&2
+    echo "[local-deploy]          retry: ssh -i $STANDBY_KEY $STANDBY_HOST true" >&2
+  fi
+fi
