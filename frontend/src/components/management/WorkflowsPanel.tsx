@@ -192,8 +192,8 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
         </label>
       </FieldRow>
       <FieldRow
-        label="Auto-unload all trucks"
-        hint="When enabled, every truck is automatically set to Unloaded at the start of each new run day, overriding any dirty/unfinished state from the previous day."
+        label="Auto-unload all trucks (end of day)"
+        hint="When enabled, every truck is treated as Unloaded at the end of each run day, so the next day starts clean — dirty/unfinished trucks are cleared. OOS and shop trucks are left as-is."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -201,7 +201,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             checked={form.force_unloaded_on_new_day}
             onChange={(e) => setForm({ ...form, force_unloaded_on_new_day: e.target.checked })}
           />
-          Assume all trucks unloaded by next start day
+          Assume all trucks unloaded by end of day
         </label>
       </FieldRow>
       <SaveButton
