@@ -1,0 +1,60 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ReadyRoute · Elements</title>
+  <link rel="stylesheet" href="../../../styles.css" />
+  <style>
+    .wrap { padding: 24px; background: var(--rr-app); color: var(--rr-ink); font-family: var(--rr-font-sans); }
+    h2 { margin: 0 0 4px; font-size: 18px; font-weight: 800; }
+    p.sub { margin: 0 0 20px; color: var(--rr-ink-muted); font-size: 13px; }
+    h3 { margin: 22px 0 12px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--rr-ink-muted); }
+    .row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+    .btnrow { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+    .stack { max-width: 300px; }
+    .num { font-family: var(--rr-font-mono); font-size: 30px; font-weight: 800; line-height: 1; color: var(--rr-ink); }
+    .cov { color: var(--rr-ink-muted); font-size: 13px; margin-top: 6px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>Elements</h2>
+    <p class="sub">The real ReadyRoute component classes — rendered from the shipped stylesheet.</p>
+
+    <h3>Status badges &nbsp;<code style="font-family:var(--rr-font-mono);font-size:11px;color:var(--rr-ink-faint)">.badge + var(--rr-st-*)</code></h3>
+    <div class="row">
+      <span class="badge" style="background:var(--rr-st-dirty);color:#fff">Dirty</span>
+      <span class="badge" style="background:var(--rr-st-inprogress);color:#111722">In progress</span>
+      <span class="badge" style="background:var(--rr-st-unloaded);color:#052e16">Unloaded</span>
+      <span class="badge" style="background:var(--rr-st-loaded);color:#fff">Loaded</span>
+      <span class="badge" style="background:var(--rr-st-shop);color:#fff">Shop</span>
+      <span class="badge" style="background:var(--rr-st-spare);color:#04222b">Spare</span>
+      <span class="badge" style="background:var(--rr-st-off);color:#fff">Off</span>
+      <span class="badge" style="background:var(--rr-st-oos);color:#fff">OOS</span>
+      <span class="badge" style="background:var(--rr-st-unfinished);color:#fff">Unfinished</span>
+    </div>
+
+    <h3>Buttons &nbsp;<code style="font-family:var(--rr-font-mono);font-size:11px;color:var(--rr-ink-faint)">.btn-primary / .btn-ghost / .btn-danger</code></h3>
+    <div class="btnrow">
+      <button class="btn-primary">Assign coverage</button>
+      <button class="btn-ghost">Cancel</button>
+      <button class="btn-danger">Remove</button>
+    </div>
+
+    <h3>Card &amp; form &nbsp;<code style="font-family:var(--rr-font-mono);font-size:11px;color:var(--rr-ink-faint)">.card / .label / .input</code></h3>
+    <div class="row" style="align-items:flex-start; gap:16px">
+      <div class="card stack">
+        <div class="label">Truck</div>
+        <div class="num">#68</div>
+        <div class="cov">Covered by <span style="font-family:var(--rr-font-mono);color:var(--rr-st-spare);font-weight:700">#1</span> · previous run day</div>
+      </div>
+      <div class="stack">
+        <label class="label">Covering truck</label>
+        <input class="input" value="#1 — Spare" />
+      </div>
+    </div>
+  </div>
+</body>
+</html>

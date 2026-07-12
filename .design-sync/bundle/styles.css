@@ -1,0 +1,28 @@
+/* ReadyRoute design system — entry stylesheet.
+ *
+ * Every design built with this system consumes this file's @import closure:
+ *   - IBM Plex Sans/Mono (loaded from Google Fonts at runtime)
+ *   - the semantic design tokens (tokens/tokens.css)
+ *   - ReadyRoute's compiled Tailwind (_ds_bundle.css) — every real utility and
+ *     component class (.bg-app, .text-ink-soft, .bg-st-loaded, .badge, .card,
+ *     .btn-primary, .input, .label, .rounded-pill, .shadow-card, …).
+ *
+ * @import rules must precede all other rules.
+ */
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600;700&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap");
+@import "./tokens/tokens.css";
+@import "./_ds_bundle.css";
+
+/* App-shell defaults — the ReadyRoute dark canvas + IBM Plex, so a bare design
+ * lands on-brand before any classes are applied. (Overrides Tailwind Preflight,
+ * which is imported above.) */
+:root { color-scheme: dark; }
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background: var(--rr-app);
+  color: var(--rr-ink);
+  font-family: var(--rr-font-sans);
+  -webkit-font-smoothing: antialiased;
+}
