@@ -9,7 +9,7 @@ import { Bell, Check, AlertTriangle, Plus, Trash2, X } from "lucide-react";
 import { useSettings, useSpareAssignments, useRouteSwapLog, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
-import { isScheduledOff, getCoverageRouteNumber } from "../utils/truckStatus";
+import { isScheduledOff, getCoverageRouteNumber, previousRunDate, buildPrevDayCoverage } from "../utils/truckStatus";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckNote, TruckStatus } from "../types";
 
@@ -95,11 +95,8 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
     saveSections(currentSections.map((s) => s.id === id ? { ...s, [field]: val } : s));
   }
 
-  const yesterday = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  }, []);
+  // Previous operating day (weekend-aware) — Monday's prior run day is Friday.
+  const yesterday = useMemo(() => previousRunDate(todayIso()), []);
 
   const { data: yesterdaySpares } = useSpareAssignments(yesterday);
   const unreturnedSpares = useMemo(
@@ -108,11 +105,14 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
   );
 
   const { data: todaySpares } = useSpareAssignments(todayIso());
-  const { data: swapLog = [] } = useRouteSwapLog(1);
+  const { data: swapLog = [] } = useRouteSwapLog(14);
   const todaySwaps = useMemo(
     () => swapLog.filter((s) => s.run_date === todayIso()),
     [swapLog],
   );
+  // Complete previous load-day coverage (route -> covering truck), weekend-aware,
+  // shared with the Day Overview and Unload board.
+  const prevCoverage = useMemo(() => buildPrevDayCoverage(swapLog, yesterday), [swapLog, yesterday]);
   const offTrucksToday = useMemo(
     () => board.filter((t) => t.state?.status === "off"),
     [board],
@@ -298,6 +298,29 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
             {/* Reminders tab */}
             {tab === "reminders" && (
               <div className="space-y-4">
+
+                {/* Previous load-day coverage — complete route → covering-truck list
+                    from the route-swap log (matches Day Overview + Unload board). */}
+                {prevCoverage.items.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-400" />
+                      <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Previous Load-Day Coverage</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {prevCoverage.items.map((c) => (
+                        <span
+                          key={c.route}
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-sm"
+                        >
+                          <span className="font-black text-red-300">#{c.route}</span>
+                          <span className="text-slate-600">→</span>
+                          <span className="font-black text-amber-200">#{c.loadOn}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Unload Reminders — trucks scheduled off today that actually ran */}
                 {unloadReminders.length > 0 && (

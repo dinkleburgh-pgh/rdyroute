@@ -25,7 +25,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../utils/truckStatus";
+import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousRunDate, previousWorkday, recordSwapHistory } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -48,7 +48,7 @@ import FleetMobileActionSheet from "./board/FleetMobileActionSheet";
 import FleetUtilityBar from "./board/FleetUtilityBar";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
-import { CalendarDays, X } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, X } from "lucide-react";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -130,6 +130,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [spareCoverageRoute, setSpareCoverageRoute] = useState<string>("");
   const [spareCoverageError, setSpareCoverageError] = useState<string | null>(null);
   const [offScheduleDialogOpen, setOffScheduleDialogOpen] = useState(false);
+  const [prevCovOpen, setPrevCovOpen] = useState(false);
+  const [prevCovRoute, setPrevCovRoute] = useState("");
+  const [prevCovTruck, setPrevCovTruck] = useState("");
+  const [prevCovError, setPrevCovError] = useState<string | null>(null);
   const isArchive = runDate < todayIso();
   const isFuture  = runDate > todayIso();
   const isReadOnly = runDate !== todayIso();
@@ -138,6 +142,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: swapLog = [] } = useRouteSwapLog(60);
   const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
+  // Previous operating day — for the "Previous Day Coverage" setter modal.
+  const prevRunDate = useMemo(() => previousRunDate(runDate), [runDate]);
+  const { data: prevSwaps = [] } = useRouteSwaps(prevRunDate);
+  const { data: prevSpares = [] } = useSpareAssignments(prevRunDate, false);
   const { data: settings } = useSettings();
   const upsert = useUpsertTruckState();
   const updateTruck = useUpdateTruck();
@@ -546,29 +554,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
       {/* ── Main content ── */}
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className={fleetMode ? "space-y-4 overflow-y-auto p-3 md:p-4" : "space-y-4 p-3 md:p-6"}>
-      {fleetMode && (
-        <FleetUtilityBar
-          runDate={runDate}
-          onRunDateChange={setRunDate}
-          isArchive={isArchive}
-          isFuture={isFuture}
-          isReadOnly={isReadOnly}
-          multiSelect={multiSelect}
-          selectedCount={selectedTrucks.size}
-          filteredCount={filtered.length}
-          counts={counts}
-          fleetFilters={fleetFilters}
-          bulkStatus={bulkStatus}
-          isApplying={upsert.isPending}
-          onToggleBulkEdit={toggleBulkEdit}
-          onToggleFilter={toggleFleetFilter}
-          onBulkStatusChange={setBulkStatus}
-          onSelectAll={selectAllFilteredTrucks}
-          onSelectNone={clearSelectedTrucks}
-          onApplyBulk={applyBulkEdit}
-        />
-      )}
-      {/* ── Page header ── */}
+      {/* ── Page header (above the bulk-edit bar) ── */}
       {(() => {
         type HeaderCfg = { title: string; subtitle: string };
         const fleet: HeaderCfg = {
@@ -620,7 +606,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             title={cfg.title}
             subtitle={cfg.subtitle}
             actions={
-              filter === "off" && !fleetMode ? (
+              filter === "off" ? (
                 <button
                   type="button"
                   onClick={() => setOffScheduleDialogOpen(true)}
@@ -634,6 +620,42 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           />
         );
       })()}
+
+      {fleetMode && (
+        <FleetUtilityBar
+          runDate={runDate}
+          onRunDateChange={setRunDate}
+          isArchive={isArchive}
+          isFuture={isFuture}
+          isReadOnly={isReadOnly}
+          multiSelect={multiSelect}
+          selectedCount={selectedTrucks.size}
+          filteredCount={filtered.length}
+          counts={counts}
+          fleetFilters={fleetFilters}
+          bulkStatus={bulkStatus}
+          isApplying={upsert.isPending}
+          onToggleBulkEdit={toggleBulkEdit}
+          onToggleFilter={toggleFleetFilter}
+          onBulkStatusChange={setBulkStatus}
+          onSelectAll={selectAllFilteredTrucks}
+          onSelectNone={clearSelectedTrucks}
+          onApplyBulk={applyBulkEdit}
+        />
+      )}
+      {/* Previous Day Coverage — directly below the bulk-edit section */}
+      {fleetMode && (
+        <div className="flex justify-start">
+          <button
+            type="button"
+            onClick={() => setPrevCovOpen(true)}
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-800"
+          >
+            <ArrowLeftRight className="h-4 w-4 text-slate-400" />
+            Previous Day Coverage
+          </button>
+        </div>
+      )}
 
       {isLoading && <p className="text-slate-400">Loading…</p>}
       {error && (
@@ -1530,6 +1552,137 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 }}
               >
                 {assignSpare.isPending ? "Saving…" : "Assign Route & Start Loading"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {prevCovOpen && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          onClick={() => { setPrevCovOpen(false); setPrevCovRoute(""); setPrevCovTruck(""); setPrevCovError(null); }}
+        >
+          <div
+            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="mb-1 text-base font-semibold">Previous Day Coverage</h3>
+            <p className="mb-4 text-sm text-slate-400">
+              Record who covered a route on the previous run day
+              {" "}(<span className="font-semibold text-slate-300">{format(new Date(`${prevRunDate}T12:00:00`), "EEE MMM d")}</span>).
+              This surfaces on the Day Overview, Unload board, and Reminders so returning loads are unloaded as the right route.
+            </p>
+            <div className="space-y-3">
+              <div>
+                <label className="label">Route covered</label>
+                <select className="input" value={prevCovRoute} onChange={(e) => setPrevCovRoute(e.target.value)}>
+                  <option value="">— pick route —</option>
+                  {(data ?? [])
+                    .filter((x) => x.truck_type !== "Spare")
+                    .sort((a, b) => a.truck_number - b.truck_number)
+                    .map((x) => (
+                      <option key={x.truck_number} value={x.truck_number}>#{x.truck_number}</option>
+                    ))}
+                </select>
+              </div>
+              <div>
+                <label className="label">Covered by</label>
+                <select className="input" value={prevCovTruck} onChange={(e) => setPrevCovTruck(e.target.value)}>
+                  <option value="">— pick covering truck —</option>
+                  <optgroup label="Spares">
+                    {(data ?? [])
+                      .filter((x) => x.truck_type === "Spare")
+                      .sort((a, b) => a.truck_number - b.truck_number)
+                      .map((x) => (
+                        <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+                      ))}
+                  </optgroup>
+                  <optgroup label="Route trucks">
+                    {(data ?? [])
+                      .filter((x) => x.truck_type !== "Spare" && String(x.truck_number) !== prevCovRoute)
+                      .sort((a, b) => a.truck_number - b.truck_number)
+                      .map((x) => (
+                        <option key={x.truck_number} value={x.truck_number}>#{x.truck_number}</option>
+                      ))}
+                  </optgroup>
+                </select>
+              </div>
+              {prevCovError && <p className="text-sm text-red-400">{prevCovError}</p>}
+              <div className="flex justify-end">
+                <button
+                  className="rounded-md bg-green-700 px-4 py-1.5 text-sm font-semibold text-white hover:bg-green-600 disabled:opacity-60 transition-colors"
+                  disabled={createSwap.isPending || assignSpare.isPending || prevCovRoute === "" || prevCovTruck === ""}
+                  onClick={async () => {
+                    const route = parseInt(prevCovRoute, 10);
+                    const cover = parseInt(prevCovTruck, 10);
+                    if (!Number.isFinite(route) || !Number.isFinite(cover)) { setPrevCovError("Pick a route and a covering truck."); return; }
+                    if (route === cover) { setPrevCovError("A truck can't cover its own route."); return; }
+                    const coverIsSpare = (data ?? []).find((x) => x.truck_number === cover)?.truck_type === "Spare";
+                    try {
+                      if (coverIsSpare) {
+                        await assignSpare.mutateAsync({ run_date: prevRunDate, spare_truck_number: cover, covering_route_truck: route });
+                      } else {
+                        await createSwap.mutateAsync({ run_date: prevRunDate, route_truck: route, load_on_truck: cover, two_way: false });
+                      }
+                      recordSwapHistory(route, cover);
+                      setPrevCovRoute(""); setPrevCovTruck(""); setPrevCovError(null);
+                    } catch (err: unknown) {
+                      const e = err as { response?: { data?: { detail?: string } } };
+                      setPrevCovError(e?.response?.data?.detail ?? "Failed to save coverage.");
+                    }
+                  }}
+                >
+                  {(createSwap.isPending || assignSpare.isPending) ? "Saving…" : "Add Coverage"}
+                </button>
+              </div>
+            </div>
+
+            {/* Existing previous-day coverage */}
+            <div className="mt-4 border-t border-slate-800 pt-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                Set for {format(new Date(`${prevRunDate}T12:00:00`), "EEE MMM d")}
+              </div>
+              {(prevSwaps.length === 0 && prevSpares.filter((s) => !s.returned).length === 0) ? (
+                <p className="text-sm text-slate-500">No coverage recorded for the previous day yet.</p>
+              ) : (
+                <div className="space-y-1.5">
+                  {prevSwaps.slice().sort((a, b) => a.route_truck - b.route_truck).map((s) => (
+                    <div key={`sw-${s.id}`} className="flex items-center gap-2 rounded-md bg-slate-800/60 px-2.5 py-1.5 text-sm">
+                      <span className="font-black text-red-300">#{s.route_truck}</span>
+                      <ArrowLeftRight className="h-3.5 w-3.5 text-slate-600" />
+                      <span className="font-black text-amber-200">#{s.load_on_truck}</span>
+                      <button
+                        className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300"
+                        onClick={() => deleteSwap.mutate({ id: s.id, runDate: prevRunDate })}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                  {prevSpares.filter((s) => !s.returned).sort((a, b) => a.covering_route_truck - b.covering_route_truck).map((s) => (
+                    <div key={`sp-${s.id}`} className="flex items-center gap-2 rounded-md bg-slate-800/60 px-2.5 py-1.5 text-sm">
+                      <span className="font-black text-red-300">#{s.covering_route_truck}</span>
+                      <ArrowLeftRight className="h-3.5 w-3.5 text-slate-600" />
+                      <span className="font-black text-cyan-200">#{s.spare_truck_number}<span className="ml-1 text-[10px] text-slate-500">spare</span></span>
+                      <button
+                        className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300"
+                        onClick={() => returnSpare.mutate(s.id)}
+                      >
+                        Remove
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="mt-5 flex justify-end">
+              <button
+                className="btn-ghost"
+                onClick={() => { setPrevCovOpen(false); setPrevCovRoute(""); setPrevCovTruck(""); setPrevCovError(null); }}
+              >
+                Done
               </button>
             </div>
           </div>

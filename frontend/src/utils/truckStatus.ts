@@ -193,6 +193,68 @@ export function buildHistoricalCoverageFallback(
   return fallback;
 }
 
+// ---------------------------------------------------------------------------
+// Previous-day coverage (shared by Day Overview, Unload board, Reminders)
+// ---------------------------------------------------------------------------
+
+/**
+ * The previous OPERATING day as a YYYY-MM-DD string, stepping over the weekend
+ * (Monday's previous run day is Friday). Mirrors the run_date logic used across
+ * the app so prior-day coverage follows the ship day across weekends. NOTE:
+ * distinct from previousWorkday(), which returns a weekday NUMBER (1-5), not a
+ * date.
+ */
+export function previousRunDate(iso: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  do {
+    d.setDate(d.getDate() - 1);
+  } while (d.getDay() === 0 || d.getDay() === 6); // skip Sun(0)/Sat(6)
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
+export interface PrevDayCoverage {
+  /** The actual run_date the coverage was resolved from (<= prevRunDate), or null. */
+  date: string | null;
+  /** route -> covering truck, sorted by route for display. */
+  items: { route: number; loadOn: number }[];
+  /** route number -> the truck that covered it. */
+  byRoute: Map<number, number>;
+  /** covering truck number -> the route it covered (inverse of byRoute). */
+  byCover: Map<number, number>;
+}
+
+/**
+ * Resolve who covered which route on/before `prevRunDate` from the route-swap
+ * log: take the most recent operating day on/before prevRunDate that has any
+ * entries, then the newest entry per route wins (the log is ordered newest
+ * first). This is the same resolution the Day Overview uses; sharing it keeps
+ * the Unload board and Reminders in lock-step, and it's what a manually-set
+ * "Previous Day Coverage" record (a route_swap_log row dated to prevRunDate)
+ * feeds into.
+ */
+export function buildPrevDayCoverage(
+  swapLog: RouteSwapLogEntryLike[],
+  prevRunDate: string,
+): PrevDayCoverage {
+  const prior = swapLog.filter((e) => e.run_date <= prevRunDate);
+  if (prior.length === 0) return { date: null, items: [], byRoute: new Map(), byCover: new Map() };
+  const latestDate = prior.reduce((m, e) => (e.run_date > m ? e.run_date : m), prior[0].run_date);
+  const byRoute = new Map<number, number>();
+  // Newest-first log order → first entry seen per route is the most recent.
+  for (const e of prior.filter((e) => e.run_date === latestDate)) {
+    if (!byRoute.has(e.route_truck)) byRoute.set(e.route_truck, e.load_on_truck);
+  }
+  const items = [...byRoute.entries()]
+    .map(([route, loadOn]) => ({ route, loadOn }))
+    .sort((a, b) => a.route - b.route);
+  const byCover = new Map<number, number>();
+  for (const { route, loadOn } of items) byCover.set(loadOn, route);
+  return { date: latestDate, items, byRoute, byCover };
+}
+
 export function effectiveOperationalStatus(
   t: TruckWithState,
   dayNum: number,

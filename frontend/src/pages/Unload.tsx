@@ -1,14 +1,16 @@
 import { useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
-import { getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
+import { buildPrevDayCoverage, getCoverageRouteNumber, isScheduledOff, previousRunDate } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import WorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
+import { ArrowLeftRight } from "lucide-react";
+import { format } from "date-fns";
 import clsx from "clsx";
 
 /**
@@ -28,6 +30,12 @@ export default function Unload() {
   const { data } = useBoard(runDate);
   const { data: batches } = useBatchSummary(runDate);
   const { data: settings } = useSettings();
+  // Previous-day coverage: the loads being unloaded today were covered on the
+  // prior run day. Resolve who covered which route from the route-swap log so
+  // returning trucks are unloaded as the right route. Shared with Day Overview.
+  const prevRunDate = useMemo(() => previousRunDate(runDate), [runDate]);
+  const { data: prevSwapLog = [] } = useRouteSwapLog(14);
+  const prevCoverage = useMemo(() => buildPrevDayCoverage(prevSwapLog, prevRunDate), [prevSwapLog, prevRunDate]);
   const batchingDisabled = useMemo(
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
     [settings],
@@ -267,6 +275,14 @@ export default function Unload() {
                 Cov. #{coveredRoute}
               </span>
             )}
+            {prevCoverage.byCover.has(t.truck_number) && (
+              <span
+                className="mt-0.5 inline-flex items-center gap-1 self-start rounded-full bg-amber-900/40 px-2 py-0.5 text-xs font-semibold text-amber-300 ring-1 ring-amber-700/40"
+                title={`Covered route #${prevCoverage.byCover.get(t.truck_number)} on the previous run day`}
+              >
+                <ArrowLeftRight className="h-3 w-3" /> Cov. #{prevCoverage.byCover.get(t.truck_number)} (prev)
+              </span>
+            )}
           </div>
           <div className="flex flex-col items-end gap-1 mt-0.5 shrink-0">
             {isPriority && (
@@ -410,6 +426,36 @@ export default function Unload() {
         title="Unload"
         subtitle="Work dirty and unfinished trucks into unloaded status and batch them when needed."
       />
+
+      {/* Previous load-day coverage — what's being unloaded today was covered by
+          these trucks on the prior run day (also shown per-card as "Cov. #N (prev)"). */}
+      {prevCoverage.items.length > 0 && (
+        <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2.5">
+          <div className="mb-1.5 flex items-center gap-2">
+            <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+              Previous load-day coverage
+            </span>
+            {prevCoverage.date && (
+              <span className="text-[10px] text-amber-500/70">
+                ({format(new Date(`${prevCoverage.date}T12:00:00`), "EEE MMM d")})
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {prevCoverage.items.map((c) => (
+              <span
+                key={c.route}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-xs"
+              >
+                <span className="font-black text-red-300">#{c.route}</span>
+                <ArrowLeftRight className="h-3 w-3 text-slate-600" />
+                <span className="font-black text-amber-200">#{c.loadOn}</span>
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ── Requests ─────────────────────────────────────────────────── */}
       {requested.length > 0 && (

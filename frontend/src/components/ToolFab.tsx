@@ -1,4 +1,4 @@
-import { useState, useMemo, useRef, useEffect, useCallback, type ComponentType } from "react";
+import { useState, useMemo, useRef, useEffect, useLayoutEffect, useCallback, type ComponentType } from "react";
 import { Wrench, Calculator, StickyNote, CalendarDays } from "lucide-react";
 import { useLocation } from "react-router-dom";
 import DraggableFab from "./DraggableFab";
@@ -42,7 +42,9 @@ export default function ToolFab() {
     () => settings ? new Map(settings.map((s) => [s.key, s.value])) : new Map(),
     [settings],
   );
-  const calcEnabled = settingsMap.get("calculator_fab_enabled") !== false;
+  // All three tools are opt-in (=== true): the FAB only appears once at least
+  // one is explicitly enabled, and never during the settings-loading window.
+  const calcEnabled = settingsMap.get("calculator_fab_enabled") === true;
   const notesEnabled = settingsMap.get("note_cards_enabled") === true;
   const calEnabled = settingsMap.get("calendar_fab_enabled") === true;
 
@@ -55,7 +57,7 @@ export default function ToolFab() {
     [calcEnabled, notesEnabled, calEnabled],
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (wheelOpen) updateFabRect();
   }, [wheelOpen, updateFabRect]);
 
@@ -94,7 +96,7 @@ export default function ToolFab() {
       <NoteCardsDrawer open={activePanel === "notes"} onClose={closePanel} />
 
       <DraggableFab storageKey="tool" defaultRight={16} defaultBottom={100} onMove={updateFabRect}>
-        <div ref={fabRef} onClick={() => setWheelOpen((o) => !o)} className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-white shadow-lg shadow-slate-900/40 ring-2 ring-slate-600/50 transition-all hover:bg-slate-700 hover:scale-110 active:scale-95 cursor-pointer">
+        <div ref={fabRef} onClick={() => { updateFabRect(); setWheelOpen((o) => !o); }} className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-white shadow-lg shadow-slate-900/40 ring-2 ring-slate-600/50 transition-all hover:bg-slate-700 hover:scale-110 active:scale-95 cursor-pointer">
           <Wrench className="h-6 w-6" />
         </div>
       </DraggableFab>
