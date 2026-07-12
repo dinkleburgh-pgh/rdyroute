@@ -95,8 +95,14 @@ export default function ToolFab() {
       <CalendarFab open={activePanel === "calendar"} onClose={closePanel} />
       <NoteCardsDrawer open={activePanel === "notes"} onClose={closePanel} />
 
-      <DraggableFab storageKey="tool" defaultRight={16} defaultBottom={100} onMove={updateFabRect}>
-        <div ref={fabRef} onClick={() => { updateFabRect(); setWheelOpen((o) => !o); }} className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-white shadow-lg shadow-slate-900/40 ring-2 ring-slate-600/50 transition-all hover:bg-slate-700 hover:scale-110 active:scale-95 cursor-pointer">
+      <DraggableFab
+        storageKey="tool"
+        defaultRight={16}
+        defaultBottom={100}
+        onMove={updateFabRect}
+        onClick={() => { updateFabRect(); setWheelOpen((o) => !o); }}
+      >
+        <div ref={fabRef} className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-800 text-white shadow-lg shadow-slate-900/40 ring-2 ring-slate-600/50 transition-all hover:bg-slate-700 hover:scale-110 active:scale-95 cursor-pointer">
           <Wrench className="h-6 w-6" />
         </div>
       </DraggableFab>
