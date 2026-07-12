@@ -65,3 +65,37 @@ else
     echo "[local-deploy]          retry: ssh -i $STANDBY_KEY $STANDBY_HOST true" >&2
   fi
 fi
+
+# ---------------------------------------------------------------------------
+# Bust the PWA service worker at Cloudflare's edge so clients pick up this build
+# immediately. The origin serves sw.js no-cache, but a copy already sitting at
+# the edge would linger until its TTL — that's what makes deploys look "stuck"
+# on an old version. Reads CF token+zone from the failover env already on the
+# NAS (the token needs the "Cache Purge" permission). Non-fatal: a failed purge
+# never fails the deploy; clients just lag until the edge TTL expires.
+# Skip with SKIP_PURGE=1.
+# ---------------------------------------------------------------------------
+CF_ENV="${CF_ENV:-/mnt/coxmain/home/claude/rdyroute-failback.env}"
+if [ -n "${SKIP_PURGE:-}" ]; then
+  echo "[local-deploy] SKIP_PURGE set — leaving Cloudflare cache alone"
+elif [ ! -f "$CF_ENV" ]; then
+  echo "[local-deploy] no CF env ($CF_ENV) — skipping edge purge"
+else
+  CF_TOKEN=$(grep -E '^CF_API_TOKEN=' "$CF_ENV" | head -1 | cut -d= -f2-)
+  CF_ZONE=$(grep -E '^CF_ZONE_ID=' "$CF_ENV" | head -1 | cut -d= -f2-)
+  if [ -z "$CF_TOKEN" ] || [ -z "$CF_ZONE" ]; then
+    echo "[local-deploy] CF token/zone not in $CF_ENV — skipping edge purge"
+  else
+    echo "[local-deploy] purging Cloudflare edge cache for the PWA worker…"
+    resp=$(curl -s -m 15 -X POST \
+      "https://api.cloudflare.com/client/v4/zones/${CF_ZONE}/purge_cache" \
+      -H "Authorization: Bearer ${CF_TOKEN}" -H "Content-Type: application/json" \
+      -d '{"files":["https://rdyroute.app/sw.js","https://rdyroute.app/registerSW.js","https://rdyroute.app/index.html"]}')
+    if printf '%s' "$resp" | grep -q '"success":true'; then
+      echo "[local-deploy] Cloudflare purge OK (sw.js, registerSW.js, index.html)"
+    else
+      echo "[local-deploy] WARNING: Cloudflare purge failed — clients lag until edge TTL." >&2
+      echo "[local-deploy]          token likely missing Zone:Cache Purge. Resp: $resp" >&2
+    fi
+  fi
+fi
