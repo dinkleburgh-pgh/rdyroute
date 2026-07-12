@@ -47,13 +47,13 @@ ReadyRoute also ships **component classes** (in `_ds_bundle.css`) — use them d
 - **`.btn-primary`** (blue), **`.btn-ghost`** (slate), **`.btn-danger`** (red).
 - **`.input`**, **`.label`** (uppercase micro-label above a field).
 
-`styles.css` additionally carries ReadyRoute's compiled Tailwind utilities (surface/ink families like `bg-surface`, `text-ink-soft`, and the `bg-status-*` / `text-status-*` status families). That utility set is only what ReadyRoute's app happened to use, so it isn't exhaustive — reach for the `var(--rr-*)` tokens when composing anything new.
+`styles.css` also carries matching **utility classes** for the tokens: surfaces (`.bg-app`, `.bg-surface`, `.bg-surface-2` / `-3`, `.bg-track`, `.bg-accent`), ink (`.text-ink`, `.text-ink-soft` / `-muted` / `-faint`), the full status set (`.bg-st-*` and `.text-st-*` for all nine statuses), plus `.border-hairline`, `.rounded-pill`, `.shadow-card` / `-hero` / `-inset-top`, and `.font-sans` / `.font-mono`. For anything outside this set, use standard Tailwind (which Claude Design provides) alongside the `var(--rr-*)` tokens for color.
 
 ## Where the truth lives
 
 - `styles.css` — the entry (imports fonts, tokens, and the compiled CSS). Every design consumes this file's `@import` closure.
 - `tokens/tokens.css` — the full token reference.
-- `_ds_bundle.css` — ReadyRoute's real compiled utility + component classes.
+- `_ds_bundle.css` — the component + utility classes (hand-authored, token-mapped; no Tailwind internals).
 - Foundation cards (**Colors**, **Typography**, **Elements**) — the visual reference.
 
 ## Example
