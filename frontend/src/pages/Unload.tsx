@@ -162,7 +162,6 @@ export default function Unload() {
     unfinished.length +
     dirtyCoverages.filter(notDone).length +
     dirtyRoute.filter(notDone).length;
-  const dayLabel = format(new Date(`${runDate}T12:00:00`), "EEE");
 
   async function assignBatch(truckNumber: number) {
     await assign.mutateAsync({
@@ -290,10 +289,10 @@ export default function Unload() {
           {opts.coverageBadge && coveredRoute != null && (
             <span className="badge shrink-0 bg-st-spare text-[#04222b]">Cov. #{coveredRoute}</span>
           )}
+          <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
           {t.state?.needs_checked && (
             <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>
           )}
-          <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
 
           {isUndo ? (
             <div className="flex shrink-0 items-center gap-2">
@@ -407,7 +406,7 @@ export default function Unload() {
             ReadyRoute · Unload
           </div>
           <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.01em] text-ink">
-            Unload — {dayLabel}’s ship
+            Day {unloadsDay} Unload
           </h1>
         </div>
         <span className="badge shrink-0 bg-st-dirty text-white">{toGo} to go</span>
@@ -494,7 +493,7 @@ export default function Unload() {
         <section className="flex flex-col gap-2">
           <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dirty — route trucks</div>
           {dirtyRoute.map((t, i) =>
-            renderRow(t, i, { actionLabel: "Mark Unloaded", overflow: "dirty" }),
+            renderRow(t, i, { accentClass: "border-l-[3px] border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" }),
           )}
         </section>
       )}
@@ -548,37 +547,35 @@ export default function Unload() {
         </section>
       )}
 
-      {/* ── Batches (retained when batching is enabled) ────────────────── */}
-      {!batchingDisabled && (
-        <section className="flex flex-col gap-2">
-          <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Batches</div>
-          <div className="columns-2 gap-3">
-            {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => (
-              <AnimateCard key={b.batch_number} delay={index * 0.03} className="card mb-3 break-inside-avoid space-y-2 p-4">
-                <p className="font-bold text-ink">Batch {b.batch_number}</p>
-                <div className="flex flex-wrap gap-1">
-                  {b.trucks.length === 0 ? (
-                    <span className="text-xs text-ink-muted">No trucks</span>
-                  ) : (
-                    b.trucks.map((t) => (
-                      <span key={t.truck_number} className="badge bg-track text-ink-soft">
-                        #{t.truck_number}
-                      </span>
-                    ))
-                  )}
-                </div>
-                <p className="text-xs text-ink-muted">
-                  Total wearers:{" "}
-                  <span className={b.total_wearers > 0 ? "font-semibold text-st-unloaded" : ""}>
-                    {b.total_wearers}
-                  </span>{" "}
-                  / {wearerCap}
-                </p>
-              </AnimateCard>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* ── Batches ────────────────────────────────────────────────────── */}
+      <section className="flex flex-col gap-2">
+        <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Batches</div>
+        <div className="columns-2 gap-3">
+          {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => (
+            <AnimateCard key={b.batch_number} delay={index * 0.03} className="card mb-3 break-inside-avoid space-y-2 p-4">
+              <p className="font-bold text-ink">Batch {b.batch_number}</p>
+              <div className="flex flex-wrap gap-1">
+                {b.trucks.length === 0 ? (
+                  <span className="text-xs text-ink-muted">No trucks</span>
+                ) : (
+                  b.trucks.map((t) => (
+                    <span key={t.truck_number} className="badge bg-track text-ink-soft">
+                      #{t.truck_number}
+                    </span>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-ink-muted">
+                Total wearers:{" "}
+                <span className={b.total_wearers > 0 ? "font-semibold text-st-unloaded" : ""}>
+                  {b.total_wearers}
+                </span>{" "}
+                / {wearerCap}
+              </p>
+            </AnimateCard>
+          ))}
+        </div>
+      </section>
     </motion.div>
   );
 }
