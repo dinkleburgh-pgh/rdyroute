@@ -76,8 +76,20 @@ export default function RouteSwapModal({ onClose }: Props) {
   const [ruleDays, setRuleDays] = useState<Set<number>>(new Set());
   const [ruleError, setRuleError] = useState<string | null>(null);
 
-  function saveRules(next: RecurringRouteSwap[]) {
-    upsertSetting.mutate({ key: "recurring_route_swaps", value: next });
+  async function saveRules(next: RecurringRouteSwap[]): Promise<boolean> {
+    setRuleError(null);
+    try {
+      await upsertSetting.mutateAsync({ key: "recurring_route_swaps", value: next });
+      return true;
+    } catch (e: unknown) {
+      const err = e as { response?: { status?: number; data?: { detail?: string } } };
+      setRuleError(
+        err?.response?.status === 403
+          ? "No permission to change recurring rules — needs an admin / fleet / supervisor account. NOT saved."
+          : (err?.response?.data?.detail ?? "Couldn't save recurring rules — they were not persisted. Try again."),
+      );
+      return false;
+    }
   }
   function toggleRuleDay(d: number) {
     setRuleDays((prev) => {
@@ -86,7 +98,7 @@ export default function RouteSwapModal({ onClose }: Props) {
       return n;
     });
   }
-  function addRule() {
+  async function addRule() {
     const rt = parseInt(ruleRoute, 10);
     const lo = parseInt(ruleLoadOn, 10);
     if (isNaN(rt) || isNaN(lo)) { setRuleError("Select both trucks."); return; }
@@ -99,11 +111,14 @@ export default function RouteSwapModal({ onClose }: Props) {
       ...recurringRules.filter((r) => r.route_truck !== rt),
       { route_truck: rt, load_on_truck: lo, days },
     ];
-    saveRules(next);
-    setRuleRoute(""); setRuleLoadOn(""); setRuleDays(new Set());
+    // Only clear the form once the rule is actually persisted — otherwise a
+    // failed save would silently lose the entry ("getting removed").
+    if (await saveRules(next)) {
+      setRuleRoute(""); setRuleLoadOn(""); setRuleDays(new Set());
+    }
   }
   function removeRule(idx: number) {
-    saveRules(recurringRules.filter((_, i) => i !== idx));
+    void saveRules(recurringRules.filter((_, i) => i !== idx));
   }
 
   // Sets for quick lookups
