@@ -249,15 +249,11 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             if prior is None or prior.status != TruckStatus.dirty:
                 status = TruckStatus.unloaded
 
-        # Auto-unload all trucks: when enabled, every truck starts the new run day
-        # already Unloaded (or Off if it's scheduled off today), overriding the
-        # normal dirty / carried-forward inference so the next day begins from a
-        # clean slate. Without this, the seeding above would re-derive "ran
-        # yesterday → dirty today" and the setting would do nothing. Physical
-        # conditions (OOS, shop) are left untouched — a truck in the shop or out
-        # of service didn't get unloaded.
-        if force_unloaded and not truck.is_oos and status not in (TruckStatus.oos, TruckStatus.shop):
-            status = TruckStatus.off if scheduled_off_today else TruckStatus.unloaded
+        # NOTE: force_unloaded_on_new_day intentionally does NOT pre-mark today's
+        # trucks unloaded. It only closes out the PREVIOUS day (see the block near
+        # the top of this function). Trucks that ran come back dirty today so the
+        # crew's unload workflow has work to do; the auto-unload is an END-OF-DAY
+        # action — it happens when the NEXT day rolls over and closes this one out.
 
         row = TruckState(
             truck_number=truck.truck_number,

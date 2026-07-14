@@ -239,12 +239,15 @@ export function buildPrevDayCoverage(
   swapLog: RouteSwapLogEntryLike[],
   prevRunDate: string,
 ): PrevDayCoverage {
-  const prior = swapLog.filter((e) => e.run_date <= prevRunDate);
-  if (prior.length === 0) return { date: null, items: [], byRoute: new Map(), byCover: new Map() };
-  const latestDate = prior.reduce((m, e) => (e.run_date > m ? e.run_date : m), prior[0].run_date);
+  // Only surface coverage from the ACTUAL previous run day. Falling back to the
+  // most recent swap on/before prevRunDate surfaced week-old coverage on days
+  // that simply had no swaps — misleading, since those trucks returned and were
+  // unloaded days ago. If the previous run day had no coverage, show nothing.
+  const onPrevDay = swapLog.filter((e) => e.run_date === prevRunDate);
+  if (onPrevDay.length === 0) return { date: null, items: [], byRoute: new Map(), byCover: new Map() };
   const byRoute = new Map<number, number>();
   // Newest-first log order → first entry seen per route is the most recent.
-  for (const e of prior.filter((e) => e.run_date === latestDate)) {
+  for (const e of onPrevDay) {
     if (!byRoute.has(e.route_truck)) byRoute.set(e.route_truck, e.load_on_truck);
   }
   const items = [...byRoute.entries()]
@@ -252,7 +255,7 @@ export function buildPrevDayCoverage(
     .sort((a, b) => a.route - b.route);
   const byCover = new Map<number, number>();
   for (const { route, loadOn } of items) byCover.set(loadOn, route);
-  return { date: latestDate, items, byRoute, byCover };
+  return { date: prevRunDate, items, byRoute, byCover };
 }
 
 export function effectiveOperationalStatus(
