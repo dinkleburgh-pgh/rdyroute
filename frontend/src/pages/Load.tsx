@@ -35,6 +35,7 @@ import { ChevronDown } from "lucide-react";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import ConfirmDialog from "../components/ConfirmDialog";
 import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
@@ -57,6 +58,9 @@ export default function Load() {
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
   const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
+  // Dust-garment finish confirmation — asks "Did you load garments?" before
+  // finishing a truck flagged with dust garments.
+  const [confirmGarmentTruck, setConfirmGarmentTruck] = useState<TruckWithState | null>(null);
   const [dustCollapsed, setDustCollapsed] = useState(() => localStorage.getItem("load:dustCollapsed") === "1");
   const [coverageCollapsed, setCoverageCollapsed] = useState(() => localStorage.getItem("load:coverageCollapsed") === "1");
 
@@ -388,7 +392,10 @@ export default function Load() {
             busy={busy === inProgress.truck_number}
             loadDay={loadDay}
             nextUp={ready[0]}
-            onFinish={() => finishLoad(inProgress)}
+            onFinish={() => {
+              if (inProgress.state?.has_dust_garment) setConfirmGarmentTruck(inProgress);
+              else void finishLoad(inProgress);
+            }}
             onCancel={() => cancelLoad(inProgress)}
           />
           <InlineShortages truck={inProgress} runDate={runDate} />
@@ -639,6 +646,19 @@ export default function Load() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmGarmentTruck !== null}
+        title="Did you load garments?"
+        description={`Truck #${confirmGarmentTruck?.truck_number ?? ""} is flagged with dust garments — confirm the garments were loaded before finishing.`}
+        confirmLabel="Yes, finish loading"
+        cancelLabel="Not yet"
+        onConfirm={() => {
+          const t = confirmGarmentTruck;
+          setConfirmGarmentTruck(null);
+          if (t) void finishLoad(t);
+        }}
+        onCancel={() => setConfirmGarmentTruck(null)}
+      />
     </motion.div>
     </>
   );
