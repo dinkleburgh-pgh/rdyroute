@@ -21,7 +21,10 @@ import {
   buildRouteStatusCounts,
   countLoaded,
   countUnloadedFromContext,
+  loadedTruckNumbers,
+  unloadedTruckNumbersFromContext,
 } from "../utils/truckStatus";
+import { reportProgressOverflow } from "../utils/debugLog";
 import { STATUS_LABELS } from "../constants/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
@@ -252,6 +255,25 @@ export default function Layout() {
     () => countUnloadedFromContext(unloadScheduleContext),
     [unloadScheduleContext],
   );
+
+  // Debug: capture the intermittent "N+1 of N" progress overflow with the
+  // offending truck, logged server-side so a floor-device-only occurrence is
+  // retrievable centrally. The load numerator (countLoaded) scans the whole
+  // board, so it can exceed the route denominator; unload is a subset (defensive).
+  useEffect(() => {
+    reportProgressOverflow(
+      "Load (sidebar)",
+      loadedTruckNumbers(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload),
+      loadContext.activeTrucks.map((t) => t.truck_number),
+      { run_date: todayIso(), loadDay: loadDayNum },
+    );
+    reportProgressOverflow(
+      "Unload (sidebar)",
+      unloadedTruckNumbersFromContext(unloadScheduleContext),
+      unloadScheduleContext.activeTrucks.map((t) => t.truck_number),
+      { run_date: todayIso(), unloadsDay },
+    );
+  }, [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload, loadContext, unloadScheduleContext]);
 
   const loadedPct =
     totalScheduledLoad > 0

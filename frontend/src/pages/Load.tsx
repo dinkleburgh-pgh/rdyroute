@@ -26,7 +26,10 @@ import {
   getCoverageRouteNumber,
   getOperationalTruckType,
   isScheduledOff,
+  loadedTruckNumbers,
+  unloadedTruckNumbersFromContext,
 } from "../utils/truckStatus";
+import { reportProgressOverflow } from "../utils/debugLog";
 import { PaceBar, useElapsed } from "../components/LiveInProgress";
 import { ChevronDown } from "lucide-react";
 import { DustGarmentIcon } from "../components/icons";
@@ -180,6 +183,23 @@ export default function Load() {
     [unloadScheduleContext],
   );
   const unloadPct = unloadTotal > 0 ? Math.round((unloadDone / unloadTotal) * 100) : 0;
+
+  // Debug: log a numerator > denominator overflow (with the offending truck)
+  // to the server, so the intermittent "N+1 of N" is captured centrally.
+  useEffect(() => {
+    reportProgressOverflow(
+      "Load (Load page)",
+      loadedTruckNumbers(board, loadDay, holidayLoad, unloadsDay, holidayUnload),
+      loadDisplayTrucks.map((t) => t.truck_number),
+      { run_date: runDate, loadDay },
+    );
+    reportProgressOverflow(
+      "Unload (Load page)",
+      unloadedTruckNumbersFromContext(unloadScheduleContext),
+      unloadScheduleContext.activeTrucks.map((t) => t.truck_number),
+      { run_date: runDate, unloadsDay },
+    );
+  }, [board, loadDay, unloadsDay, holidayLoad, holidayUnload, loadDisplayTrucks, unloadScheduleContext, runDate]);
 
   const anyInProgress = Boolean(inProgress);
   // A spare can't load until it's covering a route (enforced on the backend too).

@@ -62,13 +62,13 @@ export function isScheduledOff(truck: { scheduled_off_days: number[] }, dayNum: 
  * the covering truck — including them would over-count relative to the
  * denominator in buildOperationalDayContext (which already excludes them).
  */
-export function countLoaded(
+export function loadedTruckNumbers(
   board: TruckWithState[],
   loadDayNum: number,
   holidayLoad: boolean,
   unloadsDayNum: number,
   holidayUnload: boolean,
-): number {
+): number[] {
   // Build the set of route numbers whose load is being handled by another truck
   // (same logic as buildOperationalDayContext) so we can exclude them below.
   const routeTruckByNumber = new Map<number, TruckWithState>();
@@ -104,7 +104,18 @@ export function countLoaded(
     // route to read status "oos" — an is_oos route can show "dirty", which would
     // hold the numerator below the denominator so the bar never reaches 100%.
     return holidayLoad || !isScheduledOff(coveredTruck, loadDayNum);
-  }).length;
+  }).map((t) => t.truck_number);
+}
+
+/** Count of loaded trucks (see {@link loadedTruckNumbers}). */
+export function countLoaded(
+  board: TruckWithState[],
+  loadDayNum: number,
+  holidayLoad: boolean,
+  unloadsDayNum: number,
+  holidayUnload: boolean,
+): number {
+  return loadedTruckNumbers(board, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload).length;
 }
 
 /**
@@ -112,11 +123,16 @@ export function countLoaded(
  * A truck counts as unloaded when its raw status is "unloaded" or "loaded"
  * (loaded means it unloaded previously and already moved to load workflow).
  */
-export function countUnloadedFromContext(ctx: OperationalDayContext): number {
+export function unloadedTruckNumbersFromContext(ctx: OperationalDayContext): number[] {
   return ctx.activeTrucks.filter((t) => {
     const raw = (t.state?.status ?? "dirty") as TruckStatus;
     return raw === "unloaded" || raw === "loaded";
-  }).length;
+  }).map((t) => t.truck_number);
+}
+
+/** Count of unloaded trucks from an unload context (see {@link unloadedTruckNumbersFromContext}). */
+export function countUnloadedFromContext(ctx: OperationalDayContext): number {
+  return unloadedTruckNumbersFromContext(ctx).length;
 }
 
 export function getCoverageRouteNumber(t: TruckWithState): number | null {

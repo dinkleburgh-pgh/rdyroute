@@ -21,7 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from database import Base, SessionLocal, engine, settings
-from routers import activity, audit, auth, batches, communications, exports, fleet, load_durations, notes as notes_router, notices, notifications, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, ws as ws_router
+from routers import activity, audit, auth, batches, communications, debug, exports, fleet, load_durations, notes as notes_router, notices, notifications, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, ws as ws_router
 from seed import run_startup_seed
 from backups import backup_loop
 
@@ -285,6 +285,7 @@ app.include_router(settings_router.router)
 app.include_router(notifications.router)
 app.include_router(ws_router.router)
 app.include_router(exports.router)
+app.include_router(debug.router)
 
 
 # ---------------------------------------------------------------------------
