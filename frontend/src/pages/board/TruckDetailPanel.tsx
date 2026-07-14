@@ -48,6 +48,7 @@ export default function TruckDetailPanel({
     { label: "Started", value: fmtTime(truck.state?.load_start_time) },
     { label: "Finished", value: fmtTime(truck.state?.load_finish_time) },
     { label: "Arrived", value: fmtTime(truck.state?.arrived_at) },
+    { label: "Unloaded", value: fmtTime(truck.state?.unloaded_at) },
     { label: "Status", value: STATUS_LABELS[status] ?? status },
   ];
 

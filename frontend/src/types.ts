@@ -59,6 +59,7 @@ export interface TruckState {
   priority_hold: boolean;
   needs_checked: boolean;
   arrived_at: number | null;
+  unloaded_at: number | null;
   state_source: TruckStateSource;
   updated_at: string;
 }

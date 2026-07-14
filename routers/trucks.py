@@ -485,6 +485,7 @@ def update_truck_state(
         "priority_hold": row.priority_hold,
         "needs_checked": row.needs_checked,
         "arrived_at": row.arrived_at,
+        "unloaded_at": row.unloaded_at,
         "state_source": row.state_source,
     })
     updates = payload.model_dump(exclude_unset=True)
@@ -498,20 +499,20 @@ def update_truck_state(
     for field, value in updates.items():
         setattr(row, field, value)
 
-    # Auto-baseline arrival: the first time a truck actually enters the unload
-    # workflow, capture arrived_at if nobody set it manually. This guarantees an
-    # arrival timestamp is recorded even when no one taps "Arrived"; a manual tap
-    # made earlier (while still dirty) is preserved because we only fill when the
-    # value is still null. Only the deliberate per-truck transition stamps —
-    # bulk/admin status changes never do, keeping the arrival data clean.
-    entered_unload = (
-        previous_status not in (TruckStatus.in_progress, TruckStatus.unloaded, TruckStatus.loaded)
-        and row.status in (TruckStatus.in_progress, TruckStatus.unloaded)
-    )
-    if row.arrived_at is None and entered_unload:
-        arrived_setting = db.get(AppSetting, "arrived_tracking_enabled")
-        if arrived_setting is not None and arrived_setting.value is True:
-            row.arrived_at = time.time()
+    # arrived_at is set ONLY by an explicit "Arrived" tap (the client sends it in
+    # the payload). There is deliberately no auto-baseline on unload: arriving and
+    # being unloaded are different events, so arrival never piggybacks on a status
+    # change.
+    #
+    # unloaded_at stamps the moment a truck is genuinely unloaded via this
+    # per-truck workflow (dirty / in_progress / unfinished -> unloaded), for
+    # unload-timing pattern analysis. Bulk/admin status changes go through the
+    # separate bulk endpoint and never stamp. Undoing (leaving unloaded) clears it.
+    _UNLOAD_OPEN = (TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished)
+    if row.status == TruckStatus.unloaded and previous_status in _UNLOAD_OPEN:
+        row.unloaded_at = time.time()
+    elif row.status != TruckStatus.unloaded and previous_status == TruckStatus.unloaded:
+        row.unloaded_at = None
 
     append_truck_state_activity(
         db,

@@ -228,6 +228,7 @@ export function useUpsertTruckState() {
               priority_hold: false,
               needs_checked: false,
               arrived_at: null,
+              unloaded_at: null,
               state_source: "workflow" as TruckStateSource,
               updated_at: new Date().toISOString(),
             };

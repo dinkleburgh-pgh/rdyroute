@@ -165,8 +165,13 @@ class TruckState(Base):
     priority_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Follow-up check required even while the truck continues its normal lifecycle
     needs_checked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
-    # Driver parked / truck arrived back in the yard for this run-date
+    # Driver parked / truck arrived back in the yard for this run-date. Set ONLY
+    # by an explicit "Arrived" tap — never auto-stamped on a status change.
     arrived_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # When the truck was marked unloaded via the per-truck unload workflow (never
+    # on bulk/admin changes) — kept distinct from arrived_at for unload-timing
+    # pattern analysis.
+    unloaded_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Who last established the current-day row shape
     state_source: Mapped[str] = mapped_column(String(16), nullable=False, default=TruckStateSource.auto.value)
 

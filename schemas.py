@@ -119,6 +119,7 @@ class TruckStateOut(_OrmBase):
     priority_hold: bool = False
     needs_checked: bool = False
     arrived_at: float | None = None
+    unloaded_at: float | None = None
     state_source: TruckStateSource
     updated_at: datetime
 
