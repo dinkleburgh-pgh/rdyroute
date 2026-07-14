@@ -22,6 +22,7 @@ import type { TruckNote, TruckStatus, TruckWithState } from "../types";
 import {
   buildHistoricalCoverageFallback,
   buildOperationalDayContext,
+  buildPrevDayCoverage,
   countLoaded,
   effectiveOperationalStatus,
   effectiveStatus,
@@ -243,23 +244,10 @@ export default function RunDay() {
 
   // Previous load-day coverage (shown with the Unload section as a reminder):
   // the trucks being unloaded today were loaded on the prior run day, so surface
-  // who covered which route then, from the route-swap log — pulling the most
-  // recent coverage on or before that previous operating day (so it follows the
-  // ship day across weekends and ignores any stray weekend-dated entries).
-  const prevCoverage = useMemo(() => {
-    const prior = swapLog.filter((e) => e.run_date <= prevRunDate);
-    if (prior.length === 0) return { date: null as string | null, items: [] as { route: number; loadOn: number }[] };
-    const latestDate = prior.reduce((m, e) => (e.run_date > m ? e.run_date : m), prior[0].run_date);
-    const byRoute = new Map<number, number>();
-    // log is newest-first; iterate so the most recent entry per route wins
-    for (const e of prior.filter((e) => e.run_date === latestDate)) {
-      if (!byRoute.has(e.route_truck)) byRoute.set(e.route_truck, e.load_on_truck);
-    }
-    const items = [...byRoute.entries()]
-      .map(([route, loadOn]) => ({ route, loadOn }))
-      .sort((a, b) => a.route - b.route);
-    return { date: latestDate, items };
-  }, [swapLog, prevRunDate]);
+  // who covered which route then. Uses the shared buildPrevDayCoverage (same as
+  // the Unload page and Note Cards) — coverage from the ACTUAL previous run day
+  // only, so a swap from last week can't stick around on days with no coverage.
+  const prevCoverage = useMemo(() => buildPrevDayCoverage(swapLog, prevRunDate), [swapLog, prevRunDate]);
 
   // Lookups so the Unload grid can show each route's covering truck from the
   // PREVIOUS load day (what's being unloaded today was covered then).
