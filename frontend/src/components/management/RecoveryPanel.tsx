@@ -9,7 +9,6 @@ import { api } from "../../api/client";
 import { useToast } from "../../contexts/ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
 import { DownloadIcon, TrashIcon, RefreshIcon } from "../icons";
-import { format, parseISO } from "date-fns";
 
 interface PgBackup {
   filename: string;
@@ -24,7 +23,16 @@ function fmtBytes(b: number): string {
 }
 
 function fmtDate(iso: string): string {
-  return format(parseISO(iso), "MMM d, h:mm a");
+  // Render in Eastern (the operation's timezone) regardless of the viewer's locale.
+  return (
+    new Date(iso).toLocaleString("en-US", {
+      timeZone: "America/New_York",
+      month: "short",
+      day: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+    }) + " ET"
+  );
 }
 
 export default function RecoveryPanel() {
@@ -36,6 +44,8 @@ export default function RecoveryPanel() {
   const [loaded, setLoaded] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [restoreTarget, setRestoreTarget] = useState<string | null>(null);
+  const [restoring, setRestoring] = useState(false);
 
   // ZIP restore state (existing functionality)
   const [importing, setImporting] = useState(false);
@@ -71,6 +81,24 @@ export default function RecoveryPanel() {
     } finally {
       setDeleting(false);
       setDeleteTarget(null);
+    }
+  }
+
+  async function doRestore() {
+    if (!restoreTarget) return;
+    setRestoring(true);
+    try {
+      const res = await api.post<{ message?: string }>(
+        `/exports/pg-backups/${encodeURIComponent(restoreTarget)}/restore`,
+      );
+      toast.success(res.data?.message ?? `Restored from ${restoreTarget}`);
+      await loadBackups();
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { detail?: string } } };
+      toast.error(err?.response?.data?.detail ?? "Restore failed");
+    } finally {
+      setRestoring(false);
+      setRestoreTarget(null);
     }
   }
 
@@ -160,6 +188,14 @@ export default function RecoveryPanel() {
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
+                          title="Restore this backup — replaces the entire database"
+                          className="rounded px-2 py-1 text-xs font-semibold text-amber-400 transition-colors hover:bg-amber-500/10 disabled:opacity-40"
+                          disabled={!isPrivileged}
+                          onClick={() => setRestoreTarget(b.filename)}
+                        >
+                          Restore
+                        </button>
+                        <button
                           title="Download"
                           className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
                           onClick={() => downloadBackup(b.filename)}
@@ -234,6 +270,18 @@ export default function RecoveryPanel() {
         busy={deleting}
         onConfirm={doDelete}
         onCancel={() => setDeleteTarget(null)}
+      />
+
+      {/* Confirm restore (destructive — full DB replace) */}
+      <ConfirmDialog
+        open={restoreTarget !== null}
+        title={`Restore ${restoreTarget ?? "backup"}?`}
+        description="This REPLACES the entire database with this snapshot — all current data is overwritten. A pre-restore snapshot is saved automatically first, and if the restore fails it rolls back with no changes."
+        confirmLabel="Replace DB & restore"
+        variant="danger"
+        busy={restoring}
+        onConfirm={doRestore}
+        onCancel={() => setRestoreTarget(null)}
       />
     </div>
   );

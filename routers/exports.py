@@ -13,8 +13,10 @@ import io
 import ipaddress
 import json
 import os
+import shutil
+import subprocess
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
@@ -1228,7 +1230,9 @@ def _list_pg_backups() -> list[dict]:
         result.append({
             "filename": f.name,
             "size_bytes": stat.st_size,
-            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            # UTC-aware ISO (…+00:00) so the client can render it in a fixed
+            # timezone; a naive value would be reinterpreted as browser-local.
+            "created_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
         })
     return result
 
@@ -1273,4 +1277,101 @@ def delete_pg_backup(
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail=f"Backup '{filename}' not found")
     path.unlink()
+
+
+@router.post("/pg-backups/{filename}/restore")
+def restore_pg_backup(
+    filename: str,
+    _admin=Depends(require_admin),
+) -> dict:
+    """
+    Restore the database from a pg_dump SQL backup. DESTRUCTIVE — the current
+    database contents are replaced by the snapshot.
+
+    Safety:
+      1. A pre-restore snapshot of the CURRENT database is taken first, so the
+         restore can be undone by restoring that file.
+      2. The schema reset + load run inside a SINGLE transaction
+         (psql --single-transaction, ON_ERROR_STOP), so any error rolls the whole
+         thing back and leaves the live database untouched.
+      3. After a successful load the schema is brought up to the current
+         migration head (the backup may predate recent migrations).
+    """
+    if not filename.startswith("readyroute-") or not filename.endswith(".sql"):
+        raise HTTPException(status_code=400, detail="Invalid backup filename")
+    path = _PG_BACKUP_DIR / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Backup '{filename}' not found")
+
+    url = settings.database_url
+    if not url.startswith("postgresql"):
+        raise HTTPException(status_code=400, detail="Restore is only supported on PostgreSQL")
+    parsed = urllib_parse.urlparse(url.replace("postgresql+psycopg://", "postgresql://"))
+    env = os.environ.copy()
+    env["PGPASSWORD"] = parsed.password or ""
+    host = parsed.hostname or "localhost"
+    port = str(parsed.port or 5432)
+    dbuser = parsed.username or ""
+    dbname = (parsed.path or "").lstrip("/")
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    # 1) Pre-restore safety snapshot of the CURRENT state (undo point).
+    pre_path = _PG_BACKUP_DIR / f"readyroute-prerestore-{stamp}.sql"
+    dump = subprocess.run(
+        ["pg_dump", "-h", host, "-p", port, "-U", dbuser, "-d", dbname, "-F", "p", "-f", str(pre_path)],
+        env=env, capture_output=True, text=True, timeout=180,
+    )
+    if dump.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"Pre-restore snapshot failed: {dump.stderr.strip()[:400]}")
+
+    # 2) Atomic restore: reset schema + load the dump in one transaction, so a
+    #    failure rolls back and the live database is left exactly as it was.
+    combined = _PG_BACKUP_DIR / f".restore-{stamp}.sql"
+    try:
+        with open(combined, "w", encoding="utf-8") as out:
+            out.write("DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n")
+            with open(path, "r", encoding="utf-8") as src:
+                shutil.copyfileobj(src, out)
+        restore = subprocess.run(
+            ["psql", "-h", host, "-p", port, "-U", dbuser, "-d", dbname,
+             "--single-transaction", "--set", "ON_ERROR_STOP=1", "-f", str(combined)],
+            env=env, capture_output=True, text=True, timeout=300,
+        )
+    finally:
+        try:
+            combined.unlink()
+        except OSError:
+            pass
+
+    if restore.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Restore failed and was rolled back — database unchanged: {restore.stderr.strip()[:400]}",
+        )
+
+    # 3) Best-effort: bring the (possibly older) restored schema up to head so the
+    #    running app's expectations still hold. Non-fatal.
+    migrate_note = "schema left at the backup's migration version"
+    try:
+        from alembic.config import Config as _AlembicConfig
+        from alembic import command as _alembic_command
+        from database import engine as _engine
+
+        _cfg = _AlembicConfig(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+        _cfg.set_main_option("sqlalchemy.url", str(_engine.url))
+        _alembic_command.upgrade(_cfg, "head")
+        migrate_note = "schema upgraded to head"
+    except Exception as exc:  # noqa: BLE001
+        migrate_note = f"post-restore migration skipped: {str(exc)[:200]}"
+
+    return {
+        "restored_from": filename,
+        "pre_restore_snapshot": pre_path.name,
+        "migration": migrate_note,
+        "message": (
+            f"Database restored from {filename}. A pre-restore snapshot "
+            f"({pre_path.name}) was saved — restore it to undo."
+        ),
+    }
 
