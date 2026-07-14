@@ -450,6 +450,16 @@ export function buildOperationalDayContext(
     }
   }
 
+  // Routes covered by ANY truck — a covering spare (oos_spare_route) OR a route
+  // truck taking another route's load (route_swap_route). Used only to drop an
+  // OOS route truck below; a normal route-swap between two healthy trucks leaves
+  // both running and removes neither.
+  const coveredByAnyRoute = new Set<number>();
+  for (const truck of trucks) {
+    const r = getCoverageRouteNumber(truck);
+    if (r != null) coveredByAnyRoute.add(r);
+  }
+
   const activeTrucks: TruckWithState[] = [];
   for (const truck of trucks) {
     // Covering spares stand in for the route truck — count the spare instead.
@@ -471,6 +481,11 @@ export function buildOperationalDayContext(
     // (covered when needed). Only a spare physically taking over removes a route.
     if (!holidayMode && isScheduledOff(truck, dayNum)) continue;
     if (coveredRouteNumbers.has(truck.truck_number)) continue;
+    // An OOS route truck whose route is being covered (by a spare OR a route-swap
+    // truck) does not run — its freight loads on the cover — so it's not part of
+    // the load/unload count. Uncovered OOS trucks are kept: still physically here
+    // to handle. Mirrors Unload.tsx's allTrucks filter.
+    if ((truck.is_oos || truck.state?.status === "oos") && coveredByAnyRoute.has(truck.truck_number)) continue;
     activeTrucks.push(truck);
   }
 
