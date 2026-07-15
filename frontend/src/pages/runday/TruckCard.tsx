@@ -41,6 +41,13 @@ export default function TruckCard({
     [notes, dayNum],
   );
   const showNotes = visibleNotes.length > 0 && (status === "in_progress" || status === "unloaded");
+  // Corner badges (note top-left, garment top-right) are absolutely positioned in
+  // the top band of the card, where the big centered truck number also sits. When
+  // either is present we reserve a top band (pt-8) so the badge never overlaps /
+  // hides a digit of the number — worst case a 3-digit number, which both badges
+  // can clip.
+  const hasGarmentBadge = t.truck_type === "Dust" && !!t.state?.has_dust_garment;
+  const hasCornerBadge = showNotes || hasGarmentBadge;
 
   const rawStatus = (t.state?.status ?? status) as TruckStatus;
   // Status chip: show the underlying dirty/unloaded for off trucks so the real
@@ -105,13 +112,14 @@ export default function TruckCard({
   return (
     <AnimateCard
       className={clsx(
-        "card relative flex flex-col items-center gap-1.5 p-3 text-center transition-opacity min-h-[7.5rem]",
+        "card relative flex flex-col items-center gap-1.5 px-3 pb-3 text-center transition-opacity min-h-[7.5rem]",
+        hasCornerBadge ? "pt-8" : "pt-3",
         done && "opacity-40",
         status === "in_progress" && "animate-pulse ring-2 ring-amber-400",
         showNotes && "ring-1 ring-violet-500/50",
       )}
     >
-      {t.truck_type === "Dust" && t.state?.has_dust_garment && (
+      {hasGarmentBadge && (
         <span
           className="absolute right-2 top-2 inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
           title="Garments assigned"
