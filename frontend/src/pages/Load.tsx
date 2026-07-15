@@ -228,6 +228,10 @@ export default function Load() {
         load_finish_time: null,
         load_duration_seconds: null,
       });
+      // Bump the viewer to the top of the page so the now-loading truck's
+      // In-Progress panel (with the Finish Loading button) scrolls into view —
+      // the tap that starts a load is usually deep down in the truck grid.
+      document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setBusy(null);
     }
