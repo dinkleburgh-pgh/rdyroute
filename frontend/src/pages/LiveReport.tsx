@@ -154,10 +154,12 @@ export default function LiveReport() {
     const v = Number(settings.find((s) => s.key === "wearer_cap")?.value);
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_WEARER_CAP;
   }, [settings]);
-  const recurringRules = useMemo(
-    () => (settings.find((s) => s.key === "recurring_route_swaps")?.value as RecurringRouteSwap[] | undefined) ?? [],
-    [settings],
-  );
+  const recurringRules = useMemo(() => {
+    // Guard against a non-array value (the setting is admin-editable) so
+    // isRecurring's `.some(...)` can't throw and crash the coverage section.
+    const row = settings.find((s) => s.key === "recurring_route_swaps");
+    return Array.isArray(row?.value) ? (row!.value as RecurringRouteSwap[]) : [];
+  }, [settings]);
 
   // Per-run-date data (all keyed by runDate; poll/WS keep them live).
   const { data: board = [] } = useBoard(runDate);
@@ -192,19 +194,26 @@ export default function LiveReport() {
 
   // ---- Coverage ("routes covered") ----
   const coverageRows = useMemo(() => {
-    type Row = { routeTruck: number; loadOnTruck: number; type: string };
+    type Row = { routeTruck: number; loadOnTruck: number; type: string; returned: boolean };
     const rows: Row[] = [];
     const seen = new Set<string>();
-    const add = (routeTruck: number, loadOnTruck: number, type: string) => {
+    const add = (routeTruck: number, loadOnTruck: number, type: string, returned = false) => {
       const key = `${routeTruck}->${loadOnTruck}`;
       if (seen.has(key)) return;
       seen.add(key);
-      rows.push({ routeTruck, loadOnTruck, type });
+      rows.push({ routeTruck, loadOnTruck, type, returned });
     };
     for (const rs of routeSwaps) add(rs.route_truck, rs.load_on_truck, "Route swap");
-    for (const s of spares) if (!s.returned) add(s.covering_route_truck, s.spare_truck_number, "Spare cover");
+    // Today's live view shows only still-active spare coverage; a historical
+    // report also includes spares that were later returned, since the freight
+    // did load on that spare that day (a returned spare keeps its run_date, so
+    // filtering it out would silently drop real coverage from past reports).
+    for (const s of spares) {
+      if (isToday && s.returned) continue;
+      add(s.covering_route_truck, s.spare_truck_number, "Spare cover", s.returned);
+    }
     return rows.sort((a, b) => a.routeTruck - b.routeTruck);
-  }, [routeSwaps, spares]);
+  }, [routeSwaps, spares, isToday]);
 
   const isRecurring = (routeTruck: number, loadOnTruck: number) =>
     recurringRules.some((r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay));
@@ -337,6 +346,9 @@ export default function LiveReport() {
                     <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">{r.type}</span>
                     {isRecurring(r.routeTruck, r.loadOnTruck) && (
                       <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
+                    )}
+                    {r.returned && (
+                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">returned</span>
                     )}
                     <span className="ml-auto text-right text-xs">
                       {done ? (
