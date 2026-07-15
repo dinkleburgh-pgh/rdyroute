@@ -32,6 +32,7 @@ const NotesBoard = lazy(() => import("./pages/Notes"));
 const DriverNotes = lazy(() => import("./pages/DriverNotes"));
 const FleetSchedule = lazy(() => import("./pages/FleetSchedule"));
 const VerifyShortSheet = lazy(() => import("./pages/VerifyShortSheet"));
+const LiveReport = lazy(() => import("./pages/LiveReport"));
 
 function RouteFallback() {
   return (
@@ -72,6 +73,7 @@ const router = createBrowserRouter([
       { path: "settings", element: <Navigate to="/management" replace /> },
       { path: "fleet-schedule", element: lazyRoute(<FleetSchedule />) },
       { path: "verify-short-sheet", element: lazyRoute(<VerifyShortSheet />) },
+      { path: "report", element: lazyRoute(<LiveReport />) },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },
