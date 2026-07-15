@@ -550,14 +550,23 @@ if (-not $NoBrowser) {
 # object with .VirtualKeyCode and .Character so callers don't care which path
 # was used.
 function Read-MenuKey {
+    # [Console]::ReadKey is the reliable cross-host way to read a single key,
+    # arrows included: .NET translates the arrow-key VT escape sequences that
+    # Windows Terminal sends into a ConsoleKey enum whose integer value already
+    # matches the virtual-key codes the menu switch expects (UpArrow=38,
+    # DownArrow=40, Enter=13, Escape=27, letters/Q = ASCII of the key).
+    #
+    # $Host.UI.RawUI.ReadKey is intentionally NOT the primary path: on Windows
+    # Terminal + PowerShell 7 it surfaces the raw ESC-sequence bytes of an arrow
+    # key one at a time (ESC, '[', 'A'/'B'), which the switch mis-read as Escape
+    # and stray characters — that's why pressing an arrow was navigating nowhere
+    # and could fall through to exiting / "Stop All".
     try {
+        $k = [Console]::ReadKey($true)
+        return [pscustomobject]@{ VirtualKeyCode = [int]$k.Key; Character = $k.KeyChar }
+    } catch {
         $k = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
         return [pscustomobject]@{ VirtualKeyCode = $k.VirtualKeyCode; Character = $k.Character }
-    } catch {
-        $k = [Console]::ReadKey($true)
-        $vkMap = @{ UpArrow = 38; DownArrow = 40; Enter = 13; Escape = 27; W = 87; S = 83; J = 74; K = 75; Q = 81 }
-        $vk = if ($vkMap.ContainsKey($k.Key.ToString())) { $vkMap[$k.Key.ToString()] } else { 0 }
-        return [pscustomobject]@{ VirtualKeyCode = $vk; Character = $k.KeyChar }
     }
 }
 

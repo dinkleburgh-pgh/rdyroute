@@ -18,8 +18,13 @@ const KEY = "dehydrated";
 // Ignore a persisted cache older than this — stale operational data is worse
 // than an empty board.
 const MAX_AGE_MS = 1000 * 60 * 60 * 24 * 3;
+// Bump when the cached data shape changes so an old persisted cache is DROPPED
+// rather than hydrated — hydrating a mismatched shape is the "cache
+// deserialization" failure. Records without a matching version are discarded.
+const CACHE_VERSION = 2;
 
 interface Saved {
+  v?: number;
   ts: number;
   state: DehydratedState;
 }
@@ -45,8 +50,12 @@ export async function loadPersistedCache(qc: QueryClient): Promise<void> {
   try {
     const db = await getDb();
     const saved = (await db.get(STORE, KEY)) as Saved | undefined;
-    if (saved && Date.now() - saved.ts < MAX_AGE_MS) {
+    if (saved && saved.v === CACHE_VERSION && Date.now() - saved.ts < MAX_AGE_MS) {
       hydrate(qc, saved.state);
+    } else if (saved) {
+      // Wrong version or too old — drop it so we start clean and never try to
+      // hydrate (deserialize) a mismatched shape.
+      await db.delete(STORE, KEY).catch(() => {});
     }
   } catch (err) {
     console.warn("[queryPersist] load failed", err);
@@ -69,7 +78,7 @@ export function startPersisting(qc: QueryClient): void {
       timer = undefined;
       try {
         const db = await getDb();
-        await db.put(STORE, { ts: Date.now(), state: dump(qc) } satisfies Saved, KEY);
+        await db.put(STORE, { v: CACHE_VERSION, ts: Date.now(), state: dump(qc) } satisfies Saved, KEY);
       } catch (err) {
         console.warn("[queryPersist] save failed", err);
       }
@@ -80,6 +89,6 @@ export function startPersisting(qc: QueryClient): void {
 
   // Best-effort flush when the tab is hidden/closed so the latest data persists.
   window.addEventListener("pagehide", () => {
-    void getDb().then((db) => db.put(STORE, { ts: Date.now(), state: dump(qc) }, KEY)).catch(() => {});
+    void getDb().then((db) => db.put(STORE, { v: CACHE_VERSION, ts: Date.now(), state: dump(qc) }, KEY)).catch(() => {});
   });
 }
