@@ -112,7 +112,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [detailNum, setDetailNum] = useState<number | null>(null);
   const [mobileActionTruck, setMobileActionTruck] = useState<TruckWithState | null>(null);
   const [confirmTruck, setConfirmTruck] = useState<TruckWithState | null>(null);
-  const [fleetFilters, setFleetFilters] = useState<Set<TruckStatus | "all">>(new Set(["all"]));
+  const [fleetFilters, setFleetFilters] = useState<Set<TruckStatus | "all" | "Uniform" | "Dust">>(new Set(["all"]));
   const [multiSelect, setMultiSelect] = useState(false);
   const [selectedTrucks, setSelectedTrucks] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<TruckStatus>("dirty");
@@ -357,13 +357,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     setParams(next, { replace: true });
   }
 
-  function toggleFleetFilter(s: TruckStatus | "all") {
+  function toggleFleetFilter(s: TruckStatus | "all" | "Uniform" | "Dust") {
     if (s === "all") { setFleetFilters(new Set(["all"])); return; }
     if (!multiSelect) {
       setFleetFilters(prev => (prev.has(s) && prev.size === 1) ? new Set(["all"]) : new Set([s]));
     } else {
       setFleetFilters(prev => {
-        const next = new Set(prev) as Set<TruckStatus | "all">;
+        const next = new Set(prev) as Set<TruckStatus | "all" | "Uniform" | "Dust">;
         next.delete("all");
         if (next.has(s)) { next.delete(s); if (next.size === 0) next.add("all"); }
         else next.add(s);
@@ -376,6 +376,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     const c: Record<string, number> = { total: 0 };
     (data ?? []).forEach((t) => {
       c.total += 1;
+      if (t.truck_type === "Uniform") c.Uniform = (c.Uniform ?? 0) + 1;
+      else if (t.truck_type === "Dust") c.Dust = (c.Dust ?? 0) + 1;
       if (fleetMode && t.truck_type === "Spare" && t.state?.status !== "oos") {
         // In fleet mode, spares covering an OOS route count in their real
         // lifecycle bucket (e.g. "unloaded"). Idle spares with no OOS
@@ -434,6 +436,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     if (fleetMode) {
       if (fleetFilters.has("all")) return data;
       return data.filter((t) => {
+        // Truck-TYPE filters (Uniform / Dust) match purely on truck_type.
+        if (fleetFilters.has("Uniform") && t.truck_type === "Uniform") return true;
+        if (fleetFilters.has("Dust") && t.truck_type === "Dust") return true;
         if (t.truck_type === "Spare" && t.state?.status !== "oos") {
           const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
           const isOosCoverage = coveredRoute != null && truckStatusByNumber.get(coveredRoute) === "oos";
