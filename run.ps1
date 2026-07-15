@@ -549,25 +549,56 @@ if (-not $NoBrowser) {
 # doesn't support it at all, falls back to [Console]::ReadKey. Returns an
 # object with .VirtualKeyCode and .Character so callers don't care which path
 # was used.
+# Windows Terminal / pwsh often enable ENABLE_VIRTUAL_TERMINAL_INPUT (0x0200) on
+# stdin, which makes ReadKey hand back raw ESC-[-A byte sequences for arrows
+# instead of translated ConsoleKeys. Clearing that flag makes [Console]::ReadKey
+# return ConsoleKey.UpArrow etc. Best-effort; ignored if P/Invoke is unavailable.
+function Disable-VtInput {
+    try {
+        if (-not ('RrConsole.Mode' -as [type])) {
+            Add-Type -Namespace RrConsole -Name Mode -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError=true)] public static extern System.IntPtr GetStdHandle(int n);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetConsoleMode(System.IntPtr h, out uint m);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleMode(System.IntPtr h, uint m);
+'@ -ErrorAction Stop
+        }
+        $h = [RrConsole.Mode]::GetStdHandle(-10)   # STD_INPUT_HANDLE
+        [uint32]$m = 0
+        if ([RrConsole.Mode]::GetConsoleMode($h, [ref]$m)) {
+            [void][RrConsole.Mode]::SetConsoleMode($h, ($m -band (-bnot [uint32]0x0200)))
+        }
+    } catch { }
+}
+
 function Read-MenuKey {
-    # [Console]::ReadKey is the reliable cross-host way to read a single key,
-    # arrows included: .NET translates the arrow-key VT escape sequences that
-    # Windows Terminal sends into a ConsoleKey enum whose integer value already
-    # matches the virtual-key codes the menu switch expects (UpArrow=38,
-    # DownArrow=40, Enter=13, Escape=27, letters/Q = ASCII of the key).
-    #
-    # $Host.UI.RawUI.ReadKey is intentionally NOT the primary path: on Windows
-    # Terminal + PowerShell 7 it surfaces the raw ESC-sequence bytes of an arrow
-    # key one at a time (ESC, '[', 'A'/'B'), which the switch mis-read as Escape
-    # and stray characters — that's why pressing an arrow was navigating nowhere
-    # and could fall through to exiting / "Stop All".
+    # Primary: [Console]::ReadKey returns translated ConsoleKeys whose int value
+    # matches the switch (UpArrow=38, DownArrow=40, Enter=13, Escape=27,
+    # letters/Q=ASCII; digits via KeyChar). Belt-and-suspenders: if a host still
+    # delivers arrows as raw VT escape sequences (ESC [ A/B/C/D), decode them.
     try {
         $k = [Console]::ReadKey($true)
-        return [pscustomobject]@{ VirtualKeyCode = [int]$k.Key; Character = $k.KeyChar }
     } catch {
-        $k = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
-        return [pscustomobject]@{ VirtualKeyCode = $k.VirtualKeyCode; Character = $k.Character }
+        $r = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+        return [pscustomobject]@{ VirtualKeyCode = $r.VirtualKeyCode; Character = $r.Character }
     }
+    if ($k.KeyChar -eq [char]27) {
+        Start-Sleep -Milliseconds 2
+        if ([Console]::KeyAvailable) {
+            [void][Console]::ReadKey($true)          # intro byte: '[' or 'O'
+            if ([Console]::KeyAvailable) {
+                $f = [Console]::ReadKey($true).KeyChar
+                switch ($f) {
+                    'A' { return [pscustomobject]@{ VirtualKeyCode = 38; Character = [char]0 } } # Up
+                    'B' { return [pscustomobject]@{ VirtualKeyCode = 40; Character = [char]0 } } # Down
+                    'C' { return [pscustomobject]@{ VirtualKeyCode = 39; Character = [char]0 } } # Right
+                    'D' { return [pscustomobject]@{ VirtualKeyCode = 37; Character = [char]0 } } # Left
+                }
+                return [pscustomobject]@{ VirtualKeyCode = 0; Character = $f }
+            }
+        }
+        return [pscustomobject]@{ VirtualKeyCode = 27; Character = [char]27 }  # bare Escape
+    }
+    return [pscustomobject]@{ VirtualKeyCode = [int]$k.Key; Character = $k.KeyChar }
 }
 
 function Show-ArrowMenu {
@@ -576,6 +607,7 @@ function Show-ArrowMenu {
         [string]$Title = 'Select an action'
     )
     $selected = 0
+    $dbg = ''
     while ($true) {
         # Redraw by clearing the screen rather than repositioning the cursor —
         # SetCursorPosition doesn't reliably overwrite in every terminal host
@@ -599,10 +631,12 @@ function Show-ArrowMenu {
                 Write-Host $row -ForegroundColor Gray
             }
         }
+        if ($dbg) { Write-Host ""; Write-Host "  $dbg" -ForegroundColor DarkGray }
         # Number keys jump straight to that item — a guaranteed-to-work
         # fallback in case arrow-key escape sequences don't parse correctly
         # in a particular terminal/host.
         $k = Read-MenuKey
+        $dbg = "diag: last key VK=$($k.VirtualKeyCode) char='$($k.Character)'  (Up=38 Down=40 Enter=13 digits=49-57)"
         switch ($k.VirtualKeyCode) {
             38 { $selected = ($selected - 1 + $Items.Count) % $Items.Count } # Up
             40 { $selected = ($selected + 1) % $Items.Count }               # Down
@@ -643,6 +677,7 @@ if (Test-InteractiveConsole) {
         'Stop All && Exit'
         'Leave Running && Exit Menu'
     )
+    Disable-VtInput
     while ($true) {
         $menuTitle = "ReadyRoute V2 - dev console  ($([char]0x2191)/$([char]0x2193) navigate, Enter select, number to jump, Q quit)"
         $choice = Show-ArrowMenu -Items $menuItems -Title $menuTitle
