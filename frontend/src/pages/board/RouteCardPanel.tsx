@@ -161,17 +161,17 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
                     selectedRoute === t.truck_number && "ring-2 ring-blue-500",
                   )}
                 >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-semibold text-sm">#{t.truck_number}</span>
-                      <span className={clsx("badge", STATUS_BG["oos"])}>OOS</span>
+                  <div className="flex items-center justify-between gap-2 min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+                      <span className="font-semibold text-sm shrink-0">#{t.truck_number}</span>
+                      <span className={clsx("badge shrink-0", STATUS_BG["oos"])}>OOS</span>
                       {isCovered ? (
                         <>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-3 py-1 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
+                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-bold text-sky-300 ring-1 ring-sky-700/40 whitespace-nowrap">
                             Cov. #{coveringTruckNum}
                           </span>
                           {coveringStatus && (
-                            <span className={clsx("badge", STATUS_BG[coveringStatus], STATUS_BADGE_TEXT[coveringStatus])}>
+                            <span className={clsx("badge shrink-0", STATUS_BG[coveringStatus], STATUS_BADGE_TEXT[coveringStatus])}>
                               {STATUS_LABELS[coveringStatus]}
                             </span>
                           )}

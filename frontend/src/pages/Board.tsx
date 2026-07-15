@@ -562,8 +562,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         fleetMode
           ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]"
           : filter === "off" || filter === "dirty" || filter === "unloaded"
-          ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-          : "grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+          ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+          : "grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
       )}>
         {(() => {
           type SentinelHeader = { __header: "dirty" | "unfinished" | "coverages" | "needsChecked" | "holdForLoading" | "outOfService" | "spareCoverages" | "idleSpares" | "unloadedRunning" | "unloadedSpare" | "unloadedOff"; count: number };
@@ -722,8 +722,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 }}
               >
                 <div className="flex w-full flex-col gap-0.5 md:gap-1">
-                  <div className="flex w-full items-start justify-between gap-2">
-                    <div className="flex min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
+                  <div className="flex w-full items-start justify-between gap-1.5">
+                    <div className="flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
                       <span
                         className={clsx(
                           "font-extrabold tracking-tight tabular-nums leading-none",
@@ -734,16 +734,16 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         {truck.truck_number}
                       </span>
                       {!fleetMode && (
-                        <span className="flex min-h-[1.5rem] items-center">
+                        <span className="flex min-h-[1.5rem] min-w-0 items-center overflow-hidden">
                           {showCoverageBadge ? (
-                            <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-sky-900/40 px-3 py-1 text-xs font-bold text-sky-300 ring-1 ring-sky-700/40">
+                            <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 lg:px-3 lg:py-1 lg:text-xs">
                               → Cov. #{coverageRoute}
                             </span>
                           ) : null}
                         </span>
                       )}
                     </div>
-                    <span className="flex min-h-[1.5rem] flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
+                    <span className="flex shrink-0 min-h-[1.5rem] flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
                       <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
                         {STATUS_LABELS[status]}
                       </span>
@@ -818,7 +818,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setDetailNum(coverageRoute); }}
-                              className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer md:px-3 md:py-1 md:text-sm"
+                              className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer lg:px-3 lg:py-1 lg:text-xs"
                             >
                               → Cov. #{coverageRoute}
                             </button>
@@ -1112,7 +1112,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   <span className="text-lg text-slate-500 transition-transform group-open:rotate-180">⌄</span>
                 </summary>
                 <div className="border-t border-slate-800/80 p-3">
-                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
                     {sectionRows.map((truck, sectionIndex) => renderTruckCard(truck, sectionIndex))}
                   </div>
                 </div>
