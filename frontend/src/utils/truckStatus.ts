@@ -54,57 +54,30 @@ export function isScheduledOff(truck: { scheduled_off_days: number[] }, dayNum: 
 
 
 /**
- * Count of loaded trucks matching the sidebar/board "loaded" filter.
- * Route trucks: effectiveWorkflowStatus === "loaded", and NOT covered by a swap/OOS spare.
- * Spare trucks: only counted when covering an OOS route and loaded.
+ * Truck numbers counting toward the sidebar/board "loaded" progress.
  *
- * Covered route trucks are excluded because their route is being handled by
- * the covering truck — including them would over-count relative to the
- * denominator in buildOperationalDayContext (which already excludes them).
+ * Derived from the SAME schedule context that supplies the denominator
+ * (buildOperationalDayContext(board, loadDayNum).activeTrucks), so the
+ * numerator is structurally a subset of the total. The previous hand-copied
+ * version replicated only some of the context's exclusions: a truck carrying
+ * "loaded" status while scheduled OFF the load day (e.g. after an off-day
+ * schedule move, or loaded ahead) was counted but absent from the total —
+ * the sidebar read 38/33.
+ *
+ * unloadsDayNum/holidayUnload are retained for call-site compatibility; the
+ * unload-day fallback in effectiveWorkflowStatus only ever rewrites
+ * dirty/unloaded statuses, so it can never produce (or hide) a "loaded".
  */
 export function loadedTruckNumbers(
   board: TruckWithState[],
   loadDayNum: number,
   holidayLoad: boolean,
-  unloadsDayNum: number,
-  holidayUnload: boolean,
+  _unloadsDayNum?: number,
+  _holidayUnload?: boolean,
 ): number[] {
-  // Build the set of route numbers whose load is being handled by another truck
-  // (same logic as buildOperationalDayContext) so we can exclude them below.
-  const routeTruckByNumber = new Map<number, TruckWithState>();
-  for (const t of board) {
-    if (t.truck_type !== "Spare") routeTruckByNumber.set(t.truck_number, t);
-  }
-  // Only spare coverage removes a route truck from the count — a route-truck
-  // swap leaves both trucks running (see buildOperationalDayContext).
-  const coveredRouteNumbers = new Set<number>();
-  for (const t of board) {
-    if (t.truck_type !== "Spare") continue;
-    const coveredRoute = getCoverageRouteNumber(t);
-    if (coveredRoute != null && routeTruckByNumber.has(coveredRoute)) {
-      coveredRouteNumbers.add(coveredRoute);
-    }
-  }
-
-  return board.filter((t) => {
-    const s = effectiveWorkflowStatus(t, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload);
-    if (s !== "loaded") return false;
-    if (t.truck_type !== "Spare") {
-      // Skip trucks whose route is being handled by a covering truck — they are
-      // not in the denominator and should not inflate the numerator.
-      if (coveredRouteNumbers.has(t.truck_number)) return false;
-      return true;
-    }
-    const coveredRoute = getCoverageRouteNumber(t);
-    if (coveredRoute == null) return false;
-    const coveredTruck = routeTruckByNumber.get(coveredRoute);
-    if (coveredTruck == null) return false;
-    // Mirror buildOperationalDayContext (the denominator): a loaded covering
-    // spare counts when its covered route runs today. Don't require the covered
-    // route to read status "oos" — an is_oos route can show "dirty", which would
-    // hold the numerator below the denominator so the bar never reaches 100%.
-    return holidayLoad || !isScheduledOff(coveredTruck, loadDayNum);
-  }).map((t) => t.truck_number);
+  return buildOperationalDayContext(board, loadDayNum, holidayLoad)
+    .activeTrucks.filter((t) => t.state?.status === "loaded")
+    .map((t) => t.truck_number);
 }
 
 /** Count of loaded trucks (see {@link loadedTruckNumbers}). */
