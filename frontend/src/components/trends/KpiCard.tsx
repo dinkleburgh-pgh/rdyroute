@@ -34,8 +34,8 @@ export default function KpiCard({ label, value, change, direction, status, icon,
         {icon && <span className="text-slate-500">{icon}</span>}
       </div>
 
-      <div className="flex items-baseline gap-2">
-        <span className="text-2xl font-bold tabular-nums text-slate-100">{value}</span>
+      <div className="flex min-w-0 flex-col gap-0.5">
+        <span className="truncate text-2xl font-bold tabular-nums text-slate-100">{value}</span>
         {change != null && (
           <span
             className={
@@ -47,13 +47,9 @@ export default function KpiCard({ label, value, change, direction, status, icon,
                   : "text-slate-400")
             }
           >
-            {direction === "up" && (
-              <ArrowUp className="h-3 w-3" strokeWidth={2.5} />
-            )}
-            {direction === "down" && (
-              <ArrowDown className="h-3 w-3" strokeWidth={2.5} />
-            )}
-            {Math.abs(change).toFixed(1)}%
+            {direction === "up" && <ArrowUp className="h-3 w-3" strokeWidth={2.5} />}
+            {direction === "down" && <ArrowDown className="h-3 w-3" strokeWidth={2.5} />}
+            {Math.abs(change) > 999 ? ">999%" : `${Math.abs(change).toFixed(1)}%`}
           </span>
         )}
       </div>

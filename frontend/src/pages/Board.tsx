@@ -698,8 +698,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         fleetMode
           ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]"
           : filter === "off" || filter === "dirty" || filter === "unloaded"
-          ? "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5"
-          : "grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6",
+          ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
+          : "grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
       )}>
         {(() => {
           type SentinelHeader = { __header: "dirty" | "unfinished" | "coverages" | "needsChecked" | "holdForLoading" | "outOfService" | "spareCoverages" | "idleSpares" | "unloadedRunning" | "unloadedSpare" | "unloadedOff"; count: number };
@@ -940,6 +940,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           </span>
                         </span>
                       )}
+                      {!fleetMode && !showCoverageBadge && (
+                        <span className="min-h-[1.5rem]" />
+                      )}
                     </div>
                     <span className="flex min-h-[1.5rem] shrink-0 flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
                       {/* 1. Status chip — show underlying dirty/unloaded for off trucks */}
@@ -1037,7 +1040,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setDetailNum(coverageRoute); }}
-                              className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer md:px-3 md:py-1 md:text-sm"
+                              className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer lg:px-3 lg:py-1 lg:text-xs"
                             >
                               → Cov. #{coverageRoute}
                             </button>
