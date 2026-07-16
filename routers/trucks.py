@@ -16,7 +16,8 @@ Business logic preserved from V1:
 """
 
 import time
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import case, delete, func, select
@@ -24,7 +25,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
-from database import get_db
+from database import get_db, settings as app_settings
 from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin, require_non_guest
@@ -61,6 +62,15 @@ def _ran_special(note: str | None) -> bool:
 
 
 def _ensure_day_initialized(run_date: date, db: Session) -> None:
+    # NEVER initialize a future run day. Day-init closes out the PREVIOUS day
+    # (with force_unloaded_on_new_day it marks its open trucks unloaded and the
+    # new day's seed clears priority holds) — so any request for a future board
+    # date would roll the day over while the current shift is still working.
+    # That happened 2026-07-15 23:59: a query for the 16th auto-unloaded a
+    # truck marked "Unload and Hold" minutes earlier. Future dates now render
+    # from whatever rows already exist, without initializing anything.
+    if run_date > datetime.now(ZoneInfo(app_settings.timezone)).date():
+        return
     source_key = f"day_setup_source_{run_date}"
     if db.get(AppSetting, source_key) is not None:
         return

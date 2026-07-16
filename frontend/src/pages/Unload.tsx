@@ -82,6 +82,13 @@ export default function Unload() {
         // it in the workflow. Matches truckStatus.ts / the Board / the sidebar,
         // which only reclassify is_oos as OOS once coverage exists.
         if ((t.is_oos || t.state?.status === "oos") && coveredRouteNumbers.has(t.truck_number)) return false;
+        // A truck someone must physically unload ALWAYS appears, regardless of
+        // the spare/schedule exclusions below — e.g. a spare marked
+        // "Unload and Hold" (dirty + priority_hold) or a scheduled-off truck
+        // that ran anyway. Excluding these left the sidebar counting a dirty
+        // truck the Unload page never showed.
+        const s = t.state?.status;
+        if (s === "dirty" || s === "in_progress" || s === "unfinished" || t.state?.priority_hold === true) return true;
         if (t.truck_type === "Spare") return false;
         return holidayUnload || !isScheduledOff(t, unloadsDay);
       }),
