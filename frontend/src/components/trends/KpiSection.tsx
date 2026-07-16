@@ -43,7 +43,7 @@ function MiniSparkline({ data }: { data: number[] }) {
 export default function KpiSection({ summary, isLoading }: Props) {
   if (isLoading) {
     return (
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="card animate-pulse">
             <div className="mb-2 h-3 w-16 rounded bg-slate-800" />
@@ -61,7 +61,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
   const stableStatus = summary.trend_direction === "stable" ? "Stable" : "Watch";
 
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
+    <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }}>
         <KpiCard
           label="Items Removed"
@@ -77,7 +77,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }}>
         <KpiCard
           label="Avg / Day"
-          value={summary.avg_per_day.toFixed(1)}
+          value={summary.avg_per_day >= 1000 ? summary.avg_per_day.toLocaleString(undefined, { maximumFractionDigits: 0 }) : summary.avg_per_day.toFixed(1)}
           change={summary.change_vs_prior_pct}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
           status="Stable"
