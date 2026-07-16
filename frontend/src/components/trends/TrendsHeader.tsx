@@ -42,7 +42,7 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
     <PageHeader
       eyebrow="Analytics"
       title="Trends"
-      subtitle={`Audit and operational performance over the last ${days} days.`}
+      subtitle={`Discrepancy tracking and operational performance over the last ${days} days.`}
       actions={
         <>
           {isLoading && (

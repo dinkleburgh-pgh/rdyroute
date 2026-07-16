@@ -1,62 +1,107 @@
 import { useMemo, useState } from "react";
-import { useNavigate } from "react-router-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useSettings, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
+import { workdayNumbers } from "../components/Clock";
+import { buildPrevDayCoverage, getCoverageRouteNumber, isScheduledOff, previousRunDate } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
-import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
+import { ArrowLeftRight } from "lucide-react";
+import { format } from "date-fns";
 import clsx from "clsx";
 
 /**
- * Unload workflow (V1 parity):
+ * Unload workflow (V1 parity + 2026 redesign):
  *   dirty → unloaded (single click; V1 had no in_progress step for unloading —
  *   the in_progress state is reserved for the LOAD workflow).
  *
- * An "Undo" button lets the user revert a truck back to dirty if it was
- * marked by mistake (matches V1 unload_mobile_undo_state behavior).
+ * Layout follows design_handoff_unload_workflow: a single centered 560px column,
+ * horizontal cards, and the section order Requested → Unfinished → Dirty·coverage
+ * → Dirty·route → Unloaded today. Membership logic is unchanged — only the render
+ * order and styling changed. An "Undo" button lets the user revert a truck back to
+ * dirty if marked by mistake (matches V1 unload_mobile_undo_state behavior).
  */
 export default function Unload() {
   const runDate = todayIso();
+  const { unloadsDay: computedUnloadsDay } = workdayNumbers();
+  const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
+  const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
+  const { data: holidayUnload } = useHolidayUnload(runDate);
   const { data } = useBoard(runDate);
   const { data: batches } = useBatchSummary(runDate);
   const { data: settings } = useSettings();
+  // Previous-day coverage: the loads being unloaded today were covered on the
+  // prior run day. Resolve who covered which route from the route-swap log so
+  // returning trucks are unloaded as the right route. Shared with Day Overview.
+  const prevRunDate = useMemo(() => previousRunDate(runDate), [runDate]);
+  const { data: prevSwapLog = [] } = useRouteSwapLog(14);
+  const prevCoverage = useMemo(() => buildPrevDayCoverage(prevSwapLog, prevRunDate), [prevSwapLog, prevRunDate]);
   const batchingDisabled = useMemo(
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
     [settings],
   );
+  const wearerCap = useMemo(() => {
+    const v = Number((settings ?? []).find((s) => s.key === "wearer_cap")?.value);
+    return Number.isFinite(v) && v > 0 ? v : 1800;
+  }, [settings]);
   const upsert = useUpsertTruckState();
   const assign = useAssignBatch();
-  const navigate = useNavigate();
   const [busy, setBusy] = useState<number | null>(null);
   const [batchOpen, setBatchOpen] = useState<number | null>(null);
   const [batchNum, setBatchNum] = useState("1");
   const [wearers, setWearers] = useState("0");
   const [overflowOpen, setOverflowOpen] = useState<number | null>(null);
+  const [unloadedSort, setUnloadedSort] = useState<"number" | "order">("number");
   // Trucks marked unloaded this session — card stays in dirty section with Undo until navigation.
   const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
 
-  // Include spare trucks in dirty/unfinished/unloaded views so idle dirty
-  // spares show up in the Unload page alongside route trucks.
+  // Route numbers that ARE being covered by some other truck today — derived
+  // from the board itself (the covering truck carries route_swap_route /
+  // oos_spare_route pointing at the route it covers).
+  const coveredRouteNumbers = useMemo(() => {
+    const s = new Set<number>();
+    for (const t of data ?? []) {
+      const r = getCoverageRouteNumber(t);
+      if (r != null) s.add(r);
+    }
+    return s;
+  }, [data]);
+
+  // Fleet Schedule is the single source of truth for which trucks appear.
+  // Covering spares always included; pure spares excluded; route trucks included
+  // iff they run on unloadsDay per scheduled_off_days.
   const allTrucks = useMemo(
     () =>
-      (data ?? []).filter(
-        (t) =>
-          t.truck_type !== "Spare" ||
-          t.route_swap_route != null ||
-          t.state?.oos_spare_route != null ||
-          (t.state?.status === "dirty" || t.state == null),
-      ),
-    [data],
+      (data ?? []).filter((t) => {
+        // Coverage trucks always appear (spare has oos_spare_route; route-swap trucks
+        // have route_swap_route). The OOS truck they cover is excluded below.
+        if (t.route_swap_route != null || t.state?.oos_spare_route != null) return true;
+        // An OOS route truck is only dropped once it's actually COVERED — the
+        // covering truck (above) represents it then. An uncovered OOS truck is
+        // still physically here; if it's dirty someone must unload it, so keep
+        // it in the workflow. Matches truckStatus.ts / the Board / the sidebar,
+        // which only reclassify is_oos as OOS once coverage exists.
+        if ((t.is_oos || t.state?.status === "oos") && coveredRouteNumbers.has(t.truck_number)) return false;
+        // A truck someone must physically unload ALWAYS appears, regardless of
+        // the spare/schedule exclusions below — e.g. a spare marked
+        // "Unload and Hold" (dirty + priority_hold) or a scheduled-off truck
+        // that ran anyway. Excluding these left the sidebar counting a dirty
+        // truck the Unload page never showed.
+        const s = t.state?.status;
+        if (s === "dirty" || s === "in_progress" || s === "unfinished" || t.state?.priority_hold === true) return true;
+        if (t.truck_type === "Spare") return false;
+        return holidayUnload || !isScheduledOff(t, unloadsDay);
+      }),
+    [data, unloadsDay, holidayUnload, coveredRouteNumbers],
   );
+  // "Needs unloading" = any truck in allTrucks not yet unloaded/loaded/unfinished.
   const dirty = useMemo(
     () =>
-      allTrucks.filter(
-        (t) =>
-          t.state?.status === "dirty" ||
-          t.state == null ||
-          recentlyUnloaded.has(t.truck_number),
-      ),
+      allTrucks.filter((t) => {
+        if (recentlyUnloaded.has(t.truck_number)) return true;
+        const s = t.state?.status;
+        return s !== "unloaded" && s !== "loaded" && s !== "unfinished";
+      }),
     [allTrucks, recentlyUnloaded],
   );
   const dirtyRoute = useMemo(
@@ -75,23 +120,55 @@ export default function Unload() {
     () => allTrucks.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
     [allTrucks, recentlyUnloaded],
   );
+  // Unloaded today = every truck that went dirty → unloaded this shift, i.e.
+  // status "unloaded" AND anything further along that lifecycle ("in_progress"
+  // /"loaded" — already loading/loaded, but was unloaded to get there). Without
+  // in_progress/loaded here, a truck would drop OUT of this list the moment it
+  // starts loading, making the card read like "what's still waiting" instead of
+  // "everyone unloaded today." Reflects status immediately (including trucks
+  // just marked this session) so the card appears the moment Mark Unloaded is
+  // clicked; the truck also stays pinned in the Dirty section with Undo via
+  // recentlyUnloaded.
   const unloaded = useMemo(
     () =>
-      allTrucks.filter(
-        (t) => t.state?.status === "unloaded" && !recentlyUnloaded.has(t.truck_number),
-      ),
-    [allTrucks, recentlyUnloaded],
+      allTrucks.filter((t) => {
+        const s = t.state?.status;
+        return s === "unloaded" || s === "in_progress" || s === "loaded";
+      }),
+    [allTrucks],
   );
-  const needsChecked = useMemo(
-    () =>
-      allTrucks.filter(
-        (t) =>
-          t.state?.needs_checked === true &&
-          (t.state?.status === "dirty" || t.state?.status === "unfinished" || t.state == null) &&
-          !recentlyUnloaded.has(t.truck_number),
-      ),
-    [allTrucks, recentlyUnloaded],
-  );
+  // Sort variant for the "Unloaded today" grid — mirrors the Load page's
+  // Number/Load order toggle. There's no dedicated unload-finish timestamp (the
+  // unload workflow is single-click, no timed step), so updated_at is the order
+  // proxy — the same fallback the Load page uses for trucks that skip the timed
+  // workflow.
+  const unloadedSorted = useMemo(() => {
+    const arr = [...unloaded];
+    if (unloadedSort === "order") {
+      const toEpoch = (t: TruckWithState): number => {
+        const ua = t.state?.updated_at;
+        return ua ? new Date(ua).getTime() / 1000 : Number.POSITIVE_INFINITY;
+      };
+      arr.sort((a, b) => {
+        const diff = toEpoch(a) - toEpoch(b);
+        if (diff !== 0) return diff;
+        return a.truck_number - b.truck_number;
+      });
+    } else {
+      arr.sort((a, b) => a.truck_number - b.truck_number);
+    }
+    return arr;
+  }, [unloaded, unloadedSort]);
+
+  // Header count: everything not yet unloaded across every dirty-family section.
+  // The dirty memos keep recently-unloaded trucks pinned (with Undo), so exclude
+  // those; unfinished already excludes them.
+  const notDone = (t: TruckWithState) => !recentlyUnloaded.has(t.truck_number);
+  const toGo =
+    requested.filter(notDone).length +
+    unfinished.length +
+    dirtyCoverages.filter(notDone).length +
+    dirtyRoute.filter(notDone).length;
 
   async function assignBatch(truckNumber: number) {
     await assign.mutateAsync({
@@ -121,6 +198,11 @@ export default function Unload() {
   async function markUnloaded(t: TruckWithState) {
     setBusy(t.truck_number);
     setOverflowOpen(null);
+    // Mark recently-unloaded *before* the mutation so the card stays pinned in
+    // the Dirty section (with Undo) the moment the optimistic update flips its
+    // status to "unloaded". Otherwise it briefly drops into the Unloaded section
+    // and snaps back, which reads as a page flash/jitter.
+    setRecentlyUnloaded((prev) => new Set([...prev, t.truck_number]));
     try {
       await upsert.mutateAsync({
         truck_number: t.truck_number,
@@ -128,7 +210,13 @@ export default function Unload() {
         status: "unloaded",
         wearers: t.state?.wearers ?? 0,
       });
-      setRecentlyUnloaded((prev) => new Set([...prev, t.truck_number]));
+    } catch {
+      // Roll back the optimistic pin if the save failed.
+      setRecentlyUnloaded((prev) => {
+        const next = new Set(prev);
+        next.delete(t.truck_number);
+        return next;
+      });
     } finally {
       setBusy(null);
     }
@@ -165,377 +253,331 @@ export default function Unload() {
     setBatchOpen(null);
   }
 
-  function renderDirtyCard(t: TruckWithState, index: number = 0) {
-    const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+  /**
+   * A single horizontal dirty-family row. Used by every dirty-family section
+   * (requested / unfinished / dirty-coverage / dirty-route); the section passes
+   * its accent border, action label/style, and overflow menu variant via opts.
+   */
+  function renderRow(
+    t: TruckWithState,
+    index: number,
+    opts: {
+      accentClass?: string;
+      actionLabel: string;
+      ghost?: boolean;
+      coverageBadge?: boolean;
+      overflow: "dirty" | "unfinished";
+    },
+  ) {
     const isUndo = recentlyUnloaded.has(t.truck_number);
+    const isBusy = busy === t.truck_number;
     const isBatchOpen = batchOpen === t.truck_number;
     const isOverflowOpen = overflowOpen === t.truck_number;
-    const batchLabel = t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign batch";
-    const isBusy = busy === t.truck_number;
-    const isPriority = t.state?.priority_hold === true;
+    const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+    const prevCov = prevCoverage.byCover.get(t.truck_number) ?? null;
 
-    const cardClass = isPriority
-      ? "card animate-priority-glow flex flex-col gap-2 p-3 min-h-[8rem] border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900"
-      : "card flex flex-col gap-2 p-3 min-h-[8rem]";
-
-    const numberColor = isPriority ? "text-amber-300" : "text-red-400";
+    // Detail line — concise context: prev-day coverage hint, today's coverage
+    // (when not already shown as a badge), spare/batch tags.
+    const detailParts: string[] = [];
+    if (prevCov != null) detailParts.push(`Unload as #${prevCov} · prev-day cover`);
+    else if (coveredRoute != null && !opts.coverageBadge) detailParts.push(`Covering #${coveredRoute}`);
+    if (t.truck_type === "Spare") detailParts.push("Spare");
+    if (t.state?.batch_id != null) detailParts.push(`Batch ${t.state.batch_id}`);
+    const detail = detailParts.join("  ·  ");
 
     return (
-      <AnimateCard key={t.truck_number} delay={index * 0.03} className={cardClass}>
-        {/* Header: truck number + status badge */}
-        <div className="flex items-start justify-between gap-1">
-          <div>
-            {coveredRoute != null ? (
-              <div className="flex items-center gap-2">
-                <div className="flex flex-col items-center">
-                  <span className={clsx("text-3xl font-black leading-none", numberColor)}>
-                    {t.truck_number}
-                  </span>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                    {t.truck_type === "Spare" ? "Spare" : "Truck"}
-                  </span>
-                </div>
-                <span className="text-base font-bold text-slate-400">→</span>
-                <div className="flex flex-col items-center">
-                  <span className="text-3xl font-black leading-none text-sky-300">
-                    {coveredRoute}
-                  </span>
-                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Route</span>
-                </div>
-              </div>
-            ) : (
-              <span className={clsx("text-3xl font-black leading-none", numberColor)}>
-                #{t.truck_number}
-              </span>
-            )}
-          </div>
-          <div className="flex flex-col items-end gap-1 mt-0.5 shrink-0">
-            {isPriority && (
-              <motion.span
-                animate={{ opacity: [1, 0.6, 1] }}
-                transition={{ duration: 1.2, repeat: Infinity }}
-                className="badge bg-amber-500 font-bold text-black"
-              >
-                REQUEST
-              </motion.span>
-            )}
-            <span className="badge bg-status-dirty">Dirty</span>
-            {t.state?.needs_checked && (
-              <span className="badge bg-amber-700 text-white">Needs Checked</span>
-            )}
-          </div>
-        </div>
+      <AnimateCard
+        key={t.truck_number}
+        delay={index * 0.03}
+        className={clsx("card flex flex-col !p-0", opts.accentClass)}
+      >
+        <div className="flex items-center gap-3 px-4 py-3">
+          <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
+          {opts.coverageBadge && coveredRoute != null && (
+            <span className="badge shrink-0 bg-st-spare text-[#04222b]">Cov. #{coveredRoute}</span>
+          )}
+          <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
+          {t.state?.needs_checked && (
+            <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>
+          )}
 
-        {isUndo ? (
-          /* ── Undo state ── */
-          <button
-            className="w-full rounded-lg border border-slate-600 bg-slate-800 py-2.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50"
-            disabled={isBusy}
-            onClick={() => undoUnload(t.truck_number)}
-          >
-            {isBusy ? "…" : "Undo"}
-          </button>
-        ) : (
-          <>
-            {/* Batch chip — hidden when batching is disabled */}
-            {!batchingDisabled && (
-              <>
-                <button
-                  className="flex w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:hidden"
-                  onClick={() => toggleBatch(t)}
-                >
-                  <span>{batchLabel}</span>
-                  <span className="text-slate-500">{isBatchOpen ? "▲" : "▼"}</span>
-                </button>
-                <button
-                  className="hidden w-full items-center justify-between rounded-md border border-slate-700 bg-slate-800/60 px-2.5 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:border-slate-600 hover:bg-slate-700/60 md:flex"
-                  onClick={() => navigate(`/batches?truck=${t.truck_number}&run_date=${runDate}&source=unload`)}
-                >
-                  <span>{batchLabel}</span>
-                  <span className="text-slate-500">↗</span>
-                </button>
-              </>
-            )}
-
-            {/* Inline batch panel (mobile) */}
-            {!batchingDisabled && isBatchOpen && (
-              <div className="space-y-2 rounded-lg bg-slate-800 p-2 md:hidden">
-                <div className="grid grid-cols-3 gap-1.5">
-                  {[1, 2, 3, 4, 5, 6].map((n) => (
-                    <button
-                      key={n}
-                      type="button"
-                      onClick={() => setBatchNum(String(n))}
-                      className={
-                        batchNum === String(n)
-                          ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400"
-                          : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"
-                      }
-                    >
-                      {n}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  type="number"
-                  min={0}
-                  className="input w-full"
-                  placeholder="Wearers"
-                  value={wearers}
-                  onChange={(e) => setWearers(e.target.value)}
-                />
-                <button
-                  className="btn-primary w-full font-semibold"
-                  disabled={assign.isPending}
-                  onClick={() => assignBatch(t.truck_number)}
-                >
-                  {assign.isPending ? "Saving…" : "Assign"}
-                </button>
-              </div>
-            )}
-
-            {/* Primary action: Mark Unloaded */}
-            <div className="flex gap-1.5">
+          {isUndo ? (
+            <div className="flex shrink-0 items-center gap-2">
+              <span className="badge bg-st-unloaded text-[#052e16]">Unloaded</span>
+              <button className="btn-ghost" disabled={isBusy} onClick={() => undoUnload(t.truck_number)}>
+                {isBusy ? "…" : "Undo"}
+              </button>
+            </div>
+          ) : (
+            <div className="relative flex shrink-0 items-center gap-1.5">
               <button
-                className={clsx(
-                  "flex-1 rounded-lg py-3.5 text-sm font-bold text-white shadow-sm transition-colors active:scale-[0.98] disabled:opacity-50",
-                  isPriority
-                    ? "bg-amber-600 hover:bg-amber-500"
-                    : "bg-emerald-600 hover:bg-emerald-500",
-                )}
+                className={clsx(opts.ghost ? "btn-ghost" : "btn-primary", "px-4 py-2")}
                 disabled={isBusy}
                 onClick={() => markUnloaded(t)}
               >
-                {isBusy ? "…" : "Mark Unloaded"}
+                {isBusy ? "…" : opts.actionLabel}
               </button>
-
-              {/* Overflow: Mark Unfinished */}
-              <div className="relative">
-                <button
-                  className="flex h-full items-center justify-center rounded-lg border border-slate-700 bg-slate-800/60 px-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
-                  onClick={() => toggleOverflow(t.truck_number)}
-                  title="More actions"
-                  aria-label="More actions"
-                >
-                  <span className="text-base leading-none">···</span>
-                </button>
-                {isOverflowOpen && (
-                  <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-slate-700 bg-slate-900 py-1 shadow-xl">
+              <button
+                className="flex h-9 w-8 items-center justify-center rounded-md border border-hairline bg-surface-2 text-lg leading-none text-ink-muted transition-colors hover:text-ink"
+                onClick={() => toggleOverflow(t.truck_number)}
+                title="More actions"
+                aria-label="More actions"
+              >
+                ···
+              </button>
+              {isOverflowOpen && (
+                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-hairline bg-surface-3 py-1 shadow-card">
+                  {opts.overflow === "unfinished" ? (
                     <button
-                      className="w-full px-3 py-2 text-left text-sm font-medium text-orange-400 transition-colors hover:bg-slate-800"
+                      className="w-full px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
                       disabled={isBusy}
-                      onClick={() => markUnfinished(t)}
+                      onClick={() => {
+                        setOverflowOpen(null);
+                        upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" });
+                      }}
                     >
-                      Mark Unfinished
+                      Back to dirty
                     </button>
-                  </div>
-                )}
-              </div>
+                  ) : (
+                    <>
+                      <button
+                        className="w-full px-3 py-2 text-left text-sm font-medium text-st-unfinished transition-colors hover:bg-surface-2"
+                        disabled={isBusy}
+                        onClick={() => markUnfinished(t)}
+                      >
+                        Mark unfinished
+                      </button>
+                      {!batchingDisabled && (
+                        <button
+                          className="w-full px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2"
+                          onClick={() => toggleBatch(t)}
+                        >
+                          {t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign batch"}
+                        </button>
+                      )}
+                    </>
+                  )}
+                </div>
+              )}
             </div>
-          </>
+          )}
+        </div>
+
+        {/* Inline batch panel (opened from the overflow menu) */}
+        {!batchingDisabled && isBatchOpen && (
+          <div className="space-y-2 rounded-b-xl border-t border-hairline bg-surface-2 p-3">
+            <div className="grid grid-cols-6 gap-1.5">
+              {[1, 2, 3, 4, 5, 6].map((n) => (
+                <button
+                  key={n}
+                  type="button"
+                  onClick={() => setBatchNum(String(n))}
+                  className={
+                    batchNum === String(n)
+                      ? "rounded-md bg-st-unloaded py-2 text-center text-base font-bold text-black ring-2 ring-st-unloaded/60"
+                      : "rounded-md bg-surface-3 py-2 text-center text-base font-bold text-ink-soft hover:bg-track"
+                  }
+                >
+                  {n}
+                </button>
+              ))}
+            </div>
+            <input
+              type="number"
+              min={0}
+              className="input"
+              placeholder="Wearers"
+              value={wearers}
+              onChange={(e) => setWearers(e.target.value)}
+            />
+            <button className="btn-primary w-full" disabled={assign.isPending} onClick={() => assignBatch(t.truck_number)}>
+              {assign.isPending ? "Saving…" : "Assign"}
+            </button>
+          </div>
         )}
       </AnimateCard>
     );
   }
 
   return (
-    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-6 p-3 md:p-6">
-      <PageHeader
-        eyebrow="Workflow"
-        title="Unload"
-        subtitle="Work dirty and unfinished trucks into unloaded status and batch them when needed."
-      />
-
-      {/* ── Requests ─────────────────────────────────────────────────── */}
-      {requested.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-red-400">
-            Requests ({requested.length})
-          </h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {requested.map((t, index) => renderDirtyCard(t, index))}
+    <motion.div
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.3 }}
+      className="mx-auto flex w-full max-w-[560px] flex-col gap-4 px-4 py-6"
+    >
+      {/* ── Header ─────────────────────────────────────────────────────── */}
+      <header className="flex items-end justify-between gap-3">
+        <div>
+          <div className="mb-1 text-[11px] font-medium uppercase tracking-[0.14em] text-ink-muted">
+            ReadyRoute · Unload
           </div>
-        </section>
-      )}
-
-      {/* ── Needs Checked ─────────────────────────────────────────────── */}
-      {needsChecked.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-amber-400">
-            Needs Checked ({needsChecked.length})
-          </h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {needsChecked.map((t, index) => renderDirtyCard(t, index))}
-          </div>
-        </section>
-      )}
-
-      {/* ── Dirty (route trucks) ───────────────────────────────────────── */}
-      <section>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-red-400">
-          Dirty ({dirtyRoute.length})
-        </h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {dirtyRoute.map((t, index) => renderDirtyCard(t, index))}
-          {dirtyRoute.length === 0 && (
-            <p className="col-span-full text-sm text-slate-500">No dirty trucks.</p>
-          )}
+          <h1 className="text-[22px] font-extrabold leading-tight tracking-[-0.01em] text-ink">
+            Day {unloadsDay} Unload
+          </h1>
         </div>
-      </section>
+        <span className="badge shrink-0 bg-st-dirty text-white">{toGo} to go</span>
+      </header>
 
-      {/* ── Unfinished ─────────────────────────────────────────────────── */}
-      <section>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-orange-400">
-          Unfinished ({unfinished.length})
-        </h3>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-          {unfinished.map((t, index) => {
-            const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
-            const isOverflowOpen = overflowOpen === t.truck_number;
-            const isBusy = busy === t.truck_number;
-
-            return (
-              <AnimateCard key={t.truck_number} delay={index * 0.03} className="card flex flex-col gap-2 p-3 min-h-[8rem]">
-                {/* Header */}
-                <div className="flex items-start justify-between gap-1">
-                  <div>
-                    {coveredRoute != null ? (
-                      <div className="flex items-center gap-2">
-                        <div className="flex flex-col items-center">
-                          <span className="text-3xl font-black leading-none text-orange-400">
-                            {t.truck_number}
-                          </span>
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
-                            {t.truck_type === "Spare" ? "Spare" : "Truck"}
-                          </span>
-                        </div>
-                        <span className="text-base font-bold text-slate-400">→</span>
-                        <div className="flex flex-col items-center">
-                          <span className="text-3xl font-black leading-none text-sky-300">
-                            {coveredRoute}
-                          </span>
-                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Route</span>
-                        </div>
-                      </div>
-                    ) : (
-                      <span className="text-3xl font-black leading-none text-orange-400">
-                        #{t.truck_number}
-                      </span>
-                    )}
-                  </div>
-                  <span className="flex flex-col items-end gap-1 mt-0.5 shrink-0">
-                    <span className="badge bg-status-unfinished">Unfinished</span>
-                    {t.state?.needs_checked && (
-                      <span className="badge bg-amber-700 text-white">Needs Checked</span>
-                    )}
-                  </span>
-                </div>
-
-                {/* Primary action + overflow */}
-                <div className="flex gap-1.5">
-                  <button
-                    className="flex-1 rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 active:scale-[0.98] disabled:opacity-50"
-                    disabled={isBusy}
-                    onClick={() => markUnloaded(t)}
-                  >
-                    {isBusy ? "…" : "Mark Unloaded"}
-                  </button>
-
-                  {/* Overflow: Back to Dirty */}
-                  <div className="relative">
-                    <button
-                      className="flex h-full items-center justify-center rounded-lg border border-slate-700 bg-slate-800/60 px-2 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
-                      onClick={() => toggleOverflow(t.truck_number)}
-                      title="More actions"
-                      aria-label="More actions"
-                    >
-                      <span className="text-base leading-none">···</span>
-                    </button>
-                    {isOverflowOpen && (
-                      <div className="absolute right-0 top-full z-20 mt-1 w-40 rounded-lg border border-slate-700 bg-slate-900 py-1 shadow-xl">
-                        <button
-                          className="w-full px-3 py-2 text-left text-sm font-medium text-slate-300 transition-colors hover:bg-slate-800"
-                          disabled={isBusy}
-                          onClick={() => {
-                            setOverflowOpen(null);
-                            upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" });
-                          }}
-                        >
-                          Back to Dirty
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </AnimateCard>
-            );
-          })}
-          {unfinished.length === 0 && (
-            <p className="col-span-full text-sm text-slate-500">No unfinished trucks.</p>
-          )}
-        </div>
-      </section>
-
-      {/* ── Unloaded ───────────────────────────────────────────────────── */}
-      <section>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-emerald-400">
-          Unloaded today ({unloaded.length})
-        </h3>
-        <div className="flex flex-wrap gap-2">
-          {unloaded.map((t) => (
-            <span key={t.truck_number} className="inline-flex items-center gap-1 rounded-full bg-status-unloaded px-3 py-1 text-xs font-semibold text-white">
-              #{t.truck_number}
-              {t.state?.needs_checked && (
-                <span className="rounded-full bg-amber-900/70 px-1.5 py-0.5 text-[10px] font-bold text-amber-300">
-                  Check
-                </span>
-              )}
+      {/* Previous load-day coverage — what's being unloaded today was covered by
+          these trucks on the prior run day (also shown per-card as "Unload as #N"). */}
+      {prevCoverage.items.length > 0 && (
+        <div className="rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2.5">
+          <div className="mb-1.5 flex items-center gap-2">
+            <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+            <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+              Previous load-day coverage
             </span>
-          ))}
-          {unloaded.length === 0 && (
-            <p className="text-sm text-slate-500">Nothing unloaded yet.</p>
-          )}
+            {prevCoverage.date && (
+              <span className="text-[10px] text-amber-500/70">
+                ({format(new Date(`${prevCoverage.date}T12:00:00`), "EEE MMM d")})
+              </span>
+            )}
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {prevCoverage.items.map((c) => (
+              <span
+                key={c.route}
+                className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-surface-3 px-2 py-0.5 text-xs"
+              >
+                <span className="font-black text-st-dirty">#{c.route}</span>
+                <ArrowLeftRight className="h-3 w-3 text-ink-faint" />
+                <span className="font-black text-amber-200">#{c.loadOn}</span>
+              </span>
+            ))}
+          </div>
         </div>
-      </section>
+      )}
 
-      {/* ── Spares / Coverages ─────────────────────────────────────────── */}
+      {/* ── 1. Requested — priority hold ───────────────────────────────── */}
+      {requested.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-st-inprogress">
+            Requested — priority hold
+          </div>
+          {requested.map((t, i) =>
+            renderRow(t, i, {
+              accentClass: "border-l-[3px] border-l-st-inprogress",
+              actionLabel: "Mark Unloaded",
+              overflow: "dirty",
+            }),
+          )}
+        </section>
+      )}
+
+      {/* ── 2. Unfinished ──────────────────────────────────────────────── */}
+      {unfinished.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-st-unfinished">Unfinished</div>
+          {unfinished.map((t, i) =>
+            renderRow(t, i, {
+              accentClass: "border-l-[3px] border-l-st-unfinished",
+              actionLabel: "Finish unload",
+              ghost: true,
+              overflow: "unfinished",
+            }),
+          )}
+        </section>
+      )}
+
+      {/* ── 3. Dirty — coverage ────────────────────────────────────────── */}
       {dirtyCoverages.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-violet-400">
-            Spares / Coverages ({dirtyCoverages.length})
-          </h3>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6">
-            {dirtyCoverages.map((t, index) => renderDirtyCard(t, index))}
+        <section className="flex flex-col gap-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dirty — coverage</div>
+          {dirtyCoverages.map((t, i) =>
+            renderRow(t, i, {
+              accentClass: "border-l-[3px] border-l-st-spare",
+              actionLabel: "Mark Unloaded",
+              coverageBadge: true,
+              overflow: "dirty",
+            }),
+          )}
+        </section>
+      )}
+
+      {/* ── 4. Dirty — route trucks ────────────────────────────────────── */}
+      {dirtyRoute.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dirty — route trucks</div>
+          {dirtyRoute.map((t, i) =>
+            renderRow(t, i, { accentClass: "border-l-[3px] border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" }),
+          )}
+        </section>
+      )}
+
+      {/* ── 5. Unloaded today ──────────────────────────────────────────── */}
+      {unloaded.length > 0 && (
+        <section className="flex flex-col gap-2">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-st-unloaded">
+              Unloaded today · {unloaded.length}
+            </span>
+            <span className="flex-1" />
+            <button
+              type="button"
+              onClick={() => setUnloadedSort("number")}
+              className={clsx(
+                "rounded-pill border bg-surface px-3 py-1 text-[11px] font-bold text-ink-soft transition-colors",
+                unloadedSort === "number" ? "border-accent" : "border-hairline",
+              )}
+            >
+              Number
+            </button>
+            <button
+              type="button"
+              onClick={() => setUnloadedSort("order")}
+              className={clsx(
+                "rounded-pill border bg-surface px-3 py-1 text-[11px] font-bold text-ink-soft transition-colors",
+                unloadedSort === "order" ? "border-accent" : "border-hairline",
+              )}
+            >
+              Unload order
+            </button>
+          </div>
+          <div className="grid grid-cols-4 gap-2">
+            {unloadedSorted.map((t, index) => {
+              const time = t.state?.updated_at ? format(new Date(t.state.updated_at), "HH:mm") : "—";
+              return (
+                <AnimateCard key={t.truck_number} delay={index * 0.02}>
+                  <div className="rounded-[10px] border border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.06)] px-1.5 py-2.5 text-center">
+                    <span className="block font-mono text-[17px] font-extrabold leading-none text-ink">
+                      #{t.truck_number}
+                    </span>
+                    <span className="mt-1 block font-mono text-[10px] text-ink-muted">
+                      {unloadedSort === "order" ? `#${index + 1} · ${time}` : time}
+                    </span>
+                  </div>
+                </AnimateCard>
+              );
+            })}
           </div>
         </section>
       )}
 
       {/* ── Batches ────────────────────────────────────────────────────── */}
-      <section>
-        <h3 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-          Batches
-        </h3>
-        <div className="columns-2 gap-3 md:columns-3">
+      <section className="flex flex-col gap-2">
+        <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Batches</div>
+        <div className="columns-2 gap-3">
           {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => (
-            <AnimateCard key={b.batch_number} delay={index * 0.03} className="card mb-3 break-inside-avoid p-4 space-y-2">
-              <p className="font-bold text-slate-100">Batch {b.batch_number}</p>
+            <AnimateCard key={b.batch_number} delay={index * 0.03} className="card mb-3 break-inside-avoid space-y-2 p-4">
+              <p className="font-bold text-ink">Batch {b.batch_number}</p>
               <div className="flex flex-wrap gap-1">
                 {b.trucks.length === 0 ? (
-                  <span className="text-xs text-slate-500">No trucks</span>
+                  <span className="text-xs text-ink-muted">No trucks</span>
                 ) : (
                   b.trucks.map((t) => (
-                    <span key={t.truck_number} className="badge bg-slate-700 text-slate-200">
+                    <span key={t.truck_number} className="badge bg-track text-ink-soft">
                       #{t.truck_number}
                     </span>
                   ))
                 )}
               </div>
-              <p className="text-xs text-slate-400">
+              <p className="text-xs text-ink-muted">
                 Total wearers:{" "}
-                <span className={b.total_wearers > 0 ? "text-emerald-400 font-semibold" : ""}>
+                <span className={b.total_wearers > 0 ? "font-semibold text-st-unloaded" : ""}>
                   {b.total_wearers}
                 </span>{" "}
-                / 400
+                / {wearerCap}
               </p>
             </AnimateCard>
           ))}
@@ -544,13 +586,3 @@ export default function Unload() {
     </motion.div>
   );
 }
-
-
-/**
- * Unload workflow (V1 parity):
- *   dirty → unloaded (single click; V1 had no in_progress step for unloading —
- *   the in_progress state is reserved for the LOAD workflow).
- *
- * An "Undo" button lets the user revert a truck back to dirty if it was
- * marked by mistake (matches V1 unload_mobile_undo_state behavior).
- */

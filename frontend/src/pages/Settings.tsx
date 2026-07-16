@@ -13,7 +13,6 @@ import ColorsPanel from "../components/management/ColorsPanel";
 import WorkflowsPanel from "../components/management/WorkflowsPanel";
 import CommunicationsPanel from "../components/management/CommunicationsPanel";
 import AdvancedPanel from "../components/management/AdvancedPanel";
-import UpdatesPanel from "../components/management/UpdatesPanel";
 import DevelopmentPanel from "../components/management/DevelopmentPanel";
 import ConnectionsPanel from "../components/management/ConnectionsPanel";
 import RecoveryPanel from "../components/management/RecoveryPanel";
@@ -46,13 +45,12 @@ type Category =
   | "off_day_schedule"
   | "bulk_status"
   | "advanced"
-  | "updates"
   | "development"
   | "recovery"
   | "resets"
   | "requests"
   | "notices"
-  | "items"
+  | "configure_items"
   | "roles"
   | "activity"
   | "history_activity"
@@ -64,7 +62,7 @@ type Category =
   | "prev_coverage";
 
 // Two-level navigation: Cards (groups) → Tabs (sub-categories)
-type GroupId = "app" | "users" | "content" | "fleet" | "comms" | "ops" | "advanced" | "data" | "shortages";
+type GroupId = "app" | "users" | "items" | "fleet" | "comms" | "ops" | "advanced" | "data" | "shortages";
 
 interface CardGroup {
   id: GroupId;
@@ -107,16 +105,15 @@ const CARD_GROUPS: CardGroup[] = [
     ],
   },
   {
-    id: "content",
-    label: "Notices & Items",
-    desc: "Team notices and audit checklist catalog",
-    mobileDesc: "Notices and item catalog",
+    id: "items",
+    label: "Items",
+    desc: "Configure item catalog, pack sizes, and unit types",
+    mobileDesc: "Item catalog",
     borderColor: "border-l-yellow-500",
     bgTint: "bg-yellow-950/35",
     adminOnly: true,
     tabs: [
-      { id: "notices", label: "Notices" },
-      { id: "items",   label: "Tracked Items" },
+      { id: "configure_items", label: "Configure Items" },
     ],
   },
   {
@@ -146,12 +143,15 @@ const CARD_GROUPS: CardGroup[] = [
   {
     id: "comms",
     label: "Communications",
-    desc: "Manage censored words for the messaging system",
-    mobileDesc: "Censor words",
+    desc: "Team notices and profanity filter settings",
+    mobileDesc: "Notices and censor words",
     borderColor: "border-l-pink-500",
     bgTint: "bg-pink-950/35",
     adminOnly: true,
-    tabs: [{ id: "communications", label: "Censor Words" }],
+    tabs: [
+      { id: "notices",        label: "Notices" },
+      { id: "communications", label: "Censor Words" },
+    ],
   },
   {
     id: "ops",
@@ -177,7 +177,6 @@ const CARD_GROUPS: CardGroup[] = [
     adminOnly: true,
     tabs: [
       { id: "advanced",     label: "Advanced" },
-      { id: "updates",      label: "Update" },
       { id: "development",  label: "Development" },
       { id: "connections",  label: "Connections" },
     ],
@@ -286,14 +285,13 @@ export default function Management() {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
-      case "updates":        return <UpdatesPanel map={map} />;
       case "development":    return <DevelopmentPanel />;
       case "connections":    return <ConnectionsPanel />;
       case "communications": return <CommunicationsPanel />;
       case "users":          return <UsersPanel />;
       case "requests":       return <RequestsPanel disabled={!isAdmin} />;
       case "notices":        return <NoticesPanel disabled={!isAdmin} />;
-      case "items":          return <ItemsPanel disabled={!isAdmin} />;
+      case "configure_items": return <ItemsPanel disabled={!isAdmin} />;
       case "short_imports":  return <ShortsWorkspace />;
       case "roles":          return <RoleAccessPanel />;
       case "activity":       return <ActivityPanel />;

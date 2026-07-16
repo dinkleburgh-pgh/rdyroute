@@ -5,11 +5,12 @@ import type { TruckStatus } from "../../types";
 import {
   FLEET_RAIL_STATUSES,
   FLEET_STATUS_OPTIONS,
+  FLEET_TYPE_FILTERS,
+  FLEET_TYPE_FILTER_BG,
   STATUS_BG,
   STATUS_LABELS,
+  type FleetFilterValue,
 } from "./constants";
-
-type FleetFilterValue = TruckStatus | "all";
 
 interface FleetUtilityBarProps {
   runDate: string;
@@ -38,12 +39,16 @@ function formatFilterSummary(
   filteredCount: number,
 ): string {
   if (fleetFilters.has("all")) return `All · ${counts.total ?? 0}`;
-  const activeFilters = FLEET_RAIL_STATUSES.filter((status) => fleetFilters.has(status));
-  if (activeFilters.length === 1) {
-    const status = activeFilters[0];
-    return `${STATUS_LABELS[status]} · ${counts[status] ?? 0}`;
+  const active: FleetFilterValue[] = [
+    ...FLEET_RAIL_STATUSES.filter((status) => fleetFilters.has(status)),
+    ...FLEET_TYPE_FILTERS.filter((t) => fleetFilters.has(t)),
+  ];
+  if (active.length === 1) {
+    const key = active[0];
+    const label = (STATUS_LABELS as Record<string, string>)[key] ?? key;
+    return `${label} · ${counts[key] ?? 0}`;
   }
-  return `${activeFilters.length} filters · ${filteredCount}`;
+  return `${active.length} filters · ${filteredCount}`;
 }
 
 export default function FleetUtilityBar({
@@ -176,6 +181,31 @@ export default function FleetUtilityBar({
                       <span className="truncate">{STATUS_LABELS[status]}</span>
                     </span>
                     <span className="tabular-nums text-slate-400">{counts[status] ?? 0}</span>
+                  </button>
+                );
+              })}
+
+              {/* Truck-type filters */}
+              <div className="my-1 border-t border-slate-800" />
+              {FLEET_TYPE_FILTERS.map((typeKey) => {
+                const active = !fleetFilters.has("all") && fleetFilters.has(typeKey);
+                return (
+                  <button
+                    key={typeKey}
+                    type="button"
+                    onClick={() => handleFilterClick(typeKey)}
+                    className={clsx(
+                      "mt-1 flex w-full items-center justify-between rounded-lg px-2.5 py-2 text-xs transition-colors",
+                      active
+                        ? "bg-slate-800 text-white"
+                        : "text-slate-300 hover:bg-slate-900",
+                    )}
+                  >
+                    <span className="flex min-w-0 items-center gap-2 font-medium">
+                      <span className={clsx("h-2 w-2 shrink-0 rounded-full", FLEET_TYPE_FILTER_BG[typeKey])} />
+                      <span className="truncate">{typeKey}</span>
+                    </span>
+                    <span className="tabular-nums text-slate-400">{counts[typeKey] ?? 0}</span>
                   </button>
                 );
               })}

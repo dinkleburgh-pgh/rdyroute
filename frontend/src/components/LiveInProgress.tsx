@@ -11,15 +11,21 @@ import {
   useShortages,
   useTruckNotes,
   useUpsertTruckState,
+  useHolidayLoad,
+  useAssignSpare,
+  useSpareAssignments,
 } from "../api/hooks";
 import { ShortageLogger } from "../pages/Shorts";
 import { todayIso } from "../api/client";
+import { workdayNumbers } from "./Clock";
+import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
 import type { TruckNote, TruckWithState } from "../types";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
   const { data: board } = useBoard(runDate);
   const { data: nextUp } = useNextUp(runDate);
   const { data: pace } = usePaceAverage(30);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
 
   const inProgress = useMemo(
     () => (board ?? []).find((t) => t.state?.status === "in_progress") ?? null,
@@ -34,14 +40,22 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
     [board],
   );
 
+  const loadDay = inProgress?.state?.load_day_num ?? null;
+  const scheduledTotal = useMemo(
+    () =>
+      loadDay != null
+        ? buildOperationalDayContext(board ?? [], loadDay, holidayLoad, false).activeTrucks.length
+        : 0,
+    [board, loadDay, holidayLoad],
+  );
+
   if (!inProgress) {
     return (
-      <div className="space-y-4 p-[22px_26px_40px]">
+      <div className="p-4 sm:p-[22px_26px_40px]">
         <div className="card flex flex-col items-center justify-center py-10 text-center">
           <p className="text-lg font-semibold text-st-loaded">No truck currently in progress.</p>
           <p className="mt-1 text-sm text-ink-muted">Set a next-up truck and start it to begin loading.</p>
         </div>
-        <NextUpPanel runDate={runDate} nextUp={nextUp ?? null} unloaded={unloaded} anyInProgress={false} />
       </div>
     );
   }
@@ -49,16 +63,16 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
   const dayNum = inProgress.state?.load_day_num ?? null;
 
   return (
-    <div className="p-3 sm:p-[22px_26px_40px]">
-      {/* Eyebrow header */}
-      <div className="mb-3 sm:mb-[18px]">
+    <div className="p-4 sm:p-[22px_26px_40px]">
+      {/* Eyebrow header — hidden on mobile (shown in PageHeader instead) */}
+      <div className="mb-[18px] hidden md:block">
         <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
           <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
           Live
         </span>
       </div>
 
-      <div className="grid gap-4 items-start grid-cols-1 lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
+      <div className="grid grid-cols-1 gap-4 items-start lg:grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)]">
         {/* Left column */}
         <div className="space-y-4">
           <InProgressHero
@@ -73,7 +87,7 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
 
         {/* Right column */}
         <div className="space-y-4">
-          <SessionStats inProgress={inProgress} unloaded={unloaded} loadedToday={loadedToday} paceAvgSeconds={pace?.avg_seconds ?? null} />
+          <SessionStats inProgress={inProgress} unloaded={unloaded} loadedToday={loadedToday} paceAvgSeconds={pace?.avg_seconds ?? null} scheduledTotal={scheduledTotal} />
           <RecentFinishes loadedToday={loadedToday} />
         </div>
       </div>
@@ -241,16 +255,16 @@ function SessionStats({
   unloaded,
   loadedToday,
   paceAvgSeconds,
+  scheduledTotal,
 }: {
   inProgress: TruckWithState;
   unloaded: TruckWithState[];
   loadedToday: TruckWithState[];
   paceAvgSeconds: number | null;
+  scheduledTotal: number;
 }) {
   const loadedCount = loadedToday.length;
-  const remaining = unloaded.length;
-  // +1 for the current in-progress truck
-  const scheduledTotal = loadedCount + remaining + 1;
+  const remaining = Math.max(0, scheduledTotal - loadedCount - 1);
 
   const onPacePct = paceAvgSeconds != null && loadedCount > 0
     ? Math.round(
@@ -434,7 +448,7 @@ function InProgressHero({
         <div className="flex items-start gap-4">
           <div className="flex-1 text-center">
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Current Truck</p>
-            <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[42px] sm:text-[58px] leading-none" style={{ color: "#fbbf5c" }}>
+            <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[46px] sm:text-[58px] leading-none" style={{ color: "#fbbf5c" }}>
               #{truck.truck_number}
             </p>
             {dayLabel && (
@@ -451,7 +465,7 @@ function InProgressHero({
             <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Next Up</p>
             {nextUp != null ? (
               <>
-                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[42px] sm:text-[58px] leading-none" style={{ color: "#7dd3fc" }}>
+                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[46px] sm:text-[58px] leading-none" style={{ color: "#7dd3fc" }}>
                   #{nextUp}
                 </p>
                 {paceAvgSeconds != null && (
@@ -469,7 +483,7 @@ function InProgressHero({
               </>
             ) : (
               <>
-                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[42px] sm:text-[58px] leading-none text-ink-faint">—</p>
+                <p className="font-mono font-black tabular-nums tracking-[-0.02em] text-[46px] sm:text-[58px] leading-none text-ink-faint">—</p>
                 <button
                   type="button"
                   onClick={() => setPickerOpen(true)}
@@ -485,7 +499,7 @@ function InProgressHero({
         {/* Timer */}
         <div className="flex flex-col items-center gap-2 py-1">
           <span
-            className="font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-[40px] sm:text-[56px]"
+            className="font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-[44px] sm:text-[56px]"
             style={{ color: timerColor }}
           >
             {formatDuration(elapsed)}
@@ -588,7 +602,8 @@ function QueueRow({
   isNext: boolean;
   onSelect: () => void;
 }) {
-  const coverRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
+  const coverRoute = getCoverageRouteNumber(truck);
+  const spareNeedsRoute = truck.truck_type === "Spare" && coverRoute == null;
   const parts: string[] = [truck.truck_type];
   if (truck.state?.batch_id != null) parts.push(`Batch ${truck.state.batch_id}`);
   if (coverRoute != null) parts.push(`Cov. #${coverRoute}`);
@@ -607,6 +622,11 @@ function QueueRow({
       <span className="w-4 shrink-0 text-center text-[11px] font-bold tabular-nums text-ink-faint">{index + 1}</span>
       <span className="font-mono tabular-nums text-sm font-bold text-ink">#{truck.truck_number}</span>
       <span className="flex-1 truncate text-[11px] text-ink-muted">{meta}</span>
+      {spareNeedsRoute && (
+        <span className="shrink-0 rounded-pill bg-amber-900/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-300">
+          Needs route
+        </span>
+      )}
       {isNext && (
         <span className="shrink-0 rounded-pill bg-sky-900/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
           NEXT
@@ -631,11 +651,58 @@ function NextUpPanel({
 }) {
   const setNext = useSetNextUp(runDate);
   const clearNext = useClearNextUp(runDate);
+  const assignSpare = useAssignSpare();
+  const { data: board = [] } = useBoard(runDate);
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
+  const { data: spareAssignments = [] } = useSpareAssignments(runDate);
+  const { loadDay } = workdayNumbers();
+
+  // A spare with no route assigned can't be queued — it has nothing to load.
+  // Selecting one opens this prompt to pick the route it should cover first.
+  const [assignFor, setAssignFor] = useState<TruckWithState | null>(null);
 
   const options = useMemo(
     () => [...unloaded].sort((a, b) => a.truck_number - b.truck_number),
     [unloaded],
   );
+
+  // Routes already covered (spare assignment or route swap) — excluded / flagged.
+  const coveredRoutes = useMemo(
+    () =>
+      new Set<number>([
+        ...spareAssignments.filter((a) => !a.returned).map((a) => a.covering_route_truck),
+        ...board.filter((t) => t.route_swap_route != null).map((t) => t.route_swap_route as number),
+      ]),
+    [spareAssignments, board],
+  );
+  const routeTrucks = useMemo(
+    () =>
+      board
+        .filter((t) => t.truck_type !== "Spare" && (holidayLoad || !isScheduledOff(t, loadDay)))
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board, holidayLoad, loadDay],
+  );
+  const oosUncovered = routeTrucks.filter(
+    (t) => effectiveStatus(t, loadDay, holidayLoad) === "oos" && !coveredRoutes.has(t.truck_number),
+  );
+  const otherRoutes = routeTrucks.filter(
+    (t) => !(effectiveStatus(t, loadDay, holidayLoad) === "oos" && !coveredRoutes.has(t.truck_number)),
+  );
+
+  function needsRoute(t: TruckWithState) {
+    return t.truck_type === "Spare" && getCoverageRouteNumber(t) == null;
+  }
+
+  async function assignAndQueue(spareNum: number, routeNum: number) {
+    try {
+      await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: spareNum, covering_route_truck: routeNum });
+      setNext.mutate(spareNum);
+      setAssignFor(null);
+      onPick?.();
+    } catch (err) {
+      console.error("assign spare route failed", err);
+    }
+  }
 
   const nextStillAvailable = nextUp != null && options.some((t) => t.truck_number === nextUp);
 
@@ -654,6 +721,39 @@ function NextUpPanel({
         </p>
       )}
 
+      {/* Spare route-assignment prompt */}
+      {assignFor && (
+        <div className="space-y-2 rounded-lg border border-amber-700/40 bg-amber-950/20 p-3">
+          <p className="text-xs text-amber-200">
+            Spare <span className="font-black text-amber-100">#{assignFor.truck_number}</span> has no route. Pick the route it should load on:
+          </p>
+          <select
+            className="input w-full text-sm"
+            defaultValue=""
+            onChange={(e) => { if (e.target.value) assignAndQueue(assignFor.truck_number, parseInt(e.target.value)); }}
+          >
+            <option value="">— select route —</option>
+            {oosUncovered.length > 0 && (
+              <optgroup label="OOS — needs covering">
+                {oosUncovered.map((t) => (
+                  <option key={t.truck_number} value={t.truck_number}>#{t.truck_number} — OOS</option>
+                ))}
+              </optgroup>
+            )}
+            <optgroup label="Route trucks">
+              {otherRoutes.map((t) => (
+                <option key={t.truck_number} value={t.truck_number}>
+                  #{t.truck_number}{coveredRoutes.has(t.truck_number) ? " ✓ covered" : ""}
+                </option>
+              ))}
+            </optgroup>
+          </select>
+          <button type="button" className="btn-ghost w-full text-xs" onClick={() => setAssignFor(null)}>
+            Cancel
+          </button>
+        </div>
+      )}
+
       {options.length === 0 ? (
         <p className="text-center text-xs text-ink-faint">No Unloaded trucks available.</p>
       ) : (
@@ -664,7 +764,11 @@ function NextUpPanel({
               truck={truck}
               index={i}
               isNext={truck.truck_number === nextUp}
-              onSelect={() => { setNext.mutate(truck.truck_number); onPick?.(); }}
+              onSelect={() =>
+                needsRoute(truck)
+                  ? setAssignFor(truck)
+                  : (setNext.mutate(truck.truck_number), onPick?.())
+              }
             />
           ))}
         </div>

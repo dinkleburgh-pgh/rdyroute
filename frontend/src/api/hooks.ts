@@ -49,6 +49,15 @@ export function useLogin() {
   });
 }
 
+export function useGuestLogin() {
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await api.post<TokenResponse>("/auth/guest");
+      return data;
+    },
+  });
+}
+
 export function useMe(enabled = true) {
   return useQuery({
     queryKey: ["me"],
@@ -219,6 +228,7 @@ export function useUpsertTruckState() {
               priority_hold: false,
               needs_checked: false,
               arrived_at: null,
+              unloaded_at: null,
               state_source: "workflow" as TruckStateSource,
               updated_at: new Date().toISOString(),
             };
@@ -323,6 +333,21 @@ export function useSpareAssignments(runDate: string = todayIso(), returnedOnly?:
   });
 }
 
+// Every spare assignment nobody has returned yet, regardless of which day it
+// was made — the authoritative "is this coverage still active" signal. Used
+// as the historical-coverage fallback source (a truck's dirty status often
+// traces back to an assignment from a prior day whose record was never
+// re-created for today, but was also never explicitly returned).
+export function useOpenSpareAssignments() {
+  return useQuery({
+    queryKey: ["spares", "all-dates", "open"],
+    queryFn: async () =>
+      (await api.get<SpareAssignment[]>("/spares", { params: { returned: false } })).data,
+    refetchInterval: 15000,
+    staleTime: 14500,
+  });
+}
+
 export function useAssignSpare() {
   const qc = useQueryClient();
   return useMutation({
@@ -334,6 +359,9 @@ export function useAssignSpare() {
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["spares"] });
       qc.invalidateQueries({ queryKey: ["board", vars.run_date] });
+      // Coverage overlays on Board/RunDay/Supervisor read the swap log; it must
+      // refresh when coverage changes or those views show stale pre-swap state.
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -346,6 +374,7 @@ export function useReturnSpare() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["spares"] });
       qc.invalidateQueries({ queryKey: ["board"] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -357,6 +386,7 @@ export function useDeleteSpare() {
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["spares"] });
       qc.invalidateQueries({ queryKey: ["board"] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -389,8 +419,10 @@ export function useCreateRouteSwap() {
         two_way: payload.two_way ?? false,
       })).data,
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["route-swaps", vars.run_date] });
+      // Prefix key invalidates every ["route-swaps", *] query at once.
+      qc.invalidateQueries({ queryKey: ["route-swaps"] });
       qc.invalidateQueries({ queryKey: ["board", vars.run_date] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -403,8 +435,9 @@ export function useDeleteRouteSwap() {
         params: { also_reciprocal: alsoReciprocal ?? false },
       }),
     onSuccess: (_data, vars) => {
-      qc.invalidateQueries({ queryKey: ["route-swaps", vars.runDate] });
+      qc.invalidateQueries({ queryKey: ["route-swaps"] });
       qc.invalidateQueries({ queryKey: ["board", vars.runDate] });
+      qc.invalidateQueries({ queryKey: ["route-swap-log"] });
     },
   });
 }
@@ -953,66 +986,6 @@ export async function fetchNotificationPublicKey(): Promise<NotificationPublicKe
   return (await api.get<NotificationPublicKey>("/notifications/public-key")).data;
 }
 
-export interface UpdateStatus {
-  enabled: boolean;
-  has_secret: boolean;
-  command: string;
-  running: boolean;
-  last: {
-    state?: string;
-    started_at?: string;
-    finished_at?: string;
-    exit_code?: number;
-    error?: string;
-    [key: string]: unknown;
-  };
-}
-
-export function useUpdateStatus() {
-  return useQuery({
-    queryKey: ["update-status"],
-    queryFn: async () => (await api.get<UpdateStatus>("/updates/status")).data,
-    refetchInterval: 5000,
-    staleTime: 4500,
-  });
-}
-
-export function useTriggerUpdate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async () => (await api.post("/updates/trigger")).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["update-status"] }),
-  });
-}
-
-export function useTriggerPushUpdate() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (payload: { ref?: string; head_commit?: { id?: string } }) =>
-      (await api.post("/updates/push", payload)).data,
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["update-status"] }),
-  });
-}
-
-export interface UpdateCheckResult {
-  local_sha: string | null;
-  remote_sha: string | null;
-  remote_message: string | null;
-  remote_date: string | null;
-  update_available: boolean;
-  check_error: string | null;
-}
-
-export function useCheckForUpdate(enabled = true) {
-  return useQuery({
-    queryKey: ["update-check"],
-    queryFn: async () => (await api.get<UpdateCheckResult>("/updates/check")).data,
-    refetchInterval: 5 * 60 * 1000, // poll every 5 minutes
-    staleTime: 4 * 60 * 1000,
-    enabled,
-  });
-}
-
 // ---------------------------------------------------------------------------
 // Holiday mode (per run-date)
 // ---------------------------------------------------------------------------
@@ -1269,6 +1242,36 @@ export interface ShortageCategoryPoint {
   total_qty: number;
 }
 
+export interface ShortageSummary {
+  total_qty: number;
+  avg_per_day: number;
+  peak_day: string | null;
+  peak_qty: number;
+  entry_count: number;
+  days_with_data: number;
+  trend_direction: "up" | "down" | "stable";
+  change_vs_prior_pct: number | null;
+  daily_series: { run_date: string; total_qty: number; entry_count: number }[];
+}
+
+export interface QualityRatePoint {
+  run_date: string;
+  loaded_trucks: number;
+  audit_entry_count: number;
+  audit_qty: number;
+  discrepancy_rate: number | null;
+  items_per_truck: number | null;
+}
+
+export interface QualityRateSummary {
+  avg_items_per_truck: number | null;
+  avg_discrepancy_rate: number | null;
+  days_with_data: number;
+  trend_direction: string;
+  change_vs_prior_pct: number | null;
+  daily_series: QualityRatePoint[];
+}
+
 export interface AnomalyDay {
   run_date: string;
   metric: string;
@@ -1408,6 +1411,32 @@ export function useShortageDailyTrend(daysBack = 14) {
     queryKey: ["shortage-trend-daily", daysBack],
     queryFn: async () =>
       (await api.get<ShortageDailyPoint[]>("/shorts/trends/daily", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useShortageSummary(daysBack = 14, compareDaysBack?: number) {
+  return useQuery({
+    queryKey: ["shortage-summary", daysBack, compareDaysBack],
+    queryFn: async () =>
+      (
+        await api.get<ShortageSummary>("/shorts/trends/summary", {
+          params: { days_back: daysBack, compare_days_back: compareDaysBack },
+        })
+      ).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useQualityRate(daysBack = 14, compareDaysBack?: number) {
+  return useQuery({
+    queryKey: ["quality-rate", daysBack, compareDaysBack],
+    queryFn: async () =>
+      (
+        await api.get<QualityRateSummary>("/audit/trends/quality-rate", {
+          params: { days_back: daysBack, compare_days_back: compareDaysBack },
+        })
+      ).data,
     staleTime: 60_000,
   });
 }
@@ -1894,30 +1923,45 @@ export interface TrackedItem {
   pack_size?: number;
 }
 
+const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
+  { label: "Terrys/Grids",  qty_default: 1, category: "Towels", unit_label: "Bag",    pack_size: 20 },
+  { label: "White Micros",  qty_default: 1, category: "Towels", unit_label: "Bag",    pack_size: 20 },
+  { label: "Red Shops",     qty_default: 1, category: "Towels", unit_label: "Bundle", pack_size: 50 },
+  { label: "Black Aprons",  qty_default: 1, category: "Aprons", unit_label: "Bag",    pack_size: 10 },
+  { label: "White Aprons",  qty_default: 1, category: "Aprons", unit_label: "Bag",    pack_size: 10 },
+];
+
 export function useTrackedItems() {
   return useQuery({
     queryKey: ["tracked-items"],
-    staleTime: 5 * 60 * 1000,
+    staleTime: 0,
     queryFn: async (): Promise<TrackedItem[]> => {
       try {
         const { data } = await api.get<AppSetting>("/settings/tracked_items_map");
         const raw = data?.value;
         if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-          return Object.entries(raw as Record<string, unknown>).map(([label, meta]) => {
+          const seen = new Set<string>();
+          const items: TrackedItem[] = [];
+          for (const [label, meta] of Object.entries(raw as Record<string, unknown>)) {
             const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
-            return {
+            items.push({
               label,
               qty_default: Number(m.qty_default) || 1,
               category: typeof m.category === "string" ? m.category : undefined,
               unit_label: typeof m.unit_label === "string" ? m.unit_label : undefined,
               pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
-            };
-          });
+            });
+            seen.add(label);
+          }
+          for (const d of DEFAULT_TRACKED_ITEMS) {
+            if (!seen.has(d.label)) items.push(d);
+          }
+          return items;
         }
-        return [];
+        return DEFAULT_TRACKED_ITEMS;
       } catch (err: unknown) {
         const e = err as { response?: { status?: number } };
-        if (e?.response?.status === 404) return [];
+        if (e?.response?.status === 404) return DEFAULT_TRACKED_ITEMS;
         throw err;
       }
     },

@@ -15,17 +15,20 @@ Business logic preserved from V1:
     single fetch.
 """
 
-from datetime import date, timedelta
+import time
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import delete, func, select
+from sqlalchemy import case, delete, func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
-from database import get_db
-from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, User
+from database import get_db, settings as app_settings
+from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
-from routers.auth import get_current_user, require_admin
+from routers.auth import get_current_user, require_admin, require_non_guest
 from schemas import (
     AnomalyDay,
     CompletionDailyPoint,
@@ -59,6 +62,15 @@ def _ran_special(note: str | None) -> bool:
 
 
 def _ensure_day_initialized(run_date: date, db: Session) -> None:
+    # NEVER initialize a future run day. Day-init closes out the PREVIOUS day
+    # (with force_unloaded_on_new_day it marks its open trucks unloaded and the
+    # new day's seed clears priority holds) — so any request for a future board
+    # date would roll the day over while the current shift is still working.
+    # That happened 2026-07-15 23:59: a query for the 16th auto-unloaded a
+    # truck marked "Unload and Hold" minutes earlier. Future dates now render
+    # from whatever rows already exist, without initializing anything.
+    if run_date > datetime.now(ZoneInfo(app_settings.timezone)).date():
+        return
     source_key = f"day_setup_source_{run_date}"
     if db.get(AppSetting, source_key) is not None:
         return
@@ -68,8 +80,15 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     ).all()
     if not trucks:
         db.add(AppSetting(key=source_key, value="auto"))
-        db.commit()
+        try:
+            db.commit()
+        except IntegrityError:
+            db.rollback()
         return
+
+    # Check force_unloaded_on_new_day setting — overrides all prior-status logic
+    force_setting = db.get(AppSetting, "force_unloaded_on_new_day")
+    force_unloaded = force_setting is not None and force_setting.value is True
 
     load_day_num = _load_day_number(run_date)
     prev_run_date = db.scalar(
@@ -79,6 +98,29 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     # truck with prior status "unloaded" was scheduled off that day (and therefore
     # didn't run a route) vs. was active and dispatched (and came back dirty).
     prev_load_day_num = _load_day_number(prev_run_date) if prev_run_date is not None else None
+    # Did the previous run day load on a holiday? If so, TWO ship days ran in one
+    # shift (prev load day + the next ship day), so a truck only sat out if it was
+    # scheduled off BOTH days — everything else ran and comes back dirty today.
+    prev_holiday_load = False
+    if prev_run_date is not None:
+        _hl = db.get(AppSetting, f"holiday_load_{prev_run_date}")
+        prev_holiday_load = _hl is not None and _hl.value is True
+    prev_second_load_day = (
+        (1 if prev_load_day_num == 5 else prev_load_day_num + 1)
+        if prev_load_day_num is not None
+        else None
+    )
+
+    # Carry the run mode forward: a new day inherits the previous run day's
+    # holiday Load/Unload mode, so once Setup Day step 1 sets it the choice
+    # persists day to day until it's explicitly changed again.
+    if prev_run_date is not None:
+        for base in ("holiday_load", "holiday_unload", "holiday_mode"):
+            cur_key = f"{base}_{run_date}"
+            if db.get(AppSetting, cur_key) is None:
+                prev_setting = db.get(AppSetting, f"{base}_{prev_run_date}")
+                if prev_setting is not None:
+                    db.add(AppSetting(key=cur_key, value=prev_setting.value))
 
     prev_states_by_num: dict[int, TruckState] = {}
     prev_loaded_on = set[int]()
@@ -106,6 +148,16 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             ).all()
         }
 
+    # When force_unloaded is set, close out the previous day first — mark any
+    # trucks that are still dirty/in_progress/unfinished as unloaded so that
+    # the previous day's board reflects a clean end-of-day state.
+    _OPEN_STATUSES = {TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished}
+    if force_unloaded and prev_run_date is not None:
+        for prev_state in prev_states_by_num.values():
+            if prev_state.status in _OPEN_STATUSES:
+                prev_state.status = TruckStatus.unloaded
+                prev_state.state_source = TruckStateSource.workflow.value
+
     today_states = {
         row.truck_number: row
         for row in db.scalars(
@@ -117,6 +169,16 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
 
     for truck in trucks:
         if truck.truck_number in today_states:
+            # A row already exists for this run date (rare — created before init
+            # ran). Day init is the start of a fresh run day, so priority_hold and
+            # needs_checked must not carry into it — clear them here too so the
+            # reset is guaranteed for every truck, not just the freshly-seeded
+            # ones. (Legitimate same-day holds/checks are set by wizard/workflow
+            # AFTER init, which no longer runs once day_setup_source is set.)
+            existing_today = today_states[truck.truck_number]
+            if existing_today.priority_hold or existing_today.needs_checked:
+                existing_today.priority_hold = False
+                existing_today.needs_checked = False
             continue
 
         prior = prev_states_by_num.get(truck.truck_number)
@@ -136,9 +198,8 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
         status = TruckStatus.unloaded
 
         if prior is not None:
-            needs_checked = bool(getattr(prior, "needs_checked", False)) or _ran_special(prior.off_note)
-            if _ran_special(prior.off_note):
-                off_note = prior.off_note or ""
+            # needs_checked and ran-special off_note are intentionally NOT carried
+            # forward — both reset each day.
             shop_note = prior.shop_note or ""
             used_yesterday = (
                 prior.status in {TruckStatus.loaded, TruckStatus.in_progress}
@@ -150,23 +211,40 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 status = TruckStatus.unfinished
             elif prior.status in {TruckStatus.oos, TruckStatus.shop}:
                 status = prior.status
-            elif scheduled_off_today:
-                status = TruckStatus.off
-            elif used_yesterday:
-                status = TruckStatus.dirty
             elif prior.status == TruckStatus.dirty:
-                # Truck was dirty yesterday and not yet processed — carry forward as dirty.
-                # It's physically at the dock waiting to be unloaded; do not reset to unloaded.
+                # Truck is physically at the dock waiting to be unloaded. Carry forward
+                # regardless of the next load day's schedule.
+                status = TruckStatus.dirty
+            elif used_yesterday:
+                # Truck was in loaded/in_progress state yesterday — it definitely dispatched
+                # and returned dirty today, regardless of today's load schedule.
                 status = TruckStatus.dirty
             elif prior.status == TruckStatus.unloaded and truck.truck_type != "Spare":
-                # Non-spare was unloaded yesterday. Whether it ran depends on its schedule:
-                # - Scheduled off yesterday → it didn't dispatch → stays unloaded (ready to load)
-                # - NOT scheduled off yesterday → it ran its route → came back dirty
-                prev_sched_off = (
-                    prev_load_day_num is not None
-                    and prev_load_day_num in (truck.scheduled_off_days or [])
-                )
-                status = TruckStatus.unloaded if prev_sched_off else TruckStatus.dirty
+                # Non-spare was unloaded yesterday. Check if it actually dispatched by looking
+                # at the UNLOAD day schedule (prev_load_day_num = today's unload day number).
+                # Resolve this BEFORE scheduled_off_today so a truck scheduled off for
+                # tomorrow's load doesn't wrongly get "off" status when it ran today.
+                off_days = truck.scheduled_off_days or []
+                if prev_holiday_load and prev_load_day_num is not None:
+                    # Holiday ran both ship days — the truck only sat out if it was
+                    # scheduled off BOTH, otherwise it ran and returned dirty.
+                    prev_sched_off = (
+                        prev_load_day_num in off_days
+                        and (prev_second_load_day is None or prev_second_load_day in off_days)
+                    )
+                else:
+                    prev_sched_off = (
+                        prev_load_day_num is not None
+                        and prev_load_day_num in off_days
+                    )
+                if not prev_sched_off:
+                    status = TruckStatus.dirty    # dispatched → came back dirty
+                elif scheduled_off_today:
+                    status = TruckStatus.off      # didn't dispatch + not loading tonight
+                else:
+                    status = TruckStatus.unloaded  # didn't dispatch + active tonight
+            elif scheduled_off_today:
+                status = TruckStatus.off
             elif prior.status in {TruckStatus.off, TruckStatus.unloaded, TruckStatus.spare}:
                 status = TruckStatus.unloaded
             else:
@@ -180,6 +258,12 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             # Only reset to unloaded if the spare wasn't already carrying a dirty state forward.
             if prior is None or prior.status != TruckStatus.dirty:
                 status = TruckStatus.unloaded
+
+        # NOTE: force_unloaded_on_new_day intentionally does NOT pre-mark today's
+        # trucks unloaded. It only closes out the PREVIOUS day (see the block near
+        # the top of this function). Trucks that ran come back dirty today so the
+        # crew's unload workflow has work to do; the auto-unload is an END-OF-DAY
+        # action — it happens when the NEXT day rolls over and closes this one out.
 
         row = TruckState(
             truck_number=truck.truck_number,
@@ -225,7 +309,19 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             seeded_truck_numbers,
         ),
     )
-    db.commit()
+    # Auto-apply recurring route-swap rules for this load day (once per run-date).
+    from routers.spares import apply_recurring_swaps
+    apply_recurring_swaps(db, run_date, load_day_num)
+    # Day init is a check-then-act with no lock: at rollover two concurrent board
+    # polls can both pass the "already initialized" check at the top and both try
+    # to insert the same sentinel / TruckState rows here. The whole init is one
+    # transaction, so the loser's commit hits a unique-constraint violation —
+    # catch it, roll back, and return. The winner's initialization already stands;
+    # this request just sees the fully-initialized day on its next read.
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
 
 
 # ---------------------------------------------------------------------------
@@ -305,12 +401,12 @@ def create_truck_state(
     payload: TruckStateCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
 ):
     if payload.truck_number != truck_number:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="truck_number mismatch")
 
-    _assert_truck_exists(truck_number, db)
+    truck = _assert_truck_exists(truck_number, db)
 
     existing = db.scalars(
         select(TruckState).where(
@@ -326,6 +422,7 @@ def create_truck_state(
 
     if payload.status and payload.status.value == "in_progress":
         _assert_no_other_in_progress(truck_number, payload.run_date, db)
+        _assert_spare_has_coverage(truck, payload.run_date, db)
 
     row_payload = payload.model_dump()
     row_payload["state_source"] = payload.state_source or TruckStateSource.workflow.value
@@ -364,7 +461,7 @@ def update_truck_state(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
 ):
     """
     Partial update — only fields present in the request body are applied.
@@ -398,6 +495,7 @@ def update_truck_state(
         "priority_hold": row.priority_hold,
         "needs_checked": row.needs_checked,
         "arrived_at": row.arrived_at,
+        "unloaded_at": row.unloaded_at,
         "state_source": row.state_source,
     })
     updates = payload.model_dump(exclude_unset=True)
@@ -406,9 +504,25 @@ def update_truck_state(
 
     if updates.get("status") and updates["status"].value == "in_progress":
         _assert_no_other_in_progress(truck_number, run_date, db)
+        _assert_spare_has_coverage(_assert_truck_exists(truck_number, db), run_date, db)
 
     for field, value in updates.items():
         setattr(row, field, value)
+
+    # arrived_at is set ONLY by an explicit "Arrived" tap (the client sends it in
+    # the payload). There is deliberately no auto-baseline on unload: arriving and
+    # being unloaded are different events, so arrival never piggybacks on a status
+    # change.
+    #
+    # unloaded_at stamps the moment a truck is genuinely unloaded via this
+    # per-truck workflow (dirty / in_progress / unfinished -> unloaded), for
+    # unload-timing pattern analysis. Bulk/admin status changes go through the
+    # separate bulk endpoint and never stamp. Undoing (leaving unloaded) clears it.
+    _UNLOAD_OPEN = (TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished)
+    if row.status == TruckStatus.unloaded and previous_status in _UNLOAD_OPEN:
+        row.unloaded_at = time.time()
+    elif row.status != TruckStatus.unloaded and previous_status == TruckStatus.unloaded:
+        row.unloaded_at = None
 
     append_truck_state_activity(
         db,
@@ -629,7 +743,7 @@ def bulk_update_status(
     truck_numbers: list[int] = Query(...),
     new_status: str = Query(...),
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
 ):
     """
     Set all listed trucks to *new_status* for *run_date*.
@@ -641,6 +755,13 @@ def bulk_update_status(
         validated_status = TruckStatus(new_status)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid status '{new_status}'")
+
+    # A spare can't be bulk-started into loading without a route to cover.
+    if validated_status == TruckStatus.in_progress:
+        for num in truck_numbers:
+            truck = db.scalars(select(Truck).where(Truck.truck_number == num)).first()
+            if truck is not None:
+                _assert_spare_has_coverage(truck, run_date, db)
 
     rows = db.scalars(
         select(TruckState).where(
@@ -755,6 +876,41 @@ def _assert_no_other_in_progress(
         )
 
 
+def _assert_spare_has_coverage(truck: Truck, run_date, db: Session) -> None:
+    """Raise 409 if a Spare is asked to start loading with no route assigned.
+
+    A spare only loads to cover another route, so before it can go in_progress
+    it must either be the load_on_truck of a RouteSwap or have an active
+    SpareAssignment for the run_date. Non-spare trucks are never blocked here.
+    """
+    if truck.truck_type != TruckType.spare:
+        return
+
+    covered_by_swap = db.scalars(
+        select(RouteSwap).where(
+            RouteSwap.run_date == run_date,
+            RouteSwap.load_on_truck == truck.truck_number,
+        )
+    ).first()
+    if covered_by_swap:
+        return
+
+    covered_by_assignment = db.scalars(
+        select(SpareAssignment).where(
+            SpareAssignment.run_date == run_date,
+            SpareAssignment.spare_truck_number == truck.truck_number,
+            SpareAssignment.returned.is_(False),
+        )
+    ).first()
+    if covered_by_assignment:
+        return
+
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=f"Spare {truck.truck_number} has no route to cover. Assign a route before loading.",
+    )
+
+
 # ---------------------------------------------------------------------------
 # Trend aggregation endpoints
 # ---------------------------------------------------------------------------
@@ -771,7 +927,7 @@ def truck_completion_trend(
             TruckState.run_date,
             func.count(TruckState.id).label("total"),
             func.sum(
-                func.case((TruckState.status == "loaded", 1), else_=0)
+                case((TruckState.status == "loaded", 1), else_=0)
             ).label("loaded"),
         )
         .where(TruckState.run_date >= cutoff)
@@ -864,15 +1020,15 @@ def truck_anomalies(
         select(
             TruckState.run_date,
             func.count(TruckState.id).label("tot"),
-            func.sum(func.case((TruckState.status == "loaded", 1), else_=0)).label("lod"),
+            func.sum(case((TruckState.status == "loaded", 1), else_=0)).label("lod"),
             func.avg(
-                func.case(
+                case(
                     (TruckState.status == "loaded", TruckState.load_duration_seconds),
                     else_=None,
                 )
             ).label("pac"),
             func.avg(
-                func.case(
+                case(
                     (TruckState.status == "loaded", TruckState.wearers),
                     else_=None,
                 )

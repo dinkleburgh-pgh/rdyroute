@@ -59,6 +59,7 @@ export interface TruckState {
   priority_hold: boolean;
   needs_checked: boolean;
   arrived_at: number | null;
+  unloaded_at: number | null;
   state_source: TruckStateSource;
   updated_at: string;
 }
@@ -245,10 +246,21 @@ export interface AppSetting {
   updated_at: string;
 }
 
+/**
+ * A recurring route-swap rule (stored in the `recurring_route_swaps` app setting).
+ * route_truck's load runs on load_on_truck on each ship/load day in `days` (1=Mon..5=Fri).
+ * Auto-applied when the board for a matching load day is initialized.
+ */
+export interface RecurringRouteSwap {
+  route_truck: number;
+  load_on_truck: number;
+  days: number[];
+  two_way?: boolean;
+}
+
 export interface ProductionSyncResult {
   source: string;
   run_dates: string[];
-  coverage_run_dates: string[];
   backup_bytes: number;
   warnings: string[];
   summary: Record<string, number>;

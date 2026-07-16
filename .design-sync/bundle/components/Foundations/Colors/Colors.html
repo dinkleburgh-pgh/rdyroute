@@ -1,0 +1,60 @@
+<!-- @dsCard group="Foundations" -->
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ReadyRoute · Colors</title>
+  <link rel="stylesheet" href="../../../styles.css" />
+  <style>
+    .wrap { padding: 24px; font-family: var(--rr-font-sans); color: var(--rr-ink); background: var(--rr-app); }
+    h2 { margin: 0 0 4px; font-size: 18px; font-weight: 800; }
+    p.sub { margin: 0 0 20px; color: var(--rr-ink-muted); font-size: 13px; }
+    h3 { margin: 22px 0 10px; font-size: 11px; letter-spacing: .14em; text-transform: uppercase; color: var(--rr-ink-muted); }
+    .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 12px; }
+    .sw { border: 1px solid var(--rr-hairline); border-radius: 12px; overflow: hidden; background: var(--rr-surface); }
+    .chip { height: 54px; border-bottom: 1px solid var(--rr-hairline); }
+    .meta { padding: 8px 10px; }
+    .meta .nm { font-size: 12px; font-weight: 600; }
+    .meta .cl { font-family: var(--rr-font-mono); font-size: 10.5px; color: var(--rr-ink-soft); }
+    .meta .hx { font-family: var(--rr-font-mono); font-size: 10.5px; color: var(--rr-ink-muted); }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h2>Colors</h2>
+    <p class="sub">Dark surface shell, the ink text ramp, and the truck-lifecycle status palette. Each swatch shows its token variable and hex.</p>
+
+    <h3>Surfaces</h3>
+    <div class="grid">
+      <div class="sw"><div class="chip" style="background:var(--rr-app)"></div><div class="meta"><div class="nm">App canvas</div><div class="cl">--rr-app</div><div class="hx">#07090d</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-surface)"></div><div class="meta"><div class="nm">Surface</div><div class="cl">--rr-surface</div><div class="hx">#161d2b</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-surface-2)"></div><div class="meta"><div class="nm">Surface 2</div><div class="cl">--rr-surface-2</div><div class="hx">#141a27</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-surface-3)"></div><div class="meta"><div class="nm">Surface 3</div><div class="cl">--rr-surface-3</div><div class="hx">#111722</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-track)"></div><div class="meta"><div class="nm">Track</div><div class="cl">--rr-track</div><div class="hx">#1c2434</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-accent)"></div><div class="meta"><div class="nm">Accent</div><div class="cl">--rr-accent</div><div class="hx">#3b82f6</div></div></div>
+    </div>
+
+    <h3>Ink (text)</h3>
+    <div class="grid">
+      <div class="sw"><div class="chip" style="background:var(--rr-ink)"></div><div class="meta"><div class="nm">Ink</div><div class="cl">--rr-ink</div><div class="hx">#f2f6fb</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-ink-soft)"></div><div class="meta"><div class="nm">Ink soft</div><div class="cl">--rr-ink-soft</div><div class="hx">#cdd6e2</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-ink-muted)"></div><div class="meta"><div class="nm">Ink muted</div><div class="cl">--rr-ink-muted</div><div class="hx">#8a96a8</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-ink-faint)"></div><div class="meta"><div class="nm">Ink faint</div><div class="cl">--rr-ink-faint</div><div class="hx">#7a8698</div></div></div>
+    </div>
+
+    <h3>Status — truck lifecycle</h3>
+    <div class="grid">
+      <div class="sw"><div class="chip" style="background:var(--rr-st-dirty)"></div><div class="meta"><div class="nm">Dirty</div><div class="cl">--rr-st-dirty</div><div class="hx">#ef4444</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-inprogress)"></div><div class="meta"><div class="nm">In progress</div><div class="cl">--rr-st-inprogress</div><div class="hx">#f59e0b</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-unloaded)"></div><div class="meta"><div class="nm">Unloaded</div><div class="cl">--rr-st-unloaded</div><div class="hx">#22c55e</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-loaded)"></div><div class="meta"><div class="nm">Loaded</div><div class="cl">--rr-st-loaded</div><div class="hx">#3b82f6</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-unfinished)"></div><div class="meta"><div class="nm">Unfinished</div><div class="cl">--rr-st-unfinished</div><div class="hx">#d946ef</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-shop)"></div><div class="meta"><div class="nm">Shop</div><div class="cl">--rr-st-shop</div><div class="hx">#8b5cf6</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-spare)"></div><div class="meta"><div class="nm">Spare</div><div class="cl">--rr-st-spare</div><div class="hx">#06b6d4</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-off)"></div><div class="meta"><div class="nm">Off</div><div class="cl">--rr-st-off</div><div class="hx">#64748b</div></div></div>
+      <div class="sw"><div class="chip" style="background:var(--rr-st-oos)"></div><div class="meta"><div class="nm">Out of service</div><div class="cl">--rr-st-oos</div><div class="hx">#6b7a90</div></div></div>
+    </div>
+  </div>
+</body>
+</html>

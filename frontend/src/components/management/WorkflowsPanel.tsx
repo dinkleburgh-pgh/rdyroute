@@ -11,12 +11,17 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
     () => ({
       batching_disabled: asBool(map.get("batching_disabled"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
+      wearer_cap: Number(map.get("wearer_cap") ?? 1800),
       outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
       outside_timer_minutes: Number(map.get("outside_timer_minutes") ?? 20),
       paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
       paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
+      shift_notes_enabled: asBool(map.get("shift_notes_enabled"), true),
+      calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), false),
+      calendar_fab_enabled: asBool(map.get("calendar_fab_enabled"), false),
+      force_unloaded_on_new_day: asBool(map.get("force_unloaded_on_new_day"), false),
     }),
     [map],
   );
@@ -51,7 +56,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       <FieldRow
         label="No wearer cap"
-        hint="Remove the 400-wearer batch capacity limit. Useful for holiday or overflow loads."
+        hint="Remove the per-batch wearer capacity limit. Useful for holiday or overflow loads."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -60,6 +65,21 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, batch_no_cap: e.target.checked })}
           />
           No limit
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Wearers cap"
+        hint="Maximum total wearers allowed per batch during unload. Ignored when 'No wearer cap' is on."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="number"
+            min={1}
+            value={form.wearer_cap}
+            onChange={(e) => setForm({ ...form, wearer_cap: Number(e.target.value) || 1800 })}
+            className="input w-24"
+          />
+          <span className="text-xs text-slate-500">wearers</span>
         </label>
       </FieldRow>
       <FieldRow
@@ -108,7 +128,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       <FieldRow
         label="Arrived tracking"
-        hint="Adds a development-only Arrived quick action so fleet can timestamp when a truck parks back in the yard."
+        hint="Records when each truck parks back in the yard — auto-captured when unloading starts, or tap 'Mark Arrived' on a dirty truck to log the exact time earlier."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -130,6 +150,58 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, note_cards_enabled: e.target.checked })}
           />
           Enable Note Cards
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Shift Notes"
+        hint="Show the Shift Notes handoff panel at the top of the Day Overview."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.shift_notes_enabled}
+            onChange={(e) => setForm({ ...form, shift_notes_enabled: e.target.checked })}
+          />
+          Show Shift Notes on Day Overview
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Calendar FAB"
+        hint="Show a floating calendar button that opens the Fleet Schedule page."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.calendar_fab_enabled}
+            onChange={(e) => setForm({ ...form, calendar_fab_enabled: e.target.checked })}
+          />
+          Enable calendar FAB
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Calculator FAB"
+        hint="Show the floating calculator button for quick pack/percent calculations."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.calculator_fab_enabled}
+            onChange={(e) => setForm({ ...form, calculator_fab_enabled: e.target.checked })}
+          />
+          Enable calculator
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Auto-unload all trucks (end of day)"
+        hint="When enabled, every truck is treated as Unloaded at the end of each run day, so the next day starts clean — dirty/unfinished trucks are cleared. OOS and shop trucks are left as-is."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.force_unloaded_on_new_day}
+            onChange={(e) => setForm({ ...form, force_unloaded_on_new_day: e.target.checked })}
+          />
+          Assume all trucks unloaded by end of day
         </label>
       </FieldRow>
       <SaveButton

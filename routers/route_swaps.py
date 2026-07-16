@@ -23,7 +23,7 @@ from notification_service import (
     coverage_removed_notification,
     dispatch_notification,
 )
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_non_guest
 from schemas import RouteSwapCreate, RouteSwapOut, RouteSwapLogOut
 
 router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
@@ -31,16 +31,17 @@ router = APIRouter(prefix="/route-swaps", tags=["route-swaps"])
 
 @router.get("", response_model=list[RouteSwapOut])
 def list_swaps(
-    run_date: date = Query(...),
+    run_date: date | None = Query(default=None),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return all route swap assignments for a run date."""
-    rows = db.scalars(
-        select(RouteSwap)
-        .where(RouteSwap.run_date == run_date)
-        .order_by(RouteSwap.route_truck)
-    ).all()
-    return rows
+    """Return route swap assignments. Filtered to a run date if given, else
+    every row currently on file (a RouteSwap row is deleted when cleared, so
+    any row that still exists is implicitly still active)."""
+    q = select(RouteSwap).order_by(RouteSwap.route_truck)
+    if run_date is not None:
+        q = q.where(RouteSwap.run_date == run_date)
+    return db.scalars(q).all()
 
 
 @router.post("", response_model=list[RouteSwapOut], status_code=status.HTTP_201_CREATED)
@@ -48,7 +49,7 @@ def create_swap(
     payload: RouteSwapCreate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """
     Create a route swap assignment.  If two_way=True, also creates the
@@ -238,7 +239,7 @@ def delete_swap(
         description="Also delete the reciprocal row if a two-way swap exists",
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """
     Delete a single swap row.  Pass also_reciprocal=true to also clear the
@@ -315,7 +316,7 @@ def clear_all_swaps(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """Remove all route swap assignments for a run date."""
     rows = db.scalars(select(RouteSwap).where(RouteSwap.run_date == run_date)).all()
@@ -357,6 +358,7 @@ def clear_all_swaps(
 @router.get("/log", response_model=list[RouteSwapLogOut])
 def get_swap_log(
     days: int = Query(default=30, ge=1, le=365),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Return the route swap history log for the past N days."""

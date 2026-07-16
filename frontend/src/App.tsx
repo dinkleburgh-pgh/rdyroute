@@ -1,7 +1,7 @@
 import { createBrowserRouter, Navigate, RouterProvider } from "react-router-dom";
-import { AnimatePresence } from "framer-motion";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import { queryClient } from "./api/queryClient";
+import { lazy, Suspense, useEffect, type ReactNode } from "react";
 import { AuthProvider } from "./contexts/AuthContext";
 import { ToastProvider } from "./contexts/ToastContext";
 import ToastContainer from "./components/ToastContainer";
@@ -12,38 +12,41 @@ import { useSettings } from "./api/hooks";
 import { badgeTextColor } from "./utils/color";
 import useWakeLock from "./hooks/useWakeLock";
 import { useAuth } from "./contexts/AuthContext";
+// Core workflow pages stay eager — they're the hot path and must paint instantly.
 import Login from "./pages/Login";
 import RunDay from "./pages/RunDay";
 import Board from "./pages/Board";
 import Unload from "./pages/Unload";
 import Load from "./pages/Load";
-import Batches from "./pages/Batches";
-import Shorts from "./pages/Shorts";
-import Audit from "./pages/Audit";
-import Trends from "./pages/Trends";
-import TrendDetail from "./pages/trends/TrendDetail";
-import Management from "./pages/Settings";
-import Communications from "./pages/Communications";
-import Supervisor from "./pages/Supervisor";
-import NotesBoard from "./pages/Notes";
-import DriverNotes from "./pages/DriverNotes";
+// Heavy / infrequently-visited pages are code-split so the login screen and the
+// core board don't ship chart.js, the OCR review UI, and ~20 admin panels up
+// front. Each lands in its own chunk, fetched on first navigation.
+const Batches = lazy(() => import("./pages/Batches"));
+const Shorts = lazy(() => import("./pages/Shorts"));
+const Audit = lazy(() => import("./pages/Audit"));
+const Trends = lazy(() => import("./pages/Trends"));
+const TrendDetail = lazy(() => import("./pages/trends/TrendDetail"));
+const Management = lazy(() => import("./pages/Settings"));
+const Communications = lazy(() => import("./pages/Communications"));
+const NotesBoard = lazy(() => import("./pages/Notes"));
+const DriverNotes = lazy(() => import("./pages/DriverNotes"));
+const FleetSchedule = lazy(() => import("./pages/FleetSchedule"));
+const VerifyShortSheet = lazy(() => import("./pages/VerifyShortSheet"));
+const LiveReport = lazy(() => import("./pages/LiveReport"));
 
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: { staleTime: 30_000, refetchOnWindowFocus: false },
-    mutations: {
-      onError: (err) => {
-        // Default fallback: log errors from mutations that don't have their
-        // own onError handler. Call sites can override with a toast as needed.
-        console.error("[mutation error]", err);
-      },
-    },
-  },
-});
+function RouteFallback() {
+  return (
+    <div className="flex min-h-[50vh] items-center justify-center text-sm text-slate-500">
+      Loading…
+    </div>
+  );
+}
+
+const lazyRoute = (node: ReactNode) => <Suspense fallback={<RouteFallback />}>{node}</Suspense>;
 
 const router = createBrowserRouter([
   { path: "/login", element: <Login />, errorElement: <ErrorBoundary /> },
-  { path: "/driver/:token", element: <DriverNotes />, errorElement: <ErrorBoundary /> },
+  { path: "/driver/:token", element: lazyRoute(<DriverNotes />), errorElement: <ErrorBoundary /> },
   {
     path: "/",
     element: (
@@ -57,17 +60,20 @@ const router = createBrowserRouter([
       { path: "board", element: <Board /> },
       { path: "unload", element: <Unload /> },
       { path: "load", element: <Load /> },
-      { path: "batches", element: <Batches /> },
+      { path: "batches", element: lazyRoute(<Batches />) },
       { path: "fleet", element: <Board fleetMode /> },
-      { path: "shorts", element: <Shorts /> },
-      { path: "audit", element: <Audit /> },
-      { path: "trends", element: <Trends /> },
-      { path: "trends/:metric", element: <TrendDetail /> },
-      { path: "management", element: <Management /> },
-      { path: "communications", element: <Communications /> },
-      { path: "notes", element: <NotesBoard /> },
+      { path: "shorts", element: lazyRoute(<Shorts />) },
+      { path: "audit", element: lazyRoute(<Audit />) },
+      { path: "trends", element: lazyRoute(<Trends />) },
+      { path: "trends/:metric", element: lazyRoute(<TrendDetail />) },
+      { path: "management", element: lazyRoute(<Management />) },
+      { path: "communications", element: lazyRoute(<Communications />) },
+      { path: "notes", element: lazyRoute(<NotesBoard />) },
       { path: "supervisor", element: <Navigate to="/management" replace /> },
       { path: "settings", element: <Navigate to="/management" replace /> },
+      { path: "fleet-schedule", element: lazyRoute(<FleetSchedule />) },
+      { path: "verify-short-sheet", element: lazyRoute(<VerifyShortSheet />) },
+      { path: "report", element: lazyRoute(<LiveReport />) },
     ],
   },
   { path: "*", element: <Navigate to="/" replace /> },

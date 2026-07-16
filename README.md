@@ -2,6 +2,8 @@
 
 Warehouse loading-dock management system. Tracks a fleet of trucks through their daily load/unload cycle, provides real-time status for supervisors and loaders, and records pace metrics over time.
 
+For a full walkthrough of how the app actually works — daily workflow, the coverage/OOS system, Operations settings, deployment — see **[docs/APP_GUIDE.md](docs/APP_GUIDE.md)**.
+
 ---
 
 ## Tech stack

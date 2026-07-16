@@ -1,38 +1,33 @@
-import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayLoad, useHolidayUnload, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
-import NoteCardsDrawer from "./NoteCardsDrawer";
+import RunDayWizard from "../pages/runday/RunDayWizard";
+import ToolFab from "./ToolFab";
 import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
+import { useToast } from "../contexts/ToastContext";
 import { OfflineIndicator } from "./OfflineIndicator";
 import type { AuthRole, TruckStatus, TruckWithState } from "../types";
 import {
+  buildHistoricalCoverageFallback,
   buildOperationalDayContext,
   buildRouteStatusCounts,
   countLoaded,
   countUnloadedFromContext,
+  loadedTruckNumbers,
+  unloadedTruckNumbersFromContext,
 } from "../utils/truckStatus";
+import { reportProgressOverflow } from "../utils/debugLog";
+import { STATUS_LABELS } from "../constants/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
-
-const STATUS_LABEL: Record<TruckStatus, string> = {
-  dirty: "Dirty",
-  unfinished: "Unfinished",
-  shop: "Shop",
-  in_progress: "In Progress",
-  unloaded: "Unloaded",
-  loaded: "Loaded",
-  off: "OFF",
-  oos: "OOS / HOLD",
-  spare: "SPARE / COV",
-};
 
 const STATUS_DOT: Record<TruckStatus, string> = {
   dirty: "bg-status-dirty",
@@ -65,38 +60,43 @@ const SIDEBAR_PRIMARY_NAV = [
 ];
 
 const SIDEBAR_SECONDARY_NAV = [
+  { to: "/report", label: "Report" },
   { to: "/shorts", label: "Short sheet" },
   { to: "/notes", label: "Notes" },
   { to: "/trends", label: "Trends" },
   { to: "/audit", label: "Audit" },
+  { to: "/fleet-schedule", label: "Fleet Schedule" },
+  { to: "/verify-short-sheet", label: "Verify Shorts" },
   { to: "/management", label: "Management" },
 ];
 
 const MOBILE_PRIMARY_NAV = [
-  { to: "/shorts", label: "Short Sheet" },
+  { to: "/fleet-schedule", label: "Fleet Sch." },
   { to: "/audit", label: "Audit" },
   { to: "/communications", label: "Communications" },
-  { to: "/management", label: "Management" },
+  { to: "/shorts", label: "Short Sheet" },
 ];
 
 const MOBILE_SECONDARY_NAV = [
+  { to: "/report", label: "Report" },
   { to: "/unload", label: "Unload" },
   { to: "/load", label: "Load" },
   { to: "/fleet", label: "Fleet" },
   { to: "/notes", label: "Notes" },
   { to: "/trends", label: "Trends" },
+  { to: "/management", label: "Management" },
 ];
 
 // Mirrors V1 ROLE_SCREEN_ACCESS — which nav links each role can see.
 const ROLE_NAV_ACCESS: Record<AuthRole, Set<string>> = {
-  admin: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  fleet: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  atl: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  supervisor: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
-  lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/management"]),
+  admin: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  fleet: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  atl: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  supervisor: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
   loader: new Set(["/load", "/communications", "/audit"]),
   unloader: new Set(["/unload", "/communications"]),
-  guest: new Set<string>(),
+  guest: new Set(["/fleet-schedule"]),
 };
 
 const ROLE_LABELS: Record<AuthRole, string> = {
@@ -136,7 +136,7 @@ function BuildInfo() {
   return (
     <div className="pt-2 text-center text-[10px] leading-tight text-ink-faint">
       <p>
-        ReadyRoute V2 · {isDev ? "dev" : version}
+        ReadyRoute V2 · {isDev ? `${version} · dev` : version}
       </p>
       {(shortCommit || dateLabel) && !isDev && (
         <p className="text-ink-faint/60">
@@ -151,15 +151,34 @@ function BuildInfo() {
 
 export default function Layout() {
   const { user, logout } = useAuth();
+  const resolvedVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
+  // In dev show the predicted next build label (from vite.config) with a marker
+  // so it's clear it isn't pushed yet; in prod show the shipped build label.
+  const appVersion = import.meta.env.DEV ? `${resolvedVersion} · dev` : resolvedVersion;
+  const { data: allSettings } = useSettings();
+  const settingsMap = useMemo(() => allSettings ? new Map(allSettings.map((s) => [s.key, s.value])) : new Map(), [allSettings]);
+
   const nav = useNavigate();
   const location = useLocation();
   const { data: board } = useBoard(todayIso());
+  const { data: swapLog = [] } = useRouteSwapLog(60);
+  const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
   const { data: holidayLoad = false } = useHolidayLoad(todayIso());
   const { data: holidayUnload = false } = useHolidayUnload(todayIso());
   const { data: wizardDone = false } = useWizardCompleted(todayIso());
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [swapModalOpen, setSwapModalOpen] = useState(false);
   const [moreOpen, setMoreOpen] = useState(false);
+  const [wizardOpen, setWizardOpen] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Open wizard when ?setup=1 appears in the URL (e.g. from an old link or redirect)
+  useEffect(() => {
+    if (searchParams.get("setup") === "1") {
+      setWizardOpen(true);
+      setSearchParams({}, { replace: true });
+    }
+  }, [searchParams, setSearchParams]);
 
   const canManageSwaps = ["admin", "fleet", "supervisor", "atl"].includes(user?.role ?? "");
 
@@ -167,7 +186,13 @@ export default function Layout() {
   const { isWsConnected } = useRealtimeSync();
 
   // Offline sync: queue + flush + connectivity state
-  const offlineState = useOfflineSync();
+  const toast = useToast();
+  const offlineState = useOfflineSync({
+    onConflict: (n) =>
+      toast.info(
+        `${n} offline change${n === 1 ? "" : "s"} couldn't be synced — already updated on the server.`,
+      ),
+  });
 
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {
@@ -175,12 +200,23 @@ export default function Layout() {
     setMoreOpen(false);
   }, [location.pathname]);
 
+  // Guests are read-only and locked to Day Overview
+  useEffect(() => {
+    if (user?.role === "guest" && location.pathname !== "/" && location.pathname !== "/fleet-schedule") {
+      nav("/", { replace: true });
+    }
+  }, [user?.role, location.pathname, nav]);
+
   const { loadDay, unloadsDay } = workdayNumbers();
   const loadDayNum = loadDay;
 
+  const historicalCoverageFallback = useMemo(
+    () => buildHistoricalCoverageFallback(board ?? [], openSpareAssignments, swapLog, todayIso()),
+    [board, openSpareAssignments, swapLog],
+  );
   const counts = useMemo(
-    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload),
-    [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload],
+    () => buildRouteStatusCounts(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload, historicalCoverageFallback),
+    [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload, historicalCoverageFallback],
   );
 
   // Hold count for nav badges — priority_hold trucks on the Unload page.
@@ -194,6 +230,7 @@ export default function Layout() {
     [board],
   );
 
+  // Non-spare unloaded count for the sidebar — spares are excluded from this bucket.
   // Load progress mirrors the Day Overview: denominator = route trucks scheduled
   // for load; a route counts as done when the route truck is loaded OR its covering spare is.
   const loadContext = useMemo(
@@ -208,21 +245,37 @@ export default function Layout() {
   );
 
   // Unload denominator = routes scheduled to run today (not off, not replaced by spare).
-  // Numerator = routes that have been unloaded. Two contexts: schedule context (no off-day
-  // spare coverage) for the total; work context (with off-day coverage) for done count.
+  // Numerator = how many of THOSE same routes are unloaded — counted from the same
+  // context as the denominator so a spare covering an off-day route can't push the
+  // numerator above the total (was causing e.g. 29/28).
   const unloadScheduleContext = useMemo(
     () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, false),
     [board, unloadsDay, holidayUnload],
   );
   const totalScheduledUnload = unloadScheduleContext.activeTrucks.length;
-  const unloadContext = useMemo(
-    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, true),
-    [board, unloadsDay, holidayUnload],
-  );
   const unloadedScheduled = useMemo(
-    () => countUnloadedFromContext(unloadContext),
-    [unloadContext],
+    () => countUnloadedFromContext(unloadScheduleContext),
+    [unloadScheduleContext],
   );
+
+  // Debug: capture the intermittent "N+1 of N" progress overflow with the
+  // offending truck, logged server-side so a floor-device-only occurrence is
+  // retrievable centrally. The load numerator (countLoaded) scans the whole
+  // board, so it can exceed the route denominator; unload is a subset (defensive).
+  useEffect(() => {
+    reportProgressOverflow(
+      "Load (sidebar)",
+      loadedTruckNumbers(board ?? [], loadDayNum, holidayLoad, unloadsDay, holidayUnload),
+      loadContext.activeTrucks.map((t) => t.truck_number),
+      { run_date: todayIso(), loadDay: loadDayNum },
+    );
+    reportProgressOverflow(
+      "Unload (sidebar)",
+      unloadedTruckNumbersFromContext(unloadScheduleContext),
+      unloadScheduleContext.activeTrucks.map((t) => t.truck_number),
+      { run_date: todayIso(), unloadsDay },
+    );
+  }, [board, loadDayNum, unloadsDay, holidayLoad, holidayUnload, loadContext, unloadScheduleContext]);
 
   const loadedPct =
     totalScheduledLoad > 0
@@ -248,10 +301,15 @@ export default function Layout() {
   const roleLabel = roleOverride?.label ?? user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
   const roleBadgeCls = roleOverride?.cls ?? ROLE_BADGE[(user?.role ?? "guest") as AuthRole] ?? ROLE_BADGE.guest;
   const allowed = ROLE_NAV_ACCESS[(user?.role ?? "guest") as AuthRole] ?? new Set<string>();
-  const sidebarPrimaryNav = SIDEBAR_PRIMARY_NAV.filter((i) => allowed.has(i.to));
-  const sidebarSecondaryNav = SIDEBAR_SECONDARY_NAV.filter((i) => allowed.has(i.to));
-  const mobilePrimaryNav = MOBILE_PRIMARY_NAV.filter((i) => allowed.has(i.to));
-  const mobileSecondaryNav = MOBILE_SECONDARY_NAV.filter((i) => allowed.has(i.to));
+  const isGuest = user?.role === "guest";
+  const sidebarPrimaryNav = isGuest
+    ? [...SIDEBAR_PRIMARY_NAV, ...SIDEBAR_SECONDARY_NAV].filter((i) => allowed.has(i.to))
+    : SIDEBAR_PRIMARY_NAV.filter((i) => allowed.has(i.to));
+  const sidebarSecondaryNav = isGuest ? [] : SIDEBAR_SECONDARY_NAV.filter((i) => allowed.has(i.to));
+  const mobilePrimaryNav = isGuest
+    ? [...MOBILE_PRIMARY_NAV, ...MOBILE_SECONDARY_NAV].filter((i) => allowed.has(i.to))
+    : MOBILE_PRIMARY_NAV.filter((i) => allowed.has(i.to));
+  const mobileSecondaryNav = isGuest ? [] : MOBILE_SECONDARY_NAV.filter((i) => allowed.has(i.to));
   const shiftName = currentShift().name;
   const loadBadgeText = `L${loadDay}${holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}`;
   const unloadBadgeText = `U${unloadsDay}${holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}`;
@@ -280,19 +338,32 @@ export default function Layout() {
           sidebarOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <div className="flex-1 space-y-3 overflow-y-auto p-[14px]">
+        <div className="flex-1 space-y-3 overflow-y-auto p-[14px] pt-safe">
+          {/* Brand header */}
+          <div className="flex items-center gap-3 px-1 pt-1">
+            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br from-cyan-400 to-teal-500 text-lg font-black text-white shadow-lg shadow-cyan-500/30">
+              R
+            </div>
+            <div className="leading-tight">
+              <p className="text-base font-bold text-white">rdyroute.app</p>
+              <p className="font-mono text-xs text-ink-faint">{appVersion}</p>
+            </div>
+          </div>
+
           {/* Setup Day button */}
-          <button
-            onClick={() => nav("/?setup=1")}
-            className={clsx(
-              "block w-full rounded-[10px] border px-3 py-2 text-center text-sm font-medium transition-colors",
-              wizardDone
-                ? "border-hairline bg-surface text-ink-soft hover:bg-surface-2"
-                : "border-[rgba(245,158,11,0.30)] bg-[rgba(245,158,11,0.08)] text-[#fbbf5c] hover:bg-[rgba(245,158,11,0.15)]",
-            )}
-          >
-            {wizardDone ? "Setup Day" : "Setup Day (optional override)"}
-          </button>
+          {!isGuest && (
+            <button
+              onClick={() => setWizardOpen(true)}
+              className={clsx(
+                "block w-full rounded-[10px] border px-3 py-2 text-center text-sm font-medium transition-colors",
+                wizardDone
+                  ? "border-hairline bg-surface text-ink-soft hover:bg-surface-2"
+                  : "border-[rgba(245,158,11,0.30)] bg-[rgba(245,158,11,0.08)] text-[#fbbf5c] hover:bg-[rgba(245,158,11,0.15)]",
+              )}
+            >
+              {wizardDone ? "Setup Day" : "Setup Day (optional override)"}
+            </button>
+          )}
 
           {canManageSwaps && (
             <button
@@ -398,7 +469,7 @@ export default function Layout() {
                   STATUS_DOT[s],
                   s === "in_progress" && counts[s] > 0 && "animate-pulse",
                 )} />
-                {STATUS_LABEL[s]}
+                {STATUS_LABELS[s]}
                 <span className="absolute right-2 text-ink-muted">
                   {s === "in_progress"
                     ? inProgressTruck
@@ -435,7 +506,7 @@ export default function Layout() {
                 to={item.to}
                 className={({ isActive }) =>
                   clsx(
-                    "rounded-[9px] border border-hairline px-2 py-2 text-center text-xs font-medium transition-colors",
+                    "flex min-h-[36px] items-center justify-center rounded-[9px] border border-hairline px-2 py-1 text-center text-xs font-medium leading-tight transition-colors",
                     isActive
                       ? "bg-[rgba(59,130,246,0.13)] text-[#7cc4ff]"
                       : "bg-surface text-[#aab4c4] hover:bg-surface-2",
@@ -467,7 +538,7 @@ export default function Layout() {
               nav("/login");
             }}
           >
-            Logout
+            {user?.role === "guest" ? "Login" : "Logout"}
           </button>
           <BuildInfo />
         </div>
@@ -476,17 +547,21 @@ export default function Layout() {
       {/* Content column */}
       <div className="flex min-w-0 flex-1 flex-col">
         {/* App top bar — mobile shows hamburger + brand, all sizes show clock/shift/day badges */}
-        <header className="sticky top-0 z-10 flex h-[54px] items-center gap-2 border-b border-hairline bg-[rgba(13,18,28,0.7)] backdrop-blur px-[22px]">
+        <header className="sticky top-0 z-10 flex min-h-[54px] items-center gap-2 border-b border-hairline bg-[rgba(13,18,28,0.7)] backdrop-blur px-[22px] pt-safe md:min-h-[68px]">
           <button
             type="button"
             aria-label="Open menu"
             onClick={() => setSidebarOpen(true)}
-            className="rounded-md p-1.5 text-ink-faint hover:bg-surface hover:text-ink md:hidden"
+            className="shrink-0 rounded-md p-2.5 text-ink-faint hover:bg-surface hover:text-ink md:hidden"
           >
             <Menu className="h-6 w-6" />
           </button>
-          <span className="hidden min-[380px]:inline truncate text-sm font-semibold text-ink-soft md:hidden">ReadyRoute</span>
-          <div className="ml-auto flex min-w-0 flex-1 items-center justify-end gap-1 md:hidden">
+          <div className="flex shrink-0 items-center md:hidden">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-cyan-400 to-teal-500 text-sm font-black text-white shadow-md shadow-cyan-500/30">
+              R
+            </div>
+          </div>
+          <div className="ml-auto flex shrink-0 items-center justify-end gap-1 md:hidden">
             <span className="shrink-0 font-mono tabular-nums text-xs text-ink-soft"><Clock compact /></span>
             <span className="inline-flex shrink-0 items-center rounded-[9px] border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-[11px] py-[4px] text-xs font-semibold text-[#c4b5fd]">
               {shiftName}
@@ -498,24 +573,24 @@ export default function Layout() {
               {unloadBadgeText}
             </span>
           </div>
-          <div className="ml-auto hidden items-center gap-2 text-xs md:flex">
-            <span className="font-mono text-[13px] text-ink-soft"><Clock compact /></span>
-            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-[11px] py-[4px] font-semibold text-[#c4b5fd]">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#8b6fd1]">Shift</span>
+          <div className="ml-auto hidden items-center gap-3 text-sm md:flex">
+            <Clock compact className="font-mono text-2xl font-bold tabular-nums text-blue-400" />
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-4 py-2 font-semibold text-[#c4b5fd]">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8b6fd1]">Shift</span>
               {shiftName}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-[11px] py-[4px] font-semibold text-[#93c5fd]">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#5a8fd6]">Load</span>
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-4 py-2 font-semibold text-[#93c5fd]">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#5a8fd6]">Load</span>
               Day {loadDay}{holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}
             </span>
-            <span className="inline-flex items-center gap-1 rounded-[9px] border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-[11px] py-[4px] font-semibold text-[#6ee7b7]">
-              <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-[#4f9e84]">Unload</span>
+            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-4 py-2 font-semibold text-[#6ee7b7]">
+              <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#4f9e84]">Unload</span>
               Day {unloadsDay}{holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}
             </span>
           </div>
         </header>
 
-        <main className="flex-1 overflow-auto pb-14 md:pb-0">
+        <main className="flex-1 overflow-auto pb-nav-safe md:pb-0">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
@@ -528,6 +603,8 @@ export default function Layout() {
             </motion.div>
           </AnimatePresence>
         </main>
+
+        <ToolFab />
       </div>
 
       {/* Mobile bottom nav — primary workflow actions + More drawer */}
@@ -540,7 +617,7 @@ export default function Layout() {
                 className="fixed inset-0 z-30 bg-black/50 md:hidden"
                 onClick={() => setMoreOpen(false)}
               />
-              <div className="fixed bottom-12 inset-x-0 z-40 rounded-t-xl border-t border-hairline bg-[#0e1320] pb-2 shadow-xl md:hidden">
+              <div className="fixed inset-x-0 z-40 rounded-t-xl border-t border-hairline bg-[#0e1320] pb-2 shadow-xl md:hidden" style={{ bottom: 'calc(3rem + env(safe-area-inset-bottom))' }}>
                 <div className="flex items-center justify-between px-4 py-3">
                   <p className="text-xs font-semibold uppercase tracking-wide text-ink-faint">More</p>
                   <button onClick={() => setMoreOpen(false)} className="text-ink-faint hover:text-ink-soft">
@@ -555,7 +632,7 @@ export default function Layout() {
                       onClick={() => setMoreOpen(false)}
                       className={({ isActive }) =>
                         clsx(
-                          "flex flex-col items-center justify-center rounded-lg px-2 py-3 text-[11px] font-semibold transition-colors",
+                          "flex flex-col items-center justify-center rounded-lg px-2 py-4 text-[11px] font-semibold transition-colors",
                           isActive
                             ? "bg-[rgba(59,130,246,0.20)] text-blue-400"
                             : "text-ink-faint hover:bg-surface hover:text-ink-soft",
@@ -582,7 +659,7 @@ export default function Layout() {
             </>
           )}
 
-          <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-hairline bg-[#0e1320] md:hidden">
+          <nav className="fixed bottom-0 inset-x-0 z-30 flex border-t border-hairline bg-[#0e1320] pb-safe md:hidden">
             {mobilePrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
@@ -592,7 +669,7 @@ export default function Layout() {
                   to={item.to}
                   className={({ isActive }) =>
                     clsx(
-                      "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
+                      "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-3 text-[10px] font-semibold leading-tight transition-colors",
                       isActive ? "text-blue-400" : "text-ink-faint",
                     )
                   }
@@ -619,6 +696,7 @@ export default function Layout() {
                   "relative flex flex-1 flex-col items-center justify-center gap-0.5 px-1 py-2.5 text-[10px] font-semibold leading-tight transition-colors",
                   moreOpen ? "text-blue-400" : "text-ink-faint",
                 )}
+                style={{ minHeight: '44px' }}
               >
                 More
                 <span className={clsx(
@@ -634,7 +712,15 @@ export default function Layout() {
       )}
 
       {swapModalOpen && <RouteSwapModal onClose={() => setSwapModalOpen(false)} />}
-      <NoteCardsDrawer />
+      {wizardOpen && (
+        <RunDayWizard
+          runDate={todayIso()}
+          board={board ?? []}
+          loadDay={loadDay}
+          unloadsDay={unloadsDay}
+          onClose={() => setWizardOpen(false)}
+        />
+      )}
     </div>
   );
 }

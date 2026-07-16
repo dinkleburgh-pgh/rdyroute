@@ -1,0 +1,50 @@
+/* ReadyRoute design tokens — semantic CSS custom properties.
+ *
+ * ReadyRoute's compiled utility + component classes in _ds_bundle.css already
+ * bake these values in (e.g. `.bg-st-dirty`, `.text-ink-soft`, `.shadow-card`).
+ * These variables expose the same palette for direct `var(--rr-*)` use and are
+ * the canonical token reference for the system.
+ */
+:root {
+  /* ---- Surfaces (dark app shell) ---- */
+  --rr-app: #07090d;        /* page canvas */
+  --rr-surface: #161d2b;    /* cards / panels */
+  --rr-surface-2: #141a27;  /* nested surface */
+  --rr-surface-3: #111722;  /* deepest surface */
+  --rr-track: #1c2434;      /* rails / inputs */
+
+  /* ---- Ink (text) ---- */
+  --rr-ink: #f2f6fb;        /* primary text */
+  --rr-ink-soft: #cdd6e2;   /* secondary text */
+  --rr-ink-muted: #8a96a8;  /* labels / meta */
+  --rr-ink-faint: #7a8698;  /* de-emphasized */
+
+  /* ---- Accent ---- */
+  --rr-accent: #3b82f6;
+
+  /* ---- Status colors (truck lifecycle) ---- */
+  --rr-st-dirty: #ef4444;
+  --rr-st-unfinished: #d946ef;
+  --rr-st-shop: #8b5cf6;
+  --rr-st-inprogress: #f59e0b;
+  --rr-st-unloaded: #22c55e;
+  --rr-st-loaded: #3b82f6;
+  --rr-st-off: #64748b;
+  --rr-st-oos: #6b7a90;
+  --rr-st-spare: #06b6d4;
+
+  /* ---- Borders ---- */
+  --rr-hairline: rgba(255, 255, 255, 0.06);
+
+  /* ---- Radii ---- */
+  --rr-radius-pill: 999px;
+
+  /* ---- Elevation ---- */
+  --rr-shadow-inset-top: inset 0 1px 0 rgba(255, 255, 255, 0.04);
+  --rr-shadow-card: 0 6px 18px -12px rgba(0, 0, 0, 0.7);
+  --rr-shadow-hero: 0 12px 34px -18px rgba(245, 158, 11, 0.5);
+
+  /* ---- Type ---- */
+  --rr-font-sans: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --rr-font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}

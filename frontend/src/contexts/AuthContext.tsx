@@ -33,12 +33,13 @@ const LS_USER_KEY = "readyroutev2_user";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   // Seed from localStorage so returning users don't flash a blank screen.
-  // The /auth/me check below validates that the httpOnly JWT cookie is still
-  // valid and replaces or clears the cached user accordingly.
+  // Guest sessions are never persisted — they're ephemeral per tab.
   const [user, setUser] = useState<StoredUser | null>(() => {
     try {
       const raw = localStorage.getItem(LS_USER_KEY);
-      return raw ? (JSON.parse(raw) as StoredUser) : null;
+      if (!raw) return null;
+      const cached = JSON.parse(raw) as StoredUser;
+      return cached.role === "guest" ? null : cached;
     } catch {
       return null;
     }
@@ -47,13 +48,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
 
   const setSession = useCallback((u: StoredUser) => {
-    localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
+    if (u.role !== "guest") {
+      localStorage.setItem(LS_USER_KEY, JSON.stringify(u));
+    }
     setUser(u);
   }, []);
 
   const logout = useCallback(() => {
-    localStorage.removeItem(LS_USER_KEY);
-    setUser(null);
+    api.post("/auth/logout").catch(() => {}).finally(() => {
+      localStorage.removeItem(LS_USER_KEY);
+      setUser(null);
+    });
   }, []);
 
   // On every mount, verify the httpOnly JWT cookie is still valid by calling
@@ -69,13 +74,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         display_role: res.data.display_role ?? null,
         display_name: res.data.display_name,
       };
-      localStorage.setItem(LS_USER_KEY, JSON.stringify(fresh));
+      if (fresh.role !== "guest") {
+        localStorage.setItem(LS_USER_KEY, JSON.stringify(fresh));
+      }
       setUser(fresh);
-    }).catch(() => {
+    }).catch((err: unknown) => {
       if (cancelled) return;
-      // 401 = no valid session → clear cached user
-      localStorage.removeItem(LS_USER_KEY);
-      setUser(null);
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 401 || status === 403) {
+        // Server explicitly rejected the session — clear it.
+        localStorage.removeItem(LS_USER_KEY);
+        setUser(null);
+      }
+      // Network error (no response) while offline: keep the cached user so the
+      // app stays usable. The next successful /auth/me will re-sync.
     }).finally(() => {
       if (!cancelled) setLoading(false);
     });

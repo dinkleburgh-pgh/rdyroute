@@ -3,7 +3,7 @@
  *
  * Steps: Run Mode → Dust Garments → Route Swaps → Trucks Not Here → Daily Notes.
  */
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import clsx from "clsx";
 import {
   useCreateRouteSwap,
@@ -13,6 +13,8 @@ import {
   useHolidayMode,
   useHolidayUnload,
   useRouteSwaps,
+  useSpareAssignments,
+  useDeleteSpare,
   useSetDailyNotes,
   useSetHolidayLoad,
   useSetHolidayMode,
@@ -22,8 +24,9 @@ import {
   useUpsertTruckState,
 } from "../../api/hooks";
 import { workdayNumbers } from "../../components/Clock";
+import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
-import { effectiveStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../../utils/truckStatus";
+import { effectiveStatus, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
 
 export default function RunDayWizard({
   runDate,
@@ -52,6 +55,8 @@ export default function RunDayWizard({
   // Counts per side, derived from the actual fleet roster.
   // Base = trucks scheduled to run that ship day normally.
   // Extra = trucks normally off for that ship day (added by holiday).
+  // OOS trucks are still counted — a scheduled route always runs (it gets
+  // covered), so excluding OOS would undercount the routes (e.g. 27 vs 28).
   const loadBase = board.filter(
     (t) => t.truck_type !== "Spare" && !isScheduledOff(t, loadDay),
   ).length;
@@ -71,7 +76,6 @@ export default function RunDayWizard({
   const setDailyNotes = useSetDailyNotes();
   const setWizardCompleted = useSetWizardCompleted();
   const upsertSetting = useUpsertSetting();
-  const [workflowSkipped, setWorkflowSkipped] = useState(0);
 
   const dustTrucks = board.filter((t) => t.truck_type === "Dust");
   const [dustSelected, setDustSelected] = useState<Set<number>>(
@@ -79,8 +83,35 @@ export default function RunDayWizard({
   );
 
   const { data: swaps = [] } = useRouteSwaps(runDate);
+  const { data: spareAssignments = [] } = useSpareAssignments(runDate);
   const createSwap = useCreateRouteSwap();
   const deleteSwap = useDeleteRouteSwap();
+  const returnSpare = useDeleteSpare();
+
+  // Active coverages, unioned across EVERY source so none are missed:
+  //  - the board's resolved coverage for the current run day (route_swap_route /
+  //    oos_spare_route) — reflects recurring rules and the day rollover,
+  //  - the raw route_swaps (Setup Day mechanism), and
+  //  - the non-returned spare_assignments (the Route Swaps modal's source).
+  // Deduped by route→load; each row keeps whatever underlying ids exist so the
+  // ✕ clears the right record(s). A board-only coverage with no raw id can't be
+  // removed here, but it still shows so the list is never short.
+  const coverages = useMemo(() => {
+    const out: { key: string; route_truck: number; load_on_truck: number; swapId?: number; spareId?: number }[] = [];
+    const upsert = (route: number, load: number, patch: { swapId?: number; spareId?: number }) => {
+      const ex = out.find((o) => o.route_truck === route && o.load_on_truck === load);
+      if (ex) Object.assign(ex, patch);
+      else out.push({ key: `cov-${route}-${load}`, route_truck: route, load_on_truck: load, ...patch });
+    };
+    for (const t of board) {
+      const route = t.route_swap_route ?? t.state?.oos_spare_route;
+      if (route != null) upsert(route, t.truck_number, {});
+    }
+    for (const s of swaps) upsert(s.route_truck, s.load_on_truck, { swapId: s.id });
+    for (const a of spareAssignments.filter((a) => !a.returned)) upsert(a.covering_route_truck, a.spare_truck_number, { spareId: a.id });
+    return out.sort((a, b) => a.route_truck - b.route_truck);
+  }, [board, swaps, spareAssignments]);
+  const coveredRouteSet = useMemo(() => new Set(coverages.map((c) => c.route_truck)), [coverages]);
   const [swapRoute, setSwapRoute] = useState<string>("");
   const [swapLoadOn, setSwapLoadOn] = useState<string>("");
   const [swapError, setSwapError] = useState<string | null>(null);
@@ -88,7 +119,7 @@ export default function RunDayWizard({
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   const { loadDay: todayLoad } = workdayNumbers(new Date(`${runDate}T12:00:00`));
-  const prevDay = todayLoad === 1 ? 5 : todayLoad - 1;
+  const prevDay = previousWorkday(todayLoad);
   const returningTrucks = board.filter(
     (t) =>
       t.truck_type !== "Spare" &&
@@ -99,8 +130,8 @@ export default function RunDayWizard({
   const specialTrucks = [...returningTrucks, ...spareTrucks].filter(
     (t, i, arr) => arr.findIndex((x) => x.truck_number === t.truck_number) === i,
   );
-  const canWizardMutateTruck = (t: TruckWithState) =>
-    (t.state?.state_source ?? "auto") !== "workflow";
+  // Wizard always overrides — including workflow-touched trucks
+  const canWizardMutateTruck = (_t: TruckWithState) => true;
   const editableDustTrucks = dustTrucks.filter(canWizardMutateTruck);
   const editableSpecialTrucks = specialTrucks.filter(canWizardMutateTruck);
   const [absentSelected, setAbsentSelected] = useState<Set<number>>(new Set());
@@ -124,7 +155,6 @@ export default function RunDayWizard({
   }
 
   async function saveDustAndAdvance() {
-    setWorkflowSkipped(dustTrucks.length - editableDustTrucks.length);
     await Promise.all(
       editableDustTrucks.map((t) =>
         upsert.mutateAsync({
@@ -168,20 +198,21 @@ export default function RunDayWizard({
 
   async function saveAbsentAndAdvance() {
     const tasks: Promise<unknown>[] = [];
-    let skipped = 0;
-
-    // Absent trucks: mark dirty (they weren't pushed yesterday)
+    // Absent trucks: flag needs_checked and park them in a non-dirty status.
+    // An absent truck isn't here to unload, so it must NOT land in the dirty
+    // pile — give spares "spare" and route trucks "unloaded", and let the
+    // Needs Checked badge prompt a manual verify when it actually arrives.
+    // (Passing an explicit status also stops the backend defaulting a freshly
+    // created state row — e.g. an unseeded spare — to "dirty".)
     for (const num of absentSelected) {
       const truck = specialTrucks.find((t) => t.truck_number === num);
       if (!truck) continue;
-      if (!canWizardMutateTruck(truck)) {
-        skipped += 1;
-        continue;
-      }
       tasks.push(upsert.mutateAsync({
         truck_number: num,
         run_date: runDate,
-        status: "dirty",
+        needs_checked: true,
+        status: truck.truck_type === "Spare" ? "spare" : "unloaded",
+        wearers: truck.state?.wearers ?? 0,
         state_source: "wizard",
       }));
     }
@@ -189,23 +220,20 @@ export default function RunDayWizard({
     // Non-absent returning trucks: auto-set to unloaded.
     // These trucks were off yesterday and are back today — they were already
     // loaded/pushed the day before, so they return in an unloaded state.
+    // Guard: don't downgrade a truck that's already further along this shift —
+    // re-running Setup Day must not reset in-progress/loaded work back to unloaded.
     for (const t of returningTrucks) {
-      if (!absentSelected.has(t.truck_number)) {
-        if (!canWizardMutateTruck(t)) {
-          skipped += 1;
-          continue;
-        }
-        tasks.push(upsert.mutateAsync({
-          truck_number: t.truck_number,
-          run_date: runDate,
-          status: "unloaded",
-          state_source: "wizard",
-        }));
-      }
+      if (absentSelected.has(t.truck_number)) continue;
+      if (t.state?.status === "in_progress" || t.state?.status === "loaded") continue;
+      tasks.push(upsert.mutateAsync({
+        truck_number: t.truck_number,
+        run_date: runDate,
+        status: "unloaded",
+        state_source: "wizard",
+      }));
     }
 
     await Promise.all(tasks);
-    setWorkflowSkipped((prev) => prev + skipped);
     setStep(5);
   }
 
@@ -372,8 +400,8 @@ export default function RunDayWizard({
           {/* Step 2: Dust Garments */}
           {step === 2 && (
             <div className="space-y-4">
+              <DustGarmentIcon className="mx-auto h-16 w-16 text-amber-300" style={{ color: "#fcd34d" }} />
               <p className="text-center text-xl font-extrabold text-slate-100">Select dust trucks with garments</p>
-              <p className="text-center text-xs text-slate-400">Select which dust trucks have garments today.</p>
               {editableDustTrucks.length === 0 ? (
                 <p className="text-center text-sm text-slate-500">No dust trucks in fleet.</p>
               ) : (
@@ -394,11 +422,6 @@ export default function RunDayWizard({
                   ))}
                 </div>
               )}
-              {dustTrucks.length !== editableDustTrucks.length && (
-                <p className="text-center text-xs text-amber-400">
-                  {dustTrucks.length - editableDustTrucks.length} dust truck(s) already changed by workflow and will not be overridden.
-                </p>
-              )}
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(1)}>Back</button>
                 <button className="flex-1 btn-primary text-sm" disabled={upsert.isPending} onClick={saveDustAndAdvance}>Save & Continue</button>
@@ -409,10 +432,14 @@ export default function RunDayWizard({
 
           {/* Step 3: Route Swaps */}
           {step === 3 && (() => {
-            // OOS trucks that don't yet have a swap assigned
-            const swappedRoutes = new Set(swaps.map((s) => s.route_truck));
+            // OOS trucks that don't yet have a swap assigned (covered via either
+            // a route swap or a spare assignment).
+            const swappedRoutes = coveredRouteSet;
+            // Match the Fleet board's "Needs assignment" detection exactly: a
+            // route truck is OOS via the is_oos FLAG (its status may read
+            // dirty/unloaded), not only when status is literally "oos".
             const unswappedOos = board.filter(
-              (t) => t.truck_type !== "Spare" && t.state?.status === "oos" && !swappedRoutes.has(t.truck_number),
+              (t) => t.truck_type !== "Spare" && t.is_oos && !swappedRoutes.has(t.truck_number),
             ).sort((a, b) => a.truck_number - b.truck_number);
             return (
             <div className="space-y-3 max-h-[70vh] overflow-y-auto">
@@ -422,9 +449,12 @@ export default function RunDayWizard({
               {/* OOS trucks needing a covering truck */}
               {unswappedOos.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
-                    OOS — Select covering truck
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-400">
+                      Needs Assignment
+                    </p>
+                    <span className="rounded-full bg-amber-700/50 px-2 py-0.5 text-[10px] font-bold text-amber-300">{unswappedOos.length}</span>
+                  </div>
                   {unswappedOos.map((t) => (
                     <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 px-3 py-2">
                       <span className="text-sm font-bold text-amber-300 whitespace-nowrap">
@@ -447,7 +477,7 @@ export default function RunDayWizard({
                           const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                           const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
                           const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "off");
-                          const swappedRouteSet = new Set(swaps.map((s) => s.route_truck));
+                          const swappedRouteSet = coveredRouteSet;
                           const oosRouteless = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(x.truck_number) && x.truck_number !== t.truck_number);
                           const otherTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) !== "off" && effectiveStatus(x, loadDay, holidayLoad) !== "oos");
                           return (
@@ -496,20 +526,27 @@ export default function RunDayWizard({
                 </div>
               )}
 
-              {swaps.length > 0 && (
+              {coverages.length > 0 && (
                 <div className="space-y-1">
-                  <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Current Assignments</p>
-                  {swaps.map((s) => (
-                    <div key={s.id} className="flex items-center justify-between gap-2 rounded-md border border-blue-900/50 bg-blue-950/20 px-3 py-2">
+                  <div className="flex items-center gap-2">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-400">Active Route Swaps</p>
+                    <span className="rounded-full bg-blue-800/60 px-2 py-0.5 text-[10px] font-bold text-blue-300">{coverages.length}</span>
+                  </div>
+                  {coverages.map((c) => (
+                    <div key={c.key} className="flex items-center justify-between gap-2 rounded-md border border-blue-900/50 bg-blue-950/20 px-3 py-2">
                       <span className="text-sm font-bold text-slate-200">
-                        Route <span className="text-red-400">#{s.route_truck}</span>
+                        Route <span className="text-red-400">#{c.route_truck}</span>
                         <span className="mx-1 text-slate-500">→</span>
-                        Load On <span className="text-blue-300">#{s.load_on_truck}</span>
+                        Load On <span className="text-blue-300">#{c.load_on_truck}</span>
                       </span>
                       <button
-                        className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-slate-700"
-                        disabled={deleteSwap.isPending}
-                        onClick={() => deleteSwap.mutate({ id: s.id, runDate, alsoReciprocal: false })}
+                        className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-slate-700 disabled:opacity-40"
+                        disabled={deleteSwap.isPending || returnSpare.isPending || (c.swapId == null && c.spareId == null)}
+                        onClick={() => {
+                          // Clear coverage from whichever mechanism(s) set it.
+                          if (c.swapId != null) deleteSwap.mutate({ id: c.swapId, runDate, alsoReciprocal: false });
+                          if (c.spareId != null) returnSpare.mutate(c.spareId);
+                        }}
                       >✕</button>
                     </div>
                   ))}
@@ -557,7 +594,7 @@ export default function RunDayWizard({
                         const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
                         const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off");
                         // OOS trucks whose route is already covered are routeless and available
-                        const swappedRouteSet = new Set(swaps.map((s) => s.route_truck));
+                        const swappedRouteSet = coveredRouteSet;
                         const oosRouteless = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(t.truck_number));
                         const oosUncovered = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swappedRouteSet.has(t.truck_number));
                         const otherTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
@@ -665,11 +702,6 @@ export default function RunDayWizard({
                   ))}
                 </div>
               )}
-              {specialTrucks.length !== editableSpecialTrucks.length && (
-                <p className="text-center text-xs text-amber-400">
-                  {specialTrucks.length - editableSpecialTrucks.length} truck(s) already moved in workflow and will be left alone.
-                </p>
-              )}
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(3)}>Back</button>
                 <button className="flex-1 btn-primary text-sm" disabled={upsert.isPending} onClick={saveAbsentAndAdvance}>Save & Continue</button>
@@ -682,11 +714,6 @@ export default function RunDayWizard({
           {step === 5 && (
             <div className="space-y-4">
               <p className="text-center text-xl font-extrabold text-slate-100">Add any notes about today.</p>
-              {workflowSkipped > 0 && (
-                <div className="rounded-md border border-amber-700/40 bg-amber-950/20 px-3 py-2 text-xs text-amber-200">
-                  Wizard override skipped {workflowSkipped} truck(s) because they were already touched by downstream workflow.
-                </div>
-              )}
               <textarea
                 className="input w-full resize-none text-sm"
                 rows={4}

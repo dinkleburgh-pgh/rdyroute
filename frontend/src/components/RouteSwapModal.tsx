@@ -7,11 +7,15 @@
  * Accessible from the sidebar "Route Swap" button.
  */
 import { useState, useMemo } from "react";
+import clsx from "clsx";
 import { todayIso } from "../api/client";
-import { useBoard, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useHolidayLoad, useRouteSwapLog } from "../api/hooks";
+import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useRouteSwapLog, useSettings, useUpsertSetting } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
-import type { TruckWithState, RouteSwap } from "../types";
+import { formatRunDate } from "../utils/dates";
+import type { TruckWithState, SpareAssignment, RecurringRouteSwap } from "../types";
+
+const DAY_ABBR = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
 // ---- component -------------------------------------------------------------
 
@@ -22,12 +26,13 @@ interface Props {
 export default function RouteSwapModal({ onClose }: Props) {
   const runDate = todayIso();
   const { data: board = [] } = useBoard(runDate);
-  const { data: swaps = [], isLoading: swapsLoading } = useRouteSwaps(runDate);
+  const { data: allSpareAssignments = [], isLoading: swapsLoading } = useSpareAssignments(runDate);
+  const swaps = useMemo(() => allSpareAssignments.filter((s) => !s.returned), [allSpareAssignments]);
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { loadDay } = workdayNumbers();
 
-  const createSwap = useCreateRouteSwap();
-  const deleteSwap = useDeleteRouteSwap();
+  const assignSpare = useAssignSpare();
+  const deleteSpare = useDeleteSpare();
   const { data: swapLog = [] } = useRouteSwapLog(60);
 
   // Per route_truck: ordered list of the last 2 distinct load_on_truck values used historically
@@ -54,16 +59,78 @@ export default function RouteSwapModal({ onClose }: Props) {
   const [error, setError] = useState<string | null>(null);
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
+  // Accordion: only one of Add swap / Recurring rules is open at a time.
+  const [openSection, setOpenSection] = useState<"add" | "recurring" | null>("add");
+  const toggleSection = (s: "add" | "recurring") =>
+    setOpenSection((prev) => (prev === s ? null : s));
+
+  // Recurring rules — stored in the `recurring_route_swaps` app setting.
+  const { data: settings = [] } = useSettings();
+  const upsertSetting = useUpsertSetting();
+  const recurringRules = useMemo<RecurringRouteSwap[]>(() => {
+    const row = settings.find((s) => s.key === "recurring_route_swaps");
+    return Array.isArray(row?.value) ? (row!.value as RecurringRouteSwap[]) : [];
+  }, [settings]);
+  const [ruleRoute, setRuleRoute] = useState("");
+  const [ruleLoadOn, setRuleLoadOn] = useState("");
+  const [ruleDays, setRuleDays] = useState<Set<number>>(new Set());
+  const [ruleError, setRuleError] = useState<string | null>(null);
+
+  async function saveRules(next: RecurringRouteSwap[]): Promise<boolean> {
+    setRuleError(null);
+    try {
+      await upsertSetting.mutateAsync({ key: "recurring_route_swaps", value: next });
+      return true;
+    } catch (e: unknown) {
+      const err = e as { response?: { status?: number; data?: { detail?: string } } };
+      setRuleError(
+        err?.response?.status === 403
+          ? "No permission to change recurring rules — needs an admin / fleet / supervisor account. NOT saved."
+          : (err?.response?.data?.detail ?? "Couldn't save recurring rules — they were not persisted. Try again."),
+      );
+      return false;
+    }
+  }
+  function toggleRuleDay(d: number) {
+    setRuleDays((prev) => {
+      const n = new Set(prev);
+      if (n.has(d)) n.delete(d); else n.add(d);
+      return n;
+    });
+  }
+  async function addRule() {
+    const rt = parseInt(ruleRoute, 10);
+    const lo = parseInt(ruleLoadOn, 10);
+    if (isNaN(rt) || isNaN(lo)) { setRuleError("Select both trucks."); return; }
+    if (rt === lo) { setRuleError("Route and Load On must be different."); return; }
+    if (ruleDays.size === 0) { setRuleError("Pick at least one day."); return; }
+    setRuleError(null);
+    const days = [...ruleDays].sort((a, b) => a - b);
+    // One rule per route truck — replace any existing rule for the same route.
+    const next = [
+      ...recurringRules.filter((r) => r.route_truck !== rt),
+      { route_truck: rt, load_on_truck: lo, days },
+    ];
+    // Only clear the form once the rule is actually persisted — otherwise a
+    // failed save would silently lose the entry ("getting removed").
+    if (await saveRules(next)) {
+      setRuleRoute(""); setRuleLoadOn(""); setRuleDays(new Set());
+    }
+  }
+  function removeRule(idx: number) {
+    void saveRules(recurringRules.filter((_, i) => i !== idx));
+  }
+
   // Sets for quick lookups
-  const swapRouteSet = new Set(swaps.map((s) => s.route_truck));
-  const swapLoadOnSet = new Set(swaps.map((s) => s.load_on_truck));
+  const swapRouteSet = new Set(swaps.map((s) => s.covering_route_truck));
+  const swapLoadOnSet = new Set(swaps.map((s) => s.spare_truck_number));
 
   // OOS trucks with no swap yet — shown as prefill rows.
   // Only include trucks that actually run on the load day (not scheduled off).
   const unswappedOos = [...board]
     .filter((t) =>
       t.truck_type !== "Spare" &&
-      effectiveStatus(t, loadDay, holidayLoad) === "oos" &&
+      (t.is_oos || effectiveStatus(t, loadDay, holidayLoad) === "oos") &&
       !swapRouteSet.has(t.truck_number) &&
       (holidayLoad || !isScheduledOff(t, loadDay)),
     )
@@ -71,7 +138,7 @@ export default function RouteSwapModal({ onClose }: Props) {
 
   async function addOosSwap(routeTruckNum: number, loadOnTruckNum: number) {
     try {
-      await createSwap.mutateAsync({ run_date: runDate, route_truck: routeTruckNum, load_on_truck: loadOnTruckNum, two_way: false });
+      await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: loadOnTruckNum, covering_route_truck: routeTruckNum });
       setOosLoadOns((prev) => { const n = { ...prev }; delete n[routeTruckNum]; return n; });
     } catch (err: unknown) {
       console.error("OOS swap save failed", err);
@@ -186,7 +253,7 @@ export default function RouteSwapModal({ onClose }: Props) {
     if (rt === lo) { setError("Route truck and load-on truck must be different."); return; }
     setError(null);
     try {
-      await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, two_way: false });
+      await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: lo, covering_route_truck: rt });
       setRouteTruck("");
       setLoadOnTruck("");
     } catch (err: unknown) {
@@ -195,8 +262,8 @@ export default function RouteSwapModal({ onClose }: Props) {
     }
   }
 
-  function handleDelete(s: RouteSwap) {
-    deleteSwap.mutate({ id: s.id, runDate, alsoReciprocal: false });
+  function handleDelete(s: SpareAssignment) {
+    deleteSpare.mutate(s.id);
   }
 
   return (
@@ -213,7 +280,7 @@ export default function RouteSwapModal({ onClose }: Props) {
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <div>
             <h2 className="text-base font-bold text-slate-100">Route Swaps</h2>
-            <p className="text-xs text-slate-400">{runDate}</p>
+            <p className="text-xs text-slate-400">{formatRunDate(runDate)}</p>
           </div>
           <button
             className="rounded p-1 text-slate-500 hover:text-slate-200"
@@ -226,40 +293,42 @@ export default function RouteSwapModal({ onClose }: Props) {
 
         {/* Body */}
         <div className="flex-1 space-y-4 overflow-y-auto p-5">
+          {/* Needs Assignment — OOS routes with no covering truck yet */}
+          {unswappedOos.length > 0 && (
+            <section className="rounded-lg border border-amber-700/50 bg-amber-950/20 p-4 space-y-2">
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-400">Needs Assignment</p>
+                <span className="rounded-full bg-amber-700/50 px-2 py-0.5 text-[10px] font-bold text-amber-300">{unswappedOos.length}</span>
+              </div>
+              {unswappedOos.map((t) => (
+                <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-slate-900/60 px-3 py-2">
+                  <span className="whitespace-nowrap text-sm font-black text-amber-300">
+                    #{t.truck_number} <span className="text-[10px] font-semibold text-amber-500">OOS</span>
+                  </span>
+                  <span className="text-sm text-slate-500">→</span>
+                  <select
+                    className="input flex-1 text-sm"
+                    value={oosLoadOns[t.truck_number] ?? ""}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setOosLoadOns((prev) => ({ ...prev, [t.truck_number]: val }));
+                      if (val) addOosSwap(t.truck_number, parseInt(val));
+                    }}
+                  >
+                    <option value="">— Assign truck —</option>
+                    <LoadOnOptions forRoute={t.truck_number} />
+                  </select>
+                </div>
+              ))}
+            </section>
+          )}
+
           {/* Current swaps */}
           <section>
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
               Active swaps {swaps.length > 0 && <span className="ml-1 rounded-full bg-blue-800/60 px-2 py-0.5 text-blue-300">{swaps.length}</span>}
             </p>
 
-            {/* OOS prefill rows */}
-            {unswappedOos.length > 0 && (
-              <div className="mb-3 space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-amber-500">
-                  OOS — Select covering truck
-                </p>
-                {unswappedOos.map((t) => (
-                  <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/50 bg-amber-950/20 px-3 py-2">
-                    <span className="whitespace-nowrap text-sm font-bold text-amber-300">
-                      #{t.truck_number} <span className="text-[10px] font-semibold text-amber-500">OOS</span>
-                    </span>
-                    <span className="text-sm text-slate-500">→</span>
-                    <select
-                      className="input flex-1 text-sm"
-                      value={oosLoadOns[t.truck_number] ?? ""}
-                      onChange={(e) => {
-                        const val = e.target.value;
-                        setOosLoadOns((prev) => ({ ...prev, [t.truck_number]: val }));
-                        if (val) addOosSwap(t.truck_number, parseInt(val));
-                      }}
-                    >
-                      <option value="">— Load on —</option>
-                      <LoadOnOptions forRoute={t.truck_number} />
-                    </select>
-                  </div>
-                ))}
-              </div>
-            )}
             {swapsLoading ? (
               <p className="text-sm text-slate-500">Loading…</p>
             ) : swaps.length === 0 ? (
@@ -274,14 +343,14 @@ export default function RouteSwapModal({ onClose }: Props) {
                     className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
-                      <span className="text-xl font-black text-red-400">#{s.route_truck}</span>
+                      <span className="text-xl font-black text-red-400">#{s.covering_route_truck}</span>
                       <span className="text-base font-bold text-slate-500">→</span>
-                      <span className="text-xl font-black text-blue-300">#{s.load_on_truck}</span>
-                      <span className="text-xs text-slate-500">loads route</span>
+                      <span className="text-xl font-black text-blue-300">#{s.spare_truck_number}</span>
+                      <span className="text-xs text-slate-500">covers route</span>
                     </div>
                     <button
                       className="rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
-                      disabled={deleteSwap.isPending}
+                      disabled={deleteSpare.isPending}
                       onClick={() => handleDelete(s)}
                     >
                       Remove
@@ -293,15 +362,24 @@ export default function RouteSwapModal({ onClose }: Props) {
           </section>
 
           {/* Add swap form */}
-          <section className="rounded-lg border border-slate-700 bg-slate-800/40 p-4 space-y-3">
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-300">Add swap</p>
-
-            <div className="grid grid-cols-2 gap-3">
+          <section className="overflow-hidden rounded-lg border border-sky-800/50 bg-sky-950/20">
+            <button
+              type="button"
+              onClick={() => toggleSection("add")}
+              aria-expanded={openSection === "add"}
+              className="flex w-full items-center justify-between px-4 py-3 text-left transition-colors hover:bg-sky-900/20"
+            >
+              <span className="text-xs font-semibold uppercase tracking-wide text-sky-300">Add swap</span>
+              <span className={clsx("text-sky-400/70 transition-transform", openSection === "add" && "rotate-90")}>▸</span>
+            </button>
+            {openSection === "add" && (
+            <div className="space-y-3 px-4 pb-4">
+            <div className="grid grid-cols-2 items-end gap-3">
               {/* Route Truck selector */}
               <div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-400/80">
                   Route Truck
-                  <span className="ml-1 normal-case font-normal text-slate-500">(whose route?)</span>
+                  <span className="ml-1 hidden normal-case font-normal text-slate-500 sm:inline">(whose route?)</span>
                 </label>
                 <select
                   className="input w-full text-sm"
@@ -335,9 +413,9 @@ export default function RouteSwapModal({ onClose }: Props) {
 
               {/* Load On selector */}
               <div>
-                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-slate-400">
+                <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-400/80">
                   Load On
-                  <span className="ml-1 normal-case font-normal text-slate-500">(who loads it?)</span>
+                  <span className="ml-1 hidden normal-case font-normal text-slate-500 sm:inline">(who loads it?)</span>
                 </label>
                 <select
                   className="input w-full text-sm"
@@ -358,11 +436,125 @@ export default function RouteSwapModal({ onClose }: Props) {
 
             <button
               className="btn-primary w-full"
-              disabled={!routeTruck || !loadOnTruck || createSwap.isPending}
+              disabled={!routeTruck || !loadOnTruck || assignSpare.isPending}
               onClick={handleAdd}
             >
-              {createSwap.isPending ? "Saving…" : "Add Swap"}
+              {assignSpare.isPending ? "Saving…" : "Add Swap"}
             </button>
+            </div>
+            )}
+          </section>
+
+          {/* Recurring rules */}
+          <section className="overflow-hidden rounded-lg border border-violet-800/50 bg-violet-950/20">
+            <button
+              type="button"
+              onClick={() => toggleSection("recurring")}
+              aria-expanded={openSection === "recurring"}
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-violet-900/20"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-violet-300">Recurring rules</span>
+                {recurringRules.length > 0 && (
+                  <span className="rounded-full bg-violet-700/50 px-2 py-0.5 text-[10px] font-bold text-violet-200">{recurringRules.length}</span>
+                )}
+              </span>
+              <span className={clsx("text-violet-400/70 transition-transform", openSection === "recurring" && "rotate-90")}>▸</span>
+            </button>
+            {openSection === "recurring" && (
+            <div className="space-y-3 px-4 pb-4">
+            <p className="text-[11px] text-slate-500">Applied automatically when the board is set up for a matching load day.</p>
+
+            {recurringRules.length > 0 ? (
+              <div className="space-y-1.5">
+                {recurringRules.map((rule, idx) => (
+                  <div key={`${rule.route_truck}-${idx}`} className="flex items-center gap-2 rounded-lg border border-violet-800/40 bg-slate-900/60 px-3 py-2">
+                    <span className="text-base font-black text-violet-300">{rule.route_truck}</span>
+                    <span className="text-sm font-bold text-slate-500">→</span>
+                    <span className="text-base font-black text-slate-100">{rule.load_on_truck}</span>
+                    <span className="ml-2 flex flex-wrap gap-1">
+                      {[1, 2, 3, 4, 5].map((d) => (
+                        <span
+                          key={d}
+                          className={
+                            rule.days.includes(d)
+                              ? "rounded bg-violet-500 px-1.5 py-0.5 text-[10px] font-semibold text-white"
+                              : "px-1.5 py-0.5 text-[10px] text-slate-600"
+                          }
+                        >
+                          {DAY_ABBR[d][0]}
+                        </span>
+                      ))}
+                    </span>
+                    <button
+                      className="ml-auto rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                      disabled={upsertSetting.isPending}
+                      onClick={() => removeRule(idx)}
+                      aria-label="Remove rule"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="rounded-md border border-violet-800/30 bg-slate-800/50 px-4 py-3 text-center text-xs text-slate-500">
+                No recurring rules.
+              </p>
+            )}
+
+            {/* Add rule form */}
+            <div className="space-y-2 rounded-lg border border-violet-800/30 bg-slate-900/40 p-3">
+              <div className="grid grid-cols-2 items-end gap-3">
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-violet-400/80">Route</label>
+                  <select className="input w-full text-sm" value={ruleRoute} onChange={(e) => { setRuleRoute(e.target.value); setRuleError(null); }}>
+                    <option value="">— select —</option>
+                    {sorted.filter((t) => t.truck_type !== "Spare").map((t) => (
+                      <option key={t.truck_number} value={t.truck_number}>#{t.truck_number}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-violet-400/80">Load On</label>
+                  <select className="input w-full text-sm" value={ruleLoadOn} onChange={(e) => { setRuleLoadOn(e.target.value); setRuleError(null); }}>
+                    <option value="">— select —</option>
+                    {sorted.map((t) => (
+                      <option key={t.truck_number} value={t.truck_number}>#{t.truck_number}{t.truck_type === "Spare" ? " — Spare" : ""}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <span className="mr-1 text-[11px] text-slate-500">Days:</span>
+                {[1, 2, 3, 4, 5].map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    onClick={() => toggleRuleDay(d)}
+                    className={
+                      ruleDays.has(d)
+                        ? "rounded-md bg-violet-500 px-2.5 py-1 text-xs font-semibold text-white"
+                        : "rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                    }
+                  >
+                    {DAY_ABBR[d]}
+                  </button>
+                ))}
+              </div>
+              {ruleError && (
+                <p className="rounded-md border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">{ruleError}</p>
+              )}
+              <button
+                className="w-full rounded-lg bg-violet-700 px-4 py-2 text-sm font-semibold text-white hover:bg-violet-600 disabled:opacity-40"
+                disabled={!ruleRoute || !ruleLoadOn || ruleDays.size === 0 || upsertSetting.isPending}
+                onClick={addRule}
+              >
+                {upsertSetting.isPending ? "Saving…" : "Add rule"}
+              </button>
+            </div>
+            </div>
+            )}
           </section>
         </div>
 

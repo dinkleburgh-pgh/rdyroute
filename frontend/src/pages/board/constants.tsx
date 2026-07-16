@@ -60,6 +60,18 @@ export const FLEET_RAIL_STATUSES: TruckStatus[] = [
   "oos",
 ];
 
+// Truck-TYPE filters offered in the fleet filter dropdown alongside the statuses
+// (filter the board to just Uniform or just Dust route trucks).
+export const FLEET_TYPE_FILTERS = ["Uniform", "Dust"] as const;
+export type FleetTypeFilter = (typeof FLEET_TYPE_FILTERS)[number];
+export const FLEET_TYPE_FILTER_BG: Record<FleetTypeFilter, string> = {
+  Uniform: "bg-indigo-500",
+  Dust: "bg-amber-500",
+};
+
+// A fleet filter value is "all", a truck status, or a truck-type filter.
+export type FleetFilterValue = TruckStatus | "all" | FleetTypeFilter;
+
 export const DAY_LABELS: Record<number, string> = {
   1: "Mon",
   2: "Tue",

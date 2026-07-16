@@ -8,6 +8,88 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Unreleased] — 2026-06-27
+
+### Added
+- **Sidebar brand header** — a ReadyRoute icon + name + build number at the top of the sidebar (build number from `__APP_VERSION__`).
+- **Offline-first** — the app now works without a connection after one online load. Reads: the React Query cache is persisted to IndexedDB (`api/queryPersist.ts`), hydrated before first render (`main.tsx`), and served offline (`networkMode: "offlineFirst"`, 24h `gcTime`) so every page renders last-known data. Writes: a single axios interceptor (`api/client.ts`) queues any mutation that fails with a network error and resolves it as success; `useOfflineSync` replays the whole queue in order on reconnect (last-write-wins, discards 4xx). Generalizes the previous shortage-only queue to all mutations; auth/update/export endpoints are excluded. Repeated `PUT`/`PATCH` to the same endpoint coalesce so replay skips stale intermediate states, and rejected (4xx) replays raise a "couldn't be synced" toast. Pairs with the existing service worker (app shell) and offline indicator. (Tablets must load once online to warm the cache.)
+- **Recurring route-swap rules** — define coverage that repeats on chosen load days (e.g. "route 4 loads on 70 every Fri") in the Route Swap tool. Stored in the `recurring_route_swaps` app setting and **auto-applied** when each matching day's board is initialized (`apply_recurring_swaps` in `routers/spares.py`, called from `_ensure_day_initialized`). Creates the same `SpareAssignment` coverage as a manual swap, so it flows through Load, next-day Unload, and all coverage displays. Idempotent — never clobbers a manual swap.
+- **Load "Coverage today" notice** — a collapsible banner at the top of the Load page listing each active coverage as `route → loads on → truck`, with a `recurring` tag on auto-applied ones, so loaders know which route's freight goes on which truck.
+- **Verify Short Sheet — holiday mode** — a Holiday toggle adds a second-day selector and expands the sheet to the full 38 routes: main-day routes plus the routes off the main day (which run the second day). Each card shows a day tag.
+
+### Changed
+- **Wearers cap** — the per-batch wearer cap default is raised 400 → 1800 and is now configurable via a new "Wearers cap" number setting in Management → Operations (`wearer_cap`). Backend enforcement and the batch UI both read it. The "No wearer cap" toggle now also bypasses the cap server-side (it was previously frontend-only).
+- **Coverage card — paired headline** — a covering truck's card now leads with `route → truck` (e.g. `4 → 17`, route number first) instead of the tiny `→ Cov.` pill, so the coverage is legible. The covered route's card keeps a compact `← Cov. #X` badge.
+- **Mobile bottom nav** — bottom bar is now Fleet Sch. · Audit · Communications · Short Sheet; Management moved into the "More" menu.
+- **Run Day holiday load label** — now reads `Day N + N+1` (load gets ahead on the next ship day) to match the sidebar/board; unload keeps `Day N-1 + N` (catching up on the previous day).
+- **Snappier card animations** — `AnimateCard` entrance shortened (0.35s→0.14s, smaller rise) and the stagger delay hard-capped, so boards load and re-render far faster; honors OS reduce-motion.
+- **Setup wizard counts** — load/unload route counts now include OOS routes (a covered OOS route still runs), fixing e.g. 27 → 28 for Friday.
+- **Route Swap tool** — Route/Load-On dropdowns align evenly on mobile (hint text drops on small screens).
+
+### Fixed
+- **Inline shortage item buttons animation-looping** on the in-progress page — `ItemGrid` was defined inside `HierarchyPicker`, so it got a new component identity every render and remounted the buttons (replaying their entrance fade endlessly on each board refetch/WS tick). Hoisted it to module level.
+- **Unload progress could exceed total** (e.g. 29/28) — numerator now counts "done" from the same context as the denominator, so a spare covering an off-day route can't push it over.
+- **Dirty-page card badges overflowing** — coverage badges compacted and the card columns constrained so chips stay inside the card.
+- **Duplicate "Arrived" marker on the fleet board** (desktop) — the top badge is now hidden where the bottom action row already shows it; same guard applied to the Outside / Paper Bay markers.
+
+---
+
+## [Unreleased] — 2026-06-26
+
+### Added
+- **Production Mirror Sync — authentication** — the dev "Sync from live production" tool now logs into production with configured admin credentials (`PRODUCTION_SYNC_USERNAME` / `PRODUCTION_SYNC_PASSWORD`), minting a fresh JWT per run and sending it as a Bearer token to the admin-protected export endpoints. Fixes the `401 Unauthorized` on `backup.zip`.
+- **Production Mirror Sync — private LAN access** — the loopback hard-block now also accepts RFC1918 private addresses (`192.168.x.x`, `10.x.x.x`, `172.16–31.x.x`) on both the frontend gate and the backend, so the dev tool can be reached from another device on the LAN. Public hostnames (e.g. `rdyroute.app`) remain blocked.
+- **"Covered by" badge** — a covered route truck's card now shows an amber `← Covered by #X` badge (reverse of the covering truck's `→ Cov. #X`), so swapped/covered cards are no longer blank.
+
+### Changed
+- **Unload / Load denominator = fleet schedule running count** — progress denominators now equal the concrete number of routes scheduled to run that day (non-spare trucks not scheduled off). Route swaps no longer add or remove from the count — a scheduled route always runs (covered when needed). Only a Spare physically taking over a route removes it. Applied consistently across the sidebar, Load page, RunDay, and LiveInProgress.
+- **Sidebar Spare count** — now counts every available (non-OOS) spare, including idle spares sitting unloaded, instead of only spares actively covering an OOS route.
+- **Fleet board number colour** — the big truck number is greyed out for trucks off the **load** day (done for tomorrow); **U Off** trucks (off only the unload day) keep their real workflow-status colour.
+- **OOS → unloaded** — marking a truck OOS now moves its daily status straight to `unloaded` so its route counts as done on the unload board (the `is_oos` flag is kept; the board still shows it as OOS). Dev stand-in for a future "notice to unload it" flow.
+
+### Fixed
+- **Route-swap denominator undercount** — swapping a route between two scheduled trucks no longer drops either route from the unload/load totals (was subtracting covered routes, e.g. showing 29 instead of 33).
+
+---
+
+## [Unreleased] — 2026-06-25
+
+### Added
+- **ToolFab** — single draggable wrench FAB replaces individual FAB buttons. Clicking opens a speed-dial wheel with enabled tools (Calculator, Notes, Fleet Schedule) arranged in a rotational arc. Position saved per-user.
+- **Calculator FAB** — full-featured workflow calculator with 50%/80% buttons, pack↔piece conversion for 5 hardcoded items, calculation tape/memory, "Use" button to copy result. Full-screen on mobile.
+- **Calendar FAB** — opens Fleet Schedule in a floating drawer. Compact mode shows only Route + Load + Unload day columns on mobile; clickable bouncing arrow expands to all 5 days.
+- **NoteCardsDrawer "Reminders" tab** — shows yesterday's unreturned spares, today's active spares, route swaps, and routes off today.
+- **Personal notes with sections** — My Notes tab now supports add/remove titled sections with auto-resizing textareas, stored as JSON.
+- **Items management** — Items is now its own management card with a "Configure Items" tab. Pack unit labels and per-unit piece counts are editable. Five default items (Terrys/Grids, White Micros, Red Shops, Black Aprons, White Aprons) with bag sizes ship as defaults.
+- **Trends expansion** — new ShortageKpiSection, QualityRateCard, trend direction badges on all chart cards, enhanced TrendDetail pages with summary KPIs, new backend shortage summary and quality rate endpoints.
+- **Operations settings** — Calculator FAB toggle, Calendar FAB toggle, "Assume all trucks unloaded by next start day" setting all in Settings → Workflows.
+- **Notices moved to Communications card** in Settings — frees up space for the standalone Items card.
+- **Draggable FABs** — pointer-event-based drag wrapper saves position per user to localStorage. FABs stay above overlays (z-[70]).
+- **Persistent collapse state** — Board collapsible sections (unloaded/dirty/oos/spare views) persist their open/closed state in localStorage.
+
+### Changed
+- **Login page** — removed "Continue as Guest" button; guest sessions are ephemeral (never persisted to localStorage). Sidebar shows "Login" for guest users instead of "Logout".
+- **Items panel redesign** — compact pill layout with Bag/Case toggle per item. Click label to edit name/bag amount. Trash2 icon for delete (hover only).
+- **Board "Needs Checked"** — trucks with `needs_checked=true` now only appear in the "Needs Checked" section, excluded from Dirty/Unfinished/Coverage sections (fixes double-counting).
+- **Effective status** — permanently OOS trucks with raw "dirty" status and no coverage truck now fall through to their raw status instead of "oos", so they appear in the dirty workflow.
+- **System events** — Setup Day and setup truck events are attributed to "System" actor instead of the admin user who triggered them.
+
+### Fixed
+- **Dirty count discrepancy** — sidebar and Board dirty counts now match (was off by 3 for permanently OOS trucks with raw dirty status). Removed the frontend "off yesterday → unloaded" rule (backend auto-seed already handles this correctly with proper `used_yesterday` data). Removed `coveredRouteNumbers` skip so covered route trucks count with their own status.
+- **Trend polarity** — trend status labels now correctly reflect that fewer removals = improvement. Down trend = "Improving", up trend = "Critical".
+- **Calculator "C" button** — clears display + tape history.
+- **Notes drawer height** — fixed height prevents header jumping when switching tabs.
+- **FAB z-index** — FABs raised to z-[70] so clicking an open FAB closes its panel.
+- **Fleet Schedule vertical scroll** — fixed overflow-hidden preventing scroll.
+- **Weekend freeze** (from previous session) — workdayNumbers Sat/Sun freeze to Friday.
+
+### Removed
+- **Off-yesterday→unloaded rule** — frontend `effectiveStatus` no longer overrides "dirty" to "unloaded" for trucks that were off the previous workday. The backend auto-seed in `_ensure_day_initialized` already handles this with correct `used_yesterday` context.
+- **`coveredRouteNumbers` skip** — `buildRouteStatusCounts` no longer excludes covered route trucks; they count with their own status.
+- **Guest login option** — removed "Continue as Guest" from login page (hidden behind setting re-add).
+
+---
+
 ## [Unreleased] — 2026-06-16
 
 ### Changed

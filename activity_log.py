@@ -165,9 +165,11 @@ def append_truck_state_activity(
     if before_snapshot is not None and diff["field_count"] == 0:
         return None
     family = event_family or ("setup" if after_state.state_source == "wizard" else "state")
+    # Setup/wizard events are system actions, not attributed to a specific user
+    setup_actor = None if family == "setup" else actor_user
     return append_activity_event(
         db,
-        actor_user=actor_user,
+        actor_user=setup_actor,
         event_family=family,
         event_type=event_type,
         run_date=after_state.run_date,

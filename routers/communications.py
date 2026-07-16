@@ -15,7 +15,8 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import AppSetting, AuthRole, CommunicationMessage
+from models import AppSetting, AuthRole, CommunicationMessage, User
+from routers.auth import get_current_user
 from schemas import MessageCreate, MessageOut
 
 router = APIRouter(prefix="/communications", tags=["communications"])
@@ -33,6 +34,7 @@ def list_messages(
     channel: str = Query(default="Team"),
     include_deleted: bool = Query(default=False),
     limit: int = Query(default=_MAX_MESSAGES, ge=1, le=1000),
+    _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     q = (
@@ -53,13 +55,13 @@ def list_messages(
 # ---------------------------------------------------------------------------
 
 @router.post("/messages", response_model=MessageOut, status_code=status.HTTP_201_CREATED)
-def send_message(payload: MessageCreate, db: Session = Depends(get_db)):
+def send_message(payload: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     censored_text = _apply_censor(payload.message, db)
     msg = CommunicationMessage(
         id=uuid.uuid4().hex,
         channel=payload.channel,
-        username=payload.username,
-        sender_role=payload.sender_role,
+        username=current_user.username,
+        sender_role=current_user.role.value,
         message=censored_text,
         sent_ts=time.time(),
     )
@@ -76,8 +78,7 @@ def send_message(payload: MessageCreate, db: Session = Depends(get_db)):
 @router.delete("/messages/{message_id}", status_code=status.HTTP_204_NO_CONTENT)
 def delete_message(
     message_id: str,
-    actor_username: str = Query(...),
-    actor_role: str = Query(...),
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     msg = db.get(CommunicationMessage, message_id)
@@ -85,8 +86,8 @@ def delete_message(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Message not found")
 
     # Non-admins can only delete their own messages
-    is_admin = actor_role in (AuthRole.admin.value, AuthRole.fleet.value, AuthRole.atl.value, AuthRole.supervisor.value, AuthRole.lead.value)
-    if not is_admin and msg.username != actor_username:
+    is_admin = current_user.role.value in (AuthRole.admin.value, AuthRole.fleet.value, AuthRole.atl.value, AuthRole.supervisor.value, AuthRole.lead.value)
+    if not is_admin and msg.username != current_user.username:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot delete another user's message")
 
     msg.is_deleted = True
@@ -104,7 +105,7 @@ def _load_custom_words(db: Session) -> None:
 
 
 @router.get("/censor-words", response_model=list[str])
-def get_censor_words(db: Session = Depends(get_db)):
+def get_censor_words(_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Return custom-added words for management UI."""
     setting = db.get(AppSetting, _CENSOR_WORDS_KEY)
     if setting is None or not isinstance(setting.value, list):
@@ -113,7 +114,7 @@ def get_censor_words(db: Session = Depends(get_db)):
 
 
 @router.put("/censor-words", response_model=list[str])
-def update_censor_words(words: list[str], db: Session = Depends(get_db)):
+def update_censor_words(words: list[str], _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     cleaned = sorted({w.lower().strip() for w in words if w.strip()})
     setting = db.get(AppSetting, _CENSOR_WORDS_KEY)
     if setting is None:

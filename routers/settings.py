@@ -15,11 +15,13 @@ from sqlalchemy.orm import Session
 
 from activity_log import append_activity_event
 from database import get_db
-from models import AppSetting, User
+from models import AppSetting, AuthRole, User
 from routers.auth import get_current_user, require_admin
 from schemas import SettingOut, SettingUpsert
 
 router = APIRouter(prefix="/settings", tags=["settings"])
+
+_ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
 
 # ---------------------------------------------------------------------------
 # Well-known setting keys (informational; not enforced at the API boundary)
@@ -33,6 +35,9 @@ KNOWN_KEYS = {
     "arrived_tracking_enabled",
     "note_cards_enabled",
     "tracked_items_map",
+    "calculator_fab_enabled",
+    "calendar_fab_enabled",
+    "force_unloaded_on_new_day",
     "communications_censor_words",
     "ollama_base_url",
     "shortage_sheet_ollama_model",
@@ -65,6 +70,9 @@ _USER_READABLE_KEYS = {
     "arrived_tracking_enabled",
     "note_cards_enabled",
     "tracked_items_map",
+    "calculator_fab_enabled",
+    "calendar_fab_enabled",
+    "force_unloaded_on_new_day",
 }
 
 # Keys any authenticated user may write to (e.g. personal notes)
@@ -155,8 +163,6 @@ def list_settings(
     current_user: User = Depends(get_current_user),
 ):
     all_settings = db.scalars(select(AppSetting).order_by(AppSetting.key)).all()
-    from models import AuthRole
-    _ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
     if current_user.role in _ADMIN_ROLES:
         return all_settings
     # Non-admins only see the user-readable subset
@@ -173,8 +179,6 @@ def get_setting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from models import AuthRole
-    _ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
     if current_user.role not in _ADMIN_ROLES:
         if key not in _USER_READABLE_KEYS and not _is_user_writable(key, current_user):
             raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
@@ -198,8 +202,6 @@ def upsert_setting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from models import AuthRole
-    _ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
     if current_user.role not in _ADMIN_ROLES and not _is_user_writable(key, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     setting = db.get(AppSetting, key)
@@ -211,9 +213,10 @@ def upsert_setting(
         setting.value = payload.value
     activity_payload = _setting_activity_payload(key, before_value, payload.value)
     if activity_payload is not None and before_value != payload.value:
+        is_setup = activity_payload.get("event_family") == "setup"
         append_activity_event(
             db,
-            actor_user=current_user,
+            actor_user=None if is_setup else current_user,
             event_family=str(activity_payload["event_family"]),
             event_type=str(activity_payload["event_type"]),
             run_date=activity_payload.get("run_date"),

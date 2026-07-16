@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import Batch, BatchHistory, TruckState, TruckStateSource, TruckStatus, User
+from models import AppSetting, Batch, BatchHistory, TruckState, TruckStateSource, TruckStatus, User
 from routers.auth import get_current_user
 from schemas import BatchAssign, BatchHistoryCreate, BatchHistoryOut, BatchOut, BatchSummary, BatchTruck
 from ws_manager import manager
@@ -26,8 +26,22 @@ from ws_manager import manager
 router = APIRouter(prefix="/batches", tags=["batches"])
 
 _MAX_BATCHES = 6
-# V1 BATCH_CAP — total wearers across all trucks in a single batch may not exceed this.
-_BATCH_WEARER_CAP = 400
+# Default total wearers allowed across all trucks in a single batch. Overridable
+# via the `wearer_cap` app setting (Management → Operations).
+_DEFAULT_WEARER_CAP = 1800
+
+
+def _wearer_cap(db: Session) -> int:
+    """The configured per-batch wearer cap, or the default if unset/invalid."""
+    setting = db.get(AppSetting, "wearer_cap")
+    if setting is not None:
+        try:
+            value = int(setting.value)  # type: ignore[arg-type]
+            if value > 0:
+                return value
+        except (TypeError, ValueError):
+            pass
+    return _DEFAULT_WEARER_CAP
 
 
 # ---------------------------------------------------------------------------
@@ -116,11 +130,14 @@ def assign_truck_to_batch(
             Batch.batch_number == payload.batch_number,
         )
     ) or 0
-    if current_total + payload.wearers > _BATCH_WEARER_CAP:
+    no_cap_setting = db.get(AppSetting, "batch_no_cap")
+    no_cap = no_cap_setting is not None and no_cap_setting.value is True
+    cap = _wearer_cap(db)
+    if not no_cap and current_total + payload.wearers > cap:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
-                f"Batch {payload.batch_number} cap of {_BATCH_WEARER_CAP} wearers exceeded "
+                f"Batch {payload.batch_number} cap of {cap} wearers exceeded "
                 f"(current {current_total} + new {payload.wearers})."
             ),
         )

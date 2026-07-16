@@ -4,7 +4,7 @@
 # Stage 1: build static assets
 # Stage 2: serve them with nginx + proxy /api to the backend service
 # ---------------------------------------------------------------------------
-FROM node:20-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 
 # Build-time metadata — passed from CI or docker build --build-arg
@@ -32,7 +32,7 @@ RUN set -eu; \
       "$VERSION" "$GIT_COMMIT" "$BUILD_DATE_FINAL" > dist/build-info.json
 
 # ---------------------------------------------------------------------------
-FROM nginx:1.27-alpine AS runtime
+FROM nginx:1.30-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY docker-startup.sh /docker-startup.sh

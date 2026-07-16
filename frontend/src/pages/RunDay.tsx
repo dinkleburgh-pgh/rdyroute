@@ -1,7 +1,6 @@
-import { useMemo, useState, useEffect } from "react";
-import { useSearchParams } from "react-router-dom";
+import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { Clock, Calendar, Check } from "lucide-react";
+import { Clock, Calendar, Check, ArrowLeftRight } from "lucide-react";
 import {
   useBoard,
   useDailyNotes,
@@ -12,22 +11,27 @@ import {
   useLoadDayOverride,
   useUnloadsDayOverride,
   useTruckNotes,
+  useOpenSpareAssignments,
+  useRouteSwapLog,
+  useSettings,
 } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckNote, TruckStatus, TruckWithState } from "../types";
 import {
+  buildHistoricalCoverageFallback,
   buildOperationalDayContext,
+  buildPrevDayCoverage,
   countLoaded,
-  countUnloadedFromContext,
   effectiveOperationalStatus,
   effectiveStatus,
   isScheduledOff,
+  previousWorkday,
 } from "../utils/truckStatus";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
+import { formatRunDate } from "../utils/dates";
 import TruckCard from "./runday/TruckCard";
-import RunDayWizard from "./runday/RunDayWizard";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
@@ -67,21 +71,12 @@ export default function RunDay() {
   const loadDay    = loadDayOverride    ?? computedLoadDay;
   const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
 
-  const [wizardOpen, setWizardOpen] = useState(false);
   const [unloadCollapsed, setUnloadCollapsed] = useState(
     () => localStorage.getItem("runday:unloadCollapsed") === "1",
   );
   const [loadCollapsed, setLoadCollapsed] = useState(
     () => localStorage.getItem("runday:loadCollapsed") === "1",
   );
-  const [searchParams, setSearchParams] = useSearchParams();
-  useEffect(() => {
-    if (searchParams.get("setup") === "1") {
-      setWizardOpen(true);
-      setSearchParams({}, { replace: true });
-    }
-  }, [searchParams, setSearchParams]);
-
   // Shift notes — visible inline on the main page, editable by supervisors+
   const { user } = useAuth();
   const canEditNotes = ["admin", "fleet", "supervisor", "lead", "atl"].includes(user?.role ?? "");
@@ -89,6 +84,54 @@ export default function RunDay() {
   const setDailyNotesMutation = useSetDailyNotes();
   const [notesEditing, setNotesEditing] = useState(false);
   const [notesDraft, setNotesDraft] = useState("");
+  // Shift Notes can be toggled off in Operations settings (default on).
+  const { data: settings = [] } = useSettings();
+  const shiftNotesEnabled = settings.find((s) => s.key === "shift_notes_enabled")?.value !== false;
+
+  const { data: swapLog = [] } = useRouteSwapLog(60);
+  const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
+
+  // Map from route truck number → the truck covering its route today.
+  // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
+  // non-spare trucks assigned via a route swap.  Spares are hidden from the
+  // grid; non-spare covering trucks still render their own card.
+  //
+  // Also folds in the read-only historical fallback: an is_oos route truck
+  // with no LIVE coverage today (nobody has re-confirmed the swap yet this
+  // shift) is still represented by whoever covered it most recently, per the
+  // route-swap log — it didn't suddenly become dirty just because today's
+  // coverage record lapsed. Matches Board.tsx/the sidebar so all three agree.
+  const coveringTruckMap = useMemo(() => {
+    const boardByNum = new Map(board.map((t) => [t.truck_number, t]));
+    const m = new Map<number, TruckWithState>(
+      board
+        .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
+        .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
+    );
+    const fallback = buildHistoricalCoverageFallback(board, openSpareAssignments, swapLog, runDate);
+    for (const [route, truckNum] of fallback) {
+      if (m.has(route)) continue;
+      const cover = boardByNum.get(truckNum);
+      if (cover) m.set(route, cover);
+    }
+    return m;
+  }, [board, swapLog, openSpareAssignments, runDate]);
+
+  // The status a card actually displays, used for sorting so the order matches
+  // the visible badge:
+  //  - an OOS route that's covered reflects its covering truck's status, and
+  //  - an "off" truck that physically came back dirty/unloaded shows that
+  //    underlying badge (a dirty truck still needs unloading even if it's off
+  //    the next load day), so sort it by that — keeping dirty trucks at the top.
+  function displayStatusFor(t: TruckWithState, dayNum: number, holiday: boolean): TruckStatus {
+    const cov = t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+    const base = cov ?? t;
+    const eff = effectiveStatus(base, dayNum, holiday);
+    if (eff === "off" && (base.state?.status === "dirty" || base.state?.status === "unloaded")) {
+      return base.state.status as TruckStatus;
+    }
+    return eff;
+  }
 
   const unloadTrucks = useMemo(
     () =>
@@ -101,8 +144,8 @@ export default function RunDay() {
         .sort((a, b) => {
           // Clamp loaded→unloaded in unload sort: from this section's POV,
           // "loaded" is just a downstream state of "unloaded".
-          const sa = effectiveStatus(a, unloadsDay, holidayUnload);
-          const sb = effectiveStatus(b, unloadsDay, holidayUnload);
+          const sa = displayStatusFor(a, unloadsDay, holidayUnload);
+          const sb = displayStatusFor(b, unloadsDay, holidayUnload);
           const ka: TruckStatus = sa === "loaded" ? "unloaded" : sa;
           const kb: TruckStatus = sb === "loaded" ? "unloaded" : sb;
           const oa = UNLOAD_SORT[ka] ?? 9;
@@ -110,7 +153,8 @@ export default function RunDay() {
           if (oa !== ob) return oa - ob;
           return a.truck_number - b.truck_number;
         }),
-    [board, unloadsDay, holidayUnload],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [board, unloadsDay, holidayUnload, coveringTruckMap],
   );
 
   const loadTrucks = useMemo(
@@ -122,37 +166,41 @@ export default function RunDay() {
             (holidayLoad || !isScheduledOff(t, loadDay)),
         )
         .sort((a, b) => {
-          const sa = effectiveStatus(a, loadDay, holidayLoad);
-          const sb = effectiveStatus(b, loadDay, holidayLoad);
+          const sa = displayStatusFor(a, loadDay, holidayLoad);
+          const sb = displayStatusFor(b, loadDay, holidayLoad);
           const oa = LOAD_SORT[sa] ?? 9;
           const ob = LOAD_SORT[sb] ?? 9;
           if (oa !== ob) return oa - ob;
           return a.truck_number - b.truck_number;
         }),
-    [board, loadDay, holidayLoad],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [board, loadDay, holidayLoad, coveringTruckMap],
   );
 
-  const unloadScheduleContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false),
-    [board, unloadsDay, holidayUnload],
-  );
-  const unloadTotal = unloadScheduleContext.activeTrucks.length;
+  // Unload active trucks = exactly the routes running on unloadsDay per Fleet Schedule.
+  // Uses buildOperationalDayContext (same as loadContext) so the count is consistent:
+  // one entry per running route (covering spare replaces its OOS route truck).
   const unloadContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, true),
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload ?? false, false),
     [board, unloadsDay, holidayUnload],
   );
+  const unloadActiveTrucks = unloadContext.activeTrucks;
+  const unloadTotal = unloadActiveTrucks.length;
   const unloadDone = useMemo(
-    () => countUnloadedFromContext(unloadContext),
-    [unloadContext],
+    () =>
+      unloadActiveTrucks.filter((t) => {
+        const raw = (t.state?.status ?? "dirty") as TruckStatus;
+        return raw === "unloaded" || raw === "loaded";
+      }).length,
+    [unloadActiveTrucks],
   );
-  const unloadSpareCount = unloadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
+  const unloadSpareCount = unloadActiveTrucks.filter((t) => t.truck_type === "Spare").length;
 
-  // On holiday, two days' worth of routes are loaded/unloaded in one shift.
-  // The "second" day is the PREVIOUS ship day (Mon → Fri wraps back).
-  const loadDay2 = loadDay === 1 ? 5 : loadDay - 1;
-  const unloadsDay2 = unloadsDay === 1 ? 5 : unloadsDay - 1;
-  // Trucks off on loadDay (the normal load day) OR the day after (the holiday-affected next day)
-  // are both treated as the Day 3 catch-up batch in holiday load mode.
+  // On holiday, two days' worth of routes run in one shift.
+  // Unload catches up on the PREVIOUS ship day; load gets ahead on the NEXT
+  // ship day. So unload's second day is unloadsDay-1, load's is loadDay+1
+  // (matches the sidebar/board "Day N + N+1" load label).
+  const unloadsDay2 = previousWorkday(unloadsDay);
   const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
 
   const loadContext = useMemo(
@@ -166,42 +214,81 @@ export default function RunDay() {
   );
   const loadSpareCount = loadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
 
-  // Map from route truck number → the truck covering its route today.
-  // Includes spare-type trucks (via oos_spare_route or route_swap_route) AND
-  // non-spare trucks assigned via a route swap.  Spares are hidden from the
-  // grid; non-spare covering trucks still render their own card.
-  const coveringTruckMap = useMemo(
-    () =>
-      new Map<number, TruckWithState>(
-        board
-          .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
-          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
-      ),
-    [board],
+  // Today's live coverages (shown with the Load section): each route being
+  // covered, the truck covering it, whether that's a spare or a route swap.
+  const coverages = useMemo(() => {
+    const byNum = new Map(board.map((t) => [t.truck_number, t]));
+    return [...coveringTruckMap.entries()]
+      .map(([routeNum, cover]) => ({
+        routeNum,
+        routeTruck: byNum.get(routeNum),
+        cover,
+        kind: (cover.truck_type === "Spare" ? "spare" : "swap") as "spare" | "swap",
+        coverStatus: effectiveStatus(cover, loadDay, holidayLoad),
+      }))
+      .sort((a, b) => a.routeNum - b.routeNum);
+  }, [board, coveringTruckMap, loadDay, holidayLoad]);
+
+  // The previous OPERATING day, stepping over the weekend — Monday's unload is
+  // Friday's load, so the prior run day is the most recent weekday before today.
+  const prevRunDate = useMemo(() => {
+    const d = new Date(`${runDate}T12:00:00`);
+    do {
+      d.setDate(d.getDate() - 1);
+    } while (d.getDay() === 0 || d.getDay() === 6); // skip Sun(0)/Sat(6)
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  }, [runDate]);
+
+  // Previous load-day coverage (shown with the Unload section as a reminder):
+  // the trucks being unloaded today were loaded on the prior run day, so surface
+  // who covered which route then. Uses the shared buildPrevDayCoverage (same as
+  // the Unload page and Note Cards) — coverage from the ACTUAL previous run day
+  // only, so a swap from last week can't stick around on days with no coverage.
+  const prevCoverage = useMemo(() => buildPrevDayCoverage(swapLog, prevRunDate), [swapLog, prevRunDate]);
+
+  // Lookups so the Unload grid can show each route's covering truck from the
+  // PREVIOUS load day (what's being unloaded today was covered then).
+  const boardByNum = useMemo(() => new Map(board.map((t) => [t.truck_number, t])), [board]);
+  const prevCoverByRoute = useMemo(
+    () => new Map(prevCoverage.items.map((c) => [c.route, c.loadOn])),
+    [prevCoverage],
   );
+  // Covering spares from the previous load day — rendered in place of the route
+  // they covered, so drop their standalone card from the unload grid.
+  const prevSpareCoverNums = useMemo(() => {
+    const s = new Set<number>();
+    for (const c of prevCoverage.items) {
+      if (boardByNum.get(c.loadOn)?.truck_type === "Spare") s.add(c.loadOn);
+    }
+    return s;
+  }, [prevCoverage, boardByNum]);
 
   return (
     <>
-      {wizardOpen && (
-        <RunDayWizard
-          runDate={runDate}
-          board={board}
-          loadDay={loadDay}
-          unloadsDay={unloadsDay}
-          onClose={() => setWizardOpen(false)}
-        />
-      )}
-      <div className="space-y-6 p-4 md:p-6">
-      {/* Page header */}
-      <div className="text-center">
-        <h2 className="text-3xl font-black tracking-tight text-indigo-400">Day Overview</h2>
-        <p className="mx-auto mt-1.5 inline-flex items-center gap-2 rounded-full border border-indigo-400/20 bg-indigo-400/10 px-3 py-0.5 text-xs font-semibold text-slate-300">
-          {runDate}
-        </p>
+      {/* Page header — matches PageHeader component style */}
+      <div className="border-b border-hairline bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.10),transparent_36%),linear-gradient(180deg,rgba(2,6,23,0.6),rgba(15,23,42,0.4))] px-3 py-3 md:px-6 md:py-4">
+        <div>
+          <span
+            className="hidden md:inline-flex rounded-pill border px-[10px] py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#7cc4ff]"
+            style={{ borderColor: "rgba(56,189,248,0.22)", background: "rgba(56,189,248,0.10)" }}
+          >
+            Operations
+          </span>
+          <h2 className="mt-2 text-3xl font-black leading-none tracking-tight text-indigo-400 md:text-[1.75rem]">
+            Day Overview
+          </h2>
+          <p className="mt-1.5 text-[13.5px] text-ink-muted">
+            {formatRunDate(runDate)} · Unload Day {unloadsDay} · Load Day {loadDay}
+          </p>
+        </div>
       </div>
+      <div className="space-y-6 p-4 md:p-6">
 
-      {/* Shift Handoff Notes */}
-      {(dailyNotes || canEditNotes) && (
+      {/* Shift Handoff Notes — toggleable in Operations settings */}
+      {shiftNotesEnabled && (dailyNotes || canEditNotes) && (
         <div className={clsx(
           "rounded-xl border px-4 py-3",
           dailyNotes
@@ -295,16 +382,58 @@ export default function RunDay() {
           }}
         >
         <div style={{ overflow: "hidden" }}>
+        {/* Reminder: coverage that was in place on the previous load day — the
+            loads now being unloaded today were covered by these trucks. */}
+        {prevCoverage.items.length > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2.5">
+            <div className="mb-1.5 flex items-center gap-2">
+              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
+                Previous load-day coverage
+              </span>
+              <span className="text-[10px] text-amber-500/70">({formatRunDate(prevCoverage.date)})</span>
+            </div>
+            <div className="flex flex-wrap gap-1.5">
+              {prevCoverage.items.map((c) => (
+                <span
+                  key={c.route}
+                  className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-xs"
+                >
+                  <span className="font-black text-red-300">#{c.route}</span>
+                  <ArrowLeftRight className="h-3 w-3 text-slate-600" />
+                  <span className="font-black text-amber-200">#{c.loadOn}</span>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
-            // Spare-type covering trucks are absorbed into their OOS route truck's card.
-            .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
+            // Spare covering trucks are rendered in place of the route they
+            // cover (below), so drop their standalone card here — both today's
+            // covering spares and the previous load day's covering spares.
+            .filter((t) =>
+              !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)) &&
+              !prevSpareCoverNums.has(t.truck_number),
+            )
             .map((t) => {
-              const coveringTruck =
-                t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
-              const ownRaw = effectiveStatus(t, unloadsDay, holidayUnload);
-              // When OOS and covered, reflect the covering truck's lifecycle status.
-              const raw = coveringTruck
+              // Unload reflects the PREVIOUS load day: prefer who covered this
+              // route then (if known), falling back to today's coverage.
+              const prevCoverNum = prevCoverByRoute.get(t.truck_number);
+              const prevCover = prevCoverNum != null ? boardByNum.get(prevCoverNum) : undefined;
+              // A truck can be OOS via the is_oos flag while its status reads
+              // dirty/unloaded, so substitute whenever coverage exists for the
+              // route rather than gating on status === "oos".
+              const todayCover = coveringTruckMap.get(t.truck_number);
+              const coveringTruck = prevCover ?? todayCover;
+              // Once a spare covers a route, show the covering spare's card
+              // (labeled "Covers #route") instead of the empty route truck.
+              const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
+              const displayTruck = spareCover ?? t;
+              const ownRaw = effectiveStatus(displayTruck, unloadsDay, holidayUnload);
+              // Non-spare (route-swap) cover still reflects the cover's status on
+              // the route's own card.
+              const raw = !spareCover && coveringTruck
                 ? effectiveStatus(coveringTruck, unloadsDay, holidayUnload)
                 : ownRaw;
               // The unload lifecycle ends at "Unloaded". Once a truck moves on
@@ -316,14 +445,16 @@ export default function RunDay() {
                 : unloadsDay;
               return (
                 <TruckCard
-                  key={t.truck_number}
-                  t={t}
+                  key={displayTruck.truck_number}
+                  t={displayTruck}
                   status={status}
                   done={isUnloadDone(raw)}
-                  coveringSpare={coveringTruck}
+                  coveringSpare={spareCover ? undefined : coveringTruck}
+                  coversRoute={spareCover ? t.truck_number : undefined}
                   dayNum={truckUnloadDay}
                   isExtraDay={truckUnloadDay === unloadsDay2}
-                  notes={notesByTruck.get(t.truck_number)}
+                  notes={notesByTruck.get(displayTruck.truck_number)}
+                  context="unload"
                 />
               );
             })}
@@ -342,7 +473,7 @@ export default function RunDay() {
             className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", loadCollapsed && "-rotate-90")}
           />
           <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
-            Load &mdash; Day {holidayLoad ? `${loadDay2} + ` : ""}{loadDay}
+            Load &mdash; Day {loadDay}{holidayLoad ? ` + ${loadNextDay}` : ""}
           </h2>
           <span className="w-24 shrink-0 text-sm text-slate-400">
             {loadDone} / {loadTotal} done
@@ -367,31 +498,77 @@ export default function RunDay() {
           }}
         >
         <div style={{ overflow: "hidden" }}>
+        {/* Today's live coverages — who is covering which route on this load day. */}
+        {coverages.length > 0 && (
+          <div className="mb-3 rounded-lg border border-sky-800/40 bg-sky-950/15 px-3 py-2.5">
+            <div className="mb-1.5 flex items-center gap-2">
+              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-sky-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">Coverages</span>
+              <span className="rounded-full bg-sky-800/50 px-2 py-0.5 text-[10px] font-bold text-sky-200">{coverages.length}</span>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {coverages.map((c) => {
+                const routeOos = c.routeTruck?.state?.status === "oos" || c.routeTruck?.is_oos;
+                return (
+                  <div
+                    key={c.routeNum}
+                    className="flex items-center gap-2 rounded-md border border-sky-800/30 bg-slate-900/50 px-2.5 py-1.5"
+                  >
+                    <span className="text-sm font-black text-red-400">#{c.routeNum}</span>
+                    <span className="text-[9px] font-semibold uppercase tracking-wide text-red-400/70">
+                      {routeOos ? "OOS" : "swap"}
+                    </span>
+                    <ArrowLeftRight className="h-3 w-3 shrink-0 text-slate-600" />
+                    <span className="text-sm font-black text-sky-300">#{c.cover.truck_number}</span>
+                    <span className="rounded-full bg-sky-900/50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
+                      {c.kind === "spare" ? "Spare" : "Route"}
+                    </span>
+                    <span
+                      className={clsx(
+                        "ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold text-white",
+                        STATUS_BG[c.coverStatus],
+                      )}
+                    >
+                      {STATUS_LABELS[c.coverStatus]}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {loadTrucks
-            // Spare-type covering trucks are absorbed into their OOS route truck's card.
+            // Spare covering trucks are rendered in place of the OOS route they
+            // cover (below), so drop their standalone card here.
             .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
             .map((t) => {
-              const coveringTruck =
-                t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
-              // When OOS and covered, reflect the covering truck's lifecycle status.
-              const status = coveringTruck
+              // A truck can be OOS via the is_oos flag while its status reads
+              // dirty/unloaded, so substitute whenever coverage exists for the
+              // route rather than gating on status === "oos".
+              const coveringTruck = coveringTruckMap.get(t.truck_number);
+              // Once a spare covers an OOS route, show the covering spare's card
+              // (labeled "Covers #route") instead of the empty OOS truck.
+              const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
+              const displayTruck = spareCover ?? t;
+              const status = !spareCover && coveringTruck
                 ? effectiveStatus(coveringTruck, loadDay, holidayLoad)
-                : effectiveStatus(t, loadDay, holidayLoad);
+                : effectiveStatus(displayTruck, loadDay, holidayLoad);
               const truckLoadDay = holidayLoad
-                ? (isScheduledOff(t, loadDay) || isScheduledOff(t, loadNextDay)) ? loadDay2 : loadDay
+                ? isScheduledOff(t, loadDay) ? loadNextDay : loadDay
                 : loadDay;
               return (
                 <TruckCard
-                  key={t.truck_number}
-                  t={t}
+                  key={displayTruck.truck_number}
+                  t={displayTruck}
                   status={status}
                   done={isLoadDone(status)}
-                  coveringSpare={coveringTruck}
+                  coveringSpare={spareCover ? undefined : coveringTruck}
+                  coversRoute={spareCover ? t.truck_number : undefined}
                   dayNum={truckLoadDay}
-                  isExtraDay={truckLoadDay === loadDay2}
-
-                  notes={notesByTruck.get(t.truck_number)}
+                  isExtraDay={truckLoadDay === loadNextDay}
+                  notes={notesByTruck.get(displayTruck.truck_number)}
+                  context="load"
                 />
               );
             })}

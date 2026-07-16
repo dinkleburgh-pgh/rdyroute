@@ -8,13 +8,13 @@ import { todayIso } from "../api/client";
 import type { BatchSummary } from "../types";
 import AnimateCard from "../components/AnimateCard";
 
-const BATCH_CAP = 400;
+const DEFAULT_WEARER_CAP = 1800;
 
-function capacityColor(total: number, noCap: boolean) {
+function capacityColor(total: number, noCap: boolean, cap: number) {
   if (noCap) return { bar: "bg-violet-500", text: "text-violet-400" };
-  if (total >= BATCH_CAP * 0.95) return { bar: "bg-red-500",    text: "text-red-400"    };
-  if (total >= BATCH_CAP * 0.70) return { bar: "bg-amber-500",  text: "text-amber-400"  };
-  return                                { bar: "bg-emerald-500", text: "text-emerald-400" };
+  if (total >= cap * 0.95) return { bar: "bg-red-500",    text: "text-red-400"    };
+  if (total >= cap * 0.70) return { bar: "bg-amber-500",  text: "text-amber-400"  };
+  return                          { bar: "bg-emerald-500", text: "text-emerald-400" };
 }
 
 function BatchCard({
@@ -25,6 +25,7 @@ function BatchCard({
   selected,
   onSelect,
   noCap,
+  cap,
   shouldFocus,
 }: {
   batch: BatchSummary;
@@ -34,11 +35,19 @@ function BatchCard({
   selected: boolean;
   onSelect: () => void;
   noCap: boolean;
+  cap: number;
   shouldFocus: boolean;
 }) {
   const assign = useAssignBatch();
-  const [wearers, setWearers] = useState("");
+  // Pre-fill the wearers field with the Operations wearer_cap setting; still
+  // editable before assigning.
+  const [wearers, setWearers] = useState(String(cap));
   const inputRef = useRef<HTMLInputElement>(null);
+
+  // Keep the field in sync when the wearer_cap setting changes.
+  useEffect(() => {
+    setWearers(String(cap));
+  }, [cap]);
 
   useEffect(() => {
     if (shouldFocus && truckNumber) {
@@ -51,8 +60,8 @@ function BatchCard({
   const previewWearers = Number(wearers || 0);
   const previewTotal = batch.total_wearers + (truckNumber ? previewWearers : 0);
   const displayTotal = truckNumber ? previewTotal : batch.total_wearers;
-  const { bar, text } = capacityColor(displayTotal, noCap);
-  const pct = noCap ? 100 : Math.min(100, Math.round((displayTotal / BATCH_CAP) * 100));
+  const { bar, text } = capacityColor(displayTotal, noCap, cap);
+  const pct = noCap ? 100 : Math.min(100, Math.round((displayTotal / cap) * 100));
 
   async function handleAssign() {
     if (!truckNumber) return;
@@ -62,7 +71,7 @@ function BatchCard({
       truck_number: Number(truckNumber),
       wearers: previewWearers,
     });
-    setWearers("");
+    setWearers(String(cap));
     onAssigned();
   }
 
@@ -91,7 +100,7 @@ function BatchCard({
             <span className={clsx("text-sm font-extrabold tabular-nums transition-colors md:text-lg", text)}>
               {displayTotal}
             </span>
-            <span className="text-slate-500"> / {noCap ? "∞" : BATCH_CAP}</span>
+            <span className="text-slate-500"> / {noCap ? "∞" : cap}</span>
           </span>
         </div>
         <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
@@ -157,6 +166,10 @@ export default function Batches() {
   const { data, isLoading } = useBatchSummary(runDate);
   const { data: settings = [] } = useSettings();
   const noCap = settings.some((s) => s.key === "batch_no_cap" && s.value === true);
+  const wearerCap = (() => {
+    const v = Number(settings.find((s) => s.key === "wearer_cap")?.value);
+    return Number.isFinite(v) && v > 0 ? v : DEFAULT_WEARER_CAP;
+  })();
   const [truck, setTruck] = useState(params.get("truck") ?? "");
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
@@ -254,6 +267,7 @@ export default function Batches() {
                   : truck
               }
               noCap={noCap}
+              cap={wearerCap}
               onAssigned={async () => {
                 if (source === "unload" && truck) {
                   await upsert.mutateAsync({

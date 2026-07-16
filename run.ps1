@@ -1,4 +1,4 @@
-<#
+﻿<#
 .SYNOPSIS
     Start the ReadyRoute V2 stack (FastAPI backend + Vite/React frontend).
 
@@ -37,7 +37,8 @@
 param(
     [switch]$Stop,
     [switch]$Restart,
-    [switch]$NoBrowser
+    [switch]$NoBrowser,
+    [switch]$NoMenu
 )
 
 $ErrorActionPreference = 'Stop'
@@ -62,9 +63,43 @@ $FrontendSentinel = Join-Path $LogDir 'frontend.sentinel'  # watchdog monitors t
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-function Write-Info  ([string]$m) { Write-Host "[INFO] $m"  -ForegroundColor Cyan }
-function Write-Warn2 ([string]$m) { Write-Host "[WARN] $m"  -ForegroundColor Yellow }
-function Write-Err   ([string]$m) { Write-Host "[ERROR] $m" -ForegroundColor Red }
+function Write-Info  ([string]$m) { Write-Host "  $m"  -ForegroundColor Cyan }
+function Write-Warn2 ([string]$m) { Write-Host "  $m"  -ForegroundColor Yellow }
+function Write-Err   ([string]$m) { Write-Host "  $m" -ForegroundColor Red }
+
+function Write-Banner {
+    $w = 58
+    $line = [string]::new([char]0x2500, $w)
+    Write-Host ""
+    Write-Host "  $([char]0x250C)$line$([char]0x2510)" -ForegroundColor DarkBlue
+    Write-Host "  $([char]0x2502)$((' ' * $w))$([char]0x2502)" -ForegroundColor DarkBlue
+    Write-Host "  $([char]0x2502)$('  ReadyRoute V2'.PadRight($w))$([char]0x2502)" -ForegroundColor Blue
+    Write-Host "  $([char]0x2502)$('  Warehouse Dock Management System'.PadRight($w))$([char]0x2502)" -ForegroundColor DarkCyan
+    Write-Host "  $([char]0x2502)$((' ' * $w))$([char]0x2502)" -ForegroundColor DarkBlue
+    Write-Host "  $([char]0x2514)$line$([char]0x2518)" -ForegroundColor DarkBlue
+    Write-Host ""
+}
+
+function Write-Step ([string]$icon, [string]$label, [string]$value = '') {
+    if ($value) {
+        Write-Host "  $icon  " -NoNewline -ForegroundColor DarkCyan
+        Write-Host "$label " -NoNewline -ForegroundColor Gray
+        Write-Host $value -ForegroundColor White
+    } else {
+        Write-Host "  $icon  " -NoNewline -ForegroundColor DarkCyan
+        Write-Host $label -ForegroundColor Gray
+    }
+}
+
+function Write-Ok ([string]$label, [string]$value = '') {
+    Write-Host "  $([char]0x2714)  " -NoNewline -ForegroundColor Green
+    Write-Host "$label " -NoNewline -ForegroundColor Gray
+    Write-Host $value -ForegroundColor White
+}
+
+function Write-Divider {
+    Write-Host "  $([string]::new([char]0x2500, 58))" -ForegroundColor DarkGray
+}
 
 function Wait-HttpReady {
     param(
@@ -105,6 +140,37 @@ function Stop-Tracked {
         Write-Info "$Label not running."
     }
     if (Test-Path $PidFile) { Remove-Item $PidFile -Force -ErrorAction SilentlyContinue }
+}
+
+function Stop-Backend {
+    Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
+
+    # uvicorn --reload spawns a watcher + a worker child. Kill any remaining
+    # listeners on the backend port, including ghost PIDs (process died but
+    # kernel socket not yet released) by sweeping WMI for uvicorn orphans.
+    $port = [int]$BackendPort
+    Start-Sleep -Milliseconds 600
+    $listeners = Get-PortListeners -Port $port
+    foreach ($o in $listeners) {
+        $exists = Get-Process -Id $o.Pid -ErrorAction SilentlyContinue
+        if ($exists) {
+            Write-Info "Killing orphaned uvicorn worker PID $($o.Pid)..."
+            Invoke-TaskKill -ProcessId $o.Pid
+        } else {
+            # Ghost PID — process is gone but socket lingers. Sweep WMI for any
+            # python process whose command line matches our stack.
+            Write-Warn2 "Ghost socket on port $port (PID $($o.Pid) no longer exists). Sweeping uvicorn orphans via WMI..."
+            $orphans = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue | Where-Object {
+                $_.Name -match '^python.*\.exe$' -and
+                $_.CommandLine -match 'uvicorn|main:app|multiprocessing|spawn_main'
+            }
+            foreach ($p in $orphans) {
+                Write-Info "Killing orphan $($p.Name) PID $($p.ProcessId)..."
+                Invoke-TaskKill -ProcessId $p.ProcessId
+            }
+        }
+    }
+    Start-Sleep -Milliseconds 800
 }
 
 function Get-PortListeners {
@@ -295,10 +361,19 @@ function Start-FrontendProcess {
     return $proc
 }
 
+Write-Banner
+
 if ($Stop -or $Restart) {
-    Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
+    Write-Step "$([char]0x25A0)" "Stopping services..."
+    Stop-Backend
     Stop-Frontend
-    if ($Stop) { return }
+    if ($Stop) {
+        Write-Host ""
+        Write-Ok "All services stopped."
+        Write-Host ""
+        return
+    }
+    Write-Host ""
 }
 
 New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
@@ -306,6 +381,7 @@ New-Item -ItemType Directory -Force -Path $LogDir | Out-Null
 # ---------------------------------------------------------------------------
 # Python venv + deps
 # ---------------------------------------------------------------------------
+Write-Step "$([char]0x25B6)" "Python environment"
 $VenvPy = Join-Path $VenvDir 'Scripts\python.exe'
 
 if (-not (Test-Path $VenvPy)) {
@@ -319,43 +395,44 @@ if (-not (Test-Path $VenvPy)) {
     if (-not (Test-Path $VenvPy)) { Write-Err "venv creation failed."; exit 1 }
 }
 
-Write-Info "Using $(& $VenvPy --version 2>&1)"
+$pyVersion = (& $VenvPy --version 2>&1).ToString().Trim()
+Write-Ok "Python ready" $pyVersion
 
-Write-Info "Upgrading pip tooling..."
+Write-Step "$([char]0x25B6)" "Installing dependencies..."
 & $VenvPy -m pip install --upgrade pip setuptools wheel | Out-Null
 
 if (Test-Path 'requirements.txt') {
-    Write-Info "Installing Python requirements..."
-    & $VenvPy -m pip install --upgrade -r requirements.txt
+    & $VenvPy -m pip install --upgrade -r requirements.txt | Out-Null
+    Write-Ok "Python packages installed"
 } else {
-    Write-Warn2 "requirements.txt not found. Skipping Python deps."
+    Write-Warn2 "requirements.txt not found — skipping Python deps."
 }
 
 # ---------------------------------------------------------------------------
-# Backend (uvicorn)
+# Backend (uvicorn) / Frontend (vite) — reusable so the interactive menu below
+# can restart either one without re-running the whole script.
 # ---------------------------------------------------------------------------
-$existing = Test-Pid -PidFile $BackendPid
-if ($existing) {
-    # Confirm the process is actually serving — a stale PID (e.g. leftover from
-    # a previous session while Docker now owns the port) would otherwise skip
-    # port cleanup and leave the backend unreachable.
-    $healthy = $false
-    try {
-        $null = Invoke-RestMethod "http://${BackendHost}:${BackendPort}/health" -TimeoutSec 2 -ErrorAction Stop
-        $healthy = $true
-    } catch { }
+function Start-Backend {
+    Write-Divider
+    Write-Step "$([char]0x25B6)" "Backend" "FastAPI + uvicorn  :$BackendPort"
+    $existing = Test-Pid -PidFile $BackendPid
+    if ($existing) {
+        $healthy = $false
+        try {
+            $null = Invoke-RestMethod "http://${BackendHost}:${BackendPort}/health" -TimeoutSec 2 -ErrorAction Stop
+            $healthy = $true
+        } catch { }
 
-    if ($healthy) {
-        Write-Info "Backend already running (PID $($existing.Id)) — http://${BackendHost}:${BackendPort}"
-    } else {
-        Write-Warn2 "Backend PID $($existing.Id) alive but not responding — restarting..."
-        Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
-        $existing = $null
+        if ($healthy) {
+            Write-Ok "Already running" "PID $($existing.Id)  http://${BackendHost}:${BackendPort}"
+            return
+        } else {
+            Write-Warn2 "PID $($existing.Id) alive but not responding — restarting..."
+            Stop-Tracked -Label 'Backend (uvicorn)' -PidFile $BackendPid
+        }
     }
-}
-if (-not $existing) {
     Clear-Port -Label 'backend (uvicorn)' -Port ([int]$BackendPort)
-    Write-Info "Starting FastAPI backend on http://${BackendHost}:${BackendPort}..."
+    Write-Info "Launching uvicorn..."
     $backendArgs = @('-m', 'uvicorn', 'main:app', '--host', $BackendHost, '--port', $BackendPort, '--reload')
     $proc = Start-Process -FilePath $VenvPy -ArgumentList $backendArgs `
         -WorkingDirectory $PSScriptRoot `
@@ -367,83 +444,261 @@ if (-not $existing) {
         Write-Err "Backend failed to start. Recent log:"
         if (Test-Path $BackendLog) { Get-Content $BackendLog -Tail 40 }
         if (Test-Path "$BackendLog.err") { Get-Content "$BackendLog.err" -Tail 40 }
-        exit 1
+        return
     }
-    Write-Info "Backend started (PID $($proc.Id)). Log: $BackendLog"
+    Write-Ok "Backend started" "PID $($proc.Id)  http://${BackendHost}:${BackendPort}"
 }
 
-# ---------------------------------------------------------------------------
-# Frontend (vite)
-# ---------------------------------------------------------------------------
-if (-not (Test-Path $FrontendDir)) {
-    Write-Warn2 "frontend/ not found - skipping frontend startup."
-} else {
+function Start-Frontend {
+    Write-Divider
+    Write-Step "$([char]0x25B6)" "Frontend" "React + Vite  :$FrontendPort"
+    if (-not (Test-Path $FrontendDir)) {
+        Write-Warn2 "frontend/ not found — skipping frontend startup."
+        return
+    }
     $npm = Get-Command npm -ErrorAction SilentlyContinue
     if (-not $npm) {
         Write-Warn2 "npm not found in PATH. Install Node.js LTS to run the frontend."
-    } else {
-        if (-not (Test-Path (Join-Path $FrontendDir 'node_modules'))) {
-            Write-Info "Installing frontend npm dependencies (this may take a minute)..."
-            Push-Location $FrontendDir
-            try { & $npm.Source install } finally { Pop-Location }
-        }
+        return
+    }
+    if (-not (Test-Path (Join-Path $FrontendDir 'node_modules'))) {
+        Write-Info "Installing npm dependencies (first run, may take a minute)..."
+        Push-Location $FrontendDir
+        try { & $npm.Source install | Out-Null } finally { Pop-Location }
+        Write-Ok "npm packages installed"
+    }
 
-        $existingFE = Test-Pid -PidFile $FrontendPidF
-        if ($existingFE) {
-            $feHealthy = $false
-            try {
-                $null = Invoke-WebRequest "http://localhost:${FrontendPort}" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
-                $feHealthy = $true
-            } catch { }
+    $existingFE = Test-Pid -PidFile $FrontendPidF
+    if ($existingFE) {
+        $feHealthy = $false
+        try {
+            $null = Invoke-WebRequest "http://localhost:${FrontendPort}" -TimeoutSec 2 -UseBasicParsing -ErrorAction Stop
+            $feHealthy = $true
+        } catch { }
 
-            if ($feHealthy) {
-                Write-Info "Frontend already running (PID $($existingFE.Id)) - http://localhost:${FrontendPort}"
-            } else {
-                Write-Warn2 "Frontend PID $($existingFE.Id) alive but port $FrontendPort not responding - restarting..."
-                Stop-Frontend
-                $existingFE = $null
-            }
-        }
-        if (-not $existingFE) {
-            Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
-            Write-Info "Starting Vite dev server on http://localhost:${FrontendPort}..."
-            $frontendArgs = @('run', 'dev', '--', '--host', '0.0.0.0', '--port', $FrontendPort)
-            $proc = Start-FrontendProcess -ArgumentList $frontendArgs
-            $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
-            if ($proc.HasExited -or -not $frontendHealthy) {
-                Write-Warn2 "Primary Vite launch did not become healthy. Retrying once..."
-                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
-                if (Test-Path $FrontendPidF) { Remove-Item $FrontendPidF -Force -ErrorAction SilentlyContinue }
-                Start-Sleep -Seconds 1
-                $proc = Start-FrontendProcess -ArgumentList $frontendArgs
-                $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
-            }
-
-            if ($proc.HasExited -or -not $frontendHealthy) {
-                Write-Err "Frontend failed to start cleanly. Recent log:"
-                if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
-                if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
-            } else {
-                Write-Info "Frontend started (PID $($proc.Id)). Log: $FrontendLog"
-            }
+        if ($feHealthy) {
+            Write-Ok "Already running" "PID $($existingFE.Id)  http://localhost:${FrontendPort}"
+            return
+        } else {
+            Write-Warn2 "PID $($existingFE.Id) alive but port $FrontendPort not responding — restarting..."
+            Stop-Frontend
         }
     }
+    Clear-Port -Label 'frontend (vite)' -Port ([int]$FrontendPort)
+    Write-Info "Launching Vite dev server..."
+    $frontendArgs = @('run', 'dev', '--', '--host', '0.0.0.0', '--port', $FrontendPort)
+    $proc = Start-FrontendProcess -ArgumentList $frontendArgs
+    $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
+    if ($proc.HasExited -or -not $frontendHealthy) {
+        Write-Warn2 "Vite didn't respond in time — retrying once..."
+        try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch { }
+        if (Test-Path $FrontendPidF) { Remove-Item $FrontendPidF -Force -ErrorAction SilentlyContinue }
+        Start-Sleep -Seconds 1
+        $proc = Start-FrontendProcess -ArgumentList $frontendArgs
+        $frontendHealthy = Wait-HttpReady -Url "http://127.0.0.1:${FrontendPort}" -TimeoutSeconds 20
+    }
+
+    if ($proc.HasExited -or -not $frontendHealthy) {
+        Write-Err "Frontend failed to start cleanly. Recent log:"
+        if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 }
+        if (Test-Path "$FrontendLog.err") { Get-Content "$FrontendLog.err" -Tail 40 }
+    } else {
+        Write-Ok "Frontend started" "PID $($proc.Id)  http://localhost:${FrontendPort}"
+    }
 }
+
+Start-Backend
+Start-Frontend
 
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
 $frontendUrl = "http://localhost:$FrontendPort"
 $backendUrl  = "http://${BackendHost}:${BackendPort}"
+
+Write-Divider
 Write-Host ""
-Write-Info "ReadyRoute V2 is up:"
-Write-Info "  Frontend : $frontendUrl"
-Write-Info "  Backend  : $backendUrl   (docs: $backendUrl/docs)"
-Write-Info "Logs in    : $LogDir"
-Write-Info "Stop with  : .\run.ps1 -Stop"
+Write-Host "  $([char]0x2713)  " -NoNewline -ForegroundColor Green
+Write-Host "ReadyRoute V2 is running" -ForegroundColor White
+Write-Host ""
+Write-Host "    App    " -NoNewline -ForegroundColor DarkGray
+Write-Host $frontendUrl -ForegroundColor Cyan
+Write-Host "    API    " -NoNewline -ForegroundColor DarkGray
+Write-Host "$backendUrl/docs" -ForegroundColor DarkCyan
+Write-Host "    Logs   " -NoNewline -ForegroundColor DarkGray
+Write-Host $LogDir -ForegroundColor DarkGray
+Write-Host "    Stop   " -NoNewline -ForegroundColor DarkGray
+Write-Host ".\run.ps1 -Stop" -ForegroundColor DarkGray
+Write-Host ""
 
 if (-not $NoBrowser) {
     try {
         Start-Process $frontendUrl | Out-Null
     } catch { }
+}
+
+# ---------------------------------------------------------------------------
+# Interactive console menu — Up/Down + Enter to control the running stack
+# without leaving this window. Skipped automatically when input/output isn't
+# a real interactive console (redirected output, CI, non-console hosts), or
+# when -NoMenu is passed for scripted/one-shot use.
+# ---------------------------------------------------------------------------
+# Reads one keypress in a way that works across the widest range of PowerShell
+# hosts. $Host.UI.RawUI.ReadKey is tried first (the technique that plays nicest
+# with Windows Terminal / conhost's arrow-key escape sequences); if the host
+# doesn't support it at all, falls back to [Console]::ReadKey. Returns an
+# object with .VirtualKeyCode and .Character so callers don't care which path
+# was used.
+# Windows Terminal / pwsh often enable ENABLE_VIRTUAL_TERMINAL_INPUT (0x0200) on
+# stdin, which makes ReadKey hand back raw ESC-[-A byte sequences for arrows
+# instead of translated ConsoleKeys. Clearing that flag makes [Console]::ReadKey
+# return ConsoleKey.UpArrow etc. Best-effort; ignored if P/Invoke is unavailable.
+function Disable-VtInput {
+    try {
+        if (-not ('RrConsole.Mode' -as [type])) {
+            Add-Type -Namespace RrConsole -Name Mode -MemberDefinition @'
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError=true)] public static extern System.IntPtr GetStdHandle(int n);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError=true)] public static extern bool GetConsoleMode(System.IntPtr h, out uint m);
+[System.Runtime.InteropServices.DllImport("kernel32.dll", SetLastError=true)] public static extern bool SetConsoleMode(System.IntPtr h, uint m);
+'@ -ErrorAction Stop
+        }
+        $h = [RrConsole.Mode]::GetStdHandle(-10)   # STD_INPUT_HANDLE
+        [uint32]$m = 0
+        if ([RrConsole.Mode]::GetConsoleMode($h, [ref]$m)) {
+            [void][RrConsole.Mode]::SetConsoleMode($h, ($m -band (-bnot [uint32]0x0200)))
+        }
+    } catch { }
+}
+
+function Read-MenuKey {
+    # Primary: [Console]::ReadKey returns translated ConsoleKeys whose int value
+    # matches the switch (UpArrow=38, DownArrow=40, Enter=13, Escape=27,
+    # letters/Q=ASCII; digits via KeyChar). Belt-and-suspenders: if a host still
+    # delivers arrows as raw VT escape sequences (ESC [ A/B/C/D), decode them.
+    try {
+        $k = [Console]::ReadKey($true)
+    } catch {
+        $r = $Host.UI.RawUI.ReadKey('NoEcho,IncludeKeyDown')
+        return [pscustomobject]@{ VirtualKeyCode = $r.VirtualKeyCode; Character = $r.Character }
+    }
+    if ($k.KeyChar -eq [char]27) {
+        Start-Sleep -Milliseconds 2
+        if ([Console]::KeyAvailable) {
+            [void][Console]::ReadKey($true)          # intro byte: '[' or 'O'
+            if ([Console]::KeyAvailable) {
+                $f = [Console]::ReadKey($true).KeyChar
+                switch ($f) {
+                    'A' { return [pscustomobject]@{ VirtualKeyCode = 38; Character = [char]0 } } # Up
+                    'B' { return [pscustomobject]@{ VirtualKeyCode = 40; Character = [char]0 } } # Down
+                    'C' { return [pscustomobject]@{ VirtualKeyCode = 39; Character = [char]0 } } # Right
+                    'D' { return [pscustomobject]@{ VirtualKeyCode = 37; Character = [char]0 } } # Left
+                }
+                return [pscustomobject]@{ VirtualKeyCode = 0; Character = $f }
+            }
+        }
+        return [pscustomobject]@{ VirtualKeyCode = 27; Character = [char]27 }  # bare Escape
+    }
+    return [pscustomobject]@{ VirtualKeyCode = [int]$k.Key; Character = $k.KeyChar }
+}
+
+function Show-ArrowMenu {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Items,
+        [string]$Title = 'Select an action'
+    )
+    $selected = 0
+    $dbg = ''
+    while ($true) {
+        # Redraw by clearing the screen rather than repositioning the cursor —
+        # SetCursorPosition doesn't reliably overwrite in every terminal host
+        # (some just keep printing new lines below instead of in place).
+        # Clear-Host is a bit more flicker but works consistently everywhere.
+        Clear-Host
+        Write-Banner
+        Write-Host "    App    " -NoNewline -ForegroundColor DarkGray
+        Write-Host $frontendUrl -ForegroundColor Cyan
+        Write-Host "    API    " -NoNewline -ForegroundColor DarkGray
+        Write-Host "$backendUrl/docs" -ForegroundColor DarkCyan
+        Write-Host ""
+        Write-Host "  $Title" -ForegroundColor Gray
+        Write-Host "  $([string]::new([char]0x2500, $Title.Length + 2))" -ForegroundColor DarkGray
+        for ($i = 0; $i -lt $Items.Count; $i++) {
+            $prefix = if ($i -eq $selected) { "$([char]0x25B8) " } else { '  ' }
+            $row = "$prefix$($i + 1). $($Items[$i])".PadRight([Console]::WindowWidth - 1)
+            if ($i -eq $selected) {
+                Write-Host $row -ForegroundColor Black -BackgroundColor Cyan
+            } else {
+                Write-Host $row -ForegroundColor Gray
+            }
+        }
+        if ($dbg) { Write-Host ""; Write-Host "  $dbg" -ForegroundColor DarkGray }
+        # Number keys jump straight to that item — a guaranteed-to-work
+        # fallback in case arrow-key escape sequences don't parse correctly
+        # in a particular terminal/host.
+        $k = Read-MenuKey
+        $dbg = "diag: last key VK=$($k.VirtualKeyCode) char='$($k.Character)'  (Up=38 Down=40 Enter=13 digits=49-57)"
+        switch ($k.VirtualKeyCode) {
+            38 { $selected = ($selected - 1 + $Items.Count) % $Items.Count } # Up
+            40 { $selected = ($selected + 1) % $Items.Count }               # Down
+            87 { $selected = ($selected - 1 + $Items.Count) % $Items.Count } # W
+            83 { $selected = ($selected + 1) % $Items.Count }               # S
+            75 { $selected = ($selected - 1 + $Items.Count) % $Items.Count } # K
+            74 { $selected = ($selected + 1) % $Items.Count }               # J
+            13 { return $selected }  # Enter
+            27 { return -1 }         # Escape
+            81 { return -1 }         # Q
+            default {
+                if ($k.Character -match '^[1-9]$') {
+                    $n = [int]"$($k.Character)" - 1
+                    if ($n -ge 0 -and $n -lt $Items.Count) { return $n }
+                }
+            }
+        }
+    }
+}
+
+function Test-InteractiveConsole {
+    if ($NoMenu) { return $false }
+    if ([Console]::IsInputRedirected -or [Console]::IsOutputRedirected) { return $false }
+    try { [void][Console]::CursorTop; return $true } catch { return $false }
+}
+
+if (Test-InteractiveConsole) {
+  try {
+    $menuItems = @(
+        'Restart Frontend (Vite)'
+        'Stop Frontend (Vite)'
+        'Restart Backend (uvicorn)'
+        'Stop Backend (uvicorn)'
+        'Restart All'
+        'Open App in Browser'
+        'Tail Frontend Log'
+        'Tail Backend Log'
+        'Stop All && Exit'
+        'Leave Running && Exit Menu'
+    )
+    Disable-VtInput
+    while ($true) {
+        $menuTitle = "ReadyRoute V2 - dev console  ($([char]0x2191)/$([char]0x2193) navigate, Enter select, number to jump, Q quit)"
+        $choice = Show-ArrowMenu -Items $menuItems -Title $menuTitle
+        Write-Host ""
+        switch ($choice) {
+            0 { Stop-Frontend; Start-Frontend }
+            1 { Stop-Frontend; Write-Ok "Frontend stopped." }
+            2 { Stop-Backend;  Start-Backend }
+            3 { Stop-Backend;  Write-Ok "Backend stopped." }
+            4 { Stop-Backend; Stop-Frontend; Start-Backend; Start-Frontend }
+            5 { try { Start-Process $frontendUrl | Out-Null } catch { } }
+            6 { if (Test-Path $FrontendLog) { Get-Content $FrontendLog -Tail 40 } else { Write-Warn2 "No frontend log yet." }; Write-Host ""; Write-Host "  (press any key to return)" -ForegroundColor DarkGray; [Console]::ReadKey($true) | Out-Null }
+            7 { if (Test-Path $BackendLog)  { Get-Content $BackendLog  -Tail 40 } else { Write-Warn2 "No backend log yet." };  Write-Host ""; Write-Host "  (press any key to return)" -ForegroundColor DarkGray; [Console]::ReadKey($true) | Out-Null }
+            8 { Stop-Backend; Stop-Frontend; Write-Ok "All services stopped."; break }
+            default { break }
+        }
+        if ($choice -eq 8 -or $choice -eq -1) { break }
+    }
+    Write-Host ""
+  } catch {
+    Write-Warn2 "Interactive menu unavailable in this console ($($_.Exception.Message)); services are still running in the background."
+    Write-Host "  Use .\run.ps1 -Stop / -Restart from a normal terminal instead." -ForegroundColor DarkGray
+  }
 }

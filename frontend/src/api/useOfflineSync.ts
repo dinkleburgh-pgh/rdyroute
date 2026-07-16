@@ -20,12 +20,19 @@ export interface OfflineSyncState {
   isFlushing: boolean;
 }
 
-export function useOfflineSync(): OfflineSyncState {
+export interface UseOfflineSyncOptions {
+  /** Called after a flush if any queued writes were rejected (4xx) and dropped. */
+  onConflict?: (discardedCount: number) => void;
+}
+
+export function useOfflineSync(opts: UseOfflineSyncOptions = {}): OfflineSyncState {
   const qc = useQueryClient();
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [pendingCount, setPendingCount] = useState(0);
   const [isFlushing, setIsFlushing] = useState(false);
   const flushingRef = useRef(false);
+  const onConflictRef = useRef(opts.onConflict);
+  onConflictRef.current = opts.onConflict;
 
   // Refresh the pending count from IndexedDB
   const refreshCount = useCallback(async () => {
@@ -43,27 +50,35 @@ export function useOfflineSync(): OfflineSyncState {
       const items = await offlineQueue.getAll();
       if (items.length === 0) return;
 
-      const invalidatedKeys = new Set<string>();
+      let anyFlushed = false;
+      let discarded = 0;
 
       for (const item of items) {
         try {
           await api.request({ method: item.method, url: item.endpoint, data: item.payload });
           await offlineQueue.remove(item.id);
-
-          // Track which query keys need invalidation
-          if (item.type === "create_shortage") invalidatedKeys.add("shorts");
-        } catch {
-          // Leave failed items in the queue; will retry on next online event
+          anyFlushed = true;
+        } catch (err: unknown) {
+          // 4xx errors are permanent client errors — discard the item and continue
+          const status =
+            (err as { response?: { status?: number } })?.response?.status;
+          if (status !== undefined && status >= 400 && status < 500) {
+            console.warn("[offlineSync] discarding permanently-rejected item", item.id, status);
+            await offlineQueue.remove(item.id);
+            discarded += 1;
+            continue;
+          }
+          // Network error or 5xx — stop replaying; retry on next online event
           break;
         }
       }
 
-      // Bulk invalidate after flush
-      for (const key of invalidatedKeys) {
-        qc.invalidateQueries({ queryKey: [key] });
+      // After draining queued writes, refresh everything (last-write-wins) so the
+      // UI reflects the now-synced server state.
+      if (anyFlushed) {
+        qc.invalidateQueries();
       }
-      // Also refresh the board so status counts update
-      qc.invalidateQueries({ queryKey: ["board"] });
+      if (discarded > 0) onConflictRef.current?.(discarded);
     } finally {
       flushingRef.current = false;
       setIsFlushing(false);

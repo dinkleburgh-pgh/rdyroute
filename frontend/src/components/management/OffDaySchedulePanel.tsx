@@ -1,13 +1,14 @@
 import { useMemo, useState } from "react";
-import { useFleet, useUpdateTruck } from "../../api/hooks";
-import { isScheduledOff } from "../../utils/truckStatus";
+import { useFleet, useHolidayLoad, useHolidayUnload, useUpdateTruck } from "../../api/hooks";
+import { isScheduledOff, previousWorkday } from "../../utils/truckStatus";
 import { workdayNumbers } from "../Clock";
+import { todayIso } from "../../api/client";
 import clsx from "clsx";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const TYPE_SHORT: Record<string, string> = { Dust: "(D)", Uniform: "(U)" };
 
-export default function OffDaySchedulePanel() {
+export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) {
   const { data: fleet } = useFleet(false);
   const updateTruck = useUpdateTruck();
   const [hoveredRow, setHoveredRow] = useState<number | null>(null);
@@ -24,11 +25,31 @@ export default function OffDaySchedulePanel() {
       .sort((a, b) => a.truck_number - b.truck_number);
   }, [fleet]);
 
-  const todayDayNum = useMemo(() => workdayNumbers().loadDay, []);
+  const { loadDay, unloadsDay } = workdayNumbers();
+  const runDate = todayIso();
+  const { data: holidayLoad = false } = useHolidayLoad(runDate);
+  const { data: holidayUnload = false } = useHolidayUnload(runDate);
+
+  // On a holiday two ship days run in one shift: load also gets ahead on the
+  // next ship day (loadDay+1), unload also catches up on the previous ship day
+  // (unloadsDay-1). Track every active load/unload day so the compact view and
+  // highlighting include the holiday's extra day.
+  const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
+  const unloadPrevDay = previousWorkday(unloadsDay);
+  const loadDays = holidayLoad ? [loadDay, loadNextDay] : [loadDay];
+  const unloadDays = holidayUnload ? [unloadsDay, unloadPrevDay] : [unloadsDay];
+  const isLoadDay = (d: number) => loadDays.includes(d);
+  const isUnloadDay = (d: number) => unloadDays.includes(d);
+  const showInCompact = (d: number) => isLoadDay(d) || isUnloadDay(d);
 
   const runningToday = useMemo(
-    () => rows.filter((t) => !isScheduledOff(t, todayDayNum)).length,
-    [rows, todayDayNum],
+    () => rows.filter((t) => !isScheduledOff(t, loadDay)).length,
+    [rows, loadDay],
+  );
+
+  const perDayCount = useMemo(
+    () => [1, 2, 3, 4, 5].map((day) => rows.filter((t) => !isScheduledOff(t, day)).length),
+    [rows],
   );
 
   const activeRow = pinnedRow ?? hoveredRow;
@@ -76,13 +97,20 @@ export default function OffDaySchedulePanel() {
                   className={clsx(
                     "border border-slate-700/50 px-1 py-1 text-center transition-colors cursor-pointer select-none",
                     pinnedDay === day && "bg-blue-900/30",
+                    isLoadDay(day) && "ring-2 ring-blue-500/40 animate-pulse",
+                    isUnloadDay(day) && "ring-2 ring-emerald-500/40 animate-pulse",
+                    compact && !showInCompact(day) && "hidden md:table-cell",
                   )}
                   onMouseEnter={() => setHoveredDay(day)}
                   onMouseLeave={() => setHoveredDay(null)}
                   onClick={() => togglePinDay(day)}
                 >
                   <div className="font-semibold text-slate-300">Day {day}</div>
-                  <div className="text-[10px] font-normal text-slate-500">{DAY_LABELS[day - 1]}</div>
+                  <div className="text-[10px] font-normal text-slate-500">
+                    {DAY_LABELS[day - 1]}
+                    {isLoadDay(day) && <span className="ml-1 text-blue-400">L</span>}
+                    {isUnloadDay(day) && <span className="ml-1 text-emerald-400">U</span>}
+                  </div>
                 </th>
               ))}
             </tr>
@@ -113,7 +141,7 @@ export default function OffDaySchedulePanel() {
                   </td>
                   {[1, 2, 3, 4, 5].map((day) => {
                     const off = isScheduledOff(t, day);
-                    const highlight = off && isActive(t.truck_number, day);
+                    const highlight = isActive(t.truck_number, day);
                     const key = `${t.truck_number}-${day}`;
                     const isSaving = saving.has(key);
                     return (
@@ -122,13 +150,20 @@ export default function OffDaySchedulePanel() {
                         onClick={() => toggleOffDay(t.truck_number, day, t.scheduled_off_days ?? [])}
                         className={clsx(
                           "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-all cursor-pointer select-none",
+                          compact && !showInCompact(day) && "hidden md:table-cell",
                           isSaving
                             ? "opacity-40"
                             : off
                               ? highlight
                                 ? "bg-red-900/50 text-red-300 opacity-100 hover:bg-emerald-900/40"
                                 : "bg-red-900/30 text-red-300/60 opacity-40 hover:opacity-80 hover:bg-red-900/50"
-                              : "bg-emerald-900/40 text-emerald-300 hover:bg-red-900/30 hover:text-red-300/80",
+                              : highlight
+                                ? "bg-slate-800/50 text-slate-500"
+                                : isLoadDay(day)
+                                  ? "text-blue-300 bg-blue-900/30 ring-1 ring-inset ring-blue-500/30 font-bold hover:bg-red-900/30 hover:text-red-300/80"
+                                  : isUnloadDay(day)
+                                    ? "text-emerald-300 bg-emerald-900/30 ring-1 ring-inset ring-emerald-500/30 font-bold hover:bg-red-900/30 hover:text-red-300/80"
+                                    : "bg-emerald-900/40 text-emerald-300 hover:bg-red-900/30 hover:text-red-300/80",
                         )}
                       >
                         {isSaving ? "…" : off ? "OFF" : "RUN"}
@@ -139,10 +174,38 @@ export default function OffDaySchedulePanel() {
               ))
             )}
           </tbody>
+          {rows.length > 0 && (
+            <tfoot>
+              <tr className="bg-slate-800/60 text-xs font-semibold uppercase tracking-wide text-slate-400">
+                <td className="sticky left-0 z-10 border border-slate-700/50 bg-slate-800/80 px-1 py-1.5 text-center text-[10px] text-slate-500">
+                  Total
+                </td>
+                {perDayCount.map((count, i) => {
+                  const day = i + 1;
+                  return (
+                    <td
+                      key={day}
+                      className={clsx(
+                        "border border-slate-700/50 px-1 py-1.5 text-center font-mono tabular-nums transition-colors",
+                        compact && !showInCompact(day) && "hidden md:table-cell",
+                        isLoadDay(day)
+                          ? "bg-blue-900/30 text-blue-300"
+                          : isUnloadDay(day)
+                          ? "bg-emerald-900/30 text-emerald-300"
+                          : "text-slate-300",
+                      )}
+                    >
+                      {count}
+                    </td>
+                  );
+                })}
+              </tr>
+            </tfoot>
+          )}
         </table>
         {rows.length > 0 && (
           <div className="border-t border-slate-800 px-3 py-1.5 text-[10px] text-slate-500">
-            {runningToday} running Day {todayDayNum} · {rows.length} total route trucks
+            <span className="text-blue-400">{runningToday}</span> running <span className="text-blue-400">Day {loadDay}{holidayLoad ? `+${loadNextDay}` : ""}</span> · <span className="text-emerald-400">{rows.filter((t) => !isScheduledOff(t, unloadsDay)).length}</span> unloading <span className="text-emerald-400">Day {unloadsDay}{holidayUnload ? `+${unloadPrevDay}` : ""}</span> · {rows.length} total route trucks
           </div>
         )}
       </div>

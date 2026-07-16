@@ -13,7 +13,7 @@ export function currentShift(d = new Date()): ShiftInfo {
   return { name: "3rd", label: "3rd Shift", hours: "10pm – 6am" };
 }
 
-export default function Clock({ compact = false }: { compact?: boolean }) {
+export default function Clock({ compact = false, className }: { compact?: boolean; className?: string }) {
   const [now, setNow] = useState(() => new Date());
   useEffect(() => {
     const id = setInterval(() => setNow(new Date()), 1000);
@@ -22,7 +22,7 @@ export default function Clock({ compact = false }: { compact?: boolean }) {
   const shift = currentShift(now);
   if (compact) {
     return (
-      <span className="text-sm font-semibold tabular-nums text-blue-400">
+      <span className={className ?? "text-sm font-semibold tabular-nums text-blue-400"}>
         {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
       </span>
     );
@@ -47,14 +47,19 @@ export function todayLong(): string {
 }
 
 /**
- * Returns the operational run date: backs up to the previous calendar day
- * if the current time is before 6am (still in 3rd shift).
+ * Returns the operational run date: backs up to the previous calendar day if
+ * before 6am (still in 3rd shift), and freezes the weekend to the preceding
+ * Friday — the weekend is one continuous run period that only rolls over at
+ * 6am Monday (1st shift). Mirrors the run_date logic in todayIso().
  */
 export function shiftRunDate(d = new Date()): Date {
-  if (d.getHours() < 6) {
-    return new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1);
-  }
-  return d;
+  let r = d.getHours() < 6
+    ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1)
+    : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const wd = r.getDay(); // 0=Sun .. 6=Sat
+  if (wd === 6) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 1);
+  else if (wd === 0) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 2);
+  return r;
 }
 
 /**
@@ -74,6 +79,13 @@ export function shipDayNumber(d: Date): number {
  * Pass an explicit date when computing from a specific run_date string.
  */
 export function workdayNumbers(now = shiftRunDate()): { loadDay: number; unloadsDay: number } {
+  // Freeze weekends to the previous Friday — the work week is Mon–Fri and
+  // rolls over at 6am Monday (after 3rd shift).
+  const wd = now.getDay(); // 0=Sun, 6=Sat
+  if (wd === 0 || wd === 6) {
+    const daysBack = wd === 0 ? 2 : 1;
+    now = new Date(now.getFullYear(), now.getMonth(), now.getDate() - daysBack);
+  }
   const unloadsDay = shipDayNumber(now);
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);

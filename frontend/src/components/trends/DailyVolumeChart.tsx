@@ -24,7 +24,7 @@ export default function DailyVolumeChart({ data, isLoading, onViewDetails }: Pro
   return (
     <TrendChartCard
       title="Daily Audit Volume"
-      subtitle="Items removed per day"
+      subtitle="Discrepancy items per day"
       isLoading={isLoading}
       isEmpty={!isLoading && (!data || data.length === 0)}
       onViewDetails={onViewDetails}
@@ -39,7 +39,7 @@ export default function DailyVolumeChart({ data, isLoading, onViewDetails }: Pro
               }),
               datasets: [
                 {
-                  label: "Items removed",
+                  label: "Discrepancy items",
                   data: data.map((d) => d.total_qty),
                   backgroundColor: "rgba(59, 130, 246, 0.6)",
                   borderColor: "#3b82f6",

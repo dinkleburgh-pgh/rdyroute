@@ -11,15 +11,17 @@ import {
   useCycleTimeTrend,
   useShortageDailyTrend,
   useShortageByCategory,
+  useShortageSummary,
   useTruckAnomalies,
   useAuditAnomalies,
   useTrendSummary,
 } from "../../api/hooks";
+import KpiCard from "../../components/trends/KpiCard";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 
 const METRICS: Record<string, { label: string; color: string }> = {
-  volume:     { label: "Audit Volume",    color: "text-blue-400" },
+  volume:     { label: "Discrepancy Volume",    color: "text-blue-400" },
   pace:       { label: "Load Pace",       color: "text-green-400" },
   completion: { label: "Completion Rate", color: "text-amber-400" },
   wearers:    { label: "Wearers",         color: "text-violet-400" },
@@ -43,6 +45,7 @@ export default function TrendDetail() {
   const { data: cycle } = useCycleTimeTrend(days);
   const { data: shortageDaily } = useShortageDailyTrend(days);
   const { data: shortageByCat } = useShortageByCategory(days);
+  const { data: shortageSummary } = useShortageSummary(days, days);
   const { data: truckAnomalies } = useTruckAnomalies(90);
   const { data: auditAnomalies } = useAuditAnomalies(90);
 
@@ -68,12 +71,12 @@ export default function TrendDetail() {
         </h2>
       </div>
 
-      {metric === "volume" && <VolumeTable data={byTruck} daily={daily} />}
+      {metric === "volume" && <VolumeTable data={byTruck} daily={daily} summary={summary} />}
       {metric === "pace" && <PaceTable data={pace} />}
       {metric === "completion" && <CompletionTable data={completion} />}
       {metric === "wearers" && <WearersTable data={wearers} />}
       {metric === "cycle" && <CycleTable data={cycle} />}
-      {metric === "shortages" && <ShortageTable data={shortageDaily} byCat={shortageByCat} />}
+      {metric === "shortages" && <ShortageTable data={shortageDaily} byCat={shortageByCat} summary={shortageSummary} />}
       {metric === "anomalies" && <AnomalyTable data={anomalies} />}
     </motion.div>
   );
@@ -95,13 +98,15 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
   return <td className={clsx("border-b border-slate-800/50 px-3 py-2 text-slate-200", className)}>{children}</td>;
 }
 
-function VolumeTable({ data, daily }: { data: { truck_number: number; item_label: string; total_qty: number }[] | undefined; daily: { run_date: string; total_qty: number; entry_count: number }[] | undefined }) {
-  const dailyTotal = daily?.reduce((s, d) => s + d.total_qty, 0) ?? 0;
+function VolumeTable({ data, daily, summary }: { data: { truck_number: number; item_label: string; total_qty: number }[] | undefined; daily: { run_date: string; total_qty: number; entry_count: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
+  const s = summary ?? { total_qty: 0, avg_per_day: 0, peak_qty: 0, entry_count: 0, days_with_data: 0 };
   return (
     <div className="space-y-4">
-      <div className="flex gap-4 text-sm">
-        <span className="text-slate-400">Total items: <span className="font-semibold text-slate-200">{dailyTotal}</span></span>
-        <span className="text-slate-400">Days: <span className="font-semibold text-slate-200">{daily?.length ?? 0}</span></span>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard label="Total Pieces" value={s.total_qty.toLocaleString()} status="Stable" />
+        <KpiCard label="Avg / Day" value={s.avg_per_day.toFixed(1)} status="Stable" />
+        <KpiCard label="Days" value={s.days_with_data} status="Stable" />
+        <KpiCard label="Total Entries" value={s.entry_count.toLocaleString()} status="Stable" />
       </div>
       <Table>
         <thead>
@@ -129,7 +134,15 @@ function VolumeTable({ data, daily }: { data: { truck_number: number; item_label
 }
 
 function PaceTable({ data }: { data: { run_date: string; avg_seconds: number; load_count: number }[] | undefined }) {
+  const avg = data && data.length > 0 ? data.reduce((s, d) => s + d.avg_seconds, 0) / data.length : 0;
+  const totalLoads = data?.reduce((s, d) => s + d.load_count, 0) ?? 0;
   return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <KpiCard label="Avg Pace" value={avg > 0 ? `${Math.floor(avg / 60)}m ${Math.round(avg % 60)}s` : "—"} status="Stable" />
+        <KpiCard label="Total Loads" value={totalLoads.toLocaleString()} status="Stable" />
+        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+      </div>
     <Table>
       <thead>
         <tr>
@@ -151,11 +164,20 @@ function PaceTable({ data }: { data: { run_date: string; avg_seconds: number; lo
         ))}
       </tbody>
     </Table>
+    </div>
   );
 }
 
 function CompletionTable({ data }: { data: { run_date: string; total_trucks: number; loaded_trucks: number; pct: number }[] | undefined }) {
+  const totalLoaded = data?.reduce((s, d) => s + d.loaded_trucks, 0) ?? 0;
+  const avgPct = data && data.length > 0 ? data.reduce((s, d) => s + d.pct, 0) / data.length : 0;
   return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <KpiCard label="Avg Completion" value={`${avgPct.toFixed(1)}%`} status={avgPct >= 90 ? "Stable" : avgPct >= 70 ? "Watch" : "Critical"} />
+        <KpiCard label="Total Loaded" value={totalLoaded.toLocaleString()} status="Stable" />
+        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+      </div>
     <Table>
       <thead>
         <tr>
@@ -177,11 +199,18 @@ function CompletionTable({ data }: { data: { run_date: string; total_trucks: num
         ))}
       </tbody>
     </Table>
+    </div>
   );
 }
 
 function WearersTable({ data }: { data: { run_date: string; avg_wearers: number; truck_count: number }[] | undefined }) {
+  const avgW = data && data.length > 0 ? data.reduce((s, d) => s + d.avg_wearers, 0) / data.length : 0;
   return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <KpiCard label="Avg Wearers" value={avgW.toFixed(1)} status="Stable" />
+        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+      </div>
     <Table>
       <thead>
         <tr>
@@ -203,11 +232,18 @@ function WearersTable({ data }: { data: { run_date: string; avg_wearers: number;
         ))}
       </tbody>
     </Table>
+    </div>
   );
 }
 
 function CycleTable({ data }: { data: { run_date: string; avg_seconds: number; truck_count: number }[] | undefined }) {
+  const avgCycle = data && data.length > 0 ? data.reduce((s, d) => s + d.avg_seconds, 0) / data.length : 0;
   return (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+        <KpiCard label="Avg Cycle" value={avgCycle > 0 ? `${Math.floor(avgCycle / 60)}m ${Math.round(avgCycle % 60)}s` : "—"} status="Stable" />
+        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+      </div>
     <Table>
       <thead>
         <tr>
@@ -229,15 +265,19 @@ function CycleTable({ data }: { data: { run_date: string; avg_seconds: number; t
         ))}
       </tbody>
     </Table>
+    </div>
   );
 }
 
-function ShortageTable({ data, byCat }: { data: { run_date: string; total_qty: number; entry_count: number }[] | undefined; byCat: { category: string; total_qty: number }[] | undefined }) {
-  const total = data?.reduce((s, d) => s + d.total_qty, 0) ?? 0;
+function ShortageTable({ data, byCat, summary }: { data: { run_date: string; total_qty: number; entry_count: number }[] | undefined; byCat: { category: string; total_qty: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
+  const s = summary ?? { total_qty: 0, avg_per_day: 0, peak_qty: 0, entry_count: 0, days_with_data: 0 };
   return (
     <div className="space-y-4">
-      <div className="flex gap-4 text-sm">
-        <span className="text-slate-400">Total shortage items: <span className="font-semibold text-slate-200">{total}</span></span>
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <KpiCard label="Total Shortages" value={s.total_qty.toLocaleString()} status="Stable" />
+        <KpiCard label="Avg / Day" value={s.avg_per_day.toFixed(1)} status="Stable" />
+        <KpiCard label="Days" value={s.days_with_data} status="Stable" />
+        <KpiCard label="Entries" value={s.entry_count.toLocaleString()} status="Stable" />
       </div>
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">By Category</h3>
       <Table>

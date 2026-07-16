@@ -28,6 +28,12 @@ class Settings(BaseSettings):
     shortage_sheet_preprocess_max_image_side: int = 2400
     production_sync_source_url: str = "https://rdyroute.app/api/exports"
     production_sync_timeout_seconds: int = 180
+    # Prod admin credentials used by the dev "Production Mirror Sync" tool to log
+    # into production and fetch the admin-protected export endpoints. Dev-only —
+    # leave empty in production. The sync POSTs these to prod's /auth/token to
+    # mint a fresh short-lived JWT on each run.
+    production_sync_username: str = ""
+    production_sync_password: str = ""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 

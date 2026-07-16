@@ -5,11 +5,11 @@
  */
 import { useMemo, useState, useRef, useEffect } from "react";
 import clsx from "clsx";
-import { useLocation } from "react-router-dom";
-import { FileText, Check, Bell } from "lucide-react";
-import { useSettings, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
+import { Bell, Check, AlertTriangle, Plus, Trash2, X } from "lucide-react";
+import { useSettings, useSpareAssignments, useRouteSwapLog, useTruckNotes, useBoard, useUpsertSetting } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
+import { isScheduledOff, getCoverageRouteNumber, previousRunDate, buildPrevDayCoverage } from "../utils/truckStatus";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckNote, TruckStatus } from "../types";
 
@@ -42,41 +42,95 @@ const STATUS_TEXT: Partial<Record<TruckStatus, string>> = {
 };
 
 
-export default function NoteCardsDrawer() {
-  const location = useLocation();
+export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { user } = useAuth();
   const { data: settings } = useSettings();
   const { data: notes = [] } = useTruckNotes({ activeOnly: true });
   const { data: board = [] } = useBoard(todayIso());
   const upsert = useUpsertSetting();
-  const [open, setOpen] = useState(false);
-  const [tab, setTab] = useState<"truck" | "mine">("truck");
+  const [tab, setTab] = useState<"truck" | "mine" | "reminders">("truck");
   const [filter, setFilter] = useState<"all" | "today">("all");
 
-  // Personal note state
+  // Personal note state — stored as JSON array of { title, body }
+  interface NoteSection { title: string; body: string; id: string; }
   const personalKey = `personal_note_${user?.username ?? "unknown"}`;
-  const savedPersonal = (settings ?? []).find((s) => s.key === personalKey)?.value as string ?? "";
-  const [personalDraft, setPersonalDraft] = useState<string | null>(null);
+  const rawSaved = (settings ?? []).find((s) => s.key === personalKey)?.value;
+  const savedSections = useMemo((): NoteSection[] => {
+    if (!rawSaved) return [];
+    if (typeof rawSaved === "string") {
+      try { return JSON.parse(rawSaved); } catch { return [{ title: "", body: rawSaved, id: "legacy" }]; }
+    }
+    return [];
+  }, [rawSaved]);
+  const [sections, setSections] = useState<NoteSection[] | null>(null);
   const [noteSaved, setNoteSaved] = useState(false);
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const currentSections = sections ?? savedSections;
+
   useEffect(() => {
-    if (personalDraft === null && savedPersonal !== "") setPersonalDraft(savedPersonal);
-  }, [savedPersonal, personalDraft]);
+    if (sections === null && savedSections.length > 0) setSections(savedSections);
+  }, [savedSections, sections]);
 
-  const personalText = personalDraft ?? savedPersonal;
-
-  function handlePersonalChange(val: string) {
-    setPersonalDraft(val);
+  function saveSections(s: NoteSection[]) {
+    setSections(s);
     if (saveTimer.current) clearTimeout(saveTimer.current);
     saveTimer.current = setTimeout(async () => {
-      await upsert.mutateAsync({ key: personalKey, value: val });
+      await upsert.mutateAsync({ key: personalKey, value: JSON.stringify(s) });
       setNoteSaved(true);
       setTimeout(() => setNoteSaved(false), 1500);
     }, 800);
   }
 
-  const { loadDay } = workdayNumbers();
+  function addSection() {
+    const id = Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    saveSections([...currentSections, { id, title: "", body: "" }]);
+  }
+
+  function removeSection(id: string) {
+    saveSections(currentSections.filter((s) => s.id !== id));
+  }
+
+  function updateSection(id: string, field: "title" | "body", val: string) {
+    saveSections(currentSections.map((s) => s.id === id ? { ...s, [field]: val } : s));
+  }
+
+  // Previous operating day (weekend-aware) — Monday's prior run day is Friday.
+  const yesterday = useMemo(() => previousRunDate(todayIso()), []);
+
+  const { data: yesterdaySpares } = useSpareAssignments(yesterday);
+  const unreturnedSpares = useMemo(
+    () => (yesterdaySpares ?? []).filter((s) => !s.returned),
+    [yesterdaySpares],
+  );
+
+  const { data: todaySpares } = useSpareAssignments(todayIso());
+  const { data: swapLog = [] } = useRouteSwapLog(14);
+  const todaySwaps = useMemo(
+    () => swapLog.filter((s) => s.run_date === todayIso()),
+    [swapLog],
+  );
+  // Complete previous load-day coverage (route -> covering truck), weekend-aware,
+  // shared with the Day Overview and Unload board.
+  const prevCoverage = useMemo(() => buildPrevDayCoverage(swapLog, yesterday), [swapLog, yesterday]);
+  const offTrucksToday = useMemo(
+    () => board.filter((t) => t.state?.status === "off"),
+    [board],
+  );
+
+  const { loadDay, unloadsDay } = workdayNumbers();
+
+  // Trucks scheduled off for the unloads day that actually ran (coverage or special).
+  // These aren't truly "off" — they need attention and shouldn't show U Off badges.
+  const unloadReminders = useMemo(
+    () => board.filter(
+      (t) =>
+        t.truck_type !== "Spare" &&
+        isScheduledOff(t, unloadsDay) &&
+        (getCoverageRouteNumber(t) != null || t.state?.needs_checked),
+    ),
+    [board, unloadsDay],
+  );
 
   const statusByTruck = useMemo(() => {
     const map = new Map<number, TruckStatus>();
@@ -85,11 +139,6 @@ export default function NoteCardsDrawer() {
     }
     return map;
   }, [board]);
-
-  const enabled = useMemo(
-    () => (settings ?? []).find((s) => s.key === "note_cards_enabled")?.value === true,
-    [settings],
-  );
 
   const today = useMemo(() => {
     const d = new Date();
@@ -126,19 +175,14 @@ export default function NoteCardsDrawer() {
     [byTruck],
   );
 
-  if (!enabled) {
-    return null;
-  }
+  if (!open) return null;
 
   return (
-    <>
-      {/* Floating panel */}
-      {open && (
-        <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ maxHeight: "80svh" }}>
-          {/* Panel header */}
-          <div className="flex shrink-0 items-center justify-between gap-2 border-b border-slate-700 bg-slate-800 px-4 py-3 rounded-t-xl">
+    <div className="fixed bottom-[7.5rem] left-3 right-3 z-40 flex flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl md:bottom-20 sm:left-auto sm:right-4 sm:w-[26rem]" style={{ height: "calc(80svh - 3rem)" }}>
+      {/* Panel header */}
+      <div className="grid shrink-0 grid-cols-[1fr_auto] items-center gap-2 border-b border-slate-700 bg-slate-800 px-4 py-3 rounded-t-xl">
             {/* Tab switcher */}
-            <div className="flex items-center gap-1 rounded-lg overflow-hidden ring-1 ring-slate-700">
+            <div className="flex items-center gap-1 rounded-lg overflow-hidden ring-1 ring-slate-700 min-w-0">
               <button
                 type="button"
                 onClick={() => setTab("truck")}
@@ -158,6 +202,16 @@ export default function NoteCardsDrawer() {
                 )}
               >
                 My Notes
+              </button>
+              <button
+                type="button"
+                onClick={() => setTab("reminders")}
+                className={clsx(
+                  "px-3 py-1.5 text-xs font-semibold transition-colors border-l border-slate-700",
+                  tab === "reminders" ? "bg-amber-700 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                )}
+              >
+                Reminders {(unreturnedSpares.length + unloadReminders.length) > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{unreturnedSpares.length + unloadReminders.length}</span>}
               </button>
             </div>
 
@@ -185,11 +239,11 @@ export default function NoteCardsDrawer() {
               )}
               <button
                 type="button"
-                onClick={() => setOpen(false)}
+                onClick={onClose}
                 className="rounded p-1 text-slate-500 hover:text-slate-300 transition-colors"
                 aria-label="Close"
               >
-                <FileText className="h-5 w-5" />
+                <X className="h-5 w-5" />
               </button>
             </div>
           </div>
@@ -199,20 +253,182 @@ export default function NoteCardsDrawer() {
 
             {/* My Notes tab */}
             {tab === "mine" && (
-              <div className="space-y-2">
+              <div className="space-y-3">
                 <div className="flex items-center gap-2">
                   <Check className="h-4 w-4 text-emerald-400" />
                   <span className="text-xs font-semibold text-emerald-400 uppercase tracking-wide">{user?.username}</span>
                   {noteSaved && <span className="text-[10px] text-emerald-500 ml-auto">Saved</span>}
                   {upsert.isPending && !noteSaved && <span className="text-[10px] text-slate-500 ml-auto">Saving…</span>}
                 </div>
-                <textarea
-                  className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none"
-                  rows={12}
-                  placeholder="Personal notes visible only to you…"
-                  value={personalText}
-                  onChange={(e) => handlePersonalChange(e.target.value)}
-                />
+                {currentSections.map((sec) => (
+                  <div key={sec.id} className="rounded-xl border border-slate-700 bg-slate-800/60 p-3 space-y-2">
+                    <div className="flex items-center gap-2">
+                      <input
+                        className="flex-1 rounded border border-slate-700 bg-slate-800 px-2 py-1 text-sm font-semibold text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none"
+                        placeholder="Section title (optional)"
+                        value={sec.title}
+                        onChange={(e) => updateSection(sec.id, "title", e.target.value)}
+                      />
+                      <button onClick={() => removeSection(sec.id)} className="rounded p-1 text-slate-500 hover:text-red-400 transition-colors" title="Remove section">
+                        <Trash2 className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                    <textarea
+                      className="w-full rounded-lg border border-slate-700 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-emerald-500 focus:outline-none resize-none overflow-hidden"
+                      rows={1}
+                      placeholder="Notes…"
+                      value={sec.body}
+                      onChange={(e) => {
+                        updateSection(sec.id, "body", e.target.value);
+                        e.target.style.height = "auto";
+                        e.target.style.height = e.target.scrollHeight + "px";
+                      }}
+                    />
+                  </div>
+                ))}
+                <button
+                  onClick={addSection}
+                  className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-slate-700 py-3 text-sm font-medium text-slate-500 transition-colors hover:border-emerald-600 hover:text-emerald-400"
+                >
+                  <Plus className="h-4 w-4" /> Add section
+                </button>
+              </div>
+            )}
+
+            {/* Reminders tab */}
+            {tab === "reminders" && (
+              <div className="space-y-4">
+
+                {/* Previous load-day coverage — complete route → covering-truck list
+                    from the route-swap log (matches Day Overview + Unload board). */}
+                {prevCoverage.items.length > 0 && (
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-amber-400" />
+                      <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Previous Load-Day Coverage</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {prevCoverage.items.map((c) => (
+                        <span
+                          key={c.route}
+                          className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-sm"
+                        >
+                          <span className="font-black text-red-300">#{c.route}</span>
+                          <span className="text-slate-600">→</span>
+                          <span className="font-black text-amber-200">#{c.loadOn}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Unload Reminders — trucks scheduled off today that actually ran */}
+                {unloadReminders.length > 0 && (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4 text-orange-400" />
+                      <span className="text-xs font-semibold text-orange-400 uppercase tracking-wide">Unload Reminders</span>
+                    </div>
+                    {unloadReminders.map((t) => (
+                      <div key={t.truck_number} className="rounded-xl border border-orange-700/30 bg-orange-900/10 p-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black text-orange-300">#{t.truck_number}</span>
+                          {t.state?.needs_checked && (
+                            <span className="rounded-full bg-amber-900/50 px-2 py-0.5 text-xs font-semibold text-amber-300">Ran Special</span>
+                          )}
+                          {getCoverageRouteNumber(t) != null && (
+                            <span className="rounded-full bg-sky-900/50 px-2 py-0.5 text-xs font-semibold text-sky-300">
+                              Cov. #{getCoverageRouteNumber(t)}
+                            </span>
+                          )}
+                          <span className="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-400 uppercase">{t.state?.status ?? "—"}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Yesterday's Coverage */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <AlertTriangle className="h-4 w-4 text-amber-400" />
+                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Yesterday's Coverage</span>
+                  </div>
+                  {unreturnedSpares.length === 0 ? (
+                    <p className="text-center text-sm text-slate-500 py-3">No active coverage reminders.</p>
+                  ) : (
+                    unreturnedSpares.map((s) => (
+                      <div key={s.id} className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-base font-black text-amber-300">#{s.covering_route_truck}</span>
+                          <span className="text-xs text-slate-500">ran on</span>
+                          <span className="text-base font-black text-amber-300">Spare #{s.spare_truck_number}</span>
+                        </div>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Today's Coverage */}
+                <div className="space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Bell className="h-4 w-4 text-blue-400" />
+                    <span className="text-xs font-semibold text-blue-400 uppercase tracking-wide">Today's Coverage</span>
+                  </div>
+
+                  {/* Active spares */}
+                  {todaySpares && todaySpares.filter((s) => !s.returned).length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Active Spares</p>
+                      {todaySpares.filter((s) => !s.returned).map((s) => (
+                        <div key={s.id} className="rounded-xl border border-blue-700/30 bg-blue-900/10 p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-black text-blue-300">Spare #{s.spare_truck_number}</span>
+                            <span className="text-xs text-slate-500">covering</span>
+                            <span className="text-base font-black text-blue-300">#{s.covering_route_truck}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Route swaps */}
+                  {todaySwaps.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Route Swaps</p>
+                      {todaySwaps.map((s, i) => (
+                        <div key={i} className="rounded-xl border border-blue-700/30 bg-blue-900/10 p-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-base font-black text-blue-300">#{s.route_truck}</span>
+                            <span className="text-xs text-slate-500">loaded by</span>
+                            <span className="text-base font-black text-blue-300">#{s.load_on_truck}</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Routes Off — non-spare route trucks not running today */}
+                  {(() => {
+                    const routeOff = board.filter((t) => t.truck_type !== "Spare" && isScheduledOff(t, loadDay));
+                    return routeOff.length > 0 ? (
+                      <div className="space-y-2">
+                        <p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Routes Off</p>
+                        <div className="flex flex-wrap gap-2">
+                          {routeOff.map((t) => (
+                            <span key={t.truck_number} className="inline-flex items-center rounded-full bg-red-900/30 px-3 py-1 text-xs font-semibold text-red-400">
+                              #{t.truck_number}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    ) : null;
+                  })()}
+
+                  {(!todaySpares || todaySpares.filter((s) => !s.returned).length === 0) && todaySwaps.length === 0 && offTrucksToday.length === 0 && (
+                    <p className="text-center text-sm text-slate-500 py-3">No coverage or off trucks today.</p>
+                  )}
+                </div>
               </div>
             )}
 
@@ -253,29 +469,7 @@ export default function NoteCardsDrawer() {
                 </div>
               );
             })}
-          </div>
         </div>
-      )}
-
-      {/* FAB toggle button */}
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className={clsx(
-          "fixed bottom-[4.5rem] right-4 z-40 flex items-center gap-2 rounded-full shadow-2xl transition-all duration-150",
-          "px-3 py-2 text-sm font-bold md:bottom-5 md:right-5 md:gap-3 md:px-6 md:py-3.5 md:text-base",
-          open
-            ? "bg-violet-700 text-white ring-4 ring-violet-500/40 shadow-violet-900/50"
-            : "bg-gradient-to-br from-violet-600 to-indigo-700 text-white ring-2 ring-violet-400/30 hover:from-violet-500 hover:to-indigo-600 hover:ring-violet-400/50 hover:scale-105",
-        )}
-      >
-        {/* Clipboard / note icon */}
-        <Bell className="h-4 w-4 shrink-0 md:h-5 md:w-5" />
-        <span className="hidden md:inline">Notes</span>
-        <span className="inline-flex items-center justify-center rounded-full bg-white min-w-[1.25rem] h-5 px-1.5 text-xs font-extrabold text-indigo-700 md:min-w-[1.5rem] md:h-6 md:px-2 md:text-sm" style={{ lineHeight: 1 }}>
-          {displayedNotes.length}
-        </span>
-      </button>
-    </>
+    </div>
   );
 }

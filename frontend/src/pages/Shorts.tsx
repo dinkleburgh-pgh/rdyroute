@@ -16,6 +16,7 @@ import {
   useCreateShortage,
   useUpdateShortage,
   useDeleteShortage,
+  useHolidayLoad,
   type TrackedItem,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
@@ -24,6 +25,8 @@ import type { Shortage, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
+import { isScheduledOff } from "../utils/truckStatus";
+import { workdayNumbers } from "../components/Clock";
 
 // ---------------------------------------------------------------------------
 // Colour palette
@@ -115,21 +118,37 @@ const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
 function TruckPicker({
   board,
   shortsByTruck,
+  loadDay,
+  holiday,
   onSelect,
 }: {
   board: TruckWithState[];
   shortsByTruck: Map<number, Shortage[]>;
+  loadDay: number;
+  holiday: boolean;
   onSelect: (t: TruckWithState) => void;
 }) {
-  const trucks = board
+  const routeTrucks = board
     .filter((t) => t.truck_type !== "Spare")
     .sort((a, b) => a.truck_number - b.truck_number);
 
-  const withShorts    = trucks.filter((t) =>  shortsByTruck.has(t.truck_number));
-  const withoutShorts = trucks.filter((t) => !shortsByTruck.has(t.truck_number));
+  // Running routes = the route trucks actually scheduled to run this load day
+  // (holiday runs every route). Mirrors VerifyShortSheet / the board, so the
+  // sheet lists exactly the routes that need writing up and re-derives live
+  // whenever the fleet schedule changes.
+  const running = routeTrucks.filter(
+    (t) => t.is_active && (holiday || !isScheduledOff(t, loadDay)),
+  );
 
-  if (trucks.length === 0) {
-    return <p className="p-6 text-sm text-slate-500">No trucks found for this date.</p>;
+  // A route that already has shorts logged is always shown (even if it's off or
+  // inactive) so nothing anyone logged can be hidden. "To log" is limited to
+  // running routes that don't have shorts yet.
+  const withShorts    = routeTrucks.filter((t) => shortsByTruck.has(t.truck_number));
+  const withoutShorts = running.filter((t) => !shortsByTruck.has(t.truck_number));
+  const runningLogged = running.filter((t) => shortsByTruck.has(t.truck_number)).length;
+
+  if (running.length === 0 && withShorts.length === 0) {
+    return <p className="p-6 text-sm text-slate-500">No routes running for this date.</p>;
   }
 
   return (
@@ -138,7 +157,7 @@ function TruckPicker({
       {withShorts.length > 0 && (
         <div className="flex flex-wrap gap-3 text-sm">
           <span className="rounded-full bg-amber-900/50 px-3 py-1 font-semibold text-amber-300">
-            {withShorts.length} / {trucks.length} routes logged
+            {runningLogged} / {running.length} routes logged
           </span>
         </div>
       )}
@@ -155,11 +174,12 @@ function TruckPicker({
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
-                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow transition active:scale-95 hover:bg-slate-600 hover:shadow-lg"
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.02 }}
-                whileHover={{ scale: 1.03 }}
+                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow hover:bg-slate-600 hover:shadow-lg"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 400, damping: 30, delay: i * 0.02 }}
+                whileHover={{ scale: 1.06, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                whileTap={{ scale: 0.93 }}
               >
                 <span className="text-2xl font-black leading-none">{t.truck_number}</span>
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
@@ -183,11 +203,12 @@ function TruckPicker({
                   key={t.truck_number}
                   type="button"
                   onClick={() => onSelect(t)}
-                  className="flex aspect-square flex-col items-center justify-center rounded-xl bg-amber-900/60 text-white shadow ring-1 ring-amber-700/60 transition active:scale-95 hover:bg-amber-800/60"
-                  initial={{ opacity: 0, y: 12 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.35, delay: i * 0.02 }}
-                  whileHover={{ scale: 1.03 }}
+                  className="flex aspect-square flex-col items-center justify-center rounded-xl bg-amber-900/60 text-white shadow ring-1 ring-amber-700/60 hover:bg-amber-800/60"
+                  initial={{ opacity: 0, scale: 0.9 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ type: "spring", stiffness: 400, damping: 30, delay: i * 0.02 }}
+                  whileHover={{ scale: 1.06, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                  whileTap={{ scale: 0.93 }}
                 >
                   <span className="text-xl font-black leading-none text-amber-200">{t.truck_number}</span>
                   <span className="mt-0.5 text-[10px] font-semibold text-amber-400">
@@ -206,6 +227,54 @@ function TruckPicker({
 // ---------------------------------------------------------------------------
 // HierarchyPicker — driven by tracked items
 // ---------------------------------------------------------------------------
+
+// Module-level so it keeps a stable component identity — defined inside
+// HierarchyPicker it was recreated every render, remounting these buttons and
+// replaying their entrance animation endlessly.
+function ItemGrid({
+  gridItems,
+  cat,
+  btnClass,
+  isPending,
+  onSelect,
+}: {
+  gridItems: TrackedItem[];
+  cat: string;
+  btnClass: string;
+  isPending: boolean;
+  onSelect: (category: string, detail: string) => void;
+}) {
+  return (
+    <div className="grid grid-cols-3 gap-2">
+      {gridItems.map((item, i) => {
+        const disp = MAT_SIZES_S.has(cat) && item.label.startsWith(cat + " ")
+          ? item.label.slice(cat.length + 1)
+          : item.label;
+        const detail = disp; // for mats: just color; for others: full label
+        return (
+          <motion.button
+            key={item.label}
+            type="button"
+            disabled={isPending}
+            onClick={() => onSelect(cat, detail)}
+            className={clsx(
+              "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg disabled:opacity-50",
+              LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
+              MAT_COLOR_PALETTE[disp] ?? btnClass,
+            )}
+            initial={{ opacity: 0, scale: 0.94 }}
+            animate={{ opacity: 1, scale: 1 }}
+            transition={{ type: "spring", stiffness: 380, damping: 28, delay: i * 0.025 }}
+            whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+            whileTap={{ scale: 0.94 }}
+          >
+            {disp}
+          </motion.button>
+        );
+      })}
+    </div>
+  );
+}
 
 function HierarchyPicker({
   items,
@@ -296,38 +365,6 @@ function HierarchyPicker({
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkSub]);
-
-  function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
-    return (
-      <div className="grid grid-cols-3 gap-2">
-        {gridItems.map((item, i) => {
-          const disp = MAT_SIZES_S.has(cat) && item.label.startsWith(cat + " ")
-            ? item.label.slice(cat.length + 1)
-            : item.label;
-          const detail = disp; // for mats: just color; for others: full label
-          return (
-            <motion.button
-              key={item.label}
-              type="button"
-              disabled={isPending}
-              onClick={() => selectItem(cat, detail)}
-              className={clsx(
-                "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
-                LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
-                MAT_COLOR_PALETTE[disp] ?? btnClass,
-              )}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.35, delay: i * 0.02 }}
-              whileHover={{ scale: 1.03 }}
-            >
-              {disp}
-            </motion.button>
-          );
-        })}
-      </div>
-    );
-  }
 
   // Build the selection trail from current state — deduplicate consecutive identical labels
   const trailRaw: { label: string; palette: string; onClick: () => void }[] = [];
@@ -456,13 +493,14 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setTopCat(cat)}
                 className={clsx(
-                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
                   TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.02 }}
-                whileHover={{ scale: 1.03 }}
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28, delay: i * 0.025 }}
+                whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                whileTap={{ scale: 0.94 }}
               >
                 {cat}
               </motion.button>
@@ -476,6 +514,8 @@ function HierarchyPicker({
             gridItems={flatItems}
             cat={topCat}
             btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            isPending={isPending}
+            onSelect={selectItem}
           />
         </div>
       ) : bulkSub === null ? (
@@ -488,13 +528,14 @@ function HierarchyPicker({
                 type="button"
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
-                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
+                  "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
                   SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
                 )}
-                initial={{ opacity: 0, y: 12 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.35, delay: i * 0.02 }}
-                whileHover={{ scale: 1.03 }}
+                initial={{ opacity: 0, scale: 0.94 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ type: "spring", stiffness: 380, damping: 28, delay: i * 0.025 }}
+                whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
+                whileTap={{ scale: 0.94 }}
               >
                 {sub}
               </motion.button>
@@ -508,6 +549,8 @@ function HierarchyPicker({
             gridItems={subItemsFor(topCat, bulkSub)}
             cat={bulkSub}
             btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            isPending={isPending}
+            onSelect={selectItem}
           />
         </div>
       )}
@@ -757,6 +800,16 @@ export function ShortsWorkspace() {
   const { data: board  = [] } = useBoard(runDate);
   const { data: shorts = [] } = useShortages(runDate);
 
+  // Which routes run on this sheet's date, per the fleet schedule. loadDay is
+  // derived from the run date the same way the rest of the app does it, and the
+  // holiday flag makes every route run. Both feed TruckPicker so the route list
+  // stays in lock-step with the fleet schedule (and its Verify companion).
+  const loadDay = useMemo(
+    () => workdayNumbers(new Date(`${runDate}T12:00:00`)).loadDay,
+    [runDate],
+  );
+  const { data: holiday = false } = useHolidayLoad(runDate);
+
   // Auto-select only when arriving with a ?truck= param (e.g. from in_progress page)
   useEffect(() => {
     if (selectedTruck !== null || board.length === 0) return;
@@ -849,6 +902,8 @@ export function ShortsWorkspace() {
             <TruckPicker
               board={board}
               shortsByTruck={shortsByTruck}
+              loadDay={loadDay}
+              holiday={holiday}
               onSelect={(t) => setSelected(t)}
             />
           ) : (

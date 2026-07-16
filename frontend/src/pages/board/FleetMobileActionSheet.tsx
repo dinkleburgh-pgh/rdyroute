@@ -66,9 +66,9 @@ export default function FleetMobileActionSheet({
   const canStartPaperBay = paperBayEnabled && !paperBayActive && !outsideActive;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-t-2xl border-t border-slate-700 bg-slate-900 pb-8 shadow-xl">
+      <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
           <div>
             <span className="text-2xl font-black tracking-tight text-white">#{truck.truck_number}</span>

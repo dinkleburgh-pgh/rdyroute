@@ -13,8 +13,10 @@ import io
 import ipaddress
 import json
 import os
+import shutil
+import subprocess
 import zipfile
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from pathlib import Path
 from urllib import error as urllib_error
 from urllib import parse as urllib_parse
@@ -37,11 +39,13 @@ from models import (
     LoadDuration,
     Notice,
     RouteSwap,
+    RouteSwapLog,
     Shortage,
     SpareAssignment,
     Truck,
     TruckNote,
     TruckState,
+    User,
 )
 from routers.auth import require_admin, require_management_access
 
@@ -68,7 +72,13 @@ def _json_response(data: object, filename: str) -> Response:
     )
 
 
-def _host_is_loopback(host: str | None) -> bool:
+def _host_is_local(host: str | None) -> bool:
+    """True for loopback or private-LAN (RFC1918) hosts.
+
+    Allows the production-sync dev tool to be reached from another device on the
+    same LAN (e.g. http://192.168.1.212:5180) while still hard-blocking public
+    hostnames like rdyroute.app, which never resolve to a private address.
+    """
     if not host:
         return False
     normalized = host.strip().lower()
@@ -81,26 +91,19 @@ def _host_is_loopback(host: str | None) -> bool:
     if normalized == "localhost":
         return True
     try:
-        return ipaddress.ip_address(normalized).is_loopback
+        ip = ipaddress.ip_address(normalized)
     except ValueError:
         return False
+    return ip.is_loopback or ip.is_private
 
 
 def _request_is_localhost(request: Request) -> bool:
-    candidates: list[str | None] = [
-        request.url.hostname,
-        request.client.host if request.client else None,
-    ]
-    for header_name in ("host", "x-forwarded-host", "origin", "referer"):
-        raw = request.headers.get(header_name)
-        if not raw:
-            continue
-        if header_name in {"origin", "referer"}:
-            parsed = urllib_parse.urlparse(raw)
-            candidates.append(parsed.hostname)
-        else:
-            candidates.extend(part.strip() for part in raw.split(","))
-    return any(_host_is_loopback(candidate) for candidate in candidates)
+    # Only trust the actual TCP peer (request.client.host). The Host /
+    # X-Forwarded-Host / Origin / Referer headers are all attacker-controlled —
+    # trusting them let a remote caller send "X-Forwarded-Host: 127.0.0.1" and
+    # pass this gate. This is a secondary check anyway; the primary gate on the
+    # sync route is "local DB is SQLite" (see sync_from_production).
+    return _host_is_local(request.client.host if request.client else None)
 
 
 def _parse_date(value: object) -> date | None:
@@ -159,6 +162,24 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     summary: dict[str, int] = {}
 
     if replace_existing:
+        # Guard against a partial/older backup silently wiping local data:
+        # under replace_existing every listed table is deleted, but each is only
+        # refilled if its JSON member is present below. If any expected member is
+        # missing, that table would be wiped with nothing to restore — so abort
+        # loudly instead of destroying data. (Merge mode, replace_existing=False,
+        # is safe: a missing member just means nothing to merge for that table.)
+        required_members = {
+            "batches.json", "shortages.json", "audit_entries.json",
+            "truck_states.json", "load_durations.json", "fleet.json",
+            "app_settings.json", "route_swaps.json", "spare_assignments.json",
+            "route_swap_log.json", "truck_notes.json",
+        }
+        missing = sorted(required_members - set(zf.namelist()))
+        if missing:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Backup is missing required members, refusing to replace data: {', '.join(missing)}",
+            )
         for model in (
             Batch,
             Shortage,
@@ -166,6 +187,11 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             TruckState,
             LoadDuration,
             Truck,
+            AppSetting,
+            RouteSwap,
+            SpareAssignment,
+            RouteSwapLog,
+            TruckNote,
         ):
             db.execute(delete(model))
         db.flush()
@@ -237,7 +263,9 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
                 truck_number = int(item.get("truck_number", 0) or 0)
                 if truck_number <= 0:
                     continue
-                existing = db.get(Truck, truck_number)
+                # Under replace_existing the table was just emptied, so the row
+                # can't exist — skip the guaranteed-miss lookup and insert.
+                existing = None if replace_existing else db.get(Truck, truck_number)
                 truck_type = TruckType(item["truck_type"]) if item.get("truck_type") else TruckType.uniform
                 if existing is None:
                     db.add(Truck(
@@ -271,7 +299,9 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             truck_number = int(item.get("truck_number", 0) or 0)
             if run_date is None or truck_number <= 0:
                 continue
-            existing = db.scalars(
+            # Under replace_existing the table was just emptied, so skip the
+            # per-row lookup (10k+ guaranteed-miss round trips on a real mirror).
+            existing = None if replace_existing else db.scalars(
                 select(TruckState).where(
                     TruckState.truck_number == truck_number,
                     TruckState.run_date == run_date,
@@ -354,7 +384,7 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             truck_number = int(item.get("truck_number", 0) or 0)
             if run_date is None or batch_number <= 0 or truck_number <= 0:
                 continue
-            existing = db.scalars(
+            existing = None if replace_existing else db.scalars(
                 select(Batch).where(
                     Batch.run_date == run_date,
                     Batch.batch_number == batch_number,
@@ -375,6 +405,147 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
         db.flush()
         summary["batches_imported"] = imported
         summary["batches_updated"] = updated
+
+    if "app_settings.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("app_settings.json"), file_label="app_settings.json")
+        imported = 0
+        updated = 0
+        for item in rows_data:
+            key = str(item.get("key") or "").strip()
+            if not key:
+                continue
+            existing = None if replace_existing else db.get(AppSetting, key)
+            if existing is None:
+                db.add(AppSetting(key=key, value=item.get("value")))
+                imported += 1
+            else:
+                existing.value = item.get("value")
+                updated += 1
+        db.flush()
+        summary["app_settings_imported"] = imported
+        summary["app_settings_updated"] = updated
+
+    if "route_swaps.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("route_swaps.json"), file_label="route_swaps.json")
+        imported = 0
+        for item in rows_data:
+            run_date = _parse_date(item.get("run_date"))
+            route_truck = int(item.get("route_truck", 0) or 0)
+            load_on_truck = int(item.get("load_on_truck", 0) or 0)
+            if run_date is None or route_truck <= 0 or load_on_truck <= 0:
+                continue
+            if not replace_existing:
+                existing = db.scalars(
+                    select(RouteSwap).where(RouteSwap.run_date == run_date, RouteSwap.route_truck == route_truck)
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(RouteSwap(
+                run_date=run_date,
+                route_truck=route_truck,
+                load_on_truck=load_on_truck,
+                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
+            ))
+            imported += 1
+        db.flush()
+        summary["route_swaps"] = imported
+
+    if "spare_assignments.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("spare_assignments.json"), file_label="spare_assignments.json")
+        imported = 0
+        for item in rows_data:
+            run_date = _parse_date(item.get("run_date"))
+            spare_truck_number = int(item.get("spare_truck_number", 0) or 0)
+            covering_route_truck = int(item.get("covering_route_truck", 0) or 0)
+            if run_date is None or spare_truck_number <= 0 or covering_route_truck <= 0:
+                continue
+            assigned_at = _parse_datetime(item.get("assigned_at")) or datetime.utcnow()
+            if not replace_existing:
+                existing = db.scalars(
+                    select(SpareAssignment).where(
+                        SpareAssignment.run_date == run_date,
+                        SpareAssignment.spare_truck_number == spare_truck_number,
+                        SpareAssignment.covering_route_truck == covering_route_truck,
+                        SpareAssignment.assigned_at == assigned_at,
+                    )
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(SpareAssignment(
+                run_date=run_date,
+                spare_truck_number=spare_truck_number,
+                covering_route_truck=covering_route_truck,
+                returned=bool(item.get("returned", False)),
+                assigned_at=assigned_at,
+                returned_at=_parse_datetime(item.get("returned_at")),
+            ))
+            imported += 1
+        db.flush()
+        summary["spare_assignments"] = imported
+
+    if "route_swap_log.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("route_swap_log.json"), file_label="route_swap_log.json")
+        imported = 0
+        for item in rows_data:
+            run_date = _parse_date(item.get("run_date"))
+            route_truck = int(item.get("route_truck", 0) or 0)
+            load_on_truck = int(item.get("load_on_truck", 0) or 0)
+            if run_date is None or route_truck <= 0 or load_on_truck <= 0:
+                continue
+            if not replace_existing:
+                existing = db.scalars(
+                    select(RouteSwapLog).where(
+                        RouteSwapLog.run_date == run_date,
+                        RouteSwapLog.route_truck == route_truck,
+                        RouteSwapLog.load_on_truck == load_on_truck,
+                    )
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(RouteSwapLog(
+                run_date=run_date,
+                route_truck=route_truck,
+                load_on_truck=load_on_truck,
+                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
+            ))
+            imported += 1
+        db.flush()
+        summary["route_swap_log"] = imported
+
+    if "truck_notes.json" in zf.namelist():
+        rows_data = _coerce_json_rows(zf.read("truck_notes.json"), file_label="truck_notes.json")
+        imported = 0
+        for item in rows_data:
+            truck_number = int(item.get("truck_number", 0) or 0)
+            body = str(item.get("body") or "")
+            note_type = str(item.get("note_type") or "constant")
+            if truck_number <= 0 or not body:
+                continue
+            if not replace_existing:
+                existing = db.scalars(
+                    select(TruckNote).where(
+                        TruckNote.truck_number == truck_number,
+                        TruckNote.note_type == note_type,
+                        TruckNote.body == body,
+                        TruckNote.workday_num == item.get("workday_num"),
+                    )
+                ).first()
+                if existing is not None:
+                    continue
+            db.add(TruckNote(
+                truck_number=truck_number,
+                note_type=note_type,
+                body=body,
+                workday_num=item.get("workday_num"),
+                expires_on=_parse_date(item.get("expires_on")),
+                is_active=bool(item.get("is_active", True)),
+                created_by=str(item.get("created_by") or ""),
+                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
+                updated_at=_parse_datetime(item.get("updated_at")) or datetime.utcnow(),
+            ))
+            imported += 1
+        db.flush()
+        summary["truck_notes"] = imported
 
     return summary
 
@@ -423,56 +594,18 @@ def _import_activity_events_payload(payload: bytes, db: Session, *, replace_exis
     return {"activity_events": imported}
 
 
-def _import_spares_for_dates(run_date_rows: dict[date, list[dict]], db: Session, *, replace_existing: bool = False) -> dict[str, int]:
-    imported = 0
-    if replace_existing:
-        db.execute(delete(SpareAssignment))
-        db.flush()
-    for run_date, rows in run_date_rows.items():
-        for item in rows:
-            spare_truck_number = int(item.get("spare_truck_number", 0) or 0)
-            covering_route_truck = int(item.get("covering_route_truck", 0) or 0)
-            if spare_truck_number <= 0 or covering_route_truck <= 0:
-                continue
-            db.add(SpareAssignment(
-                run_date=run_date,
-                spare_truck_number=spare_truck_number,
-                covering_route_truck=covering_route_truck,
-                returned=bool(item.get("returned", False)),
-                assigned_at=_parse_datetime(item.get("assigned_at")) or datetime.utcnow(),
-                returned_at=_parse_datetime(item.get("returned_at")),
-            ))
-            imported += 1
-    db.flush()
-    return {"spare_assignments": imported}
-
-
-def _import_route_swaps_for_dates(run_date_rows: dict[date, list[dict]], db: Session, *, replace_existing: bool = False) -> dict[str, int]:
-    imported = 0
-    if replace_existing:
-        db.execute(delete(RouteSwap))
-        db.flush()
-    for run_date, rows in run_date_rows.items():
-        for item in rows:
-            route_truck = int(item.get("route_truck", 0) or 0)
-            load_on_truck = int(item.get("load_on_truck", 0) or 0)
-            if route_truck <= 0 or load_on_truck <= 0:
-                continue
-            db.add(RouteSwap(
-                run_date=run_date,
-                route_truck=route_truck,
-                load_on_truck=load_on_truck,
-                created_at=_parse_datetime(item.get("created_at")) or datetime.utcnow(),
-            ))
-            imported += 1
-    db.flush()
-    return {"route_swaps": imported}
-
-
-def _fetch_remote_bytes(url: str, *, timeout_seconds: int, accept: str | None = None) -> bytes:
+def _fetch_remote_bytes(
+    url: str,
+    *,
+    timeout_seconds: int,
+    accept: str | None = None,
+    auth_token: str | None = None,
+) -> bytes:
     req = urllib_request.Request(url, headers={"User-Agent": "ReadyRouteDevSync/1.0"})
     if accept:
         req.add_header("Accept", accept)
+    if auth_token:
+        req.add_header("Authorization", f"Bearer {auth_token}")
     try:
         with urllib_request.urlopen(req, timeout=timeout_seconds) as response:  # noqa: S310
             return response.read()
@@ -483,12 +616,53 @@ def _fetch_remote_bytes(url: str, *, timeout_seconds: int, accept: str | None = 
         raise HTTPException(status_code=502, detail=f"Production fetch failed for {url}: {exc.reason}") from exc
 
 
+def _fetch_production_token(api_root: str, *, timeout_seconds: int) -> str | None:
+    """Log into production with the configured dev-sync admin credentials and
+    return a fresh JWT access token, or None when no credentials are configured.
+
+    Production export endpoints require an admin Bearer token; the dev sync mints
+    one per run so it never has to store an expiring token in .env.
+    """
+    username = settings.production_sync_username.strip()
+    password = settings.production_sync_password
+    if not username or not password:
+        return None
+
+    token_url = f"{api_root}/auth/token"
+    body = urllib_parse.urlencode({"username": username, "password": password}).encode("utf-8")
+    req = urllib_request.Request(
+        token_url,
+        data=body,
+        headers={
+            "User-Agent": "ReadyRouteDevSync/1.0",
+            "Content-Type": "application/x-www-form-urlencoded",
+            "Accept": "application/json",
+        },
+    )
+    try:
+        with urllib_request.urlopen(req, timeout=timeout_seconds) as response:  # noqa: S310
+            payload = json.loads(response.read())
+    except urllib_error.HTTPError as exc:
+        detail = exc.reason if hasattr(exc, "reason") else str(exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"Production login failed for {token_url}: {detail}. Check PRODUCTION_SYNC_USERNAME / PRODUCTION_SYNC_PASSWORD.",
+        ) from exc
+    except urllib_error.URLError as exc:
+        raise HTTPException(status_code=502, detail=f"Production login failed for {token_url}: {exc.reason}") from exc
+
+    token = payload.get("access_token")
+    if not token:
+        raise HTTPException(status_code=502, detail="Production login succeeded but returned no access_token.")
+    return token
+
+
 # ---------------------------------------------------------------------------
 # Quick JSON exports
 # ---------------------------------------------------------------------------
 
 @router.get("/load-durations.json")
-def export_load_durations(db: Session = Depends(get_db)) -> Response:
+def export_load_durations(_admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> Response:
     rows = db.scalars(
         select(LoadDuration).order_by(LoadDuration.run_date, LoadDuration.truck_number)
     ).all()
@@ -508,6 +682,7 @@ def export_load_durations(db: Session = Depends(get_db)) -> Response:
 @router.get("/truck-states.json")
 def export_truck_states(
     run_date: date | None = Query(default=None, description="Defaults to today if omitted"),
+    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     effective_date = run_date or date.today()
@@ -542,6 +717,7 @@ def export_truck_states(
 @router.get("/audit-entries.json")
 def export_audit_entries(
     run_date: date | None = Query(default=None),
+    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     q = select(AuditEntry).order_by(
@@ -574,6 +750,7 @@ def export_audit_entries(
 @router.get("/shortages.json")
 def export_shortages(
     run_date: date | None = Query(default=None),
+    _admin: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ) -> Response:
     q = select(Shortage).order_by(
@@ -634,7 +811,7 @@ def export_activity_events(
 # ---------------------------------------------------------------------------
 
 @router.get("/backup.zip")
-def download_backup(db: Session = Depends(get_db)) -> StreamingResponse:
+def download_backup(_admin: User = Depends(require_admin), db: Session = Depends(get_db)) -> StreamingResponse:
     """Download a ZIP archive containing all exportable data as JSON files."""
     buf = io.BytesIO()
 
@@ -796,6 +973,103 @@ def download_backup(db: Session = Depends(get_db)) -> StreamingResponse:
             json.dumps([activity_event_to_dict(row) for row in activity_rows], indent=2),
         )
 
+        # App settings (holiday flags, wearer_cap, recurring_route_swaps, daily
+        # notes, feature toggles, day_setup_source_* -- everything Setup Day and
+        # Operations settings read/write).
+        setting_rows = db.scalars(select(AppSetting).order_by(AppSetting.key)).all()
+        zf.writestr(
+            "app_settings.json",
+            json.dumps(
+                [
+                    {"key": r.key, "value": r.value, "updated_at": r.updated_at.isoformat()}
+                    for r in setting_rows
+                ],
+                indent=2,
+                default=_ser,
+            ),
+        )
+
+        # Route swaps -- full history (not just the current day), so the wizard
+        # and Route Swaps modal see historical coverage in dev too.
+        rs_rows = db.scalars(select(RouteSwap).order_by(RouteSwap.run_date)).all()
+        zf.writestr(
+            "route_swaps.json",
+            json.dumps(
+                [
+                    {
+                        "run_date": r.run_date.isoformat(),
+                        "route_truck": r.route_truck,
+                        "load_on_truck": r.load_on_truck,
+                        "created_at": r.created_at.isoformat(),
+                    }
+                    for r in rs_rows
+                ],
+                indent=2,
+            ),
+        )
+
+        # Spare assignments -- full history.
+        sa_rows = db.scalars(select(SpareAssignment).order_by(SpareAssignment.run_date)).all()
+        zf.writestr(
+            "spare_assignments.json",
+            json.dumps(
+                [
+                    {
+                        "run_date": r.run_date.isoformat(),
+                        "spare_truck_number": r.spare_truck_number,
+                        "covering_route_truck": r.covering_route_truck,
+                        "returned": r.returned,
+                        "assigned_at": r.assigned_at.isoformat(),
+                        "returned_at": r.returned_at.isoformat() if r.returned_at else None,
+                    }
+                    for r in sa_rows
+                ],
+                indent=2,
+            ),
+        )
+
+        # Route swap log -- append-only history behind the "previous load-day
+        # coverage" unload view and the Trends OOS/swap history.
+        rsl_rows = db.scalars(select(RouteSwapLog).order_by(RouteSwapLog.run_date)).all()
+        zf.writestr(
+            "route_swap_log.json",
+            json.dumps(
+                [
+                    {
+                        "run_date": r.run_date.isoformat(),
+                        "route_truck": r.route_truck,
+                        "load_on_truck": r.load_on_truck,
+                        "created_at": r.created_at.isoformat(),
+                    }
+                    for r in rsl_rows
+                ],
+                indent=2,
+            ),
+        )
+
+        # Truck notes -- persistent per-truck notes (constant/workday/one_off).
+        tn_rows = db.scalars(select(TruckNote).order_by(TruckNote.truck_number)).all()
+        zf.writestr(
+            "truck_notes.json",
+            json.dumps(
+                [
+                    {
+                        "truck_number": r.truck_number,
+                        "note_type": r.note_type.value if hasattr(r.note_type, "value") else str(r.note_type),
+                        "body": r.body,
+                        "workday_num": r.workday_num,
+                        "expires_on": r.expires_on.isoformat() if r.expires_on else None,
+                        "is_active": r.is_active,
+                        "created_by": r.created_by,
+                        "created_at": r.created_at.isoformat(),
+                        "updated_at": r.updated_at.isoformat(),
+                    }
+                    for r in tn_rows
+                ],
+                indent=2,
+            ),
+        )
+
     buf.seek(0)
     today = date.today().isoformat()
     return StreamingResponse(
@@ -813,6 +1087,7 @@ def download_backup(db: Session = Depends(get_db)) -> StreamingResponse:
 async def import_load_durations(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ) -> dict:
     """Import load durations from a JSON array file."""
     content = await file.read()
@@ -844,6 +1119,7 @@ async def import_load_durations(
 async def import_backup(
     file: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ) -> dict:
     """
     Import a backup ZIP package produced by GET /exports/backup.zip.
@@ -851,11 +1127,15 @@ async def import_backup(
     possible to avoid duplicates.
     """
     content = await file.read()
-    summary = _import_backup_package(content, db, replace_existing=False)
-    zf = zipfile.ZipFile(io.BytesIO(content))
-    if "activity_events.json" in zf.namelist():
-        summary.update(_import_activity_events_payload(zf.read("activity_events.json"), db, replace_existing=False))
-    db.commit()
+    try:
+        summary = _import_backup_package(content, db, replace_existing=False)
+        zf = zipfile.ZipFile(io.BytesIO(content))
+        if "activity_events.json" in zf.namelist():
+            summary.update(_import_activity_events_payload(zf.read("activity_events.json"), db, replace_existing=False))
+        db.commit()
+    except Exception:
+        db.rollback()
+        raise
     return summary
 
 
@@ -867,9 +1147,19 @@ def sync_from_production(
 ) -> dict:
     """
     Local-development helper that mirrors the live production export into the
-    current local database. Hard-blocked unless the request originates from a
-    loopback host.
+    current local database. Only valid on a dev box: it pulls prod's export
+    INTO the local DB, which is nonsensical (and destructive) to run against
+    production itself.
     """
+    # Primary gate — unspoofable: this only makes sense when the local database
+    # is SQLite (the dev DB). Production runs Postgres, so the endpoint refuses
+    # there regardless of any forwarded/host headers.
+    if not settings.database_url.startswith("sqlite"):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Production sync is only available on a SQLite (local dev) database.",
+        )
+    # Secondary defense-in-depth: request must come from a loopback/LAN peer.
     if not _request_is_localhost(request):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -878,7 +1168,12 @@ def sync_from_production(
 
     export_base = settings.production_sync_source_url.rstrip("/")
     timeout_seconds = max(15, int(settings.production_sync_timeout_seconds))
-    backup_bytes = _fetch_remote_bytes(f"{export_base}/backup.zip", timeout_seconds=timeout_seconds, accept="application/zip")
+    api_root = export_base.removesuffix("/exports")
+    # Production export endpoints require an admin Bearer token; mint a fresh one.
+    auth_token = _fetch_production_token(api_root, timeout_seconds=timeout_seconds)
+    backup_bytes = _fetch_remote_bytes(
+        f"{export_base}/backup.zip", timeout_seconds=timeout_seconds, accept="application/zip", auth_token=auth_token
+    )
     run_dates = _extract_backup_run_dates(backup_bytes)
 
     warnings: list[str] = []
@@ -887,47 +1182,18 @@ def sync_from_production(
             f"{export_base}/activity-events.json",
             timeout_seconds=timeout_seconds,
             accept="application/json",
+            auth_token=auth_token,
         )
     except HTTPException as exc:
         activity_bytes = b"[]"
         warnings.append(str(exc.detail))
 
-    api_root = export_base.removesuffix("/exports")
-    spares_payload_by_date: dict[date, list[dict]] = {}
-    swaps_payload_by_date: dict[date, list[dict]] = {}
-    coverage_dates = run_dates[-1:] if run_dates else []
-    for run_date in coverage_dates:
-        run_date_iso = run_date.isoformat()
-        try:
-            spares_payload_by_date[run_date] = _coerce_json_rows(
-                _fetch_remote_bytes(
-                    f"{api_root}/spares?run_date={run_date_iso}",
-                    timeout_seconds=timeout_seconds,
-                    accept="application/json",
-                ),
-                file_label=f"spares_{run_date_iso}.json",
-            )
-        except HTTPException as exc:
-            warnings.append(str(exc.detail))
-            spares_payload_by_date[run_date] = []
-        try:
-            swaps_payload_by_date[run_date] = _coerce_json_rows(
-                _fetch_remote_bytes(
-                    f"{api_root}/route-swaps?run_date={run_date_iso}",
-                    timeout_seconds=timeout_seconds,
-                    accept="application/json",
-                ),
-                file_label=f"route_swaps_{run_date_iso}.json",
-            )
-        except HTTPException as exc:
-            warnings.append(str(exc.detail))
-            swaps_payload_by_date[run_date] = []
-
+    # Route swaps, spare assignments, route swap log, app settings, and truck
+    # notes now all travel inside backup.zip itself (full history, not just the
+    # latest run-date), so no separate per-date fetch is needed here.
     try:
         summary = _import_backup_package(backup_bytes, db, replace_existing=True)
         summary.update(_import_activity_events_payload(activity_bytes, db, replace_existing=True))
-        summary.update(_import_spares_for_dates(spares_payload_by_date, db, replace_existing=True))
-        summary.update(_import_route_swaps_for_dates(swaps_payload_by_date, db, replace_existing=True))
         db.commit()
     except Exception:
         db.rollback()
@@ -936,7 +1202,6 @@ def sync_from_production(
     return {
         "source": export_base,
         "run_dates": [run_date.isoformat() for run_date in run_dates],
-        "coverage_run_dates": [run_date.isoformat() for run_date in coverage_dates],
         "backup_bytes": len(backup_bytes),
         "warnings": warnings,
         "summary": summary,
@@ -965,7 +1230,9 @@ def _list_pg_backups() -> list[dict]:
         result.append({
             "filename": f.name,
             "size_bytes": stat.st_size,
-            "created_at": datetime.fromtimestamp(stat.st_mtime).isoformat(),
+            # UTC-aware ISO (…+00:00) so the client can render it in a fixed
+            # timezone; a naive value would be reinterpreted as browser-local.
+            "created_at": datetime.fromtimestamp(stat.st_mtime, tz=timezone.utc).isoformat(),
         })
     return result
 
@@ -1010,4 +1277,101 @@ def delete_pg_backup(
     if not path.exists() or not path.is_file():
         raise HTTPException(status_code=404, detail=f"Backup '{filename}' not found")
     path.unlink()
+
+
+@router.post("/pg-backups/{filename}/restore")
+def restore_pg_backup(
+    filename: str,
+    _admin=Depends(require_admin),
+) -> dict:
+    """
+    Restore the database from a pg_dump SQL backup. DESTRUCTIVE — the current
+    database contents are replaced by the snapshot.
+
+    Safety:
+      1. A pre-restore snapshot of the CURRENT database is taken first, so the
+         restore can be undone by restoring that file.
+      2. The schema reset + load run inside a SINGLE transaction
+         (psql --single-transaction, ON_ERROR_STOP), so any error rolls the whole
+         thing back and leaves the live database untouched.
+      3. After a successful load the schema is brought up to the current
+         migration head (the backup may predate recent migrations).
+    """
+    if not filename.startswith("readyroute-") or not filename.endswith(".sql"):
+        raise HTTPException(status_code=400, detail="Invalid backup filename")
+    path = _PG_BACKUP_DIR / filename
+    if not path.exists() or not path.is_file():
+        raise HTTPException(status_code=404, detail=f"Backup '{filename}' not found")
+
+    url = settings.database_url
+    if not url.startswith("postgresql"):
+        raise HTTPException(status_code=400, detail="Restore is only supported on PostgreSQL")
+    parsed = urllib_parse.urlparse(url.replace("postgresql+psycopg://", "postgresql://"))
+    env = os.environ.copy()
+    env["PGPASSWORD"] = parsed.password or ""
+    host = parsed.hostname or "localhost"
+    port = str(parsed.port or 5432)
+    dbuser = parsed.username or ""
+    dbname = (parsed.path or "").lstrip("/")
+
+    stamp = datetime.now().strftime("%Y%m%d-%H%M%S")
+
+    # 1) Pre-restore safety snapshot of the CURRENT state (undo point).
+    pre_path = _PG_BACKUP_DIR / f"readyroute-prerestore-{stamp}.sql"
+    dump = subprocess.run(
+        ["pg_dump", "-h", host, "-p", port, "-U", dbuser, "-d", dbname, "-F", "p", "-f", str(pre_path)],
+        env=env, capture_output=True, text=True, timeout=180,
+    )
+    if dump.returncode != 0:
+        raise HTTPException(status_code=500, detail=f"Pre-restore snapshot failed: {dump.stderr.strip()[:400]}")
+
+    # 2) Atomic restore: reset schema + load the dump in one transaction, so a
+    #    failure rolls back and the live database is left exactly as it was.
+    combined = _PG_BACKUP_DIR / f".restore-{stamp}.sql"
+    try:
+        with open(combined, "w", encoding="utf-8") as out:
+            out.write("DROP SCHEMA IF EXISTS public CASCADE;\nCREATE SCHEMA public;\n")
+            with open(path, "r", encoding="utf-8") as src:
+                shutil.copyfileobj(src, out)
+        restore = subprocess.run(
+            ["psql", "-h", host, "-p", port, "-U", dbuser, "-d", dbname,
+             "--single-transaction", "--set", "ON_ERROR_STOP=1", "-f", str(combined)],
+            env=env, capture_output=True, text=True, timeout=300,
+        )
+    finally:
+        try:
+            combined.unlink()
+        except OSError:
+            pass
+
+    if restore.returncode != 0:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Restore failed and was rolled back — database unchanged: {restore.stderr.strip()[:400]}",
+        )
+
+    # 3) Best-effort: bring the (possibly older) restored schema up to head so the
+    #    running app's expectations still hold. Non-fatal.
+    migrate_note = "schema left at the backup's migration version"
+    try:
+        from alembic.config import Config as _AlembicConfig
+        from alembic import command as _alembic_command
+        from database import engine as _engine
+
+        _cfg = _AlembicConfig(os.path.join(os.path.dirname(os.path.dirname(__file__)), "alembic.ini"))
+        _cfg.set_main_option("sqlalchemy.url", str(_engine.url))
+        _alembic_command.upgrade(_cfg, "head")
+        migrate_note = "schema upgraded to head"
+    except Exception as exc:  # noqa: BLE001
+        migrate_note = f"post-restore migration skipped: {str(exc)[:200]}"
+
+    return {
+        "restored_from": filename,
+        "pre_restore_snapshot": pre_path.name,
+        "migration": migrate_note,
+        "message": (
+            f"Database restored from {filename}. A pre-restore snapshot "
+            f"({pre_path.name}) was saved — restore it to undo."
+        ),
+    }
 

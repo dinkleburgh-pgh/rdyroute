@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { format } from "date-fns";
 import {
@@ -10,6 +10,8 @@ import {
   usePaceAverage,
   useRecordLoadDuration,
   useShortages,
+  useSpareAssignments,
+  useSettings,
   useUpsertTruckState,
 } from "../api/hooks";
 import { ShortageLogger } from "./Shorts";
@@ -21,13 +23,20 @@ import {
   countUnloadedFromContext,
   effectiveOperationalStatus,
   effectiveStatus,
+  getCoverageRouteNumber,
   getOperationalTruckType,
   isScheduledOff,
+  loadedTruckNumbers,
+  unloadedTruckNumbersFromContext,
 } from "../utils/truckStatus";
+import { reportProgressOverflow } from "../utils/debugLog";
 import { PaceBar, useElapsed } from "../components/LiveInProgress";
+import { ChevronDown } from "lucide-react";
 import { DustGarmentIcon } from "../components/icons";
-import type { TruckWithState } from "../types";
+import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import ConfirmDialog from "../components/ConfirmDialog";
+import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 
@@ -49,6 +58,11 @@ export default function Load() {
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
   const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
+  // Dust-garment finish confirmation — asks "Did you load garments?" before
+  // finishing a truck flagged with dust garments.
+  const [confirmGarmentTruck, setConfirmGarmentTruck] = useState<TruckWithState | null>(null);
+  const [dustCollapsed, setDustCollapsed] = useState(() => localStorage.getItem("load:dustCollapsed") === "1");
+  const [coverageCollapsed, setCoverageCollapsed] = useState(() => localStorage.getItem("load:coverageCollapsed") === "1");
 
   const board = data ?? [];
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
@@ -58,6 +72,21 @@ export default function Load() {
   const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
+
+  // Today's coverage assignments (manual + auto-applied recurring) — surfaced as
+  // a notice so loaders know which route's freight loads on which truck.
+  const { data: spareAssignments = [] } = useSpareAssignments(runDate);
+  const { data: appSettings = [] } = useSettings();
+  const recurringRules = useMemo<RecurringRouteSwap[]>(() => {
+    const row = appSettings.find((s) => s.key === "recurring_route_swaps");
+    return Array.isArray(row?.value) ? (row!.value as RecurringRouteSwap[]) : [];
+  }, [appSettings]);
+  const activeCoverage = useMemo(() => spareAssignments.filter((s) => !s.returned), [spareAssignments]);
+  function isRecurringCoverage(routeTruck: number, loadOnTruck: number): boolean {
+    return recurringRules.some(
+      (r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay),
+    );
+  }
 
   const inProgress = useMemo(
     () => board.find((t) => t.state?.status === "in_progress"),
@@ -70,7 +99,7 @@ export default function Load() {
   const loadDisplayTrucks = loadContext.activeTrucks;
   // Ready = unloaded and scheduled for tomorrow.
   const ready = useMemo(
-    () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true),
+    () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true && t.state?.needs_checked !== true),
     [loadDisplayTrucks],
   );
   const heldReady = useMemo(
@@ -151,17 +180,38 @@ export default function Load() {
     [board, unloadsDay, holidayUnload],
   );
   const unloadTotal = unloadScheduleContext.activeTrucks.length;
-  const unloadContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, true),
-    [board, unloadsDay, holidayUnload],
-  );
+  // Count "done" from the same context as the total so a spare covering an
+  // off-day route can't push the numerator above the denominator (29/28 bug).
   const unloadDone = useMemo(
-    () => countUnloadedFromContext(unloadContext),
-    [unloadContext],
+    () => countUnloadedFromContext(unloadScheduleContext),
+    [unloadScheduleContext],
   );
   const unloadPct = unloadTotal > 0 ? Math.round((unloadDone / unloadTotal) * 100) : 0;
 
+  // Debug: log a numerator > denominator overflow (with the offending truck)
+  // to the server, so the intermittent "N+1 of N" is captured centrally.
+  useEffect(() => {
+    reportProgressOverflow(
+      "Load (Load page)",
+      loadedTruckNumbers(board, loadDay, holidayLoad, unloadsDay, holidayUnload),
+      loadDisplayTrucks.map((t) => t.truck_number),
+      { run_date: runDate, loadDay },
+    );
+    reportProgressOverflow(
+      "Unload (Load page)",
+      unloadedTruckNumbersFromContext(unloadScheduleContext),
+      unloadScheduleContext.activeTrucks.map((t) => t.truck_number),
+      { run_date: runDate, unloadsDay },
+    );
+  }, [board, loadDay, unloadsDay, holidayLoad, holidayUnload, loadDisplayTrucks, unloadScheduleContext, runDate]);
+
   const anyInProgress = Boolean(inProgress);
+  // A spare can't load until it's covering a route (enforced on the backend too).
+  const confirmIsUncoveredSpare =
+    confirmLoadTruck != null &&
+    confirmLoadTruck.truck_type === "Spare" &&
+    confirmLoadTruck.route_swap_route == null &&
+    confirmLoadTruck.state?.oos_spare_route == null;
 
   async function startLoad(t: TruckWithState) {
     if (anyInProgress) return;
@@ -178,6 +228,10 @@ export default function Load() {
         load_finish_time: null,
         load_duration_seconds: null,
       });
+      // Bump the viewer to the top of the page so the now-loading truck's
+      // In-Progress panel (with the Finish Loading button) scrolls into view —
+      // the tap that starts a load is usually deep down in the truck grid.
+      document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
     } finally {
       setBusy(null);
     }
@@ -231,14 +285,9 @@ export default function Load() {
     }
   }
 
-  // Dust trucks scheduled for loading and their garment status
+  // All dust trucks — show garment checklist regardless of schedule/status
   const dustGarmentTrucks = board
-    .filter(
-      (t) =>
-        t.truck_type === "Dust" &&
-        !(["off", "oos"] as string[]).includes(effectiveStatus(t, loadDay, holidayLoad)) &&
-        (holidayLoad || !isScheduledOff(t, loadDay)),
-    )
+    .filter((t) => t.truck_type === "Dust")
     .sort((a, b) => a.truck_number - b.truck_number);
 
   return (
@@ -248,35 +297,92 @@ export default function Load() {
         title="Load"
         subtitle="Start loading, finish routes, and track pace for the next run day."
         actions={<PaceBadge avgSeconds={pace?.avg_seconds ?? null} />}
+        mobileBadge={anyInProgress ? (
+          <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
+            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+            Live
+          </span>
+        ) : undefined}
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
-      {/* Dust Garments — read-only, set from Setup Day */}
-      <div className="rounded-xl border px-4 py-3" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
-        <div className="mb-2 flex items-center gap-2">
-          <DustGarmentIcon className="h-4 w-4 text-amber-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
-          <span className="ml-auto text-xs text-ink-muted">Set from Setup Day</span>
+      {/* Coverage notice — which route's freight loads on which truck today */}
+      {activeCoverage.length > 0 && (
+        <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
+          <button
+            type="button"
+            className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+            onClick={() => setCoverageCollapsed((c) => { const next = !c; localStorage.setItem("load:coverageCollapsed", next ? "1" : "0"); return next; })}
+          >
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage today</span>
+            <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
+              <span className="font-mono tabular-nums">{activeCoverage.length} route{activeCoverage.length === 1 ? "" : "s"}</span>
+              <ChevronDown className={clsx("h-3.5 w-3.5 text-sky-400/60 transition-transform", coverageCollapsed && "-rotate-90")} />
+            </span>
+          </button>
+          {!coverageCollapsed && (
+            <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
+              <div className="flex flex-col gap-1.5">
+                {activeCoverage
+                  .slice()
+                  .sort((a, b) => a.covering_route_truck - b.covering_route_truck)
+                  .map((s) => (
+                    <div key={s.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-base font-black text-sky-300">{s.covering_route_truck}</span>
+                      <span className="text-xs text-ink-muted">loads on</span>
+                      <span className="text-base font-black text-ink">{s.spare_truck_number}</span>
+                      {isRecurringCoverage(s.covering_route_truck, s.spare_truck_number) && (
+                        <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
         </div>
-        {dustGarmentTrucks.length === 0 ? (
-          <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
-        ) : (
-          <div className="flex flex-wrap gap-2">
-            {dustGarmentTrucks.map((t) => (
-              <span
-                key={t.truck_number}
-                className={clsx(
-                  "inline-flex items-center gap-2 rounded-lg border px-4 py-2 text-base font-semibold",
-                  t.state?.has_dust_garment
-                    ? "border-amber-600/60 bg-amber-950/50"
-                    : "border-hairline bg-surface-3",
-                )}
-                style={t.state?.has_dust_garment ? { color: "#fcd34d" } : { color: "#6f7c8e" }}
-              >
-                #{t.truck_number}
-                {t.state?.has_dust_garment && <DustGarmentIcon className="h-5 w-5" style={{ color: "#fcd34d" }} />}
+      )}
+
+      {/* Dust Garments — read-only, collapsible */}
+      <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
+        <button
+          type="button"
+          className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
+          onClick={() => setDustCollapsed((c) => { const next = !c; localStorage.setItem("load:dustCollapsed", next ? "1" : "0"); return next; })}
+        >
+          <DustGarmentIcon className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
+          <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
+            {dustCollapsed && (
+              <span className="font-mono tabular-nums">
+                {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
               </span>
-            ))}
+            )}
+            <ChevronDown className={clsx("h-3.5 w-3.5 text-amber-400/60 transition-transform", dustCollapsed && "-rotate-90")} />
+          </span>
+        </button>
+        {!dustCollapsed && (
+          <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
+            {dustGarmentTrucks.length === 0 ? (
+              <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {dustGarmentTrucks.map((t) => (
+                  <span
+                    key={t.truck_number}
+                    className={clsx(
+                      "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold",
+                      t.state?.has_dust_garment
+                        ? "border-amber-600/60 bg-amber-950/50"
+                        : "border-hairline bg-surface-3",
+                    )}
+                    style={t.state?.has_dust_garment ? { color: "#fcd34d" } : { color: "#6f7c8e" }}
+                  >
+                    #{t.truck_number}
+                    {t.state?.has_dust_garment && <DustGarmentIcon className="h-3 w-3" style={{ color: "#fcd34d" }} />}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -290,7 +396,10 @@ export default function Load() {
             busy={busy === inProgress.truck_number}
             loadDay={loadDay}
             nextUp={ready[0]}
-            onFinish={() => finishLoad(inProgress)}
+            onFinish={() => {
+              if (inProgress.state?.has_dust_garment) setConfirmGarmentTruck(inProgress);
+              else void finishLoad(inProgress);
+            }}
             onCancel={() => cancelLoad(inProgress)}
           />
           <InlineShortages truck={inProgress} runDate={runDate} />
@@ -323,7 +432,7 @@ export default function Load() {
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
                 const st = t.state?.status ?? "dirty";
-                const cr = t.state?.oos_spare_route ?? t.route_swap_route ?? null;
+                const cr = getCoverageRouteNumber(t);
                 return (
                   <span
                     key={t.truck_number}
@@ -520,6 +629,8 @@ export default function Load() {
             <p className="mb-4 text-sm text-ink-muted">
               {anyInProgress
                 ? "Another truck is already in progress. Finish it first."
+                : confirmIsUncoveredSpare
+                ? "This spare has no route to cover yet. Assign a route to it on the board before loading."
                 : `${confirmLoadTruck.truck_type}${confirmLoadTruck.state?.batch_id != null ? ` · Batch ${confirmLoadTruck.state.batch_id}` : ""}${confirmLoadTruck.state?.wearers ? ` · ${confirmLoadTruck.state.wearers} wearers` : ""}`}
             </p>
             <div className="flex justify-end gap-2">
@@ -527,7 +638,7 @@ export default function Load() {
               <button
                 className="rounded-lg px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
                 style={{ background: "#16a34a" }}
-                disabled={anyInProgress || busy === confirmLoadTruck.truck_number}
+                disabled={anyInProgress || confirmIsUncoveredSpare || busy === confirmLoadTruck.truck_number}
                 onClick={() => {
                   startLoad(confirmLoadTruck);
                   setConfirmLoadTruck(null);
@@ -539,6 +650,19 @@ export default function Load() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmGarmentTruck !== null}
+        title="Did you load garments?"
+        description={`Truck #${confirmGarmentTruck?.truck_number ?? ""} is flagged with dust garments — confirm the garments were loaded before finishing.`}
+        confirmLabel="Yes, finish loading"
+        cancelLabel="Not yet"
+        onConfirm={() => {
+          const t = confirmGarmentTruck;
+          setConfirmGarmentTruck(null);
+          if (t) void finishLoad(t);
+        }}
+        onCancel={() => setConfirmGarmentTruck(null)}
+      />
     </motion.div>
     </>
   );
@@ -603,77 +727,6 @@ function PaceBadge({ avgSeconds }: { avgSeconds: number | null }) {
     <span className="font-mono tabular-nums text-xs text-ink-muted">
       30-day avg <span className="font-semibold text-ink">{formatDuration(avgSeconds)}</span>
     </span>
-  );
-}
-
-function LoadWorkflowCard({
-  truck,
-  accent,
-  statusLabel,
-  statusClassName,
-  footer,
-  disabled = false,
-  interactive = false,
-  ringClassName = "hover:ring-blue-500",
-}: {
-  truck: TruckWithState;
-  accent: string;
-  statusLabel: string;
-  statusClassName: string;
-  footer?: ReactNode;
-  disabled?: boolean;
-  interactive?: boolean;
-  ringClassName?: string;
-}) {
-  const coverRoute = truck.state?.oos_spare_route ?? truck.route_swap_route ?? null;
-  return (
-    <div
-      className={clsx(
-        "card relative flex min-h-[4.5rem] flex-col gap-1 p-2 md:min-h-[10rem] md:gap-2 md:p-4",
-        interactive && "hover:ring-2 transition-shadow",
-        interactive && ringClassName,
-        disabled && "cursor-not-allowed opacity-50",
-      )}
-    >
-      <div className="flex w-full flex-col gap-0.5 md:gap-1">
-        <div className="flex w-full items-start justify-between gap-2">
-          <div className="flex min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
-            <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl md:text-5xl", accent)}>
-              {truck.truck_number}
-            </span>
-          </div>
-          <span className="flex min-h-[1.5rem] flex-col items-end justify-start gap-1">
-            <span className={clsx("badge", statusClassName)}>{statusLabel}</span>
-            {truck.state?.priority_hold && statusLabel !== "HOLD" && (
-              <span className="badge bg-st-dirty/25 text-st-dirty">Hold</span>
-            )}
-            {truck.state?.needs_checked && (
-              <span className="badge bg-st-inprogress/25 text-st-inprogress">Needs Checked</span>
-            )}
-            {coverRoute != null && (
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-pill bg-sky-900/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40">
-                → Cov. #{coverRoute}
-              </span>
-            )}
-            {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
-              <span
-                className="inline-flex items-center justify-center rounded-pill border border-st-inprogress/60 bg-st-inprogress/10 p-0.5"
-                title="Dust garment"
-              >
-                <DustGarmentIcon className="h-3.5 w-3.5" style={{ color: "#fcd34d" }} />
-              </span>
-            )}
-          </span>
-        </div>
-        <div className="text-[10px] text-ink-muted space-y-0.5 md:text-xs">
-          <div>
-            {truck.truck_type}
-            {truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
-          </div>
-        </div>
-      </div>
-      {footer ? <div className="mt-auto pt-1">{footer}</div> : null}
-    </div>
   );
 }
 
@@ -780,7 +833,7 @@ function InProgressPanel({
                       #{nextUp.truck_number}
                     </div>
                     {(() => {
-                      const cr = nextUp.state?.oos_spare_route ?? nextUp.route_swap_route ?? null;
+                      const cr = getCoverageRouteNumber(nextUp);
                       return cr != null ? (
                         <span className="mt-1 inline-flex items-center gap-1 rounded-pill bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
                           Cov. #{cr}

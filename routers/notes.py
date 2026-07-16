@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import NoteType, Truck, TruckNote, User
-from routers.auth import get_current_user, require_admin
+from routers.auth import get_current_user, require_admin, require_non_guest
 from schemas import NoteCreate, NoteOut, NoteUpdate
 
 router = APIRouter(prefix="/notes", tags=["notes"])

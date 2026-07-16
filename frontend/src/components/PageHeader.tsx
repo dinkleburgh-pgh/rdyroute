@@ -5,6 +5,7 @@ type PageHeaderProps = {
   title: string;
   subtitle?: string;
   eyebrow?: string;
+  mobileBadge?: ReactNode;
   actions?: ReactNode;
   centerMobile?: boolean;
   className?: string;
@@ -14,6 +15,7 @@ export default function PageHeader({
   title,
   subtitle,
   eyebrow,
+  mobileBadge,
   actions,
   centerMobile = true,
   className,
@@ -40,9 +42,14 @@ export default function PageHeader({
               {eyebrow}
             </span>
           )}
-          <h2 className="mt-2 text-3xl font-black leading-none tracking-tight text-ink md:text-[1.75rem]">
-            {title}
-          </h2>
+          <div className="mt-2 flex items-center gap-2.5">
+            <h2 className="text-3xl font-black leading-none tracking-tight text-ink md:text-[1.75rem]">
+              {title}
+            </h2>
+            {mobileBadge && (
+              <div className="md:hidden">{mobileBadge}</div>
+            )}
+          </div>
           {subtitle && (
             <p className="mt-1.5 hidden max-w-2xl text-[13.5px] text-ink-muted md:block">
               {subtitle}

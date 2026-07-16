@@ -30,3 +30,19 @@ htmlcov/
 .idea/
 *.log
 frontend/vite.err
+frontend/*.tsbuildinfo
+
+# Auto-generated / reference files
+AGENTS.md
+audit_photos/
+design_handoff_readyroute_refresh/
+
+# SQLite WAL artifacts (shouldn't be tracked)
+*.db-shm
+*.db-wal
+
+# design-sync build output + staged scripts
+ds-bundle/
+.ds-sync/
+.design-sync/.cache/
+.design-sync/node_modules

@@ -1,0 +1,102 @@
+/* ReadyRoute component + utility classes — hand-authored, NO Tailwind internals.
+ *
+ * This replaces ReadyRoute's full compiled Tailwind so the design-token surface
+ * stays clean: the only custom properties in this system's @import closure are
+ * the semantic --rr-* tokens (tokens.css). There are deliberately no Tailwind
+ * internal plumbing variables and no Preflight reset here. Values are
+ * hand-expanded from the app's @apply component classes, mapped to the tokens.
+ */
+
+/* ---- Token utility classes (surfaces / ink / accent) ---- */
+.bg-app        { background-color: var(--rr-app); }
+.bg-surface    { background-color: var(--rr-surface); }
+.bg-surface-2  { background-color: var(--rr-surface-2); }
+.bg-surface-3  { background-color: var(--rr-surface-3); }
+.bg-track      { background-color: var(--rr-track); }
+.bg-accent     { background-color: var(--rr-accent); }
+.text-ink       { color: var(--rr-ink); }
+.text-ink-soft  { color: var(--rr-ink-soft); }
+.text-ink-muted { color: var(--rr-ink-muted); }
+.text-ink-faint { color: var(--rr-ink-faint); }
+.border-hairline { border-color: var(--rr-hairline); }
+
+/* ---- Radii / elevation / type utilities ---- */
+.rounded-pill     { border-radius: var(--rr-radius-pill); }
+.shadow-card      { box-shadow: var(--rr-shadow-card); }
+.shadow-hero      { box-shadow: var(--rr-shadow-hero); }
+.shadow-inset-top { box-shadow: var(--rr-shadow-inset-top); }
+.font-sans { font-family: var(--rr-font-sans); }
+.font-mono { font-family: var(--rr-font-mono); }
+
+/* ---- Status colors (all nine) ---- */
+.bg-st-dirty      { background-color: var(--rr-st-dirty); }
+.bg-st-inprogress { background-color: var(--rr-st-inprogress); }
+.bg-st-unloaded   { background-color: var(--rr-st-unloaded); }
+.bg-st-loaded     { background-color: var(--rr-st-loaded); }
+.bg-st-unfinished { background-color: var(--rr-st-unfinished); }
+.bg-st-shop       { background-color: var(--rr-st-shop); }
+.bg-st-spare      { background-color: var(--rr-st-spare); }
+.bg-st-off        { background-color: var(--rr-st-off); }
+.bg-st-oos        { background-color: var(--rr-st-oos); }
+.text-st-dirty      { color: var(--rr-st-dirty); }
+.text-st-inprogress { color: var(--rr-st-inprogress); }
+.text-st-unloaded   { color: var(--rr-st-unloaded); }
+.text-st-loaded     { color: var(--rr-st-loaded); }
+.text-st-unfinished { color: var(--rr-st-unfinished); }
+.text-st-shop       { color: var(--rr-st-shop); }
+.text-st-spare      { color: var(--rr-st-spare); }
+.text-st-off        { color: var(--rr-st-off); }
+.text-st-oos        { color: var(--rr-st-oos); }
+
+/* ---- Buttons ---- */
+.btn, .btn-primary, .btn-ghost, .btn-danger {
+  display: inline-flex; align-items: center; justify-content: center;
+  border-radius: 0.375rem; padding: 0.375rem 0.75rem;
+  font-size: 0.875rem; line-height: 1.25rem; font-weight: 500;
+  transition: color .15s, background-color .15s, border-color .15s;
+  border: 0; cursor: pointer;
+}
+.btn:disabled, .btn-primary:disabled, .btn-ghost:disabled, .btn-danger:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+.btn-primary { background: #2563eb; color: #fff; }
+.btn-primary:hover { background: #3b82f6; }
+.btn-ghost { background: #1e293b; color: #f1f5f9; border: 1px solid #334155; }
+.btn-ghost:hover { background: #334155; }
+.btn-danger { background: #dc2626; color: #fff; }
+.btn-danger:hover { background: #ef4444; }
+
+/* ---- Surface card ---- */
+.card {
+  border-radius: 0.75rem;
+  border: 1px solid var(--rr-hairline);
+  background: var(--rr-surface);
+  padding: 1rem;
+  box-shadow: var(--rr-shadow-inset-top), var(--rr-shadow-card);
+}
+
+/* ---- Form field + micro-label ---- */
+.input {
+  width: 100%; border-radius: 0.375rem; border: 1px solid #334155;
+  background: #1e293b; padding: 0.375rem 0.75rem;
+  font-size: 1rem; line-height: 1.5rem; color: #f1f5f9;
+}
+.input::placeholder { color: #64748b; }
+.input:focus { border-color: #3b82f6; outline: none; }
+.label {
+  margin-bottom: 0.25rem; display: block;
+  font-size: 0.75rem; line-height: 1rem; font-weight: 500;
+  text-transform: uppercase; letter-spacing: 0.025em; color: #94a3b8;
+}
+
+/* ---- Pill badge (color it with a background: var(--rr-st-*)) ---- */
+.badge {
+  display: inline-flex; align-items: center;
+  border-radius: var(--rr-radius-pill);
+  padding: 0.125rem 0.5rem;
+  font-size: 10px; font-weight: 600; white-space: nowrap;
+}
+
+/* ---- Motion ---- */
+@keyframes slideDown { 0% { opacity: 0; transform: translateY(-10px); } 100% { opacity: 1; transform: translateY(0); } }
+.animate-slide-down { animation: slideDown 0.25s ease-out; }
