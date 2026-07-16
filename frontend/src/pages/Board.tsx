@@ -724,23 +724,37 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <div className="flex w-full flex-col gap-0.5 md:gap-1">
                   <div className="flex w-full items-start justify-between gap-1.5">
                     <div className="flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
-                      <span
-                        className={clsx(
-                          "font-extrabold tracking-tight tabular-nums leading-none",
-                          fleetMode ? "text-2xl md:text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
-                          numberColor,
-                        )}
-                      >
-                        {truck.truck_number}
-                      </span>
-                      {!fleetMode && (
-                        <span className="flex min-h-[1.5rem] min-w-0 items-center overflow-hidden">
-                          {showCoverageBadge ? (
-                            <span className="inline-flex items-center self-start whitespace-nowrap rounded-full bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 lg:px-3 lg:py-1 lg:text-xs">
-                              → Cov. #{coverageRoute}
+                      {(!fleetMode && showCoverageBadge) ? (
+                        <div className="flex items-center gap-2">
+                          <div className="flex flex-col items-center">
+                            <span className={clsx("font-extrabold tracking-tight tabular-nums leading-none text-4xl", numberColor)}>
+                              {truck.truck_number}
                             </span>
-                          ) : null}
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                              {truck.truck_type === "Spare" ? "Spare" : "Truck"}
+                            </span>
+                          </div>
+                          <span className="text-base font-bold text-slate-400">→</span>
+                          <div className="flex flex-col items-center">
+                            <span className="font-extrabold tracking-tight tabular-nums leading-none text-4xl text-sky-300">
+                              {coverageRoute}
+                            </span>
+                            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Route</span>
+                          </div>
+                        </div>
+                      ) : (
+                        <span
+                          className={clsx(
+                            "font-extrabold tracking-tight tabular-nums leading-none",
+                            fleetMode ? "text-2xl md:text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                            numberColor,
+                          )}
+                        >
+                          {truck.truck_number}
                         </span>
+                      )}
+                      {!fleetMode && !showCoverageBadge && (
+                        <span className="min-h-[1.5rem]" />
                       )}
                     </div>
                     <span className="flex shrink-0 min-h-[1.5rem] flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
