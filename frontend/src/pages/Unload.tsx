@@ -86,9 +86,12 @@ export default function Unload() {
         // the spare/schedule exclusions below — e.g. a spare marked
         // "Unload and Hold" (dirty + priority_hold) or a scheduled-off truck
         // that ran anyway. Excluding these left the sidebar counting a dirty
-        // truck the Unload page never showed.
+        // truck the Unload page never showed. NOTE: "in_progress" is NOT
+        // unload work — it's the LOAD workflow — so it must not pull a truck
+        // in here (it briefly inflated the Unloaded-today tally for every
+        // spare/off-day truck mid-load, since the tally counts in_progress).
         const s = t.state?.status;
-        if (s === "dirty" || s === "in_progress" || s === "unfinished" || t.state?.priority_hold === true) return true;
+        if (s === "dirty" || s === "unfinished" || t.state?.priority_hold === true) return true;
         if (t.truck_type === "Spare") return false;
         return holidayUnload || !isScheduledOff(t, unloadsDay);
       }),
