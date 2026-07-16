@@ -185,12 +185,27 @@ export default function Unload() {
         {/* Header: truck number + status badge */}
         <div className="flex items-start justify-between gap-1">
           <div>
-            <span className={clsx("text-3xl font-black leading-none", numberColor)}>
-              #{t.truck_number}
-            </span>
-            {coveredRoute != null && (
-              <span className="mt-0.5 inline-flex items-center gap-1 self-start rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                Cov. #{coveredRoute}
+            {coveredRoute != null ? (
+              <div className="flex items-center gap-2">
+                <div className="flex flex-col items-center">
+                  <span className={clsx("text-3xl font-black leading-none", numberColor)}>
+                    {t.truck_number}
+                  </span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                    {t.truck_type === "Spare" ? "Spare" : "Truck"}
+                  </span>
+                </div>
+                <span className="text-base font-bold text-slate-400">→</span>
+                <div className="flex flex-col items-center">
+                  <span className="text-3xl font-black leading-none text-sky-300">
+                    {coveredRoute}
+                  </span>
+                  <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Route</span>
+                </div>
+              </div>
+            ) : (
+              <span className={clsx("text-3xl font-black leading-none", numberColor)}>
+                #{t.truck_number}
               </span>
             )}
           </div>
@@ -384,12 +399,27 @@ export default function Unload() {
                 {/* Header */}
                 <div className="flex items-start justify-between gap-1">
                   <div>
-                    <span className="text-3xl font-black leading-none text-orange-400">
-                      #{t.truck_number}
-                    </span>
-                    {coveredRoute != null && (
-                      <span className="mt-0.5 inline-flex items-center gap-1 self-start rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                        Cov. #{coveredRoute}
+                    {coveredRoute != null ? (
+                      <div className="flex items-center gap-2">
+                        <div className="flex flex-col items-center">
+                          <span className="text-3xl font-black leading-none text-orange-400">
+                            {t.truck_number}
+                          </span>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+                            {t.truck_type === "Spare" ? "Spare" : "Truck"}
+                          </span>
+                        </div>
+                        <span className="text-base font-bold text-slate-400">→</span>
+                        <div className="flex flex-col items-center">
+                          <span className="text-3xl font-black leading-none text-sky-300">
+                            {coveredRoute}
+                          </span>
+                          <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">Route</span>
+                        </div>
+                      </div>
+                    ) : (
+                      <span className="text-3xl font-black leading-none text-orange-400">
+                        #{t.truck_number}
                       </span>
                     )}
                   </div>
