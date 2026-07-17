@@ -740,14 +740,21 @@ def selective_reset(
 def bulk_update_status(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
-    truck_numbers: list[int] = Query(...),
     new_status: str = Query(...),
+    truck_numbers: list[int] | None = Query(None),
+    from_status: str | None = Query(None),
     db: Session = Depends(get_db),
     _user: User = Depends(require_non_guest),
 ):
     """
-    Set all listed trucks to *new_status* for *run_date*.
-    Used by supervisor bulk-action controls (e.g., mark all dirty).
+    Set trucks to *new_status* for *run_date*.
+
+    Trucks are selected by an explicit *truck_numbers* list, by *from_status*
+    (every truck currently in that status — resolved SERVER-side at execution
+    time), or both. Status-based bulk moves must use from_status rather than a
+    client-computed list: a client snapshot can be seconds stale, silently
+    skipping trucks whose status changed moments earlier (bulk unloaded→loaded
+    missed two trucks marked unloaded 45s before, 2026-07-17).
     """
     from models import TruckStatus  # local import avoids circular
 
@@ -755,6 +762,25 @@ def bulk_update_status(
         validated_status = TruckStatus(new_status)
     except ValueError:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid status '{new_status}'")
+
+    if not truck_numbers and from_status is None:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Provide truck_numbers and/or from_status")
+
+    resolved: set[int] = set(truck_numbers or [])
+    if from_status is not None:
+        try:
+            validated_from = TruckStatus(from_status)
+        except ValueError:
+            raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=f"Invalid status '{from_status}'")
+        resolved.update(
+            db.scalars(
+                select(TruckState.truck_number).where(
+                    TruckState.run_date == run_date,
+                    TruckState.status == validated_from,
+                )
+            ).all()
+        )
+    truck_numbers = sorted(resolved)
 
     # A spare can't be bulk-started into loading without a route to cover.
     if validated_status == TruckStatus.in_progress:

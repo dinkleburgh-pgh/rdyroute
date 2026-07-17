@@ -60,13 +60,16 @@ export default function BulkStatusPanel() {
 
   function handleApply() {
     if (!fromStatus || !toStatus || !candidates.length) return;
-    const count = candidates.length;
     const fromLabel = STATUS_LABELS[fromStatus];
     const toLabel = STATUS_LABELS[toStatus];
+    // Selection is resolved on the SERVER by status (not a client-built truck
+    // list): the board snapshot here can be seconds stale and would silently
+    // skip trucks whose status changed just before Apply.
     bulk.mutate(
-      { run_date: runDate, truck_numbers: candidates.map((t) => t.truck_number), new_status: toStatus },
+      { run_date: runDate, from_status: fromStatus, new_status: toStatus },
       {
-        onSuccess: () => {
+        onSuccess: (rows) => {
+          const count = Array.isArray(rows) ? rows.length : candidates.length;
           toast.success(`Moved ${count} truck${count !== 1 ? "s" : ""} from ${fromLabel} → ${toLabel}`);
           setFromStatus(null);
           setToStatus(null);

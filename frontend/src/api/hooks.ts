@@ -10,6 +10,7 @@ import type {
   AuthRole,
   BatchSummary,
   Message,
+  TruckState,
   Notice,
   NoticeSeverity,
   NotificationEvent,
@@ -2057,14 +2058,19 @@ export function useBulkUpdateStatus() {
   return useMutation({
     mutationFn: async (args: {
       run_date: string;
-      truck_numbers: number[];
       new_status: TruckStatus;
+      /** Explicit trucks (e.g. Fleet page selection). */
+      truck_numbers?: number[];
+      /** Status-based selection, resolved SERVER-side at execution time —
+       *  immune to stale client snapshots. Prefer for "all X → Y" moves. */
+      from_status?: TruckStatus;
     }) => {
       const params = new URLSearchParams();
       params.set("run_date", args.run_date);
       params.set("new_status", args.new_status);
-      for (const n of args.truck_numbers) params.append("truck_numbers", String(n));
-      return (await api.put(`/trucks/bulk/status?${params.toString()}`)).data;
+      for (const n of args.truck_numbers ?? []) params.append("truck_numbers", String(n));
+      if (args.from_status) params.set("from_status", args.from_status);
+      return (await api.put<TruckState[]>(`/trucks/bulk/status?${params.toString()}`)).data;
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["board"] });
