@@ -747,13 +747,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               (truck.route_swap_route != null || truck.state?.oos_spare_route != null);
 
             unloadedRunningRows = filtered.filter((t) =>
-              (t.truck_type !== "Spare" &&
-                effectiveStatus(t, runDayNum, holidayLoad) !== "off") ||
-              isCoveredSpare(t)
+              ((t.truck_type !== "Spare" &&
+                effectiveStatus(t, runDayNum, holidayLoad) !== "off" &&
+                !coveringTruckByRoute.has(t.truck_number)) ||
+              isCoveredSpare(t))
             );
             unloadedOffRows = filtered.filter((t) =>
               t.truck_type !== "Spare" &&
-              effectiveStatus(t, runDayNum, holidayLoad) === "off"
+              effectiveStatus(t, runDayNum, holidayLoad) === "off" &&
+              !coveringTruckByRoute.has(t.truck_number)
             );
             unloadedSpareRows = filtered.filter((t) =>
               t.truck_type === "Spare" && !isCoveredSpare(t)
