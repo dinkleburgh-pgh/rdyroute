@@ -61,15 +61,33 @@ def _ran_special(note: str | None) -> bool:
     return "ran special" in (note or "").lower()
 
 
+def _operational_today() -> date:
+    """The current OPERATIONAL run date, mirroring the frontend's todayIso():
+    before 06:00 we're still on the previous calendar day's 3rd shift, and the
+    weekend is one continuous run period mapped to the preceding Friday —
+    nothing rolls over until Monday 06:00."""
+    now = datetime.now(ZoneInfo(app_settings.timezone))
+    d = now.date()
+    if now.hour < 6:
+        d = d - timedelta(days=1)
+    wd = d.weekday()  # Mon=0 .. Sun=6
+    if wd == 5:
+        d = d - timedelta(days=1)
+    elif wd == 6:
+        d = d - timedelta(days=2)
+    return d
+
+
 def _ensure_day_initialized(run_date: date, db: Session) -> None:
-    # NEVER initialize a future run day. Day-init closes out the PREVIOUS day
-    # (with force_unloaded_on_new_day it marks its open trucks unloaded and the
-    # new day's seed clears priority holds) — so any request for a future board
-    # date would roll the day over while the current shift is still working.
-    # That happened 2026-07-15 23:59: a query for the 16th auto-unloaded a
-    # truck marked "Unload and Hold" minutes earlier. Future dates now render
-    # from whatever rows already exist, without initializing anything.
-    if run_date > datetime.now(ZoneInfo(app_settings.timezone)).date():
+    # NEVER initialize a run day beyond the OPERATIONAL today. Day-init closes
+    # out the previous day (force-unloading its open trucks, clearing fresh
+    # holds), so initializing early rolls the day over while the shift is
+    # still working. Two real incidents: a query for tomorrow's date at 23:59
+    # (2026-07-15) auto-unloaded a just-held truck; and a calendar-Saturday
+    # date (2026-07-18) would pass a plain calendar-date guard even though the
+    # weekend IS Friday's run period until Monday 06:00. Later dates render
+    # whatever rows exist, without initializing anything.
+    if run_date > _operational_today():
         return
     source_key = f"day_setup_source_{run_date}"
     if db.get(AppSetting, source_key) is not None:
