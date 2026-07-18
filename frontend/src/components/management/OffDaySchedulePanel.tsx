@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Pencil } from "lucide-react";
 import { useFleet, useHolidayLoad, useHolidayUnload, useUpdateTruck } from "../../api/hooks";
 import { isScheduledOff, previousWorkday } from "../../utils/truckStatus";
@@ -19,8 +19,24 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
   // Track saving state per (truck, day) key so cells show feedback individually
   const [saving, setSaving] = useState<Set<string>>(new Set());
   // Cells are LIVE mutations — locked by default so a stray tap can't silently
-  // change a truck's schedule. The Edit Schedule toggle arms them.
+  // change a truck's schedule. The Edit Schedule toggle arms them, and edit
+  // mode auto-relocks after 2 minutes without an edit (shared floor tablets
+  // shouldn't sit armed).
+  const RELOCK_MS = 2 * 60 * 1000;
   const [editing, setEditing] = useState(false);
+  const relockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  function armRelock() {
+    if (relockTimer.current) clearTimeout(relockTimer.current);
+    relockTimer.current = setTimeout(() => setEditing(false), RELOCK_MS);
+  }
+  function setEditingSafe(next: boolean) {
+    if (relockTimer.current) clearTimeout(relockTimer.current);
+    if (next) armRelock();
+    setEditing(next);
+  }
+  useEffect(() => () => {
+    if (relockTimer.current) clearTimeout(relockTimer.current);
+  }, []);
 
   const rows = useMemo(() => {
     if (!fleet) return [];
@@ -73,6 +89,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
 
   async function toggleOffDay(truckNumber: number, day: number, currentOffDays: number[]) {
     if (!editing) return;
+    armRelock();
     const key = `${truckNumber}-${day}`;
     if (saving.has(key)) return;
     setSaving((s) => new Set(s).add(key));
@@ -91,12 +108,12 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-ink-muted">
           {editing
-            ? "Editing — click any cell to toggle that truck's off day. Changes save immediately."
+            ? "Editing — click any cell to toggle that truck's off day. Changes save immediately. Auto-locks after 2 min of inactivity."
             : "Schedule is locked so a stray tap can't change it. Tap Edit Schedule to make changes."}
         </p>
         <button
           type="button"
-          onClick={() => setEditing((e) => !e)}
+          onClick={() => setEditingSafe(!editing)}
           className={clsx(
             "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors",
             editing
