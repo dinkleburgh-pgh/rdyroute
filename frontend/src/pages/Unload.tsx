@@ -556,12 +556,18 @@ export default function Unload() {
           <div className="grid grid-cols-4 gap-2">
             {unloadedSorted.map((t, index) => {
               const time = t.state?.updated_at ? format(new Date(t.state.updated_at), "HH:mm") : "—";
+              const cov = getCoverageRouteNumber(t);
               return (
                 <AnimateCard key={t.truck_number} delay={index * 0.02}>
                   <div className="rounded-[10px] border border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.06)] px-1.5 py-2.5 text-center">
                     <span className="block font-mono text-[17px] font-extrabold leading-none text-ink">
                       #{t.truck_number}
                     </span>
+                    {cov != null && (
+                      <span className="mt-1 flex justify-center">
+                        <CoverageTag route={cov} truck={t.truck_number} />
+                      </span>
+                    )}
                     <span className="mt-1 block font-mono text-[10px] text-ink-muted">
                       {unloadedSort === "order" ? `#${index + 1} · ${time}` : time}
                     </span>
