@@ -49,7 +49,6 @@ import FleetUtilityBar from "./board/FleetUtilityBar";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, CalendarDays, X } from "lucide-react";
-import CoverageTag from "../components/CoverageTag";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -910,16 +909,23 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <div className="flex w-full flex-col gap-0.5 md:gap-1">
                   <div className="flex w-full min-w-0 items-start justify-between gap-2">
                     <div className="flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
-                      {!fleetMode && showCoverageBadge ? (
-                        /* Covering truck — paired headline: route → covering truck. */
+                      {!fleetMode && (showCoverageBadge || showCoveredByBadge) ? (
+                        /* Canonical coverage headline: route → carrying truck.
+                           Same pair whether this card IS the carrier
+                           (showCoverageBadge) or the covered route
+                           (showCoveredByBadge) — one style everywhere. */
                         <div className="flex items-center gap-1 md:gap-1.5">
                           <span className="flex flex-col items-center leading-none">
-                            <span className="text-lg font-extrabold tracking-tight tabular-nums text-[#7cc4ff] md:text-3xl">{coverageRoute}</span>
+                            <span className="text-lg font-extrabold tracking-tight tabular-nums text-[#7cc4ff] md:text-3xl">
+                              {showCoverageBadge ? coverageRoute : truck.truck_number}
+                            </span>
                             <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5b87b3] md:text-[10px]">route</span>
                           </span>
                           <span className="text-base font-bold text-[#7cc4ff] md:text-2xl">→</span>
                           <span className="flex flex-col items-center leading-none">
-                            <span className={clsx("text-lg font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>{truck.truck_number}</span>
+                            <span className={clsx("text-lg font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>
+                              {showCoverageBadge ? truck.truck_number : coveredBy!.num}
+                            </span>
                             <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 md:text-[10px]">truck</span>
                           </span>
                         </div>
@@ -934,12 +940,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           {truck.truck_number}
                         </span>
                       )}
-                      {!fleetMode && showCoveredByBadge && (
-                        <span className="flex min-h-[1.5rem] min-w-0 items-center">
-                          <CoverageTag route={truck.truck_number} truck={coveredBy!.num} className="self-start" />
-                        </span>
-                      )}
-                      {!fleetMode && !showCoverageBadge && (
+                      {!fleetMode && !showCoverageBadge && !showCoveredByBadge && (
                         <span className="min-h-[1.5rem]" />
                       )}
                     </div>
