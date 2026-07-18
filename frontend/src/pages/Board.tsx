@@ -1318,15 +1318,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     )}
                     {arrivedTrackingEnabled && truck.state?.arrived_at && (
                       <div
-                        className="flex items-center gap-1.5 rounded-lg border border-emerald-700/50 bg-emerald-950/70 px-2 py-1.5"
+                        className="inline-flex items-center gap-1 self-start rounded-full border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="text-xs font-bold text-emerald-300">
+                        <span className="whitespace-nowrap text-[10px] font-bold text-emerald-300">
                           📍 Arrived {formatArrivedAt(truck.state.arrived_at)}
                         </span>
                         <button
                           type="button"
-                          className="ml-auto rounded px-2 py-1 text-xs font-semibold text-emerald-400 transition-colors hover:text-emerald-200 active:bg-emerald-900/40"
+                          className="rounded px-1.5 py-0.5 text-[10px] font-semibold text-emerald-500 transition-colors hover:text-emerald-200 active:bg-emerald-900/40"
                           onClick={() => clearArrived(truck)}
                         >
                           Clear
