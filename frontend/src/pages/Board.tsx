@@ -913,15 +913,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     <div className="flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
                       {!fleetMode && showCoverageBadge ? (
                         /* Covering truck — paired headline: route → covering truck. */
-                        <div className="flex items-center gap-1 md:gap-1.5">
+                        <div className="flex shrink-0 items-center gap-1.5">
                           <span className="flex flex-col items-center leading-none">
-                            <span className="text-lg font-extrabold tracking-tight tabular-nums text-[#7cc4ff] md:text-3xl">{coverageRoute}</span>
-                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5b87b3] md:text-[10px]">route</span>
+                            <span className="text-2xl font-extrabold tracking-tight tabular-nums text-[#7cc4ff]">{coverageRoute}</span>
+                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5b87b3]">route</span>
                           </span>
-                          <span className="text-base font-bold text-[#7cc4ff] md:text-2xl">→</span>
+                          <span className="text-base font-bold text-[#7cc4ff]">→</span>
                           <span className="flex flex-col items-center leading-none">
-                            <span className={clsx("text-lg font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>{truck.truck_number}</span>
-                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 md:text-[10px]">truck</span>
+                            <span className={clsx("text-2xl font-extrabold tracking-tight tabular-nums", numberColor)}>{truck.truck_number}</span>
+                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500">truck</span>
                           </span>
                         </div>
                       ) : (
