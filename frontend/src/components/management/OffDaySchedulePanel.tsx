@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Lock, Pencil } from "lucide-react";
 import { useFleet, useHolidayLoad, useHolidayUnload, useUpdateTruck } from "../../api/hooks";
 import { isScheduledOff, previousWorkday } from "../../utils/truckStatus";
 import { workdayNumbers } from "../Clock";
@@ -17,6 +18,9 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
   const [pinnedDay, setPinnedDay] = useState<number | null>(null);
   // Track saving state per (truck, day) key so cells show feedback individually
   const [saving, setSaving] = useState<Set<string>>(new Set());
+  // Cells are LIVE mutations — locked by default so a stray tap can't silently
+  // change a truck's schedule. The Edit Schedule toggle arms them.
+  const [editing, setEditing] = useState(false);
 
   const rows = useMemo(() => {
     if (!fleet) return [];
@@ -68,6 +72,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
   }
 
   async function toggleOffDay(truckNumber: number, day: number, currentOffDays: number[]) {
+    if (!editing) return;
     const key = `${truckNumber}-${day}`;
     if (saving.has(key)) return;
     setSaving((s) => new Set(s).add(key));
@@ -83,9 +88,26 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
 
   return (
     <div className="space-y-3">
-      <p className="text-xs text-ink-muted">
-        Click any cell to toggle that truck's off day. Changes save immediately.
-      </p>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs text-ink-muted">
+          {editing
+            ? "Editing — click any cell to toggle that truck's off day. Changes save immediately."
+            : "Schedule is locked so a stray tap can't change it. Tap Edit Schedule to make changes."}
+        </p>
+        <button
+          type="button"
+          onClick={() => setEditing((e) => !e)}
+          className={clsx(
+            "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors",
+            editing
+              ? "border-amber-500/60 bg-amber-900/40 text-amber-300 hover:bg-amber-900/60"
+              : "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700",
+          )}
+        >
+          {editing ? <Lock className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
+          {editing ? "Done — Lock" : "Edit Schedule"}
+        </button>
+      </div>
       <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/60">
         <table className="w-full text-sm">
           <thead>
@@ -149,21 +171,22 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                         key={day}
                         onClick={() => toggleOffDay(t.truck_number, day, t.scheduled_off_days ?? [])}
                         className={clsx(
-                          "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-all cursor-pointer select-none",
+                          "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-all select-none",
+                          editing ? "cursor-pointer" : "cursor-default",
                           compact && !showInCompact(day) && "hidden md:table-cell",
                           isSaving
                             ? "opacity-40"
                             : off
                               ? highlight
-                                ? "bg-red-900/50 text-red-300 opacity-100 hover:bg-emerald-900/40"
-                                : "bg-red-900/30 text-red-300/60 opacity-40 hover:opacity-80 hover:bg-red-900/50"
+                                ? clsx("bg-red-900/50 text-red-300 opacity-100", editing && "hover:bg-emerald-900/40")
+                                : clsx("bg-red-900/30 text-red-300/60 opacity-40", editing && "hover:opacity-80 hover:bg-red-900/50")
                               : highlight
                                 ? "bg-slate-800/50 text-slate-500"
                                 : isLoadDay(day)
-                                  ? "text-blue-300 bg-blue-900/30 ring-1 ring-inset ring-blue-500/30 font-bold hover:bg-red-900/30 hover:text-red-300/80"
+                                  ? clsx("text-blue-300 bg-blue-900/30 ring-1 ring-inset ring-blue-500/30 font-bold", editing && "hover:bg-red-900/30 hover:text-red-300/80")
                                   : isUnloadDay(day)
-                                    ? "text-emerald-300 bg-emerald-900/30 ring-1 ring-inset ring-emerald-500/30 font-bold hover:bg-red-900/30 hover:text-red-300/80"
-                                    : "bg-emerald-900/40 text-emerald-300 hover:bg-red-900/30 hover:text-red-300/80",
+                                    ? clsx("text-emerald-300 bg-emerald-900/30 ring-1 ring-inset ring-emerald-500/30 font-bold", editing && "hover:bg-red-900/30 hover:text-red-300/80")
+                                    : clsx("bg-emerald-900/40 text-emerald-300", editing && "hover:bg-red-900/30 hover:text-red-300/80"),
                         )}
                       >
                         {isSaving ? "…" : off ? "OFF" : "RUN"}
