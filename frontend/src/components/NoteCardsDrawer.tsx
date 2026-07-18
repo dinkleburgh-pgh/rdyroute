@@ -99,11 +99,8 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
   // Previous operating day (weekend-aware) — Monday's prior run day is Friday.
   const yesterday = useMemo(() => previousRunDate(todayIso()), []);
 
-  const { data: yesterdaySpares } = useSpareAssignments(yesterday);
-  const unreturnedSpares = useMemo(
-    () => (yesterdaySpares ?? []).filter((s) => !s.returned),
-    [yesterdaySpares],
-  );
+  // ("Yesterday's Coverage" section removed 2026-07-18 — redundant with the
+  // Previous Load-Day Coverage banner, which derives from the swap log.)
 
   const { data: todaySpares } = useSpareAssignments(todayIso());
   const { data: swapLog = [] } = useRouteSwapLog(14);
@@ -212,7 +209,7 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
                   tab === "reminders" ? "bg-amber-700 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
                 )}
               >
-                Reminders {(unreturnedSpares.length + unloadReminders.length) > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{unreturnedSpares.length + unloadReminders.length}</span>}
+                Reminders {(prevCoverage.items.length + unloadReminders.length) > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{prevCoverage.items.length + unloadReminders.length}</span>}
               </button>
             </div>
 
@@ -346,27 +343,6 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
                     ))}
                   </div>
                 )}
-
-                {/* Yesterday's Coverage */}
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="h-4 w-4 text-amber-400" />
-                    <span className="text-xs font-semibold text-amber-400 uppercase tracking-wide">Yesterday's Coverage</span>
-                  </div>
-                  {unreturnedSpares.length === 0 ? (
-                    <p className="text-center text-sm text-slate-500 py-3">No active coverage reminders.</p>
-                  ) : (
-                    unreturnedSpares.map((s) => (
-                      <div key={s.id} className="rounded-xl border border-amber-700/30 bg-amber-900/10 p-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-base font-black text-amber-300">#{s.covering_route_truck}</span>
-                          <span className="text-xs text-slate-500">ran on</span>
-                          <span className="text-base font-black text-amber-300">Spare #{s.spare_truck_number}</span>
-                        </div>
-                      </div>
-                    ))
-                  )}
-                </div>
 
                 {/* Today's Coverage */}
                 <div className="space-y-3">
