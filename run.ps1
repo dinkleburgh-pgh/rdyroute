@@ -60,6 +60,15 @@ $FrontendLog   = Join-Path $LogDir 'frontend.log'
 $FrontendPidF  = Join-Path $LogDir 'frontend.pid'
 $FrontendSentinel = Join-Path $LogDir 'frontend.sentinel'  # watchdog monitors this file
 
+# Empty file fed to child stdin. Without -RedirectStandardInput the hidden
+# children INHERIT this console's input — and Vite reads stdin in raw mode for
+# its h/r/q shortcuts, eating every keystroke before the menu's ReadKey ever
+# sees it (the real reason the dev-console menu sat unresponsive through three
+# arrow-decoding fixes). An empty file = instant EOF, children detach cleanly.
+# (NUL itself is rejected: -RedirectStandardInput path-resolves its argument.)
+$EmptyStdin = Join-Path $LogDir 'empty.stdin'
+if (-not (Test-Path $EmptyStdin)) { Set-Content -Path $EmptyStdin -Value $null -NoNewline }
+
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -353,6 +362,7 @@ function Start-FrontendProcess {
     $proc = Start-Process -FilePath $npmCmd `
         -ArgumentList $ArgumentList `
         -WorkingDirectory $FrontendDir `
+        -RedirectStandardInput $EmptyStdin `
         -RedirectStandardOutput $FrontendLog `
         -RedirectStandardError "$FrontendLog.err" `
         -WindowStyle Hidden `
@@ -436,6 +446,7 @@ function Start-Backend {
     $backendArgs = @('-m', 'uvicorn', 'main:app', '--host', $BackendHost, '--port', $BackendPort, '--reload')
     $proc = Start-Process -FilePath $VenvPy -ArgumentList $backendArgs `
         -WorkingDirectory $PSScriptRoot `
+        -RedirectStandardInput $EmptyStdin `
         -RedirectStandardOutput $BackendLog -RedirectStandardError "$BackendLog.err" `
         -WindowStyle Hidden -PassThru
     $proc.Id | Out-File -FilePath $BackendPid -Encoding ascii
