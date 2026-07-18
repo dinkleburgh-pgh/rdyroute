@@ -12,6 +12,7 @@ import { workdayNumbers } from "./Clock";
 import { isScheduledOff, getCoverageRouteNumber, previousRunDate, buildPrevDayCoverage } from "../utils/truckStatus";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckNote, TruckStatus } from "../types";
+import CoverageTag from "./CoverageTag";
 
 const NOTE_TYPE_COLOR: Record<string, string> = {
   constant: "bg-blue-900/60 text-blue-300 ring-1 ring-blue-700/40",
@@ -337,9 +338,7 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
                             <span className="rounded-full bg-amber-900/50 px-2 py-0.5 text-xs font-semibold text-amber-300">Ran Special</span>
                           )}
                           {getCoverageRouteNumber(t) != null && (
-                            <span className="rounded-full bg-sky-900/50 px-2 py-0.5 text-xs font-semibold text-sky-300">
-                              Cov. #{getCoverageRouteNumber(t)}
-                            </span>
+                            <CoverageTag route={getCoverageRouteNumber(t)!} truck={t.truck_number} />
                           )}
                           <span className="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-400 uppercase">{t.state?.status ?? "—"}</span>
                         </div>

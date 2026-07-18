@@ -39,6 +39,7 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
+import CoverageTag from "../components/CoverageTag";
 
 /**
  * Load workflow (V1 parity):
@@ -835,9 +836,7 @@ function InProgressPanel({
                     {(() => {
                       const cr = getCoverageRouteNumber(nextUp);
                       return cr != null ? (
-                        <span className="mt-1 inline-flex items-center gap-1 rounded-pill bg-sky-900/40 px-2 py-0.5 text-xs font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                          Cov. #{cr}
-                        </span>
+                        <CoverageTag route={cr} truck={nextUp.truck_number} className="mt-1" />
                       ) : null;
                     })()}
                     {paceAvgSeconds != null && (

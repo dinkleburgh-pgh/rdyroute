@@ -112,6 +112,20 @@ export function getCoverageRouteNumber(t: TruckWithState): number | null {
   return t.route_swap_route ?? t.state?.oos_spare_route ?? null;
 }
 
+/**
+ * Route this truck has physically TAKEN OVER — meaning the covered route's
+ * own truck did NOT run and must never appear/count alongside its cover.
+ *
+ * True for any truck carrying `state.oos_spare_route` (spare-style coverage
+ * is about the ASSIGNMENT, not the covering truck's type — a Uniform can
+ * carry it, e.g. #75 covering route 53 on 2026-07-16), and for a Spare with
+ * `route_swap_route`. A non-Spare `route_swap_route` is a load SWAP: both
+ * trucks still run, so it is NOT a takeover.
+ */
+export function takenOverRouteNumber(t: TruckWithState): number | null {
+  return t.state?.oos_spare_route ?? (t.truck_type === "Spare" ? t.route_swap_route ?? null : null);
+}
+
 export interface RouteSwapLogEntryLike {
   run_date: string;
   route_truck: number;
@@ -421,21 +435,29 @@ export function buildOperationalDayContext(
     }
   }
 
-  // Only a Spare physically takes over a route so the original truck doesn't
-  // run — that route is removed from the count. A route-truck "swap" means BOTH
-  // trucks run (they just swap loads), so a swap must NOT remove either route.
-  const coveredRouteNumbers = new Set<number>();
+  // A TAKEOVER (takenOverRouteNumber: any truck's oos_spare_route, or a
+  // Spare's route_swap_route) means the covered route's own truck doesn't
+  // run — that route is removed from the count and the covering truck stands
+  // in for it. The covering truck's TYPE is irrelevant: a Uniform carrying
+  // oos_spare_route (#75 covering route 53, 2026-07-16) is a takeover too —
+  // gating this on truck_type === "Spare" made both trucks count. A
+  // non-Spare route-truck "swap" means BOTH trucks run (they just swap
+  // loads), so a swap must NOT remove either route.
+  const takeoverByRoute = new Map<number, TruckWithState>();
   for (const truck of trucks) {
-    if (truck.truck_type !== "Spare") continue;
-    const coveredRoute = getCoverageRouteNumber(truck);
-    if (coveredRoute != null) {
-      const coveredTruck = routeTruckByNumber.get(coveredRoute);
-      if (
-        coveredTruck &&
-        (holidayMode || !isScheduledOff(coveredTruck, dayNum))
-      ) {
-        coveredRouteNumbers.add(coveredRoute);
-      }
+    const coveredRoute = takenOverRouteNumber(truck);
+    if (coveredRoute != null && !takeoverByRoute.has(coveredRoute)) {
+      takeoverByRoute.set(coveredRoute, truck);
+    }
+  }
+  const coveredRouteNumbers = new Set<number>();
+  for (const [coveredRoute] of takeoverByRoute) {
+    const coveredTruck = routeTruckByNumber.get(coveredRoute);
+    if (
+      coveredTruck &&
+      (holidayMode || !isScheduledOff(coveredTruck, dayNum))
+    ) {
+      coveredRouteNumbers.add(coveredRoute);
     }
   }
 
@@ -451,28 +473,31 @@ export function buildOperationalDayContext(
 
   const activeTrucks: TruckWithState[] = [];
   for (const truck of trucks) {
-    // Covering spares stand in for the route truck — count the spare instead.
-    if (truck.truck_type === "Spare") {
-      const coveredRoute = getCoverageRouteNumber(truck);
-      if (coveredRoute != null) {
-        const coveredTruck = routeTruckByNumber.get(coveredRoute);
-        if (coveredTruck && (holidayMode || includeOffDayCoverage || !isScheduledOff(coveredTruck, dayNum))) {
-          activeTrucks.push(truck);
-        }
+    // Covering trucks (spare-style takeover, ANY truck type) stand in for the
+    // route truck — count the cover instead, gated on the covered route's
+    // schedule, not the cover's own.
+    const takenOver = takenOverRouteNumber(truck);
+    if (takenOver != null) {
+      const coveredTruck = routeTruckByNumber.get(takenOver);
+      if (coveredTruck && (holidayMode || includeOffDayCoverage || !isScheduledOff(coveredTruck, dayNum))) {
+        activeTrucks.push(truck);
       }
-      // Idle spares (no coverage) never participate in the load/unload count.
       continue;
     }
+    // Idle spares (no coverage) never participate in the load/unload count.
+    if (truck.truck_type === "Spare") continue;
 
     // Route trucks count purely by the fleet schedule: a route runs (and must
     // be unloaded) iff it's not scheduled off that day. Operational state — OOS,
     // route swaps — never changes this, because a scheduled route always runs
-    // (covered when needed). Only a spare physically taking over removes a route.
+    // (covered when needed). Only a physical takeover removes a route.
     if (!holidayMode && isScheduledOff(truck, dayNum)) continue;
-    if (coveredRouteNumbers.has(truck.truck_number)) continue;
-    // An OOS route truck whose route is being covered (by a spare OR a route-swap
-    // truck) does not run — its freight loads on the cover — so it's not part of
-    // the load/unload count. Uncovered OOS trucks are kept: still physically here
+    // A taken-over route did NOT run, no matter what its own flags say — the
+    // is_oos gate below missed covers whose covered truck had is_oos cleared.
+    if (takeoverByRoute.has(truck.truck_number)) continue;
+    // An OOS route truck whose route is being covered by a route-swap truck
+    // does not run — its freight loads on the cover — so it's not part of the
+    // load/unload count. Uncovered OOS trucks are kept: still physically here
     // to handle. Mirrors Unload.tsx's allTrucks filter.
     if ((truck.is_oos || truck.state?.status === "oos") && coveredByAnyRoute.has(truck.truck_number)) continue;
     activeTrucks.push(truck);

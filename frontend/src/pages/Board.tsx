@@ -49,6 +49,7 @@ import FleetUtilityBar from "./board/FleetUtilityBar";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, CalendarDays, X } from "lucide-react";
+import CoverageTag from "../components/CoverageTag";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -935,9 +936,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       )}
                       {!fleetMode && showCoveredByBadge && (
                         <span className="flex min-h-[1.5rem] min-w-0 items-center">
-                          <span className="inline-flex max-w-full items-center self-start truncate rounded-full bg-amber-900/40 px-2 py-1 text-[11px] font-bold text-amber-300 ring-1 ring-amber-700/40">
-                            ← Cov. #{coveredBy!.num}
-                          </span>
+                          <CoverageTag route={truck.truck_number} truck={coveredBy!.num} className="self-start" />
                         </span>
                       )}
                       {!fleetMode && !showCoverageBadge && (
@@ -985,7 +984,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                               onClick={(e) => { e.stopPropagation(); setDetailNum(cov.num); }}
                               className="inline-flex items-center gap-1 rounded-full bg-sky-500 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-sky-400"
                             >
-                              Cov. #{cov.num}
+                              #{truck.truck_number} <ArrowLeftRight className="h-3 w-3" /> #{cov.num}
                             </button>
                             {rawStatus && (
                               <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white", rawStatus === "dirty" && "bg-red-600", rawStatus === "unloaded" && "bg-green-600", rawStatus === "loaded" && "bg-blue-600", rawStatus === "in_progress" && "bg-amber-500", rawStatus === "off" && "bg-slate-500", rawStatus === "oos" && "bg-slate-600", rawStatus === "shop" && "bg-purple-600", rawStatus === "spare" && "bg-cyan-700", rawStatus === "unfinished" && "bg-fuchsia-600")}>
@@ -1042,7 +1041,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                               onClick={(e) => { e.stopPropagation(); setDetailNum(coverageRoute); }}
                               className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer lg:px-3 lg:py-1 lg:text-xs"
                             >
-                              → Cov. #{coverageRoute}
+                              #{coverageRoute} <ArrowLeftRight className="h-3 w-3" /> #{truck.truck_number}
                             </button>
                           );
                         }

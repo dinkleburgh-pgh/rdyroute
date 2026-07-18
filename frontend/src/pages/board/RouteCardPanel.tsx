@@ -19,6 +19,7 @@ import {
 import { workdayNumbers } from "../../components/Clock";
 import { effectiveStatus, getSwapHistory, isScheduledOff, recordSwapHistory } from "../../utils/truckStatus";
 import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS } from "./constants";
+import CoverageTag from "../../components/CoverageTag";
 
 const STATUS_BORDER = { loaded: "border-l-blue-600", in_progress: "border-l-amber-500", unloaded: "border-l-green-600" } as const;
 
@@ -167,9 +168,7 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
                       <span className={clsx("badge shrink-0", STATUS_BG["oos"])}>OOS</span>
                       {isCovered ? (
                         <>
-                          <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-xs font-bold text-sky-300 ring-1 ring-sky-700/40 whitespace-nowrap">
-                            Cov. #{coveringTruckNum}
-                          </span>
+                          <CoverageTag route={t.truck_number} truck={coveringTruckNum!} className="shrink-0" />
                           {coveringStatus && (
                             <span className={clsx("badge shrink-0", STATUS_BG[coveringStatus], STATUS_BADGE_TEXT[coveringStatus])}>
                               {STATUS_LABELS[coveringStatus]}

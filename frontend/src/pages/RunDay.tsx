@@ -28,6 +28,7 @@ import {
   effectiveStatus,
   isScheduledOff,
   previousWorkday,
+  takenOverRouteNumber,
 } from "../utils/truckStatus";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
 import { formatRunDate } from "../utils/dates";
@@ -409,11 +410,12 @@ export default function RunDay() {
         )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
-            // Spare covering trucks are rendered in place of the route they
-            // cover (below), so drop their standalone card here — both today's
-            // covering spares and the previous load day's covering spares.
+            // Covering trucks (ANY type carrying a takeover, not just Spares)
+            // are rendered in place of the route they cover (below), so drop
+            // their standalone card here — both today's covers and the
+            // previous load day's covering spares.
             .filter((t) =>
-              !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)) &&
+              takenOverRouteNumber(t) == null &&
               !prevSpareCoverNums.has(t.truck_number),
             )
             .map((t) => {
@@ -426,9 +428,13 @@ export default function RunDay() {
               // route rather than gating on status === "oos".
               const todayCover = coveringTruckMap.get(t.truck_number);
               const coveringTruck = prevCover ?? todayCover;
-              // Once a spare covers a route, show the covering spare's card
-              // (labeled "Covers #route") instead of the empty route truck.
-              const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
+              // Once a truck TAKES OVER a route (spare-style coverage, any
+              // truck type), show the cover's card instead of the empty route
+              // truck. Swap covers keep mirroring status onto the route card.
+              const spareCover =
+                coveringTruck && takenOverRouteNumber(coveringTruck) === t.truck_number
+                  ? coveringTruck
+                  : coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
               const displayTruck = spareCover ?? t;
               const ownRaw = effectiveStatus(displayTruck, unloadsDay, holidayUnload);
               // Non-spare (route-swap) cover still reflects the cover's status on
@@ -539,17 +545,20 @@ export default function RunDay() {
         )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {loadTrucks
-            // Spare covering trucks are rendered in place of the OOS route they
-            // cover (below), so drop their standalone card here.
-            .filter((t) => !(t.truck_type === "Spare" && (t.route_swap_route != null || t.state?.oos_spare_route != null)))
+            // Covering trucks (ANY type carrying a takeover) are rendered in
+            // place of the route they cover (below) — drop the standalone card.
+            .filter((t) => takenOverRouteNumber(t) == null)
             .map((t) => {
               // A truck can be OOS via the is_oos flag while its status reads
               // dirty/unloaded, so substitute whenever coverage exists for the
               // route rather than gating on status === "oos".
               const coveringTruck = coveringTruckMap.get(t.truck_number);
-              // Once a spare covers an OOS route, show the covering spare's card
-              // (labeled "Covers #route") instead of the empty OOS truck.
-              const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
+              // Once a truck takes over an OOS route (any type), show the
+              // cover's card instead of the empty OOS truck.
+              const spareCover =
+                coveringTruck && takenOverRouteNumber(coveringTruck) === t.truck_number
+                  ? coveringTruck
+                  : coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
               const displayTruck = spareCover ?? t;
               const status = !spareCover && coveringTruck
                 ? effectiveStatus(coveringTruck, loadDay, holidayLoad)

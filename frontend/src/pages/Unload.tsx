@@ -2,7 +2,8 @@ import { useMemo, useState } from "react";
 import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
-import { buildPrevDayCoverage, getCoverageRouteNumber, isScheduledOff, previousRunDate } from "../utils/truckStatus";
+import { buildPrevDayCoverage, getCoverageRouteNumber, isScheduledOff, previousRunDate, takenOverRouteNumber } from "../utils/truckStatus";
+import CoverageTag from "../components/CoverageTag";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import { motion } from "framer-motion";
@@ -66,6 +67,15 @@ export default function Unload() {
     }
     return s;
   }, [data]);
+  // Routes physically taken over (cover stands in; covered truck never shows).
+  const takenOverRoutes = useMemo(() => {
+    const s = new Set<number>();
+    for (const t of data ?? []) {
+      const r = takenOverRouteNumber(t);
+      if (r != null) s.add(r);
+    }
+    return s;
+  }, [data]);
 
   // Fleet Schedule is the single source of truth for which trucks appear.
   // Covering spares always included; pure spares excluded; route trucks included
@@ -81,6 +91,12 @@ export default function Unload() {
         // still physically here; if it's dirty someone must unload it, so keep
         // it in the workflow. Matches truckStatus.ts / the Board / the sidebar,
         // which only reclassify is_oos as OOS once coverage exists.
+        // A taken-over route (any truck carrying oos_spare_route for it, or a
+        // covering Spare) did NOT run — its cover represents it, regardless of
+        // the covered truck's own is_oos flag or type. Without this, #53
+        // appeared in "Dirty — route trucks" while its cover #75 sat in
+        // "Dirty — coverage": one physical load, two cards, double counts.
+        if (takenOverRoutes.has(t.truck_number)) return false;
         if ((t.is_oos || t.state?.status === "oos") && coveredRouteNumbers.has(t.truck_number)) return false;
         // A truck someone must physically unload ALWAYS appears, regardless of
         // the spare/schedule exclusions below — e.g. a spare marked
@@ -297,7 +313,7 @@ export default function Unload() {
         <div className="flex items-center gap-3 px-4 py-3">
           <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
           {opts.coverageBadge && coveredRoute != null && (
-            <span className="badge shrink-0 bg-st-spare text-[#04222b]">Cov. #{coveredRoute}</span>
+            <CoverageTag route={coveredRoute} truck={t.truck_number} className="shrink-0" />
           )}
           <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
           {t.state?.needs_checked && (

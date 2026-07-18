@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { TruckWithState } from "../types";
 import { getCoverageRouteNumber } from "../utils/truckStatus";
 import { DustGarmentIcon } from "./icons";
+import CoverageTag from "./CoverageTag";
 
 /**
  * WorkflowCard — the standard truck card used across the Load and Unload
@@ -55,9 +56,7 @@ export default function WorkflowCard({
               <span className="badge bg-st-inprogress/25 text-st-inprogress">Needs Checked</span>
             )}
             {coverRoute != null && (
-              <span className="inline-flex items-center gap-1 whitespace-nowrap rounded-pill bg-sky-900/40 px-2 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40">
-                → Cov. #{coverRoute}
-              </span>
+              <CoverageTag route={coverRoute} truck={truck.truck_number} />
             )}
             {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
               <span

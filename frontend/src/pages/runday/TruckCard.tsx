@@ -12,6 +12,7 @@ import clsx from "clsx";
 import type { TruckNote, TruckStatus, TruckWithState } from "../../types";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./constants";
 import AnimateCard from "../../components/AnimateCard";
+import CoverageTag from "../../components/CoverageTag";
 
 export default function TruckCard({
   t,
@@ -155,17 +156,11 @@ export default function TruckCard({
   ) : null;
 
   const coverageBadge = coversRoute != null ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
-      Covers #{coversRoute}
-    </span>
+    <CoverageTag route={coversRoute} truck={t.truck_number} />
   ) : coveringSpare ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
-      Cov. #{coveringSpare.truck_number}
-    </span>
+    <CoverageTag route={t.truck_number} truck={coveringSpare.truck_number} />
   ) : t.route_swap_route != null && t.truck_type !== "Spare" ? (
-    <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
-      Cov. #{t.route_swap_route}
-    </span>
+    <CoverageTag route={t.route_swap_route} truck={t.truck_number} />
   ) : null;
 
   // Centered card for all statuses
