@@ -26,6 +26,7 @@ import {
   countLoaded,
   effectiveOperationalStatus,
   effectiveStatus,
+  getCoverageRouteNumber,
   isScheduledOff,
   previousWorkday,
   takenOverRouteNumber,
@@ -410,12 +411,15 @@ export default function RunDay() {
         )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
           {unloadTrucks
-            // Covering trucks (ANY type carrying a takeover, not just Spares)
-            // are rendered in place of the route they cover (below), so drop
-            // their standalone card here — both today's covers and the
-            // previous load day's covering spares.
+            // UNLOAD side: a takeover describes where the NEXT load rides —
+            // it doesn't change who ran today. Route-truck carriers therefore
+            // render AS THEMSELVES here (their own route ran), and only true
+            // Spares (no route of their own) render in place of the route
+            // they cover. Dropping any takeover carrier hid #87 entirely and
+            // collapsed #4/#62 into their carriers' cards (25 cards vs the
+            // 28/28 header, 2026-07-19).
             .filter((t) =>
-              takenOverRouteNumber(t) == null &&
+              !(t.truck_type === "Spare" && getCoverageRouteNumber(t) != null) &&
               !prevSpareCoverNums.has(t.truck_number),
             )
             .map((t) => {
@@ -428,13 +432,10 @@ export default function RunDay() {
               // route rather than gating on status === "oos".
               const todayCover = coveringTruckMap.get(t.truck_number);
               const coveringTruck = prevCover ?? todayCover;
-              // Once a truck TAKES OVER a route (spare-style coverage, any
-              // truck type), show the cover's card instead of the empty route
-              // truck. Swap covers keep mirroring status onto the route card.
-              const spareCover =
-                coveringTruck && takenOverRouteNumber(coveringTruck) === t.truck_number
-                  ? coveringTruck
-                  : coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
+              // Only a SPARE cover substitutes on the unload side — a
+              // route-truck carrier ran its own route today and renders its
+              // own card, so the covered route's truck keeps its slot too.
+              const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
               const displayTruck = spareCover ?? t;
               const ownRaw = effectiveStatus(displayTruck, unloadsDay, holidayUnload);
               // Non-spare (route-swap) cover still reflects the cover's status on
