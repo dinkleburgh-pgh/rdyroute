@@ -160,19 +160,25 @@ export default function Unload() {
     () =>
       allTrucks.filter((t) => {
         const s = t.state?.status;
-        return s === "unloaded" || s === "in_progress" || s === "loaded";
+        if (!(s === "unloaded" || s === "in_progress" || s === "loaded")) return false;
+        // Day-init SEEDS trucks that didn't run yesterday as status "unloaded"
+        // (state_source "auto", no unloaded_at) — they start the day clean but
+        // nobody unloaded them today, so they don't belong in "Unloaded today"
+        // (they showed as "unloaded at 04:25", the seed time, on 2026-07-18).
+        if (s === "unloaded" && t.state?.state_source === "auto" && t.state?.unloaded_at == null) return false;
+        return true;
       }),
     [allTrucks],
   );
   // Sort variant for the "Unloaded today" grid — mirrors the Load page's
-  // Number/Load order toggle. There's no dedicated unload-finish timestamp (the
-  // unload workflow is single-click, no timed step), so updated_at is the order
-  // proxy — the same fallback the Load page uses for trucks that skip the timed
-  // workflow.
+  // Number/Load order toggle. unloaded_at (stamped by the real dirty→unloaded
+  // workflow tap) is the order key; updated_at is the fallback for rows that
+  // were never stamped (bulk moves deliberately don't stamp arrivals data).
   const unloadedSorted = useMemo(() => {
     const arr = [...unloaded];
     if (unloadedSort === "order") {
       const toEpoch = (t: TruckWithState): number => {
+        if (t.state?.unloaded_at != null) return t.state.unloaded_at;
         const ua = t.state?.updated_at;
         return ua ? new Date(ua).getTime() / 1000 : Number.POSITIVE_INFINITY;
       };
@@ -620,7 +626,10 @@ export default function Unload() {
           </div>
           <div className="grid grid-cols-4 gap-2">
             {unloadedSorted.map((t, index) => {
-              const time = t.state?.updated_at ? format(new Date(t.state.updated_at), "HH:mm") : "—";
+              // Only the real workflow stamp counts as an unload TIME —
+              // updated_at moves on every edit (and on day-init seeds), which
+              // painted fake times like "04:25" on trucks nobody touched.
+              const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "HH:mm") : "—";
               const cov = getCoverageRouteNumber(t);
               return (
                 <AnimateCard key={t.truck_number} delay={index * 0.02}>
