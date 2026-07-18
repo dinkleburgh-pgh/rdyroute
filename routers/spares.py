@@ -98,6 +98,50 @@ def assign_spare(
         spare_state.oos_spare_route = payload.covering_route_truck
         spare_state.state_source = TruckStateSource.workflow.value
 
+    # LATE assignment: if the covered route was already worked this run date
+    # (loaded / in_progress), that workflow state belongs to the route's LOAD —
+    # which now rides the covering truck. Transfer it so the carrier doesn't
+    # reappear as fresh work in "Ready to Load" and the covered truck doesn't
+    # keep credit for a load it no longer carries. (Happened 2026-07-18: swaps
+    # entered after the day's loading put two loaded routes back at 0%.)
+    route_state = db.scalars(
+        select(TruckState).where(
+            TruckState.truck_number == payload.covering_route_truck,
+            TruckState.run_date == payload.run_date,
+        )
+    ).first()
+    if (
+        route_state is not None
+        and route_state.status in (TruckStatus.loaded, TruckStatus.in_progress)
+        and spare_state.status not in (TruckStatus.loaded, TruckStatus.in_progress)
+    ):
+        spare_state.status = route_state.status
+        spare_state.load_start_time = route_state.load_start_time
+        spare_state.load_finish_time = route_state.load_finish_time
+        spare_state.load_duration_seconds = route_state.load_duration_seconds
+        route_state.status = TruckStatus.unloaded
+        route_state.load_start_time = None
+        route_state.load_finish_time = None
+        route_state.load_duration_seconds = None
+        route_state.state_source = TruckStateSource.workflow.value
+        append_activity_event(
+            db,
+            actor_user=current_user,
+            event_family="coverage",
+            event_type="coverage_state_transferred",
+            run_date=payload.run_date,
+            truck_number=payload.spare_truck_number,
+            summary=(
+                f"Route {payload.covering_route_truck} was already "
+                f"{spare_state.status.value} — state transferred to covering "
+                f"truck {payload.spare_truck_number}"
+            ),
+            context_json=add_related_truck_context(
+                {"covering_route_truck": payload.covering_route_truck},
+                [payload.spare_truck_number, payload.covering_route_truck],
+            ),
+        )
+
     after_snapshot = snapshot_truck_state(spare_state)
     append_activity_event(
         db,

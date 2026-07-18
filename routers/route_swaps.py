@@ -161,6 +161,57 @@ def create_swap(
             if st.status == TruckStatus.spare:
                 st.status = TruckStatus.dirty
             st.state_source = TruckStateSource.workflow.value
+
+    # LATE one-way swap: if the covered route was already worked this run date
+    # (loaded / in_progress), that state belongs to the route's LOAD — which now
+    # rides load_on_truck. Transfer it so the carrier doesn't reappear as fresh
+    # work and the covered truck doesn't keep credit. Two-way swaps are a real
+    # exchange (both trucks run their swapped loads) and are left untouched.
+    if not payload.two_way:
+        rt_state = db.scalars(
+            select(TruckState).where(
+                TruckState.truck_number == payload.route_truck,
+                TruckState.run_date == payload.run_date,
+            )
+        ).first()
+        lo_state = db.scalars(
+            select(TruckState).where(
+                TruckState.truck_number == payload.load_on_truck,
+                TruckState.run_date == payload.run_date,
+            )
+        ).first()
+        if (
+            rt_state is not None
+            and lo_state is not None
+            and rt_state.status in (TruckStatus.loaded, TruckStatus.in_progress)
+            and lo_state.status not in (TruckStatus.loaded, TruckStatus.in_progress)
+        ):
+            lo_state.status = rt_state.status
+            lo_state.load_start_time = rt_state.load_start_time
+            lo_state.load_finish_time = rt_state.load_finish_time
+            lo_state.load_duration_seconds = rt_state.load_duration_seconds
+            rt_state.status = TruckStatus.unloaded
+            rt_state.load_start_time = None
+            rt_state.load_finish_time = None
+            rt_state.load_duration_seconds = None
+            rt_state.state_source = TruckStateSource.workflow.value
+            append_activity_event(
+                db,
+                actor_user=current_user,
+                event_family="coverage",
+                event_type="coverage_state_transferred",
+                run_date=payload.run_date,
+                truck_number=payload.load_on_truck,
+                summary=(
+                    f"Route {payload.route_truck} was already {lo_state.status.value} — "
+                    f"state transferred to covering truck {payload.load_on_truck}"
+                ),
+                context_json=add_related_truck_context(
+                    {"covering_route_truck": payload.route_truck},
+                    [payload.load_on_truck, payload.route_truck],
+                ),
+            )
+
     truck_state_changes = []
     for truck_num in load_on_trucks:
         state = db.scalars(
