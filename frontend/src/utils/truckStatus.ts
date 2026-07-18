@@ -427,7 +427,19 @@ export function buildOperationalDayContext(
   dayNum: number,
   holidayMode = false,
   includeOffDayCoverage = false,
+  dayRole: "load" | "unload" = "load",
 ): OperationalDayContext {
+  // A takeover assignment describes where the NEXT load rides — it does not
+  // change who physically RAN today. In the "unload" role a ROUTE-truck
+  // carrier therefore counts as itself (its own schedule) and its covered
+  // route's truck still counts if it ran; only Spares substitute for a route
+  // on the unload side (a covering spare has no route of its own). Without
+  // this, a swap entered overnight for Monday's load silently shrank
+  // Friday's unload denominator (28 -> 25, 2026-07-18).
+  const takeoverOf = (t: TruckWithState): number | null =>
+    dayRole === "unload"
+      ? (t.truck_type === "Spare" ? getCoverageRouteNumber(t) : null)
+      : takenOverRouteNumber(t);
   const routeTruckByNumber = new Map<number, TruckWithState>();
   for (const truck of trucks) {
     if (truck.truck_type !== "Spare") {
@@ -445,7 +457,7 @@ export function buildOperationalDayContext(
   // loads), so a swap must NOT remove either route.
   const takeoverByRoute = new Map<number, TruckWithState>();
   for (const truck of trucks) {
-    const coveredRoute = takenOverRouteNumber(truck);
+    const coveredRoute = takeoverOf(truck);
     if (coveredRoute != null && !takeoverByRoute.has(coveredRoute)) {
       takeoverByRoute.set(coveredRoute, truck);
     }
@@ -473,10 +485,11 @@ export function buildOperationalDayContext(
 
   const activeTrucks: TruckWithState[] = [];
   for (const truck of trucks) {
-    // Covering trucks (spare-style takeover, ANY truck type) stand in for the
-    // route truck — count the cover instead, gated on the covered route's
-    // schedule, not the cover's own.
-    const takenOver = takenOverRouteNumber(truck);
+    // Covering trucks (spare-style takeover; any type in the load role,
+    // Spares only in the unload role) stand in for the route truck — count
+    // the cover instead, gated on the covered route's schedule, not the
+    // cover's own.
+    const takenOver = takeoverOf(truck);
     if (takenOver != null) {
       const coveredTruck = routeTruckByNumber.get(takenOver);
       if (coveredTruck && (holidayMode || includeOffDayCoverage || !isScheduledOff(coveredTruck, dayNum))) {

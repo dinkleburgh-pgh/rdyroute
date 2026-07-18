@@ -182,7 +182,7 @@ export default function RunDay() {
   // Uses buildOperationalDayContext (same as loadContext) so the count is consistent:
   // one entry per running route (covering spare replaces its OOS route truck).
   const unloadContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload ?? false, false),
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload ?? false, false, "unload"),
     [board, unloadsDay, holidayUnload],
   );
   const unloadActiveTrucks = unloadContext.activeTrucks;

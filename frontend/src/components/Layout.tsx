@@ -249,7 +249,7 @@ export default function Layout() {
   // context as the denominator so a spare covering an off-day route can't push the
   // numerator above the total (was causing e.g. 29/28).
   const unloadScheduleContext = useMemo(
-    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, false),
+    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, false, "unload"),
     [board, unloadsDay, holidayUnload],
   );
   const totalScheduledUnload = unloadScheduleContext.activeTrucks.length;

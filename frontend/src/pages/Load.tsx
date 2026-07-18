@@ -177,7 +177,7 @@ export default function Load() {
   const loadPct = loadTotal > 0 ? Math.round((loadDone / loadTotal) * 100) : 0;
 
   const unloadScheduleContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false),
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload"),
     [board, unloadsDay, holidayUnload],
   );
   const unloadTotal = unloadScheduleContext.activeTrucks.length;
