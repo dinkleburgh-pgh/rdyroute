@@ -22,6 +22,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), false),
       calendar_fab_enabled: asBool(map.get("calendar_fab_enabled"), false),
       force_unloaded_on_new_day: asBool(map.get("force_unloaded_on_new_day"), false),
+      unload_page_style: map.get("unload_page_style") === "grid" ? "grid" : "list",
     }),
     [map],
   );
@@ -41,6 +42,27 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
 
   return (
     <div className="card">
+      <FieldRow
+        label="Style — Unload page"
+        hint="Unload List = one row per truck with inline actions. Fleet Grid = compact fleet-style cards; tapping a truck opens an action menu (Mark Unloaded, Batch, Unfinished)."
+      >
+        <div className="inline-flex overflow-hidden rounded-lg border border-slate-600 text-sm font-semibold">
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, unload_page_style: "list" })}
+            className={form.unload_page_style === "list" ? "bg-blue-600 px-3 py-1.5 text-white" : "bg-slate-800 px-3 py-1.5 text-slate-300 hover:bg-slate-700"}
+          >
+            Unload List
+          </button>
+          <button
+            type="button"
+            onClick={() => setForm({ ...form, unload_page_style: "grid" })}
+            className={form.unload_page_style === "grid" ? "border-l border-slate-600 bg-blue-600 px-3 py-1.5 text-white" : "border-l border-slate-600 bg-slate-800 px-3 py-1.5 text-slate-300 hover:bg-slate-700"}
+          >
+            Fleet Grid
+          </button>
+        </div>
+      </FieldRow>
       <FieldRow
         label="Batching disabled"
         hint="Hide the Batches workflow entirely (mirrors V1 batching_disabled)."

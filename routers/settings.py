@@ -38,6 +38,7 @@ KNOWN_KEYS = {
     "calculator_fab_enabled",
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
+    "unload_page_style",
     "communications_censor_words",
     "ollama_base_url",
     "shortage_sheet_ollama_model",
@@ -73,6 +74,7 @@ _USER_READABLE_KEYS = {
     "calculator_fab_enabled",
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
+    "unload_page_style",
 }
 
 # Keys any authenticated user may write to (e.g. personal notes)

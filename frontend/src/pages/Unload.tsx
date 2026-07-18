@@ -41,6 +41,12 @@ export default function Unload() {
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
     [settings],
   );
+  // Operations → Style: "list" (long rows, inline actions — the default) or
+  // "grid" (compact fleet-style cards; tapping opens the action menu).
+  const unloadStyle = useMemo(
+    () => ((settings ?? []).find((s) => s.key === "unload_page_style")?.value === "grid" ? "grid" : "list"),
+    [settings],
+  );
   const wearerCap = useMemo(() => {
     const v = Number((settings ?? []).find((s) => s.key === "wearer_cap")?.value);
     return Number.isFinite(v) && v > 0 ? v : 1800;
@@ -55,6 +61,8 @@ export default function Unload() {
   const [unloadedSort, setUnloadedSort] = useState<"number" | "order">("number");
   // Trucks marked unloaded this session — card stays in dirty section with Undo until navigation.
   const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
+  // Fleet-grid style: the truck whose action menu is open.
+  const [menuTruck, setMenuTruck] = useState<TruckWithState | null>(null);
 
   // Route numbers that ARE being covered by some other truck today — derived
   // from the board itself (the covering truck carries route_swap_route /
@@ -272,6 +280,47 @@ export default function Unload() {
     setBatchOpen(null);
   }
 
+  // Fleet-grid style: open the action menu, pre-filling batch state like the
+  // list style's batch panel does.
+  function openTruckMenu(t: TruckWithState) {
+    setBatchNum(String(t.state?.batch_id ?? 1));
+    setWearers(String(t.state?.wearers ?? 0));
+    setMenuTruck(t);
+  }
+
+  // Compact fleet-style card (grid style). All actions live in the menu.
+  function renderGridCard(t: TruckWithState, accent: string) {
+    const isUndo = recentlyUnloaded.has(t.truck_number);
+    const cov = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+    return (
+      <button
+        key={t.truck_number}
+        type="button"
+        onClick={() => openTruckMenu(t)}
+        className="card flex min-h-[5.5rem] flex-col items-center justify-center gap-1 p-2 text-center transition-shadow hover:ring-2 hover:ring-blue-500"
+      >
+        <span className={clsx("font-mono text-3xl font-black leading-none", isUndo ? "text-st-unloaded" : accent)}>
+          {t.truck_number}
+        </span>
+        {cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
+        <span className="flex flex-wrap items-center justify-center gap-1">
+          {isUndo && <span className="badge bg-st-unloaded text-[#052e16]">Unloaded</span>}
+          {!isUndo && t.state?.priority_hold === true && (
+            <span className="badge bg-amber-500 font-bold text-black">HOLD</span>
+          )}
+          {t.state?.needs_checked && (
+            <span className="badge bg-st-inprogress/25 text-st-inprogress">Check</span>
+          )}
+          {t.state?.batch_id != null && (
+            <span className="badge bg-track text-ink-soft">B{t.state.batch_id}</span>
+          )}
+        </span>
+      </button>
+    );
+  }
+
+  const GRID_COLS = "grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6";
+
   /**
    * A single horizontal dirty-family row. Used by every dirty-family section
    * (requested / unfinished / dirty-coverage / dirty-route); the section passes
@@ -474,12 +523,16 @@ export default function Unload() {
           <div className="text-xs font-medium uppercase tracking-wide text-st-inprogress">
             Requested — priority hold
           </div>
-          {requested.map((t, i) =>
-            renderRow(t, i, {
-              accentClass: "border-l-[3px] border-l-st-inprogress",
-              actionLabel: "Mark Unloaded",
-              overflow: "dirty",
-            }),
+          {unloadStyle === "grid" ? (
+            <div className={GRID_COLS}>{requested.map((t) => renderGridCard(t, "text-amber-300"))}</div>
+          ) : (
+            requested.map((t, i) =>
+              renderRow(t, i, {
+                accentClass: "border-l-[3px] border-l-st-inprogress",
+                actionLabel: "Mark Unloaded",
+                overflow: "dirty",
+              }),
+            )
           )}
         </section>
       )}
@@ -488,13 +541,17 @@ export default function Unload() {
       {unfinished.length > 0 && (
         <section className="flex flex-col gap-2">
           <div className="text-xs font-medium uppercase tracking-wide text-st-unfinished">Unfinished</div>
-          {unfinished.map((t, i) =>
-            renderRow(t, i, {
-              accentClass: "border-l-[3px] border-l-st-unfinished",
-              actionLabel: "Finish unload",
-              ghost: true,
-              overflow: "unfinished",
-            }),
+          {unloadStyle === "grid" ? (
+            <div className={GRID_COLS}>{unfinished.map((t) => renderGridCard(t, "text-st-unfinished"))}</div>
+          ) : (
+            unfinished.map((t, i) =>
+              renderRow(t, i, {
+                accentClass: "border-l-[3px] border-l-st-unfinished",
+                actionLabel: "Finish unload",
+                ghost: true,
+                overflow: "unfinished",
+              }),
+            )
           )}
         </section>
       )}
@@ -503,13 +560,17 @@ export default function Unload() {
       {dirtyCoverages.length > 0 && (
         <section className="flex flex-col gap-2">
           <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dirty — coverage</div>
-          {dirtyCoverages.map((t, i) =>
-            renderRow(t, i, {
-              accentClass: "border-l-[3px] border-l-st-spare",
-              actionLabel: "Mark Unloaded",
-              coverageBadge: true,
-              overflow: "dirty",
-            }),
+          {unloadStyle === "grid" ? (
+            <div className={GRID_COLS}>{dirtyCoverages.map((t) => renderGridCard(t, "text-st-spare"))}</div>
+          ) : (
+            dirtyCoverages.map((t, i) =>
+              renderRow(t, i, {
+                accentClass: "border-l-[3px] border-l-st-spare",
+                actionLabel: "Mark Unloaded",
+                coverageBadge: true,
+                overflow: "dirty",
+              }),
+            )
           )}
         </section>
       )}
@@ -518,8 +579,12 @@ export default function Unload() {
       {dirtyRoute.length > 0 && (
         <section className="flex flex-col gap-2">
           <div className="text-xs font-medium uppercase tracking-wide text-ink-muted">Dirty — route trucks</div>
-          {dirtyRoute.map((t, i) =>
-            renderRow(t, i, { accentClass: "border-l-[3px] border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" }),
+          {unloadStyle === "grid" ? (
+            <div className={GRID_COLS}>{dirtyRoute.map((t) => renderGridCard(t, "text-red-400"))}</div>
+          ) : (
+            dirtyRoute.map((t, i) =>
+              renderRow(t, i, { accentClass: "border-l-[3px] border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" }),
+            )
           )}
         </section>
       )}
@@ -608,6 +673,114 @@ export default function Unload() {
           ))}
         </div>
       </section>
+
+      {/* ── Fleet-grid style: truck action menu (mirrors the Fleet page's
+             modal, scoped to unload actions) ─────────────────────────────── */}
+      {menuTruck && (() => {
+        const t = allTrucks.find((x) => x.truck_number === menuTruck.truck_number) ?? menuTruck;
+        const isUndo = recentlyUnloaded.has(t.truck_number);
+        const isUnfin = t.state?.status === "unfinished";
+        const cov = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+        const isBusy = busy === t.truck_number;
+        const close = () => setMenuTruck(null);
+        return (
+          <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={close}>
+            <div
+              className="w-full max-w-sm space-y-4 rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="text-xl font-semibold">Truck #{t.truck_number}</h3>
+                  <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+                    {t.truck_type}
+                    {isUnfin ? " · Unfinished" : ""}
+                    {cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
+                  </p>
+                </div>
+                <button className="btn-ghost" onClick={close}>Close</button>
+              </div>
+
+              {isUndo ? (
+                <button
+                  className="w-full rounded-lg border border-slate-600 bg-slate-800 py-3.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50"
+                  disabled={isBusy}
+                  onClick={async () => { await undoUnload(t.truck_number); close(); }}
+                >
+                  {isBusy ? "…" : "Undo — back to Dirty"}
+                </button>
+              ) : (
+                <>
+                  <button
+                    className="w-full rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-50"
+                    disabled={isBusy}
+                    onClick={async () => { await markUnloaded(t); close(); }}
+                  >
+                    {isBusy ? "…" : isUnfin ? "Finish Unload" : "Mark Unloaded"}
+                  </button>
+
+                  {!batchingDisabled && (
+                    <section>
+                      <p className="label">Batch</p>
+                      <div className="grid grid-cols-6 gap-1.5">
+                        {[1, 2, 3, 4, 5, 6].map((n) => (
+                          <button
+                            key={n}
+                            type="button"
+                            onClick={() => setBatchNum(String(n))}
+                            className={
+                              batchNum === String(n)
+                                ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400"
+                                : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"
+                            }
+                          >
+                            {n}
+                          </button>
+                        ))}
+                      </div>
+                      <input
+                        type="number"
+                        min={0}
+                        className="input mt-2"
+                        placeholder="Wearers"
+                        value={wearers}
+                        onChange={(e) => setWearers(e.target.value)}
+                      />
+                      <button
+                        className="btn-primary mt-2 w-full font-semibold"
+                        disabled={assign.isPending}
+                        onClick={async () => { await assignBatch(t.truck_number); close(); }}
+                      >
+                        {assign.isPending ? "Saving…" : t.state?.batch_id != null ? `Assign (current: Batch ${t.state.batch_id})` : "Assign Batch"}
+                      </button>
+                    </section>
+                  )}
+
+                  {isUnfin ? (
+                    <button
+                      className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700"
+                      onClick={() => {
+                        upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" });
+                        close();
+                      }}
+                    >
+                      Back to Dirty
+                    </button>
+                  ) : (
+                    <button
+                      className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-st-unfinished transition-colors hover:bg-slate-700 disabled:opacity-50"
+                      disabled={isBusy}
+                      onClick={async () => { await markUnfinished(t); close(); }}
+                    >
+                      Mark Unfinished
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        );
+      })()}
     </motion.div>
   );
 }
