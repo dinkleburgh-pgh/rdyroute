@@ -104,7 +104,11 @@ function Empty({ children }: { children: ReactNode }) {
 
 function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number; noCap: boolean }) {
   const { bar, text } = capacityColor(batch.total_wearers, noCap, cap);
-  const pct = noCap ? 100 : Math.min(100, Math.round((batch.total_wearers / cap) * 100));
+  // Fill is always proportional to the wearer cap so an empty batch reads as
+  // an empty outline. With enforcement off (noCap) the configured cap still
+  // serves as the visual reference — forcing 100% painted every bar full even
+  // for empty batches.
+  const pct = Math.min(100, Math.round((batch.total_wearers / Math.max(cap, 1)) * 100));
   return (
     <AnimateCard className="card flex flex-col gap-2 p-3">
       <div className="flex items-center justify-between">
@@ -114,7 +118,7 @@ function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number
           {noCap ? "" : ` / ${cap.toLocaleString()}`}
         </span>
       </div>
-      <div className="h-1.5 w-full overflow-hidden rounded-full bg-surface-3">
+      <div className="h-1.5 w-full overflow-hidden rounded-full border border-hairline bg-surface-3">
         <div className={clsx("h-full rounded-full transition-all", bar)} style={{ width: `${pct}%` }} />
       </div>
       {batch.trucks.length === 0 ? (
