@@ -25,7 +25,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousRunDate, previousWorkday, recordSwapHistory } from "../utils/truckStatus";
+import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousRunDate, previousWorkday, recordSwapHistory, takenOverRouteNumber } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -243,6 +243,18 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     () => (data ?? []).find((t) => t.state?.status === "in_progress"),
     [data],
   );
+
+  // Routes physically taken over (any truck's oos_spare_route or a covering
+  // Spare) — the covered truck is represented by its carrier on lifecycle
+  // filters, regardless of its own is_oos flag.
+  const takenOverRoutes = useMemo(() => {
+    const s = new Set<number>();
+    for (const t of data ?? []) {
+      const r = takenOverRouteNumber(t);
+      if (r != null) s.add(r);
+    }
+    return s;
+  }, [data]);
 
   // Unified: OOS route truck number → {truckNumber, status} of the covering truck
   // Combines spare assignments (SpareAssignment rows) and route swaps.
@@ -488,6 +500,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       // (Dirty, etc.) until it's covered or unloaded, not disappear the moment
       // it's flagged OOS.
       if (t.truck_type !== "Spare" && t.is_oos && coveringTruckByRoute.has(t.truck_number)) return false;
+      // A taken-over route (any truck carrying oos_spare_route for it) is
+      // represented by its carrier's card even when the covered truck's
+      // is_oos flag was cleared — both rendering painted identical "4 → 50"
+      // pair cards twice on the Loaded board.
+      if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number)) return false;
       // For all other filters, re-evaluate auto-off trucks against unloadsDay
       // so they surface under their real workflow status.
       const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
@@ -509,7 +526,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       }
       return true;
     });
-  }, [data, filter, fleetMode, fleetFilters, runDayNum, runUnloadsDay, holidayLoad, holidayUnload, truckStatusByNumber]);
+  }, [data, filter, fleetMode, fleetFilters, runDayNum, runUnloadsDay, holidayLoad, holidayUnload, truckStatusByNumber, takenOverRoutes]);
 
 
 

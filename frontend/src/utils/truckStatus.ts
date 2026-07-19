@@ -357,6 +357,15 @@ export function buildRouteStatusCounts(
   if (historicalCoverageFallback) {
     for (const route of historicalCoverageFallback.keys()) coveredRouteNumbers.add(route);
   }
+  // Routes physically TAKEN OVER (any truck's oos_spare_route, or a covering
+  // Spare) — the covered truck is represented by its carrier and must not
+  // also count, regardless of its own is_oos flag (a cleared flag let both
+  // sides of "4 → 50" count as Loaded: sidebar 31 vs 29 real trucks).
+  const takenOverRoutes = new Set<number>();
+  for (const t of trucks) {
+    const r = takenOverRouteNumber(t);
+    if (r != null) takenOverRoutes.add(r);
+  }
 
   function statusFor(t: TruckWithState): TruckStatus {
     // is_oos only overrides the workflow status once a covering truck is
@@ -391,6 +400,8 @@ export function buildRouteStatusCounts(
   }
 
   for (const t of trucks) {
+    // A taken-over route's truck is represented by its carrier's card/count.
+    if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number)) continue;
     if (t.truck_type === "Spare") {
       // Mirror the Board's Dirty/Unloaded filters exactly: ANY spare sitting
       // dirty/unfinished counts there whether or not it's covering a route
