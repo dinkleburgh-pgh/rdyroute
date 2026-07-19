@@ -2,6 +2,7 @@
  * Truck detail modal (fleet board). Wraps StatusEditor + FleetTruckEditor and
  * shows stats, notes, shortages, and audit entries. Extracted from Board.tsx.
  */
+import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
 import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
@@ -31,7 +32,7 @@ export default function TruckDetailModal({
   // is_oos flag takes priority — ensures OOS is reflected even on dates with no state row
   const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
@@ -165,6 +166,7 @@ export default function TruckDetailModal({
           <TruckActivityTimeline truckNumber={truck.truck_number} />
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

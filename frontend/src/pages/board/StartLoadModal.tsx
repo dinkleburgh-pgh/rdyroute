@@ -3,6 +3,7 @@
  * is already in progress. Extracted from Board.tsx.
  */
 import clsx from "clsx";
+import { createPortal } from "react-dom";
 import type { TruckWithState } from "../../types";
 
 export default function StartLoadModal({
@@ -20,13 +21,15 @@ export default function StartLoadModal({
 }) {
   const isBlocked = blockedBy !== null;
 
-  return (
+  // Portal to <body> so transformed ancestors can't break viewport centering;
+  // clamp to the visible height so the action row stays reachable.
+  return createPortal(
     <div
       className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm overflow-hidden rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
+        className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header stripe */}
@@ -81,6 +84,7 @@ export default function StartLoadModal({
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

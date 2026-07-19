@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
@@ -629,12 +630,12 @@ export default function Unload() {
               // Only the real workflow stamp counts as an unload TIME —
               // updated_at moves on every edit (and on day-init seeds), which
               // painted fake times like "04:25" on trucks nobody touched.
-              const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "HH:mm") : "—";
+              const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
               const cov = getCoverageRouteNumber(t);
               return (
-                <AnimateCard key={t.truck_number} delay={index * 0.02}>
-                  <div className="rounded-[10px] border border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.06)] px-1.5 py-2.5 text-center">
-                    <span className="block font-mono text-[17px] font-extrabold leading-none text-ink">
+                <AnimateCard key={t.truck_number} delay={index * 0.02} className="h-full">
+                  <div className="flex h-full min-h-[6rem] flex-col items-center justify-center rounded-[10px] border border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.06)] px-1.5 py-2.5 text-center">
+                    <span className="font-mono text-[17px] font-extrabold leading-none text-ink">
                       #{t.truck_number}
                     </span>
                     {cov != null && (
@@ -642,7 +643,7 @@ export default function Unload() {
                         <CoverageTag route={cov} truck={t.truck_number} />
                       </span>
                     )}
-                    <span className="mt-1 block font-mono text-[10px] text-ink-muted">
+                    <span className="mt-1 font-mono text-[10px] text-ink-muted">
                       {unloadedSort === "order" ? `#${index + 1} · ${time}` : time}
                     </span>
                   </div>
@@ -692,10 +693,10 @@ export default function Unload() {
         const cov = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
         const isBusy = busy === t.truck_number;
         const close = () => setMenuTruck(null);
-        return (
+        return createPortal(
           <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={close}>
             <div
-              className="w-full max-w-sm space-y-4 rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+              className="max-h-[90svh] w-full max-w-sm space-y-4 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
               onClick={(e) => e.stopPropagation()}
             >
               <div className="flex items-start justify-between">
@@ -787,7 +788,8 @@ export default function Unload() {
                 </>
               )}
             </div>
-          </div>
+          </div>,
+          document.body,
         );
       })()}
     </motion.div>

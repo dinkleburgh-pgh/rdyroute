@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { format } from "date-fns";
 import {
@@ -486,7 +487,7 @@ export default function Load() {
           <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]">
             {heldReady.map((t, index) => {
               return (
-                <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.0}>
+                <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.0} className="h-full">
                   <LoadWorkflowCard
                     truck={t}
                     accent="text-red-300"
@@ -516,13 +517,13 @@ export default function Load() {
           {ready.map((t, index) => {
             const disabled = anyInProgress || busy === t.truck_number;
             return (
-              <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.02}>
+              <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.02} className="h-full">
               <button
                 type="button"
                 disabled={disabled}
                 onClick={() => setConfirmLoadTruck(t)}
                 className={clsx(
-                  "w-full text-left transition-all duration-150",
+                  "h-full w-full text-left transition-all duration-150",
                   disabled
                     ? "cursor-not-allowed opacity-50"
                     : "active:scale-[0.98]",
@@ -588,8 +589,8 @@ export default function Load() {
         <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]">
           {loadedSorted.map((t, idx) => {
             return (
-              <AnimateCard key={t.truck_number} delay={idx * 0.03}>
-                <div className="relative">
+              <AnimateCard key={t.truck_number} delay={idx * 0.03} className="h-full">
+                <div className="relative h-full">
                   {loadedSort === "order" && (
                     <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-loaded ring-1 ring-st-loaded/60">
                       {idx + 1}
@@ -617,13 +618,13 @@ export default function Load() {
           )}
         </div>
       </section>
-      {confirmLoadTruck && (
+      {confirmLoadTruck && createPortal(
         <div
           className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
           onClick={() => setConfirmLoadTruck(null)}
         >
           <div
-            className="w-full max-w-sm rounded-xl border border-hairline bg-surface p-5 shadow-card"
+            className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-xl border border-hairline bg-surface p-5 shadow-card"
             onClick={(e) => e.stopPropagation()}
           >
             <h3 className="mb-1 text-base font-semibold font-mono tabular-nums">Start Loading Truck #{confirmLoadTruck.truck_number}?</h3>
@@ -649,7 +650,8 @@ export default function Load() {
               </button>
             </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
       <ConfirmDialog
         open={confirmGarmentTruck !== null}

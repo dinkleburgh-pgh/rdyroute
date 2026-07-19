@@ -6,6 +6,7 @@
  */
 import clsx from "clsx";
 import { useEffect } from "react";
+import { createPortal } from "react-dom";
 import { AlertTriangleIcon } from "./icons";
 
 export interface ConfirmDialogProps {
@@ -43,7 +44,12 @@ export default function ConfirmDialog({
 
   if (!open) return null;
 
-  return (
+  // Portal to <body>: a transformed ancestor (framer page wrappers) otherwise
+  // turns position:fixed into container-relative positioning, centering the
+  // dialog on the PAGE instead of the device viewport — off-screen buttons on
+  // mobile. The panel is clamped to the visible height so actions always stay
+  // reachable.
+  return createPortal(
     <div
       className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
       onClick={onCancel}
@@ -52,7 +58,7 @@ export default function ConfirmDialog({
         role="alertdialog"
         aria-modal="true"
         aria-label={title}
-        className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+        className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-3">
@@ -82,6 +88,7 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
