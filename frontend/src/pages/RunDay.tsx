@@ -24,6 +24,7 @@ import {
   buildOperationalDayContext,
   buildPrevDayCoverage,
   countLoaded,
+  countUnloadedFromContext,
   effectiveOperationalStatus,
   effectiveStatus,
   getCoverageRouteNumber,
@@ -188,14 +189,9 @@ export default function RunDay() {
   );
   const unloadActiveTrucks = unloadContext.activeTrucks;
   const unloadTotal = unloadActiveTrucks.length;
-  const unloadDone = useMemo(
-    () =>
-      unloadActiveTrucks.filter((t) => {
-        const raw = (t.state?.status ?? "dirty") as TruckStatus;
-        return raw === "unloaded" || raw === "loaded";
-      }).length,
-    [unloadActiveTrucks],
-  );
+  // Shared counter so pure day-init seeds count as pending, not done —
+  // same rule as the sidebar and Load page unload bars.
+  const unloadDone = useMemo(() => countUnloadedFromContext(unloadContext), [unloadContext]);
   const unloadSpareCount = unloadActiveTrucks.filter((t) => t.truck_type === "Spare").length;
 
   // On holiday, two days' worth of routes run in one shift.

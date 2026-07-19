@@ -92,12 +92,29 @@ export function countLoaded(
 }
 
 /**
+ * A PURE day-init seed: status "unloaded" written by the auto seeder, never
+ * touched by the workflow (no unloaded_at). The fleet SCHEDULE is the truth
+ * for what must be unloaded — a scheduled truck the seeder guessed clean
+ * stays in the denominator as pending work, but nobody unloaded it, so it
+ * must not count as done (a stale board otherwise started at 6/28 done).
+ */
+export function isPureUnloadSeed(t: TruckWithState): boolean {
+  return (
+    t.state?.status === "unloaded" &&
+    t.state?.state_source === "auto" &&
+    t.state?.unloaded_at == null
+  );
+}
+
+/**
  * Count of unloaded trucks from an already-built unload OperationalDayContext.
  * A truck counts as unloaded when its raw status is "unloaded" or "loaded"
- * (loaded means it unloaded previously and already moved to load workflow).
+ * (loaded means it unloaded previously and already moved to load workflow) —
+ * except pure day-init seeds, which are pending work, not completed work.
  */
 export function unloadedTruckNumbersFromContext(ctx: OperationalDayContext): number[] {
   return ctx.activeTrucks.filter((t) => {
+    if (isPureUnloadSeed(t)) return false;
     const raw = (t.state?.status ?? "dirty") as TruckStatus;
     return raw === "unloaded" || raw === "loaded";
   }).map((t) => t.truck_number);
@@ -513,17 +530,6 @@ export function buildOperationalDayContext(
     // load/unload count. Uncovered OOS trucks are kept: still physically here
     // to handle. Mirrors Unload.tsx's allTrucks filter.
     if ((truck.is_oos || truck.state?.status === "oos") && coveredByAnyRoute.has(truck.truck_number)) continue;
-    // Unload role: a PURE day-init seed (status "unloaded", source "auto",
-    // never workflow-stamped) means day-init decided this truck didn't run —
-    // it has no unload work, so it belongs in neither the numerator nor the
-    // denominator. Counting seeds made the progress bar START at 6 done on a
-    // stale board. Matches the Unloaded-today tally's seed exclusion.
-    if (
-      dayRole === "unload" &&
-      truck.state?.status === "unloaded" &&
-      truck.state?.state_source === "auto" &&
-      truck.state?.unloaded_at == null
-    ) continue;
     activeTrucks.push(truck);
   }
 
