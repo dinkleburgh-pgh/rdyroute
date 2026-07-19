@@ -513,6 +513,17 @@ export function buildOperationalDayContext(
     // load/unload count. Uncovered OOS trucks are kept: still physically here
     // to handle. Mirrors Unload.tsx's allTrucks filter.
     if ((truck.is_oos || truck.state?.status === "oos") && coveredByAnyRoute.has(truck.truck_number)) continue;
+    // Unload role: a PURE day-init seed (status "unloaded", source "auto",
+    // never workflow-stamped) means day-init decided this truck didn't run —
+    // it has no unload work, so it belongs in neither the numerator nor the
+    // denominator. Counting seeds made the progress bar START at 6 done on a
+    // stale board. Matches the Unloaded-today tally's seed exclusion.
+    if (
+      dayRole === "unload" &&
+      truck.state?.status === "unloaded" &&
+      truck.state?.state_source === "auto" &&
+      truck.state?.unloaded_at == null
+    ) continue;
     activeTrucks.push(truck);
   }
 
