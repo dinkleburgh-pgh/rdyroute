@@ -924,8 +924,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 }}
               >
                 <div className="flex w-full flex-col gap-0.5 md:gap-1">
-                  <div className="flex w-full min-w-0 items-start justify-between gap-2">
-                    <div className="flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
+                  {/* flex-wrap: when the coverage pair + badge stack can't share
+                      the row (narrow cards), badges wrap BELOW the numbers
+                      instead of painting over them. */}
+                  <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2">
+                    <div className="flex min-w-0 min-h-[2.5rem] shrink-0 flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
                       {!fleetMode && (showCoverageBadge || showCoveredByBadge) ? (
                         /* Canonical coverage headline: route → carrying truck.
                            Same pair whether this card IS the carrier
@@ -961,7 +964,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         <span className="min-h-[1.5rem]" />
                       )}
                     </div>
-                    <span className="flex min-h-[1.5rem] shrink-0 flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
+                    <span className="ml-auto flex min-h-[1.5rem] shrink-0 flex-col items-end justify-start gap-0.5 md:min-h-[2.25rem]">
                       {/* 1. Status chip — show underlying dirty/unloaded for off trucks */}
                       {displayStatus === "oos" ? (
                         <span className={clsx("badge", STATUS_BG["oos"], STATUS_BADGE_TEXT["oos"])}>
