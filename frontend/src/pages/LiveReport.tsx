@@ -43,8 +43,9 @@ const DEFAULT_WEARER_CAP = 1800;
 const UNLOADED_STATUSES = new Set(["unloaded", "in_progress", "loaded"]);
 
 // Colour bands for a batch's wearer load — mirrors Batches.tsx capacityColor.
-function capacityColor(total: number, noCap: boolean, cap: number) {
-  if (noCap) return { bar: "bg-violet-500", text: "text-violet-400" };
+// Always graded against the configured cap, even when the cap is not enforced
+// (no-cap mode), so the bar still shows how close to a full batch it is.
+function capacityColor(total: number, _noCap: boolean, cap: number) {
   if (total >= cap * 0.95) return { bar: "bg-red-500", text: "text-red-400" };
   if (total >= cap * 0.7) return { bar: "bg-amber-500", text: "text-amber-400" };
   return { bar: "bg-emerald-500", text: "text-emerald-400" };

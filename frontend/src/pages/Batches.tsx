@@ -10,8 +10,9 @@ import AnimateCard from "../components/AnimateCard";
 
 const DEFAULT_WEARER_CAP = 1800;
 
-function capacityColor(total: number, noCap: boolean, cap: number) {
-  if (noCap) return { bar: "bg-violet-500", text: "text-violet-400" };
+// Always graded against the configured cap, even when the cap is not enforced
+// (no-cap mode), so the bar still shows how close to a full batch it is.
+function capacityColor(total: number, _noCap: boolean, cap: number) {
   if (total >= cap * 0.95) return { bar: "bg-red-500",    text: "text-red-400"    };
   if (total >= cap * 0.70) return { bar: "bg-amber-500",  text: "text-amber-400"  };
   return                          { bar: "bg-emerald-500", text: "text-emerald-400" };
@@ -61,7 +62,7 @@ function BatchCard({
   const previewTotal = batch.total_wearers + (truckNumber ? previewWearers : 0);
   const displayTotal = truckNumber ? previewTotal : batch.total_wearers;
   const { bar, text } = capacityColor(displayTotal, noCap, cap);
-  const pct = noCap ? 100 : Math.min(100, Math.round((displayTotal / cap) * 100));
+  const pct = Math.min(100, Math.round((displayTotal / cap) * 100));
 
   async function handleAssign() {
     if (!truckNumber) return;

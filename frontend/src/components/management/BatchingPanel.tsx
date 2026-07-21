@@ -27,8 +27,8 @@ import type { TruckWithState } from "../../types";
 const BATCH_NUMBERS = [1, 2, 3, 4, 5, 6];
 const DEFAULT_WEARER_CAP = 1800;
 
-function capacityText(total: number, noCap: boolean, cap: number) {
-  if (noCap) return "text-violet-400";
+// Always graded against the configured cap, even when the cap is not enforced.
+function capacityText(total: number, _noCap: boolean, cap: number) {
   if (total >= cap * 0.95) return "text-red-400";
   if (total >= cap * 0.7) return "text-amber-400";
   return "text-emerald-400";
