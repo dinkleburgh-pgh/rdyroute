@@ -133,6 +133,7 @@ export default function BatchingPanel() {
           <p className="mt-1 text-xs text-slate-500">
             Assign each returning truck to a batch for the run date. Tap a batch number on a truck's row;
             tap it again (or ✕) to unassign. Wearer totals update live against the Operations wearer cap.
+            Every change saves instantly — there is no separate save or apply step.
           </p>
         </div>
 
@@ -224,6 +225,16 @@ export default function BatchingPanel() {
                     onChange={(e) =>
                       setWearerDrafts((d) => ({ ...d, [t.truck_number]: e.target.value.replace(/\D/g, "") }))
                     }
+                    onBlur={() => {
+                      // Auto-save wearers edits for trucks already in a batch —
+                      // re-assigning to the same batch updates the stored count.
+                      if (current == null) return;
+                      const saved = batches
+                        .find((b) => b.batch_number === current)
+                        ?.trucks.find((x) => x.truck_number === t.truck_number)?.wearers;
+                      const next = Number(draftWearers(t)) || 0;
+                      if (saved !== undefined && next !== saved) void assignTruck(t, current);
+                    }}
                   />
                   <div className="flex items-center gap-1">
                     {BATCH_NUMBERS.map((n) => (
