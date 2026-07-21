@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosProgressEvent } from "axios";
 import { api, todayIso } from "./client";
 import * as offlineQueue from "./offlineQueue";
+import { logDebug } from "../utils/debugLog";
 import type {
   AppSetting,
   ActivityEventPage,
@@ -258,15 +259,44 @@ export function useUpsertTruckState() {
       );
       return { previous };
     },
-    onError: (_err, vars, context) => {
+    onError: (err, vars, context) => {
+      logDebug("mutation", `FAILED #${vars.truck_number} → ${vars.status ?? "(fields)"} @${vars.run_date}`, {
+        vars,
+        error: (err as { message?: string })?.message,
+      });
       const ctx = context as { previous?: unknown } | undefined;
       if (ctx?.previous !== undefined) {
         qc.setQueryData(["board", vars.run_date], ctx.previous);
       }
     },
     onSuccess: (_data, vars) => {
+      logDebug("mutation", `#${vars.truck_number} → ${vars.status ?? "(fields)"} @${vars.run_date}`, vars);
       qc.invalidateQueries({ queryKey: ["board", vars.run_date] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Load/unload sequence history — "this truck usually loads 3rd".
+// ---------------------------------------------------------------------------
+
+export interface SequenceSuggestion {
+  truck_number: number;
+  avg_load_position: number | null;
+  times_loaded: number;
+  avg_unload_position: number | null;
+  times_unloaded: number;
+}
+
+export function useLoadSequenceSuggestions(daysBack = 14) {
+  return useQuery({
+    queryKey: ["sequence-suggestions", daysBack],
+    queryFn: async () =>
+      (await api.get<{ days_back: number; suggestions: SequenceSuggestion[] }>(
+        "/load-durations/sequence-suggestions",
+        { params: { days_back: daysBack } },
+      )).data.suggestions,
+    staleTime: 5 * 60 * 1000,
   });
 }
 
@@ -2072,9 +2102,16 @@ export function useBulkUpdateStatus() {
       if (args.from_status) params.set("from_status", args.from_status);
       return (await api.put<TruckState[]>(`/trucks/bulk/status?${params.toString()}`)).data;
     },
-    onSuccess: () => {
+    onSuccess: (rows, args) => {
+      logDebug("bulk", `${args.from_status ?? args.truck_numbers?.length + " trucks"} → ${args.new_status} @${args.run_date} (${Array.isArray(rows) ? rows.length : "?"} rows)`, args);
       qc.invalidateQueries({ queryKey: ["board"] });
       qc.invalidateQueries({ queryKey: ["truck-states"] });
+    },
+    onError: (err, args) => {
+      logDebug("bulk", `FAILED ${args.from_status ?? ""} → ${args.new_status} @${args.run_date}`, {
+        args,
+        error: (err as { message?: string })?.message,
+      });
     },
   });
 }

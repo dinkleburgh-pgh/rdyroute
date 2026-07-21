@@ -9,6 +9,7 @@ import { workdayNumbers } from "../../components/Clock";
 import ConfirmDialog from "../ConfirmDialog";
 import { useToast } from "../../contexts/ToastContext";
 import { FieldRow } from "./shared";
+import DebugPanel from "./DebugPanel";
 
 const DAY_NAMES: Record<number, string> = { 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri" };
 
@@ -215,6 +216,7 @@ export default function DevelopmentPanel() {
         }}
         onCancel={() => setConfirmSyncOpen(false)}
       />
+      <DebugPanel />
     </div>
   );
 }

@@ -14,6 +14,7 @@ import {
   useSpareAssignments,
   useSettings,
   useUpsertTruckState,
+  useLoadSequenceSuggestions,
 } from "../api/hooks";
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
@@ -108,6 +109,15 @@ export default function Load() {
     () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold === true),
     [loadDisplayTrucks],
   );
+  // Historical load-order suggestions ("usually loads ~3rd"), filtered to
+  // trucks that are actually ready tonight — top 3 by average position.
+  const { data: seqSuggestions = [] } = useLoadSequenceSuggestions(14);
+  const suggestedNext = useMemo(() => {
+    const readyNums = new Set(ready.map((t) => t.truck_number));
+    return seqSuggestions
+      .filter((s) => s.avg_load_position != null && s.times_loaded >= 2 && readyNums.has(s.truck_number))
+      .slice(0, 3);
+  }, [seqSuggestions, ready]);
   // Loaded = physically loaded and scheduled for tomorrow.
   const loaded = useMemo(
     () => loadDisplayTrucks.filter((t) => effectiveOperationalStatus(t, loadDay, holidayLoad) === "loaded"),
@@ -508,6 +518,26 @@ export default function Load() {
         <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-st-unloaded">
           Ready to load ({ready.length})
         </h3>
+        {/* What usually loads next — historical average load position over the
+            last 14 days, intersected with tonight's ready trucks. */}
+        {suggestedNext.length > 0 && (
+          <p className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
+            <span className="font-semibold uppercase tracking-wide text-ink-faint">Usually next:</span>
+            {suggestedNext.map((s, i) => (
+              <span
+                key={s.truck_number}
+                className={clsx(
+                  "inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 font-mono font-bold",
+                  i === 0 ? "border-st-loaded/60 bg-st-loaded/10 text-st-loaded" : "border-hairline bg-surface-2 text-ink-soft",
+                )}
+                title={`Usually loads ~position ${s.avg_load_position} (seen ${s.times_loaded}× in 14 days)`}
+              >
+                #{s.truck_number}
+                <span className="text-[10px] font-normal text-ink-faint">~{s.avg_load_position}</span>
+              </span>
+            ))}
+          </p>
+        )}
         {anyInProgress && (
           <p className="mb-2 text-xs text-st-inprogress">
             Finish the in-progress truck before starting another.

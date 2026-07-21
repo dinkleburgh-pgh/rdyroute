@@ -1,5 +1,6 @@
 import axios, { AxiosError, AxiosRequestConfig } from "axios";
 import * as offlineQueue from "./offlineQueue";
+import { logDebug } from "../utils/debugLog";
 
 // All requests go through the Vite dev-server proxy at /api → http://127.0.0.1:8000
 export const api = axios.create({
@@ -109,6 +110,14 @@ api.interceptors.response.use(
       clearSession();
     } else if (status === 401) {
       clearSession();
+    }
+
+    // Debug-log every API failure (except auth churn) so floor-device issues
+    // are reconstructable from Settings → Development → Debug Log.
+    if (!isAuthEndpoint) {
+      logDebug("api-error", `${(cfg?.method ?? "get").toUpperCase()} ${url} → ${status ?? "network"}`, {
+        detail: (error?.response?.data as { detail?: string })?.detail,
+      });
     }
 
     // Offline-first: any write that fails with a network error gets queued and

@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routers.auth import get_current_user
-from models import LoadDuration, User
+from models import LoadDuration, TruckState, User
 from schemas import LoadDurationCreate, LoadDurationOut, PaceDailyPoint
 
 router = APIRouter(prefix="/load-durations", tags=["load-durations"])
@@ -130,3 +130,53 @@ def load_pace_daily_trend(
         .order_by(LoadDuration.run_date)
     ).all()
     return [PaceDailyPoint(run_date=r[0], avg_seconds=round(r[1], 1) if r[1] else 0, load_count=r[2]) for r in rows]
+
+
+@router.get("/sequence-suggestions")
+def sequence_suggestions(
+    days_back: int = Query(14, ge=1, le=60),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Historical load/unload ORDER per truck.
+
+    For each run date in the window, trucks are ranked by when they finished
+    loading (load_finish_time) and by when they were unloaded (unloaded_at,
+    the workflow stamp). The per-truck average position — "this truck usually
+    loads 3rd" — powers the Load page's what-loads-next suggestions.
+    """
+    cutoff = date.today() - timedelta(days=days_back)
+    rows = db.scalars(
+        select(TruckState).where(TruckState.run_date >= cutoff)
+    ).all()
+
+    by_date_load: dict[date, list[TruckState]] = {}
+    by_date_unload: dict[date, list[TruckState]] = {}
+    for r in rows:
+        if r.load_finish_time is not None:
+            by_date_load.setdefault(r.run_date, []).append(r)
+        if r.unloaded_at is not None:
+            by_date_unload.setdefault(r.run_date, []).append(r)
+
+    load_pos: dict[int, list[int]] = {}
+    for lst in by_date_load.values():
+        for i, r in enumerate(sorted(lst, key=lambda x: x.load_finish_time), start=1):
+            load_pos.setdefault(r.truck_number, []).append(i)
+    unload_pos: dict[int, list[int]] = {}
+    for lst in by_date_unload.values():
+        for i, r in enumerate(sorted(lst, key=lambda x: x.unloaded_at), start=1):
+            unload_pos.setdefault(r.truck_number, []).append(i)
+
+    out = []
+    for truck in sorted(set(load_pos) | set(unload_pos)):
+        lp = load_pos.get(truck, [])
+        up = unload_pos.get(truck, [])
+        out.append({
+            "truck_number": truck,
+            "avg_load_position": round(sum(lp) / len(lp), 2) if lp else None,
+            "times_loaded": len(lp),
+            "avg_unload_position": round(sum(up) / len(up), 2) if up else None,
+            "times_unloaded": len(up),
+        })
+    out.sort(key=lambda x: (x["avg_load_position"] is None, x["avg_load_position"] or 999))
+    return {"days_back": days_back, "suggestions": out}
