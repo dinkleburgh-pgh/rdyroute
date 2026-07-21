@@ -38,6 +38,7 @@ export default function BatchingPanel() {
   const toast = useToast();
   const [runDate, setRunDate] = useState(todayIso());
   const [showAll, setShowAll] = useState(false);
+  const [sortByBatch, setSortByBatch] = useState(false);
   const [wearerDrafts, setWearerDrafts] = useState<Record<number, string>>({});
   const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
@@ -78,6 +79,22 @@ export default function BatchingPanel() {
   }, [board, showAll, unloadsDay, holidayUnload, batchByTruck]);
 
   const unassigned = rosterTrucks.filter((t) => !batchByTruck.has(t.truck_number)).length;
+
+  // Flat numeric list, or grouped into Batch 1–6 + Unbatched when sorting by batch.
+  const displayGroups = useMemo(() => {
+    if (!sortByBatch) return [{ key: "all", label: null as string | null, trucks: rosterTrucks }];
+    const groups = BATCH_NUMBERS.map((n) => ({
+      key: `batch-${n}`,
+      label: `Batch ${n}` as string | null,
+      trucks: rosterTrucks.filter((t) => batchByTruck.get(t.truck_number) === n),
+    }));
+    groups.push({
+      key: "unbatched",
+      label: "Unbatched",
+      trucks: rosterTrucks.filter((t) => !batchByTruck.has(t.truck_number)),
+    });
+    return groups.filter((g) => g.trucks.length > 0);
+  }, [sortByBatch, rosterTrucks, batchByTruck]);
 
   function draftWearers(t: TruckWithState): string {
     return wearerDrafts[t.truck_number] ?? String(t.state?.wearers ?? 0);
@@ -188,17 +205,35 @@ export default function BatchingPanel() {
               <span className="ml-2 text-xs font-normal text-emerald-400">all batched ✓</span>
             )}
           </h3>
-          <label className="flex items-center gap-1.5 text-xs text-slate-400">
-            <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-            Show entire fleet
-          </label>
+          <div className="flex items-center gap-4">
+            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+              <input type="checkbox" checked={sortByBatch} onChange={(e) => setSortByBatch(e.target.checked)} />
+              Sort by batch
+            </label>
+            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+              <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
+              Show entire fleet
+            </label>
+          </div>
         </div>
 
         {rosterTrucks.length === 0 ? (
           <p className="text-sm text-slate-500">No trucks on the unload roster for this date.</p>
         ) : (
-          <div className="space-y-1.5">
-            {rosterTrucks.map((t) => {
+          <div className="space-y-4">
+            {displayGroups.map((g) => (
+              <div key={g.key} className="space-y-1.5">
+                {g.label != null && (
+                  <p
+                    className={clsx(
+                      "text-[10px] font-semibold uppercase tracking-wide",
+                      g.label === "Unbatched" ? "text-amber-300" : "text-slate-500",
+                    )}
+                  >
+                    {g.label} · {g.trucks.length} truck{g.trucks.length !== 1 ? "s" : ""}
+                  </p>
+                )}
+                {g.trucks.map((t) => {
               const current = batchByTruck.get(t.truck_number);
               const busy = busyTruck === t.truck_number;
               return (
@@ -267,6 +302,8 @@ export default function BatchingPanel() {
                 </div>
               );
             })}
+              </div>
+            ))}
           </div>
         )}
       </div>
