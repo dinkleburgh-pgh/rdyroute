@@ -11,6 +11,7 @@ import RoleAccessPanel from "../components/management/RoleAccessPanel";
 import ActivityPanel from "../components/management/ActivityPanel";
 import ColorsPanel from "../components/management/ColorsPanel";
 import WorkflowsPanel from "../components/management/WorkflowsPanel";
+import BatchingPanel from "../components/management/BatchingPanel";
 import CommunicationsPanel from "../components/management/CommunicationsPanel";
 import AdvancedPanel from "../components/management/AdvancedPanel";
 import DevelopmentPanel from "../components/management/DevelopmentPanel";
@@ -39,6 +40,7 @@ import { ShortsWorkspace } from "./Shorts";
 type Category =
   | "colors"
   | "workflows"
+  | "batching"
   | "communications"
   | "users"
   | "fleet_mgmt"
@@ -156,12 +158,13 @@ const CARD_GROUPS: CardGroup[] = [
   {
     id: "ops",
     label: "Operations",
-    desc: "Workflows, force-finish loads, bulk status changes, and workday resets",
-    mobileDesc: "Workflows and resets",
+    desc: "Workflows, end-of-day batching, force-finish loads, and workday resets",
+    mobileDesc: "Workflows, batching, resets",
     borderColor: "border-l-orange-500",
     bgTint: "bg-orange-950/35",
     tabs: [
       { id: "workflows",    label: "Workflows" },
+      { id: "batching",     label: "Batching" },
       { id: "recovery",     label: "Recovery" },
       { id: "resets",       label: "Resets" },
       { id: "prev_coverage", label: "Prev Day Coverage" },
@@ -284,6 +287,7 @@ export default function Management() {
     switch (activeTab) {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
+      case "batching":       return <BatchingPanel />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
       case "development":    return <DevelopmentPanel />;
       case "connections":    return <ConnectionsPanel />;
