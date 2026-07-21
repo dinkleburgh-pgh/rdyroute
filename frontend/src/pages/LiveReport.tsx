@@ -35,12 +35,13 @@ import {
   usePaceAverage,
   useLoadDayOverride,
   useUnloadsDayOverride,
+  useHolidayUnload,
   type TrackedItem,
 } from "../api/hooks";
+import { buildOperationalDayContext, countUnloadedFromContext } from "../utils/truckStatus";
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
 
 const DEFAULT_WEARER_CAP = 1800;
-const UNLOADED_STATUSES = new Set(["unloaded", "in_progress", "loaded"]);
 
 // Colour bands for a batch's wearer load — mirrors Batches.tsx capacityColor.
 // Always graded against the configured cap, even when the cap is not enforced
@@ -192,10 +193,17 @@ export default function LiveReport() {
   const trucksBatched = useMemo(() => batches.reduce((n, b) => n + b.trucks.length, 0), [batches]);
   const totalWearers = useMemo(() => batches.reduce((n, b) => n + b.total_wearers, 0), [batches]);
   const batchesUsed = useMemo(() => batches.filter((b) => b.trucks.length > 0).length, [batches]);
-  const unloadedCount = useMemo(
-    () => board.filter((t) => UNLOADED_STATUSES.has(t.state?.status ?? "")).length,
-    [board],
+  // Same counting as the Unload page: unload-day roster only, pure day-init
+  // seeds pending (not done), "loaded" still counts as unloaded-then-moved-on.
+  // The old whole-fleet raw-status filter started the day at the seed count
+  // and climbed past the roster size as trucks loaded overnight.
+  const { data: holidayUnload = false } = useHolidayUnload(runDate);
+  const unloadCtx = useMemo(
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload"),
+    [board, unloadsDay, holidayUnload],
   );
+  const unloadedCount = countUnloadedFromContext(unloadCtx);
+  const unloadRosterSize = unloadCtx.activeTrucks.length;
 
   // ---- Coverage ("routes covered") ----
   const coverageRows = useMemo(() => {
@@ -320,7 +328,7 @@ export default function LiveReport() {
                 <Kpi label="Trucks batched" value={trucksBatched} />
                 <Kpi label="Total wearers" value={totalWearers.toLocaleString()} sub={`cap ${noCap ? "∞" : cap.toLocaleString()}/batch`} />
                 <Kpi label="Batches used" value={`${batchesUsed} / 6`} />
-                <Kpi label="Unloaded" value={unloadedCount} sub="trucks this shift" />
+                <Kpi label="Unloaded" value={`${unloadedCount} / ${unloadRosterSize}`} sub="trucks this shift" />
               </div>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {batches.map((b) => (
