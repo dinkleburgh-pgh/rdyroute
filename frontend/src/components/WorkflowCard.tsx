@@ -33,7 +33,7 @@ export default function WorkflowCard({
   return (
     <div
       className={clsx(
-        "card relative flex min-h-[4.5rem] flex-col gap-1 p-2 md:min-h-[10rem] md:gap-2 md:p-4",
+        "card relative flex h-full min-h-[5.5rem] flex-col gap-1 p-2 md:min-h-[11.5rem] md:gap-2 md:p-4",
         interactive && "hover:ring-2 transition-shadow",
         interactive && ringClassName,
         disabled && "cursor-not-allowed opacity-50",
