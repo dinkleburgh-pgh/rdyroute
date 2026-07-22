@@ -503,8 +503,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       // A taken-over route (any truck carrying oos_spare_route for it) is
       // represented by its carrier's card even when the covered truck's
       // is_oos flag was cleared — both rendering painted identical "4 → 50"
-      // pair cards twice on the Loaded board.
-      if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number)) return false;
+      // pair cards twice on the Loaded board. EXCEPT when this truck is
+      // itself a carrier (mutual/two-way takeover data): dropping both sides
+      // of a mutual pair would hide two running trucks from every board.
+      if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number) && takenOverRouteNumber(t) == null) return false;
       // For all other filters, re-evaluate auto-off trucks against unloadsDay
       // so they surface under their real workflow status.
       const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);

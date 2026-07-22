@@ -91,7 +91,8 @@ function boardFiltered(filter: string): TruckWithState[] {
       return t.is_oos || effectiveStatus(t, loadDay, holidayLoad) === "oos";
     }
     if (t.truck_type !== "Spare" && t.is_oos && coveringTruckByRoute.has(t.truck_number)) return false;
-    if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number)) return false;
+    // Mutual/two-way takeover data: a truck that is itself a carrier stays.
+    if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number) && takenOverRouteNumber(t) == null) return false;
     const s = effectiveWorkflowStatus(t, loadDay, holidayLoad, unloadsDay, holidayUnload);
     const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
     if (!matchStatus) return false;
@@ -153,15 +154,28 @@ function unloadPage() {
     const r = getCoverageRouteNumber(t);
     if (r != null) coveredRouteNumbers.add(r);
   }
+  // Unload-side takeovers: only SPARE carriers substitute.
+  const spareTakenOverRoutes = new Set<number>();
+  for (const t of board) {
+    if (t.truck_type === "Spare") {
+      const r = getCoverageRouteNumber(t);
+      if (r != null) spareTakenOverRoutes.add(r);
+    }
+  }
+  // Core = the shared unload context; page-specific inclusions are additive.
+  const core = new Set(unloadCtx.activeTrucks.map((t) => t.truck_number));
   const allTrucks = board.filter((t) => {
+    if (core.has(t.truck_number)) return true;
     if (t.route_swap_route != null || t.state?.oos_spare_route != null) return true;
-    if (takenOverRoutes.has(t.truck_number)) return false;
+    if (spareTakenOverRoutes.has(t.truck_number)) return false;
     if ((t.is_oos || t.state?.status === "oos") && coveredRouteNumbers.has(t.truck_number)) return false;
     const s = t.state?.status;
     if (s === "dirty" || s === "unfinished" || t.state?.priority_hold === true) return true;
-    if (t.truck_type === "Spare") return false;
-    return holidayUnload || !isScheduledOff(t, unloadsDay);
+    return false;
   });
+  const rosterSupersetOfContext = unloadCtx.activeTrucks.every((t) =>
+    allTrucks.some((x) => x.truck_number === t.truck_number),
+  );
   // Badge = shared unload-day pending (Unload.tsx toGo), NOT the card-section
   // sum — the sections deliberately show extra off-schedule dirty/held trucks.
   const toGo = Math.max(0, unloadCtx.activeTrucks.length - unloadDone);
@@ -171,7 +185,7 @@ function unloadPage() {
     if (s === "unloaded" && isPureUnloadSeed(t)) return false;
     return true;
   });
-  return { toGo, tally: tally.length };
+  return { toGo, tally: tally.length, rosterSupersetOfContext };
 }
 
 // ---------------------------------------------------------------------------
@@ -208,11 +222,33 @@ check("WARN", "Day Overview unload cards == unload bar total", runDayUnloadCards
 check("WARN", "Day Overview load cards == load bar total", runDayLoadCards().size, loadCtx.activeTrucks.length, "grid shows extra-schedule cards (holds etc.) by design");
 const up = unloadPage();
 check("HARD", "Unload page toGo == unload bar pending", up.toGo, unloadCtx.activeTrucks.length - unloadDone, "badge must stick to the schedule count");
+check("HARD", "Unload roster contains every unload-context truck", up.rosterSupersetOfContext ? 1 : 0, 1, "page shows fewer trucks than the denominator counts");
+
+// Structural: no route covered by TWO active carriers (each extra cover
+// would inflate the active-truck count by one).
+let dupCoverFails = 0;
+{
+  const carriersByRoute = new Map<number, number[]>();
+  for (const t of loadCtx.activeTrucks) {
+    const r = takenOverRouteNumber(t);
+    if (r != null) carriersByRoute.set(r, [...(carriersByRoute.get(r) ?? []), t.truck_number]);
+  }
+  for (const [route, carriers] of carriersByRoute) {
+    if (carriers.length > 1) {
+      console.log(` FAIL  route ${route} covered by ${carriers.length} active carriers (#${carriers.join(", #")})`);
+      dupCoverFails++;
+    }
+  }
+  if (dupCoverFails === 0) console.log("  OK   no route covered by two active carriers");
+  hardFails += dupCoverFails;
+}
 
 // Structural: no takeover pair double-represented on a single surface.
+// (One-way swaps now register as takeovers and are checked here too; only
+// TWO-WAY swaps — both trucks genuinely run — are exempt.)
 let pairFails = 0;
 for (const [route, cover] of coveringTruckByRoute) {
-  if (takenOverRouteNumber(cover) !== route) continue; // swaps: both run, both allowed
+  if (takenOverRouteNumber(cover) !== route) continue; // two-way swaps: both run, both allowed
   for (const [surface, set] of [
     ["Board loaded grid", new Set(boardFiltered("loaded").map((t) => t.truck_number))],
     ["Board unloaded grid", new Set(boardFiltered("unloaded").map((t) => t.truck_number))],

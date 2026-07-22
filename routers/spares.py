@@ -56,6 +56,29 @@ def assign_spare(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_non_guest),
 ):
+    # A truck covering its own route is nonsense data — it silently vanishes
+    # from every count (the covered route is excluded, but the "cover" IS it).
+    if payload.spare_truck_number == payload.covering_route_truck:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="A truck cannot cover its own route",
+        )
+    # Both trucks must exist in the active fleet — an assignment naming a
+    # nonexistent covering truck would drop the covered route from every
+    # count while rendering no card at all (a silently missing truck).
+    wanted = {payload.spare_truck_number, payload.covering_route_truck}
+    known = set(
+        db.scalars(
+            select(Truck.truck_number).where(
+                Truck.truck_number.in_(wanted), Truck.is_active == True
+            )
+        ).all()
+    )
+    if wanted - known:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown or inactive truck number(s): {sorted(wanted - known)}",
+        )
     # Prevent double-assignment of the same spare on the same date
     existing = db.scalars(
         select(SpareAssignment).where(
@@ -68,6 +91,23 @@ def assign_spare(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Spare {payload.spare_truck_number} is already assigned on {payload.run_date}",
+        )
+    # Prevent two trucks from covering the SAME route — each extra cover would
+    # inflate the active-truck counts by one (both covers push, route drops once).
+    route_conflict = db.scalars(
+        select(SpareAssignment).where(
+            SpareAssignment.run_date == payload.run_date,
+            SpareAssignment.covering_route_truck == payload.covering_route_truck,
+            SpareAssignment.returned == False,
+        )
+    ).first()
+    if route_conflict:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=(
+                f"Route {payload.covering_route_truck} is already covered by "
+                f"truck {route_conflict.spare_truck_number} on {payload.run_date}"
+            ),
         )
     row = SpareAssignment(**payload.model_dump())
     db.add(row)

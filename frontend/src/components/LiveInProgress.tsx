@@ -16,6 +16,7 @@ import {
   useSpareAssignments,
 } from "../api/hooks";
 import { ShortageLogger } from "../pages/Shorts";
+import CoverageTag from "./CoverageTag";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
 import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
@@ -606,7 +607,6 @@ function QueueRow({
   const spareNeedsRoute = truck.truck_type === "Spare" && coverRoute == null;
   const parts: string[] = [truck.truck_type];
   if (truck.state?.batch_id != null) parts.push(`Batch ${truck.state.batch_id}`);
-  if (coverRoute != null) parts.push(`Cov. #${coverRoute}`);
   const meta = parts.join(" · ");
   return (
     <button
@@ -621,6 +621,7 @@ function QueueRow({
     >
       <span className="w-4 shrink-0 text-center text-[11px] font-bold tabular-nums text-ink-faint">{index + 1}</span>
       <span className="font-mono tabular-nums text-sm font-bold text-ink">#{truck.truck_number}</span>
+      {coverRoute != null && <CoverageTag route={coverRoute} truck={truck.truck_number} className="shrink-0" />}
       <span className="flex-1 truncate text-[11px] text-ink-muted">{meta}</span>
       {spareNeedsRoute && (
         <span className="shrink-0 rounded-pill bg-amber-900/60 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-amber-300">

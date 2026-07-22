@@ -7,6 +7,7 @@ import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
 import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
 import Stat from "./Stat";
+import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import StatusEditor from "./StatusEditor";
 import FleetTruckEditor from "./FleetTruckEditor";
 import { format } from "date-fns";
@@ -88,8 +89,8 @@ export default function TruckDetailModal({
               }
             />
             <Stat
-              label="OOS covers route"
-              value={truck.state?.oos_spare_route ?? "—"}
+              label="Covers route"
+              value={getCoverageRouteNumber(truck) ?? "—"}
             />
             <Stat
               label="Arrived"

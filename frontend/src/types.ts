@@ -67,6 +67,8 @@ export interface TruckState {
 export interface TruckWithState extends Truck {  // qr_token inherited from Truck
   state: TruckState | null;
   route_swap_route?: number | null;
+  /** True = reciprocal swap (both trucks run); false = one-way (takeover). */
+  route_swap_two_way?: boolean | null;
 }
 
 export interface BatchTruck {

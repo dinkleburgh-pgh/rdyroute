@@ -4,6 +4,8 @@ import type { TruckStatus, TruckWithState } from "../../types";
 import { useUpsertTruckState } from "../../api/hooks";
 import { fmtCountdown } from "./useOutsideTimer";
 import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS } from "./constants";
+import CoverageTag from "../../components/CoverageTag";
+import { getCoverageRouteNumber } from "../../utils/truckStatus";
 
 const STATUS_ACTIONS: TruckStatus[] = [
   "dirty",
@@ -71,9 +73,13 @@ export default function FleetMobileActionSheet({
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
       <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-xl overflow-y-auto max-h-[90vh]">
         <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <div>
+          <div className="flex min-w-0 items-center gap-2">
             <span className="text-2xl font-black tracking-tight text-white">#{truck.truck_number}</span>
-            <span className="ml-2 text-sm text-slate-400">
+            {(() => {
+              const cr = getCoverageRouteNumber(truck);
+              return cr != null ? <CoverageTag route={cr} truck={truck.truck_number} className="shrink-0" /> : null;
+            })()}
+            <span className="text-sm text-slate-400">
               {truck.truck_type}
               {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
             </span>

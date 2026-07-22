@@ -136,6 +136,7 @@ class TruckWithState(_OrmBase):
     qr_token: str | None = None
     state: TruckStateOut | None = None
     route_swap_route: int | None = None  # set when this truck is the load_on_truck in a route swap
+    route_swap_two_way: bool | None = None  # True = reciprocal swap (both trucks run); False = one-way (takeover)
 
 
 # ---------------------------------------------------------------------------

@@ -462,11 +462,7 @@ export default function Load() {
                       >
                         {statusLabel[st] ?? st}
                       </span>
-                      {cr != null && (
-                        <span className="inline-flex items-center rounded-pill bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-sky-300 ring-1 ring-sky-700/40">
-                          Cov. #{cr}
-                        </span>
-                      )}
+                      {cr != null && <CoverageTag route={cr} truck={t.truck_number} />}
                       {t.state?.priority_hold && (
                         <span className="inline-flex items-center rounded-pill bg-red-950/70 px-1.5 py-0.5 text-[10px] font-bold leading-none text-red-300 ring-1 ring-red-900/80">
                           Hold
@@ -840,6 +836,14 @@ function InProgressPanel({
             <div className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none" style={{ color: "#fbbf5c" }}>
               #{truck.truck_number}
             </div>
+            {(() => {
+              const cr = getCoverageRouteNumber(truck);
+              return cr != null ? (
+                <div className="mt-1">
+                  <CoverageTag route={cr} truck={truck.truck_number} />
+                </div>
+              ) : null;
+            })()}
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-pill border border-st-unloaded/50 bg-st-unloaded/10 px-3 py-0.5 text-xs font-semibold text-st-unloaded">
               <span className="h-1.5 w-1.5 rounded-full bg-st-unloaded" />
               Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}

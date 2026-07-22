@@ -374,6 +374,15 @@ def get_board(
     result = []
     for t in trucks:
         s = states_by_num.get(t.truck_number)
+        swap_route = swap_by_load_on.get(t.truck_number)
+        # A two-way swap is stored as two reciprocal rows; a one-way swap has no
+        # reciprocal — the covered truck does NOT run, so clients treat one-way
+        # like a takeover.
+        swap_two_way = (
+            (swap_by_load_on.get(swap_route) == t.truck_number)
+            if swap_route is not None
+            else None
+        )
         result.append(
             TruckWithState(
                 id=t.id,
@@ -385,7 +394,8 @@ def get_board(
                 scheduled_off_days=t.scheduled_off_days or [],
                 qr_token=t.qr_token,
                 state=TruckStateOut.model_validate(s) if s else None,
-                route_swap_route=swap_by_load_on.get(t.truck_number),
+                route_swap_route=swap_route,
+                route_swap_two_way=swap_two_way,
             )
         )
     return result

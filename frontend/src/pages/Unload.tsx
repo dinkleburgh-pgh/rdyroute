@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
-import { buildOperationalDayContext, buildPrevDayCoverage, countUnloadedFromContext, getCoverageRouteNumber, isScheduledOff, previousRunDate, takenOverRouteNumber } from "../utils/truckStatus";
+import { buildOperationalDayContext, buildPrevDayCoverage, countUnloadedFromContext, getCoverageRouteNumber, previousRunDate } from "../utils/truckStatus";
 import CoverageTag from "../components/CoverageTag";
 import OverbatchedChip from "../components/OverbatchedChip";
 import type { TruckWithState } from "../types";
@@ -77,52 +77,49 @@ export default function Unload() {
     }
     return s;
   }, [data]);
-  // Routes physically taken over (cover stands in; covered truck never shows).
-  const takenOverRoutes = useMemo(() => {
+  // Routes taken over per UNLOAD semantics: only a SPARE carrier substitutes
+  // on the unload side (a route-truck carrier ran its own route too — both
+  // trucks come back dirty). Gates the additive extras below.
+  const spareTakenOverRoutes = useMemo(() => {
     const s = new Set<number>();
     for (const t of data ?? []) {
-      const r = takenOverRouteNumber(t);
-      if (r != null) s.add(r);
+      if (t.truck_type === "Spare") {
+        const r = getCoverageRouteNumber(t);
+        if (r != null) s.add(r);
+      }
     }
     return s;
   }, [data]);
 
-  // Fleet Schedule is the single source of truth for which trucks appear.
-  // Covering spares always included; pure spares excluded; route trucks included
-  // iff they run on unloadsDay per scheduled_off_days.
-  const allTrucks = useMemo(
-    () =>
-      (data ?? []).filter((t) => {
-        // Coverage trucks always appear (spare has oos_spare_route; route-swap trucks
-        // have route_swap_route). The OOS truck they cover is excluded below.
-        if (t.route_swap_route != null || t.state?.oos_spare_route != null) return true;
-        // An OOS route truck is only dropped once it's actually COVERED — the
-        // covering truck (above) represents it then. An uncovered OOS truck is
-        // still physically here; if it's dirty someone must unload it, so keep
-        // it in the workflow. Matches truckStatus.ts / the Board / the sidebar,
-        // which only reclassify is_oos as OOS once coverage exists.
-        // A taken-over route (any truck carrying oos_spare_route for it, or a
-        // covering Spare) did NOT run — its cover represents it, regardless of
-        // the covered truck's own is_oos flag or type. Without this, #53
-        // appeared in "Dirty — route trucks" while its cover #75 sat in
-        // "Dirty — coverage": one physical load, two cards, double counts.
-        if (takenOverRoutes.has(t.truck_number)) return false;
-        if ((t.is_oos || t.state?.status === "oos") && coveredRouteNumbers.has(t.truck_number)) return false;
-        // A truck someone must physically unload ALWAYS appears, regardless of
-        // the spare/schedule exclusions below — e.g. a spare marked
-        // "Unload and Hold" (dirty + priority_hold) or a scheduled-off truck
-        // that ran anyway. Excluding these left the sidebar counting a dirty
-        // truck the Unload page never showed. NOTE: "in_progress" is NOT
-        // unload work — it's the LOAD workflow — so it must not pull a truck
-        // in here (it briefly inflated the Unloaded-today tally for every
-        // spare/off-day truck mid-load, since the tally counts in_progress).
-        const s = t.state?.status;
-        if (s === "dirty" || s === "unfinished" || t.state?.priority_hold === true) return true;
-        if (t.truck_type === "Spare") return false;
-        return holidayUnload || !isScheduledOff(t, unloadsDay);
-      }),
-    [data, unloadsDay, holidayUnload, coveredRouteNumbers],
+  // Core roster = the SAME unload-day context every counting surface uses
+  // (sidebar unload bar, Day Overview, Report). The page can therefore never
+  // show fewer trucks than the denominator counts; page-specific inclusions
+  // are strictly ADDITIVE on top.
+  const unloadCtx = useMemo(
+    () => buildOperationalDayContext(data ?? [], unloadsDay, holidayUnload ?? false, false, "unload"),
+    [data, unloadsDay, holidayUnload],
   );
+
+  const allTrucks = useMemo(() => {
+    const core = new Set(unloadCtx.activeTrucks.map((t) => t.truck_number));
+    return (data ?? []).filter((t) => {
+      if (core.has(t.truck_number)) return true;
+      // ---- deliberate extras beyond the counted roster (additive only) ----
+      // Coverage carriers always appear even when off-schedule.
+      if (t.route_swap_route != null || t.state?.oos_spare_route != null) return true;
+      // A route taken over by a Spare never shows — the spare stands in.
+      if (spareTakenOverRoutes.has(t.truck_number)) return false;
+      // A covered OOS truck is represented by its cover.
+      if ((t.is_oos || t.state?.status === "oos") && coveredRouteNumbers.has(t.truck_number)) return false;
+      // Physical work ALWAYS appears regardless of schedule or type — dirty /
+      // unfinished / "Unload and Hold" trucks (incl. dirty Spares and
+      // scheduled-off trucks that ran anyway). NOTE: "in_progress" is LOAD
+      // work, not unload work — it must not pull a truck in here.
+      const s = t.state?.status;
+      if (s === "dirty" || s === "unfinished" || t.state?.priority_hold === true) return true;
+      return false; // idle Spares and off-schedule clean trucks stay out
+    });
+  }, [data, unloadCtx, spareTakenOverRoutes, coveredRouteNumbers]);
   // "Needs unloading" = any truck in allTrucks not yet unloaded/loaded/unfinished.
   const dirty = useMemo(
     () =>
@@ -341,7 +338,6 @@ export default function Unload() {
       accentClass?: string;
       actionLabel: string;
       ghost?: boolean;
-      coverageBadge?: boolean;
       overflow: "dirty" | "unfinished";
     },
   ) {
@@ -352,11 +348,10 @@ export default function Unload() {
     const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
     const prevCov = prevCoverage.byCover.get(t.truck_number) ?? null;
 
-    // Detail line — concise context: prev-day coverage hint, today's coverage
-    // (when not already shown as a badge), spare/batch tags.
+    // Detail line — concise context: prev-day coverage hint, spare/batch tags.
+    // Today's coverage always renders as the CoverageTag pill next to the number.
     const detailParts: string[] = [];
     if (prevCov != null) detailParts.push(`Unload as #${prevCov} · prev-day cover`);
-    else if (coveredRoute != null && !opts.coverageBadge) detailParts.push(`Covering #${coveredRoute}`);
     if (t.truck_type === "Spare") detailParts.push("Spare");
     if (t.state?.batch_id != null) detailParts.push(`Batch ${t.state.batch_id}`);
     const detail = detailParts.join("  ·  ");
@@ -369,7 +364,7 @@ export default function Unload() {
       >
         <div className="flex items-center gap-3 px-4 py-3">
           <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
-          {opts.coverageBadge && coveredRoute != null && (
+          {coveredRoute != null && (
             <CoverageTag route={coveredRoute} truck={t.truck_number} className="shrink-0" />
           )}
           <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
@@ -575,7 +570,6 @@ export default function Unload() {
               renderRow(t, i, {
                 accentClass: "border-l-[3px] border-l-st-spare",
                 actionLabel: "Mark Unloaded",
-                coverageBadge: true,
                 overflow: "dirty",
               }),
             )

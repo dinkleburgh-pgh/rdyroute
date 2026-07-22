@@ -135,12 +135,20 @@ export function getCoverageRouteNumber(t: TruckWithState): number | null {
  *
  * True for any truck carrying `state.oos_spare_route` (spare-style coverage
  * is about the ASSIGNMENT, not the covering truck's type — a Uniform can
- * carry it, e.g. #75 covering route 53 on 2026-07-16), and for a Spare with
- * `route_swap_route`. A non-Spare `route_swap_route` is a load SWAP: both
- * trucks still run, so it is NOT a takeover.
+ * carry it, e.g. #75 covering route 53 on 2026-07-16), for a Spare with
+ * `route_swap_route`, and for ANY truck in a ONE-WAY route swap
+ * (`route_swap_two_way === false` — the covered route's freight loads here
+ * and its own truck does NOT run). A TWO-WAY `route_swap_route` is a load
+ * SWAP: both trucks still run, so it is NOT a takeover. Strict `=== false`
+ * keeps old board payloads/snapshots (field absent) behaving as before.
  */
 export function takenOverRouteNumber(t: TruckWithState): number | null {
-  return t.state?.oos_spare_route ?? (t.truck_type === "Spare" ? t.route_swap_route ?? null : null);
+  return (
+    t.state?.oos_spare_route ??
+    ((t.truck_type === "Spare" || t.route_swap_two_way === false)
+      ? t.route_swap_route ?? null
+      : null)
+  );
 }
 
 export interface RouteSwapLogEntryLike {
@@ -400,8 +408,10 @@ export function buildRouteStatusCounts(
   }
 
   for (const t of trucks) {
-    // A taken-over route's truck is represented by its carrier's card/count.
-    if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number)) continue;
+    // A taken-over route's truck is represented by its carrier's card/count —
+    // UNLESS this truck is itself a carrier (mutual/two-way takeover data):
+    // skipping both sides of a mutual pair would vanish two running trucks.
+    if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number) && takenOverRouteNumber(t) == null) continue;
     if (t.truck_type === "Spare") {
       // Mirror the Board's Dirty/Unloaded filters exactly: ANY spare sitting
       // dirty/unfinished counts there whether or not it's covering a route
@@ -518,14 +528,18 @@ export function buildOperationalDayContext(
     // the cover instead, gated on the covered route's schedule, not the
     // cover's own.
     const takenOver = takeoverOf(truck);
-    if (takenOver != null) {
+    // Only the FIRST cover of a route stands in for it (takeoverByRoute is
+    // first-winner) — a second truck claiming the same route must not also
+    // push, or the count gains a phantom truck. Backend now rejects duplicate
+    // covers; this is defense in depth for stale data.
+    if (takenOver != null && takeoverByRoute.get(takenOver) === truck) {
       const coveredTruck = routeTruckByNumber.get(takenOver);
       if (coveredTruck && (holidayMode || includeOffDayCoverage || !isScheduledOff(coveredTruck, dayNum))) {
         activeTrucks.push(truck);
       }
       continue;
     }
-    // Idle spares (no coverage) never participate in the load/unload count.
+    // Idle spares (no coverage) and losing duplicate covers never participate.
     if (truck.truck_type === "Spare") continue;
 
     // Route trucks count purely by the fleet schedule: a route runs (and must
