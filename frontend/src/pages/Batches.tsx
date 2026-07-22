@@ -7,6 +7,7 @@ import { Package } from "lucide-react";
 import { todayIso } from "../api/client";
 import type { BatchSummary } from "../types";
 import AnimateCard from "../components/AnimateCard";
+import OverbatchedChip from "../components/OverbatchedChip";
 
 const DEFAULT_WEARER_CAP = 1800;
 
@@ -86,8 +87,11 @@ function BatchCard({
       onClick={onSelect}
     >
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h3 className="text-base font-bold md:text-xl">Batch {batch.batch_number}</h3>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex min-w-0 items-center gap-2">
+          <h3 className="text-base font-bold md:text-xl">Batch {batch.batch_number}</h3>
+          <OverbatchedChip show={displayTotal > cap} />
+        </div>
         <span className="text-xs text-slate-500">
           {batch.trucks.length} truck{batch.trucks.length !== 1 ? "s" : ""}
         </span>

@@ -21,6 +21,7 @@ import { workdayNumbers } from "../../components/Clock";
 import { buildOperationalDayContext } from "../../utils/truckStatus";
 import { useToast } from "../../contexts/ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
+import OverbatchedChip from "../OverbatchedChip";
 import { FieldRow } from "./shared";
 import type { TruckWithState } from "../../types";
 
@@ -172,8 +173,11 @@ export default function BatchingPanel() {
             const count = b?.trucks.length ?? 0;
             return (
               <div key={n} className="rounded-lg border border-slate-800 bg-slate-900/60 p-2">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-300">Batch {n}</span>
+                <div className="flex items-center justify-between gap-1">
+                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-slate-300">
+                    Batch {n}
+                    <OverbatchedChip show={total > wearerCap} />
+                  </span>
                   {count > 0 && (
                     <button
                       className="text-[10px] text-slate-500 hover:text-red-400"

@@ -19,6 +19,7 @@ import { format } from "date-fns";
 import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import AnimateCard from "../components/AnimateCard";
+import OverbatchedChip from "../components/OverbatchedChip";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
@@ -113,8 +114,11 @@ function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number
   const pct = Math.min(100, Math.round((batch.total_wearers / Math.max(cap, 1)) * 100));
   return (
     <AnimateCard className="card flex flex-col gap-2 p-3">
-      <div className="flex items-center justify-between">
-        <span className="text-sm font-bold text-ink">Batch {batch.batch_number}</span>
+      <div className="flex items-center justify-between gap-2">
+        <span className="flex min-w-0 items-center gap-2 text-sm font-bold text-ink">
+          Batch {batch.batch_number}
+          <OverbatchedChip show={batch.total_wearers > cap} />
+        </span>
         <span className={clsx("font-mono text-xs font-semibold tabular-nums", text)}>
           {batch.total_wearers.toLocaleString()}
           {noCap ? "" : ` / ${cap.toLocaleString()}`}

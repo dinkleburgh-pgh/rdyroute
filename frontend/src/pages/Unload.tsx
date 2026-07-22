@@ -5,6 +5,7 @@ import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { buildPrevDayCoverage, getCoverageRouteNumber, isScheduledOff, previousRunDate, takenOverRouteNumber } from "../utils/truckStatus";
 import CoverageTag from "../components/CoverageTag";
+import OverbatchedChip from "../components/OverbatchedChip";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import { motion } from "framer-motion";
@@ -660,7 +661,10 @@ export default function Unload() {
         <div className="columns-2 gap-3">
           {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => (
             <AnimateCard key={b.batch_number} delay={index * 0.03} className="card mb-3 break-inside-avoid space-y-2 p-4">
-              <p className="font-bold text-ink">Batch {b.batch_number}</p>
+              <p className="flex items-center gap-2 font-bold text-ink">
+                Batch {b.batch_number}
+                <OverbatchedChip show={b.total_wearers > wearerCap} />
+              </p>
               <div className="flex flex-wrap gap-1">
                 {b.trucks.length === 0 ? (
                   <span className="text-xs text-ink-muted">No trucks</span>
