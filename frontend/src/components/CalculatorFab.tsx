@@ -1,6 +1,7 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Calculator, X, Copy, Delete, Equal } from "lucide-react";
+import { useTrackedItems } from "../api/hooks";
 
 type Op = "+" | "-" | "×" | "÷";
 
@@ -13,7 +14,9 @@ function fmt(n: number): string {
   return Number.isInteger(n) ? n.toString() : n.toFixed(2);
 }
 
-const CALC_ITEMS = [
+// Fallback only — the live list comes from the tracked-items catalog
+// (Settings → Items), so pack edits there reflect here immediately.
+const CALC_ITEMS: { label: string; pack_size: number; unit_label?: string }[] = [
   { label: "Terrys/Grids", pack_size: 20 },
   { label: "White Micros", pack_size: 20 },
   { label: "Red Shops",    pack_size: 50 },
@@ -33,8 +36,17 @@ export default function CalculatorFab({ open, onClose }: { open: boolean; onClos
   const [packItem, setPackItem] = useState<string>("");
   const [copied, setCopied] = useState(false);
 
-  const selectedItem = CALC_ITEMS.find((i) => i.label === packItem);
+  const { data: tracked = [] } = useTrackedItems();
+  const calcItems = useMemo(() => {
+    const packed = tracked
+      .filter((i) => i.pack_size != null && i.pack_size > 1)
+      .map((i) => ({ label: i.label, pack_size: i.pack_size!, unit_label: i.unit_label }));
+    return packed.length > 0 ? packed : CALC_ITEMS;
+  }, [tracked]);
+
+  const selectedItem = calcItems.find((i) => i.label === packItem);
   const packSize = selectedItem?.pack_size ?? 1;
+  const unitWord = (selectedItem?.unit_label ?? "bag").toLowerCase();
   const val = parseFloat(display);
 
   const appendDigit = useCallback((d: string) => {
@@ -144,12 +156,12 @@ export default function CalculatorFab({ open, onClose }: { open: boolean; onClos
               <select value={packItem} onChange={(e) => setPackItem(e.target.value)}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-800 px-2 py-1.5 text-xs text-slate-300 outline-none">
                 <option value="">No item</option>
-                {CALC_ITEMS.map((i) => (
-                  <option key={i.label} value={i.label}>{i.label} ({i.pack_size}/bag)</option>
+                {calcItems.map((i) => (
+                  <option key={i.label} value={i.label}>{i.label} ({i.pack_size}/{(i.unit_label ?? "bag").toLowerCase()})</option>
                 ))}
               </select>
               {selectedItem && (
-                <button onClick={() => { const r = val * packSize; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `${fmt(val)} bags × ${packSize}`, result: r }]); }}
+                <button onClick={() => { const r = val * packSize; setDisplay(fmt(r)); setTape((t) => [...t, { expr: `${fmt(val)} ${unitWord}s × ${packSize}`, result: r }]); }}
                   className="rounded-lg bg-emerald-900/30 px-3 py-1.5 text-xs font-semibold text-emerald-400 hover:bg-emerald-800/40 border border-emerald-700/30 active:scale-95 select-none">
                   ×{packSize}
                 </button>

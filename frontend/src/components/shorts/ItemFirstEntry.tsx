@@ -30,8 +30,9 @@ import HierarchyPicker, {
   categoryChipClass,
   categoryTileClass,
   DEFAULT_TRACKED_ITEMS,
+  findTrackedItem,
   itemTileClass,
-  topCatOf,
+  qtyWithUnit,
 } from "./HierarchyPicker";
 
 interface SessionBatch {
@@ -98,10 +99,10 @@ export default function ItemFirstEntry({
     return map;
   }, [shorts, selectedItem]);
 
-  // Same tracked-item lookup as HierarchyPicker's confirmLog, so pack_size
-  // and unit_label behave identically in both entry modes.
+  // Robust lookup shared with the per-truck picker — resolves the item no
+  // matter which historical category shape ("Bulk"/"Towels"/"Bulk > Towels").
   const selTracked = selectedItem
-    ? items.find((i) => i.label === selectedItem.detail && topCatOf(i) === selectedItem.category)
+    ? findTrackedItem(items, selectedItem.category, selectedItem.detail)
     : undefined;
 
   const itemLabel = selectedItem
@@ -128,10 +129,12 @@ export default function ItemFirstEntry({
 
   async function submit() {
     if (!selectedItem || qtyByTruck.size === 0 || bulk.isPending) return;
-    const entries = [...qtyByTruck.entries()].map(([truck_number, rawStr]) => {
-      const raw = Math.max(1, parseInt(rawStr, 10) || 1);
-      return { truck_number, quantity: selTracked?.pack_size ? raw * selTracked.pack_size : raw };
-    });
+    // Quantities are stored as RAW UNITS exactly as typed (2 bags → 2);
+    // the "= N pcs" hint is informational only.
+    const entries = [...qtyByTruck.entries()].map(([truck_number, rawStr]) => ({
+      truck_number,
+      quantity: Math.max(1, parseInt(rawStr, 10) || 1),
+    }));
     const label = itemLabel;
     try {
       const result = await bulk.mutateAsync({
@@ -252,9 +255,12 @@ export default function ItemFirstEntry({
                     {sel ? (
                       <span className="mt-0.5 text-[10px] font-bold text-blue-200">
                         ×{Math.max(1, parseInt(qtyByTruck.get(t.truck_number) ?? "1", 10) || 1)}
+                        {unitLabel ? ` ${unitLabel}${Math.max(1, parseInt(qtyByTruck.get(t.truck_number) ?? "1", 10) || 1) !== 1 ? "s" : ""}` : ""}
                       </span>
                     ) : had != null ? (
-                      <span className="mt-0.5 text-[10px] font-semibold text-amber-400">has ×{had}</span>
+                      <span className="mt-0.5 text-[10px] font-semibold text-amber-400">
+                        has ×{had}{unitLabel ? ` ${unitLabel}${had !== 1 ? "s" : ""}` : ""}
+                      </span>
                     ) : (
                       <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
                         {t.truck_type}
@@ -370,7 +376,7 @@ export default function ItemFirstEntry({
                           key={s.id}
                           className="inline-flex items-center gap-1.5 rounded-full bg-slate-700 px-2.5 py-1 text-xs font-medium text-slate-200"
                         >
-                          #{s.truck_number} ×{s.quantity}
+                          #{s.truck_number} ×{qtyWithUnit(items, s.item_category, s.item_detail, s.quantity)}
                           <button
                             type="button"
                             onClick={() => remove.mutate(s.id)}

@@ -2004,7 +2004,6 @@ export function useTrackedItems() {
         const { data } = await api.get<AppSetting>("/settings/tracked_items_map");
         const raw = data?.value;
         if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-          const seen = new Set<string>();
           const items: TrackedItem[] = [];
           for (const [label, meta] of Object.entries(raw as Record<string, unknown>)) {
             const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
@@ -2016,12 +2015,10 @@ export function useTrackedItems() {
               pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
               color: typeof m.color === "string" ? m.color : undefined,
             });
-            seen.add(label);
           }
-          for (const d of DEFAULT_TRACKED_ITEMS) {
-            if (!seen.has(d.label)) items.push(d);
-          }
-          return items;
+          // Defaults are a FIRST-RUN seed only. Back-filling per missing
+          // label made deleted/renamed defaults resurrect on every read.
+          return items.length > 0 ? items : DEFAULT_TRACKED_ITEMS;
         }
         return DEFAULT_TRACKED_ITEMS;
       } catch (err: unknown) {

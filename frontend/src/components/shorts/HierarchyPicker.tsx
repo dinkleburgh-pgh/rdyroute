@@ -73,6 +73,37 @@ export function subCatOf(item: TrackedItem): string | null {
   return idx >= 0 ? cat.slice(idx + 1).trim() : null;
 }
 
+/**
+ * Find the tracked item behind a logged (category, detail) pair. Stored
+ * shortage rows carry the category in THREE historical shapes — the top
+ * name ("Bulk", old auto-skip rows), the sub name ("Towels", grid taps),
+ * or the full string ("Bulk > Towels") — so match all of them.
+ */
+export function findTrackedItem(
+  items: TrackedItem[],
+  category: string,
+  detail: string,
+): TrackedItem | undefined {
+  return items.find(
+    (i) =>
+      i.label === detail &&
+      (topCatOf(i) === category ||
+        subCatOf(i) === category ||
+        (i.category ?? "General") === category),
+  );
+}
+
+/** "2 Bags" / "1 Bag" when the item has a unit, else just the number. */
+export function qtyWithUnit(
+  items: TrackedItem[],
+  category: string,
+  detail: string,
+  qty: number,
+): string {
+  const unit = findTrackedItem(items, category, detail)?.unit_label;
+  return unit ? `${qty} ${unit}${qty !== 1 ? "s" : ""}` : String(qty);
+}
+
 export const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
   ...["3x10", "3x5", "4x6"].flatMap((size) =>
     ["Black", "Onyx", "Indigo", "Copper"].map((color) => ({
@@ -314,10 +345,10 @@ export default function HierarchyPicker({
 
   function confirmLog() {
     if (!pending) return;
+    // Quantities are stored as RAW UNITS exactly as typed (2 bags → 2);
+    // displays add the unit label, and the "= N pieces" hint is info-only.
     const raw = Math.max(1, parseInt(qtyInput, 10) || 1);
-    const sel = items.find((i) => i.label === pending.detail && topCatOf(i) === pending.category);
-    const qty = sel?.pack_size ? raw * sel.pack_size : raw;
-    onLog(pending.category, pending.detail, qty);
+    onLog(pending.category, pending.detail, raw);
     setPending(null);
     setQtyInput("");
   }
@@ -368,12 +399,15 @@ export default function HierarchyPicker({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topCat]);
 
-  // Auto-skip: if a sub-category has exactly 1 item, jump straight to qty entry
+  // Auto-skip: if a sub-category has exactly 1 item, jump straight to qty
+  // entry. Logs the SUB name as the category, matching what ItemGrid taps
+  // store for multi-item subs (historical rows that stored the top name are
+  // still resolved by findTrackedItem).
   useEffect(() => {
     if (topCat === null || bulkSub === null || pending !== null) return;
     const subItems = subItemsFor(topCat, bulkSub);
     if (subItems.length === 1) {
-      selectItem(topCat, subItems[0].label);
+      selectItem(bulkSub, subItems[0].label);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkSub]);
@@ -395,7 +429,7 @@ export default function HierarchyPicker({
     });
   }
   if (pending !== null) {
-    const pendingItem = items.find((i) => i.label === pending.detail && topCatOf(i) === pending.category);
+    const pendingItem = findTrackedItem(items, pending.category, pending.detail);
     const catFallback = bulkSub && topCat
       ? categoryTileClass(`${topCat} > ${bulkSub}`, catMeta)
       : topCat
@@ -447,7 +481,7 @@ export default function HierarchyPicker({
       {pending !== null ? (
         <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-5">
           {(() => {
-            const sel = items.find((i) => i.label === pending.detail && topCatOf(i) === pending.category);
+            const sel = findTrackedItem(items, pending.category, pending.detail);
             const unitLabel = sel?.unit_label;
             const packSize = sel?.pack_size;
             const qtyNum = Math.max(1, parseInt(qtyInput, 10) || 1);

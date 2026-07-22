@@ -87,6 +87,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<{ label: string; packSize: string; unitLabel: string; category: string; color: string }>({ label: "", packSize: "", unitLabel: "", category: "", color: "" });
   const [confirmRemoveLabel, setConfirmRemoveLabel] = useState<string | null>(null);
+  const [confirmRemoveCat, setConfirmRemoveCat] = useState<string | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
   const [addForm, setAddForm] = useState({ label: "", packSize: "", unitLabel: "" });
   const [newCategoryName, setNewCategoryName] = useState("");
@@ -196,6 +197,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     if (!editingLabel) return;
     const newLabel = editForm.label.trim();
     if (!newLabel) return;
+    // Labels key the saved map — renaming onto another item's label would
+    // silently drop one of them on Save. (Case-only self-renames are fine.)
+    if (draft.some((it) => it.label !== editingLabel && it.label.toLowerCase() === newLabel.toLowerCase())) return;
     const parsedPack = parseInt(editForm.packSize, 10);
     const packSize = editForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
     const unitLabel = packSize ? (editForm.unitLabel.trim() || undefined) : undefined;
@@ -221,7 +225,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     setDraft((d) => d.map((it) => {
       if (it.label !== label) return it;
       if (it.pack_size) return { ...it, pack_size: undefined };
-      return { ...it, pack_size: 12 };
+      return { ...it, pack_size: 10 };
     }));
   }
 
@@ -261,6 +265,22 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       return next;
     });
     if (colorPickerFor === cat) setColorPickerFor(null);
+  }
+
+  function moveCategoryItemsToUncategorised(cat: string) {
+    setDraft((d) => d.map((it) => (normalizeCategory(it.category ?? "") === cat ? { ...it, category: undefined } : it)));
+    if (addingToCategory === cat) setAddingToCategory(null);
+    removeEmptyCategory(cat);
+    setConfirmRemoveCat(null);
+  }
+
+  function deleteCategoryWithItems(cat: string) {
+    const removed = draft.filter((it) => normalizeCategory(it.category ?? "") === cat);
+    setDraft((d) => d.filter((it) => normalizeCategory(it.category ?? "") !== cat));
+    if (editingLabel && removed.some((it) => it.label === editingLabel)) setEditingLabel(null);
+    if (addingToCategory === cat) setAddingToCategory(null);
+    removeEmptyCategory(cat);
+    setConfirmRemoveCat(null);
   }
 
   function setCategoryColor(cat: string, color: string) {
@@ -457,10 +477,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                     <Plus className="h-3 w-3" /> Sub
                   </button>
                 )}
-                {!disabled && cat !== "" && catItems.length === 0 && (
+                {!disabled && cat !== "" && (
                   <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-red-900/50 hover:text-red-300"
-                    title="Remove this empty category"
-                    onClick={() => removeEmptyCategory(cat)}>
+                    title={catItems.length === 0 ? "Remove this empty category" : "Remove this category…"}
+                    onClick={() => (catItems.length === 0 ? removeEmptyCategory(cat) : setConfirmRemoveCat(cat))}>
                     <Trash2 className="h-3 w-3" />
                   </button>
                 )}
@@ -511,7 +531,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                       </div>
                       <div>
                         <label className="label">Pieces / unit</label>
-                        <input type="number" min={1} className="input w-20" placeholder="12" value={editForm.packSize}
+                        <input type="number" min={1} className="input w-20" placeholder="10" value={editForm.packSize}
                           onChange={(e) => setEditForm({ ...editForm, packSize: e.target.value })} />
                       </div>
                       {editForm.packSize.trim() && (
@@ -580,7 +600,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                   </div>
                   <div>
                     <label className="label">Pieces / unit</label>
-                    <input type="number" min={1} className="input w-20" placeholder="12" value={addForm.packSize}
+                    <input type="number" min={1} className="input w-20" placeholder="10" value={addForm.packSize}
                       onChange={(e) => setAddForm({ ...addForm, packSize: e.target.value })} />
                   </div>
                   {addForm.packSize.trim() && (
@@ -629,6 +649,29 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
           </div>
         </div>
       )}
+
+      {confirmRemoveCat !== null && (() => {
+        const cat = confirmRemoveCat;
+        const n = draft.filter((it) => normalizeCategory(it.category ?? "") === cat).length;
+        const hasSubs = subLevelOf(cat) === null && categories.some((c) => c.startsWith(cat + " > "));
+        return (
+          <ConfirmDialog
+            open
+            title={`Remove "${cat.replace(" > ", " › ")}"?`}
+            description={
+              `This category has ${n} item${n !== 1 ? "s" : ""}. Move them to Uncategorised or delete them.` +
+              (hasSubs ? ` Subcategories under "${cat}" are separate and will not be removed.` : "") +
+              " Save changes to make it permanent."
+            }
+            secondaryLabel={`Move ${n} to Uncategorised`}
+            onSecondary={() => moveCategoryItemsToUncategorised(cat)}
+            confirmLabel={`Delete ${n} item${n !== 1 ? "s" : ""}`}
+            variant="danger"
+            onConfirm={() => deleteCategoryWithItems(cat)}
+            onCancel={() => setConfirmRemoveCat(null)}
+          />
+        );
+      })()}
 
       <ConfirmDialog
         open={confirmRemoveLabel !== null}

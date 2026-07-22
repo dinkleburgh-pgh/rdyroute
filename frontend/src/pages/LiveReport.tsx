@@ -20,7 +20,7 @@ import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { categoryDotClass } from "../components/shorts/HierarchyPicker";
+import { categoryDotClass, qtyWithUnit } from "../components/shorts/HierarchyPicker";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
@@ -422,7 +422,7 @@ export default function LiveReport() {
         {/* ===================== LOAD · SHORTAGES ===================== */}
         <Section eyebrow="Load" title="Shortages">
           <div className="grid grid-cols-3 gap-2">
-            <Kpi label="Pieces short" value={totalPieces} tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
+            <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
             <Kpi label="Distinct items" value={distinctItems} />
             <Kpi label="Trucks shorted" value={shortsByTruck.length} />
           </div>
@@ -442,7 +442,9 @@ export default function LiveReport() {
                     {rows.map((s) => (
                       <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
                         <span className="truncate text-ink-soft">{shortLabel(s)}</span>
-                        <span className="shrink-0 font-mono font-semibold tabular-nums text-red-400">×{s.quantity}</span>
+                        <span className="shrink-0 font-mono font-semibold tabular-nums text-red-400">
+                          ×{qtyWithUnit(trackedItems, s.item_category, s.item_detail, s.quantity)}
+                        </span>
                       </li>
                     ))}
                   </ul>

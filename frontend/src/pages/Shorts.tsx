@@ -26,7 +26,8 @@ import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 import ItemFirstEntry from "../components/shorts/ItemFirstEntry";
-import HierarchyPicker, { categoryChipClass, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
+import HierarchyPicker, { categoryChipClass, DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit } from "../components/shorts/HierarchyPicker";
+import type { TrackedItem } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
 
@@ -149,7 +150,7 @@ function TruckPicker({
 // ShortageLogger
 // ---------------------------------------------------------------------------
 
-function LoggedList({ shorts }: { shorts: Shortage[] }) {
+function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[] }) {
   const update = useUpdateShortage();
   const remove = useDeleteShortage();
   const [editId, setEditId]     = useState<number | null>(null);
@@ -177,7 +178,13 @@ function LoggedList({ shorts }: { shorts: Shortage[] }) {
           if (editId === s.id) {
             return (
               <AnimateCard key={s.id} className="flex items-center gap-2 rounded-xl border border-amber-700/60 bg-amber-950/40 px-3 py-2">
-                <span className="text-xs font-semibold text-slate-200">{label}</span>
+                <span className="text-xs font-semibold text-slate-200">
+                  {label}
+                  {(() => {
+                    const unit = findTrackedItem(items, s.item_category, s.item_detail)?.unit_label;
+                    return unit ? <span className="ml-1 font-normal text-slate-500">({unit}s)</span> : null;
+                  })()}
+                </span>
                 <input
                   type="number"
                   inputMode="numeric"
@@ -209,7 +216,9 @@ function LoggedList({ shorts }: { shorts: Shortage[] }) {
             return (
               <AnimateCard key={s.id} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 w-full sm:w-auto">
               <span className="flex-1 min-w-0 text-sm font-semibold text-slate-200">{label}</span>
-              <span className="shrink-0 text-xl font-black text-white">×{s.quantity}</span>
+              <span className="shrink-0 text-xl font-black text-white">
+                ×{qtyWithUnit(items, s.item_category, s.item_detail, s.quantity)}
+              </span>
               <div className="flex shrink-0 gap-2">
                 <button
                   type="button"
@@ -307,7 +316,7 @@ export function ShortageLogger({
           </div>
         )}
         <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} quickSelect={quickSelect} quickKey={quickKey} />
-        <LoggedList shorts={shorts} />
+        <LoggedList shorts={shorts} items={items} />
       </div>
     );
   }
@@ -367,7 +376,7 @@ export function ShortageLogger({
           quickKey={quickKey}
         />
 
-        <LoggedList shorts={shorts} />
+        <LoggedList shorts={shorts} items={items} />
       </div>
     </div>
   );

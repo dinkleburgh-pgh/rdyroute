@@ -103,7 +103,7 @@ function VolumeTable({ data, daily, summary }: { data: { truck_number: number; i
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Total Pieces" value={s.total_qty.toLocaleString()} status="Stable" />
+        <KpiCard label="Total Qty" value={s.total_qty.toLocaleString()} status="Stable" />
         <KpiCard label="Avg / Day" value={s.avg_per_day.toFixed(1)} status="Stable" />
         <KpiCard label="Days" value={s.days_with_data} status="Stable" />
         <KpiCard label="Total Entries" value={s.entry_count.toLocaleString()} status="Stable" />

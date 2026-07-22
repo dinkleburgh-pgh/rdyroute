@@ -15,6 +15,9 @@ export interface ConfirmDialogProps {
   description?: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  /** Optional middle action rendered between Cancel and Confirm. */
+  secondaryLabel?: string;
+  onSecondary?: () => void;
   variant?: "danger" | "default";
   busy?: boolean;
   onConfirm: () => void;
@@ -27,6 +30,8 @@ export default function ConfirmDialog({
   description,
   confirmLabel = "Confirm",
   cancelLabel = "Cancel",
+  secondaryLabel,
+  onSecondary,
   variant = "default",
   busy = false,
   onConfirm,
@@ -75,10 +80,15 @@ export default function ConfirmDialog({
           </div>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        <div className="mt-5 flex flex-wrap justify-end gap-2">
           <button className="btn-ghost" onClick={onCancel} disabled={busy}>
             {cancelLabel}
           </button>
+          {secondaryLabel && onSecondary && (
+            <button className="btn-primary" onClick={onSecondary} disabled={busy}>
+              {secondaryLabel}
+            </button>
+          )}
           <button
             className={clsx(variant === "danger" ? "btn-danger" : "btn-primary")}
             onClick={onConfirm}
