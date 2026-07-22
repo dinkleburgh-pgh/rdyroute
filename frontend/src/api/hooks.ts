@@ -1983,6 +1983,8 @@ export interface TrackedItem {
   unit_label?: string;
   /** Number of individual pieces per pack unit (e.g. 12 for JRT case) */
   pack_size?: number;
+  /** Optional COLOR_PRESETS key for the item's shortage-picker tile */
+  color?: string;
 }
 
 const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
@@ -2012,6 +2014,7 @@ export function useTrackedItems() {
               category: typeof m.category === "string" ? m.category : undefined,
               unit_label: typeof m.unit_label === "string" ? m.unit_label : undefined,
               pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
+              color: typeof m.color === "string" ? m.color : undefined,
             });
             seen.add(label);
           }
@@ -2034,7 +2037,7 @@ export function useUpdateTrackedItems() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (items: TrackedItem[]) => {
-      const map: Record<string, { qty_default: number; category?: string; unit_label?: string; pack_size?: number }> = {};
+      const map: Record<string, { qty_default: number; category?: string; unit_label?: string; pack_size?: number; color?: string }> = {};
       for (const it of items) {
         const label = it.label.trim();
         if (!label) continue;
@@ -2043,6 +2046,7 @@ export function useUpdateTrackedItems() {
           ...(it.category?.trim() ? { category: it.category.trim() } : {}),
           ...(it.unit_label?.trim() ? { unit_label: it.unit_label.trim() } : {}),
           ...(it.pack_size != null && it.pack_size > 0 ? { pack_size: it.pack_size } : {}),
+          ...(it.color?.trim() ? { color: it.color.trim() } : {}),
         };
       }
       return (
@@ -2051,6 +2055,62 @@ export function useUpdateTrackedItems() {
     },
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["tracked-items"] });
+      qc.invalidateQueries({ queryKey: ["settings"] });
+    },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Tracked item categories — AppSetting "tracked_item_categories"
+// Metadata map keyed by the normalized category string ("Top" or "Top > Sub"):
+// existence (so empty categories survive reload) + optional color preset.
+// ---------------------------------------------------------------------------
+
+export interface CategoryMeta {
+  color?: string;
+}
+export type CategoryMetaMap = Record<string, CategoryMeta>;
+
+export function useTrackedItemCategories() {
+  return useQuery({
+    queryKey: ["tracked-item-categories"],
+    staleTime: 0,
+    queryFn: async (): Promise<CategoryMetaMap> => {
+      try {
+        const { data } = await api.get<AppSetting>("/settings/tracked_item_categories");
+        const raw = data?.value;
+        // Legacy tolerance: a bare string[] becomes { name: {} }.
+        if (Array.isArray(raw)) {
+          const out: CategoryMetaMap = {};
+          for (const c of raw) if (typeof c === "string" && c.trim()) out[c.trim()] = {};
+          return out;
+        }
+        if (raw && typeof raw === "object") {
+          const out: CategoryMetaMap = {};
+          for (const [name, meta] of Object.entries(raw as Record<string, unknown>)) {
+            if (!name.trim()) continue;
+            const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
+            out[name] = { ...(typeof m.color === "string" && m.color ? { color: m.color } : {}) };
+          }
+          return out;
+        }
+        return {};
+      } catch (err: unknown) {
+        const e = err as { response?: { status?: number } };
+        if (e?.response?.status === 404) return {};
+        throw err;
+      }
+    },
+  });
+}
+
+export function useUpdateTrackedItemCategories() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (meta: CategoryMetaMap) =>
+      (await api.put<AppSetting>("/settings/tracked_item_categories", { value: meta })).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["tracked-item-categories"] });
       qc.invalidateQueries({ queryKey: ["settings"] });
     },
   });

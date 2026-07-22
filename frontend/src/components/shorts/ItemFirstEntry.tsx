@@ -19,6 +19,7 @@ import {
   useBulkCreateShortages,
   useDeleteShortage,
   useTrackedItems,
+  useTrackedItemCategories,
 } from "../../api/hooks";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -26,12 +27,10 @@ import { isScheduledOff } from "../../utils/truckStatus";
 import type { Shortage, TruckWithState } from "../../types";
 import AnimateCard from "../AnimateCard";
 import HierarchyPicker, {
-  CAT_CHIP_COLORS,
+  categoryChipClass,
+  categoryTileClass,
   DEFAULT_TRACKED_ITEMS,
-  LIGHT_BG_ITEMS,
-  MAT_COLOR_PALETTE,
-  SUB_PALETTE,
-  TOP_PALETTE,
+  itemTileClass,
   topCatOf,
 } from "./HierarchyPicker";
 
@@ -61,6 +60,7 @@ export default function ItemFirstEntry({
   const bulk = useBulkCreateShortages();
   const remove = useDeleteShortage();
   const { data: trackedRaw = [] } = useTrackedItems();
+  const { data: catMeta } = useTrackedItemCategories();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
 
   const [selectedItem, setSelectedItem] = useState<{ category: string; detail: string } | null>(null);
@@ -161,11 +161,9 @@ export default function ItemFirstEntry({
   const unitLabel = selTracked?.unit_label;
   const dupeSelected = [...qtyByTruck.keys()].filter((n) => alreadyLoggedQty.has(n));
 
-  const itemChipPalette =
-    (selectedItem && MAT_COLOR_PALETTE[selectedItem.detail]) ??
-    (selectedItem && SUB_PALETTE[selectedItem.category]) ??
-    (selectedItem && TOP_PALETTE[selectedItem.category]) ??
-    "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20";
+  const itemChipTile = selectedItem
+    ? itemTileClass(selTracked, selectedItem.detail, categoryTileClass(selectedItem.category, catMeta))
+    : { cls: "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20", lightBg: false };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-5 overflow-y-auto p-3 md:p-6">
@@ -183,7 +181,7 @@ export default function ItemFirstEntry({
                     onClick={() => pickItem(item.category, item.detail)}
                     className={clsx(
                       "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
-                      CAT_CHIP_COLORS[item.category] ?? "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                      categoryChipClass(item.category, catMeta),
                     )}
                   >
                     {item.category} {item.detail}
@@ -207,8 +205,8 @@ export default function ItemFirstEntry({
             <span
               className={clsx(
                 "rounded-xl px-5 py-2.5 text-base font-black shadow-md ring-1 ring-white/10",
-                LIGHT_BG_ITEMS.has(selectedItem.detail) ? "text-slate-900" : "text-white",
-                itemChipPalette,
+                itemChipTile.lightBg ? "text-slate-900" : "text-white",
+                itemChipTile.cls,
               )}
             >
               {itemLabel}

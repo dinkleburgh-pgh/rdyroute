@@ -8,7 +8,7 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
-import type { TrackedItem } from "../../api/hooks";
+import { useTrackedItemCategories, type TrackedItem, type CategoryMetaMap } from "../../api/hooks";
 
 // ---------------------------------------------------------------------------
 // Colour palette
@@ -94,6 +94,131 @@ export const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
 ];
 
 // ---------------------------------------------------------------------------
+// Color presets + best-guess resolution
+//
+// Priority everywhere: hardcoded palettes (existing look) → user-chosen preset
+// (from Configure Items) → best guess (semantic name match, color words in
+// item labels, then a stable name-hash). Nothing falls back to slate gray.
+// ---------------------------------------------------------------------------
+
+export const COLOR_PRESETS: Record<string, { tile: string; chip: string; dot: string; swatch: string }> = {
+  sky:     { tile: "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",             chip: "bg-sky-900/40 text-sky-300 hover:bg-sky-800/60",         dot: "bg-sky-500",     swatch: "bg-sky-500" },
+  violet:  { tile: "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800", chip: "bg-violet-900/40 text-violet-300 hover:bg-violet-800/60", dot: "bg-violet-500",  swatch: "bg-violet-500" },
+  emerald: { tile: "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800", chip: "bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60", dot: "bg-emerald-500", swatch: "bg-emerald-500" },
+  orange:  { tile: "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900", chip: "bg-orange-900/40 text-orange-300 hover:bg-orange-800/60", dot: "bg-orange-500",  swatch: "bg-orange-500" },
+  rose:    { tile: "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",           chip: "bg-rose-900/40 text-rose-300 hover:bg-rose-800/60",       dot: "bg-rose-500",    swatch: "bg-rose-500" },
+  cyan:    { tile: "bg-gradient-to-b from-cyan-600 to-cyan-900 ring-1 ring-cyan-400/20 hover:from-cyan-500 hover:to-cyan-800",           chip: "bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60",       dot: "bg-cyan-500",    swatch: "bg-cyan-500" },
+  teal:    { tile: "bg-gradient-to-b from-teal-600 to-teal-900 ring-1 ring-teal-400/20 hover:from-teal-500 hover:to-teal-800",           chip: "bg-teal-900/40 text-teal-300 hover:bg-teal-800/60",       dot: "bg-teal-500",    swatch: "bg-teal-500" },
+  amber:   { tile: "bg-gradient-to-b from-amber-700 to-amber-950 ring-1 ring-amber-500/20 hover:from-amber-600 hover:to-amber-900",     chip: "bg-amber-900/40 text-amber-300 hover:bg-amber-800/60",   dot: "bg-amber-500",   swatch: "bg-amber-500" },
+  red:     { tile: "bg-gradient-to-b from-red-600 to-red-900 ring-1 ring-red-400/20 hover:from-red-500 hover:to-red-800",               chip: "bg-red-900/40 text-red-300 hover:bg-red-800/60",         dot: "bg-red-500",     swatch: "bg-red-500" },
+  green:   { tile: "bg-gradient-to-b from-green-600 to-green-900 ring-1 ring-green-400/20 hover:from-green-500 hover:to-green-800",     chip: "bg-green-900/40 text-green-300 hover:bg-green-800/60",   dot: "bg-green-500",   swatch: "bg-green-500" },
+  blue:    { tile: "bg-gradient-to-b from-blue-600 to-blue-900 ring-1 ring-blue-400/20 hover:from-blue-500 hover:to-blue-800",           chip: "bg-blue-900/40 text-blue-300 hover:bg-blue-800/60",       dot: "bg-blue-500",    swatch: "bg-blue-500" },
+  indigo:  { tile: "bg-gradient-to-b from-indigo-600 to-indigo-900 ring-1 ring-indigo-400/20 hover:from-indigo-500 hover:to-indigo-800", chip: "bg-indigo-900/40 text-indigo-300 hover:bg-indigo-800/60", dot: "bg-indigo-500",  swatch: "bg-indigo-500" },
+  lime:    { tile: "bg-gradient-to-b from-lime-600 to-lime-900 ring-1 ring-lime-400/20 hover:from-lime-500 hover:to-lime-800",           chip: "bg-lime-900/40 text-lime-300 hover:bg-lime-800/60",       dot: "bg-lime-500",    swatch: "bg-lime-500" },
+  stone:   { tile: "bg-gradient-to-b from-stone-500 to-stone-800 ring-1 ring-stone-300/20 hover:from-stone-400 hover:to-stone-700",     chip: "bg-stone-800/60 text-stone-300 hover:bg-stone-700/60",   dot: "bg-stone-400",   swatch: "bg-stone-400" },
+};
+
+// Categories whose NAME implies a hue — used before the hash fallback.
+const SEMANTIC_CATEGORY_PRESET: Record<string, string> = {
+  towels: "amber", aprons: "violet", "dust mops": "teal", mops: "teal", rags: "stone",
+  chemicals: "lime", wipes: "cyan", soap: "cyan", soaps: "cyan", linens: "indigo",
+  uniforms: "blue", mats: "emerald", paper: "orange", hygiene: "cyan", gloves: "green",
+};
+
+const PRESET_POOL = Object.keys(COLOR_PRESETS).filter((k) => k !== "stone");
+
+/** Best-guess preset for a category with no palette entry and no user color. */
+export function guessCategoryPreset(cat: string): { tile: string; chip: string; dot: string; swatch: string } {
+  const idx = cat.indexOf(">");
+  const part = (idx >= 0 ? cat.slice(idx + 1) : cat).trim().toLowerCase();
+  const semantic = SEMANTIC_CATEGORY_PRESET[part];
+  if (semantic) return COLOR_PRESETS[semantic];
+  let h = 0;
+  for (let i = 0; i < part.length; i++) h = (h * 31 + part.charCodeAt(i)) >>> 0;
+  return COLOR_PRESETS[PRESET_POOL[h % PRESET_POOL.length]];
+}
+
+// Color words in item labels → solid tile classes (extends the MAT_COLOR_PALETTE idea).
+// Exact-label MAT palette entries always win first, so mat tiles are unchanged.
+const COLOR_WORD_CLASSES: [RegExp, string, boolean][] = [
+  [/\bblack\b/i,              "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",     false],
+  [/\bwhite\b/i,              "bg-white ring-1 ring-slate-300 hover:bg-slate-100",            true],
+  [/\bred\b/i,                "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",           false],
+  [/\bgreen\b/i,              "bg-green-700 ring-1 ring-green-400/20 hover:bg-green-600",     false],
+  [/\bblue\b/i,               "bg-blue-700 ring-1 ring-blue-400/20 hover:bg-blue-600",        false],
+  [/\bdenim\b/i,              "bg-[#1a5fa8] ring-1 ring-blue-400/20 hover:bg-[#1e6dbe]",      false],
+  [/\bindigo\b/i,             "bg-indigo-700 ring-1 ring-indigo-400/20 hover:bg-indigo-600",  false],
+  [/\bcopper\b/i,             "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",     false],
+  [/\bonyx\b/i,               "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",     false],
+  [/\bnavy\b/i,               "bg-blue-900 ring-1 ring-blue-400/20 hover:bg-blue-800",        false],
+  [/\bgr[ae]y\b/i,            "bg-gray-500 ring-1 ring-gray-300/20 hover:bg-gray-400",        false],
+  [/\bcharcoal\b/i,           "bg-neutral-700 ring-1 ring-white/10 hover:bg-neutral-600",     false],
+  [/\byellow\b/i,             "bg-yellow-500 ring-1 ring-yellow-300/40 hover:bg-yellow-400",  true],
+  [/\borange\b/i,             "bg-orange-600 ring-1 ring-orange-400/20 hover:bg-orange-500",  false],
+  [/\bpurple\b/i,             "bg-purple-700 ring-1 ring-purple-400/20 hover:bg-purple-600",  false],
+  [/\bbrown\b/i,              "bg-amber-900 ring-1 ring-amber-500/20 hover:bg-amber-800",     false],
+  [/\b(tan|khaki)\b/i,        "bg-[#c3a06b] ring-1 ring-amber-200/30 hover:bg-[#b3915d]",     true],
+  [/\bpink\b/i,               "bg-pink-600 ring-1 ring-pink-400/20 hover:bg-pink-500",        false],
+  [/\b(maroon|burgundy)\b/i,  "bg-red-900 ring-1 ring-red-400/20 hover:bg-red-800",           false],
+  [/\bteal\b/i,               "bg-teal-600 ring-1 ring-teal-400/20 hover:bg-teal-500",        false],
+  [/\blime\b/i,               "bg-lime-500 ring-1 ring-lime-300/40 hover:bg-lime-400",        true],
+  [/\bgold\b/i,               "bg-amber-500 ring-1 ring-amber-300/40 hover:bg-amber-400",     true],
+  [/\bsilver\b/i,             "bg-slate-300 ring-1 ring-slate-100/40 hover:bg-slate-200",     true],
+  [/\b(cream|ivory)\b/i,      "bg-[#f5f0dc] ring-1 ring-slate-300 hover:bg-[#ece5cc]",        true],
+];
+
+export function colorWordClass(label: string): { cls: string; lightBg: boolean } | null {
+  for (const [re, cls, lightBg] of COLOR_WORD_CLASSES) {
+    if (re.test(label)) return { cls, lightBg };
+  }
+  return null;
+}
+
+/**
+ * Tile class for a category key ("Top" or "Top > Sub" — the meta map is keyed
+ * by the full normalized string, SUB_PALETTE by the bare sub name).
+ */
+export function categoryTileClass(catKey: string, meta?: CategoryMetaMap): string {
+  const idx = catKey.indexOf(">");
+  const subPart = idx >= 0 ? catKey.slice(idx + 1).trim() : null;
+  const userColor = meta?.[catKey]?.color;
+  return (
+    TOP_PALETTE[catKey] ??
+    SUB_PALETTE[subPart ?? catKey] ??
+    (userColor ? COLOR_PRESETS[userColor]?.tile : undefined) ??
+    guessCategoryPreset(catKey).tile
+  );
+}
+
+export function categoryChipClass(catKey: string, meta?: CategoryMetaMap): string {
+  const userColor = meta?.[catKey]?.color;
+  return (
+    CAT_CHIP_COLORS[catKey] ??
+    (userColor ? COLOR_PRESETS[userColor]?.chip : undefined) ??
+    guessCategoryPreset(catKey).chip
+  );
+}
+
+export function categoryDotClass(catKey: string, meta?: CategoryMetaMap): string {
+  const userColor = meta?.[catKey]?.color;
+  return (userColor ? COLOR_PRESETS[userColor]?.dot : undefined) ?? guessCategoryPreset(catKey).dot;
+}
+
+/** Item tile: MAT palette → user item color → color word in label → category class. */
+export function itemTileClass(
+  item: TrackedItem | undefined,
+  disp: string,
+  fallbackCls: string,
+): { cls: string; lightBg: boolean } {
+  if (MAT_COLOR_PALETTE[disp]) return { cls: MAT_COLOR_PALETTE[disp], lightBg: LIGHT_BG_ITEMS.has(disp) };
+  const preset = item?.color ? COLOR_PRESETS[item.color] : undefined;
+  if (preset) return { cls: preset.tile, lightBg: false };
+  const word = colorWordClass(disp);
+  if (word) return word;
+  return { cls: fallbackCls, lightBg: false };
+}
+
+// ---------------------------------------------------------------------------
 // HierarchyPicker — driven by tracked items
 // ---------------------------------------------------------------------------
 
@@ -120,6 +245,7 @@ function ItemGrid({
           ? item.label.slice(cat.length + 1)
           : item.label;
         const detail = disp; // for mats: just color; for others: full label
+        const tile = itemTileClass(item, disp, btnClass);
         return (
           <motion.button
             key={item.label}
@@ -128,8 +254,8 @@ function ItemGrid({
             onClick={() => onSelect(cat, detail)}
             className={clsx(
               "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg disabled:opacity-50",
-              LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
-              MAT_COLOR_PALETTE[disp] ?? btnClass,
+              tile.lightBg ? "text-slate-900" : "text-white",
+              tile.cls,
             )}
             initial={{ opacity: 0, scale: 0.94 }}
             animate={{ opacity: 1, scale: 1 }}
@@ -169,6 +295,7 @@ export default function HierarchyPicker({
   const [pending, setPending]   = useState<{ category: string; detail: string } | null>(null);
   const [qtyInput, setQtyInput] = useState("");
   const qtyRef = useRef<HTMLInputElement>(null);
+  const { data: catMeta } = useTrackedItemCategories();
 
   const topCats = useMemo(() => [...new Set(items.map(topCatOf))], [items]);
 
@@ -256,26 +383,27 @@ export default function HierarchyPicker({
   if (topCat !== null) {
     trailRaw.push({
       label: topCat,
-      palette: TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      palette: categoryTileClass(topCat, catMeta),
       onClick: reset,
     });
   }
   if (bulkSub !== null) {
     trailRaw.push({
       label: bulkSub,
-      palette: SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      palette: categoryTileClass(topCat ? `${topCat} > ${bulkSub}` : bulkSub, catMeta),
       onClick: resetSub,
     });
   }
   if (pending !== null) {
-    const itemPalette =
-      MAT_COLOR_PALETTE[pending.detail] ??
-      (bulkSub ? (SUB_PALETTE[bulkSub] ?? null) : null) ??
-      (topCat  ? (TOP_PALETTE[topCat]  ?? null) : null) ??
-      "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20";
+    const pendingItem = items.find((i) => i.label === pending.detail && topCatOf(i) === pending.category);
+    const catFallback = bulkSub && topCat
+      ? categoryTileClass(`${topCat} > ${bulkSub}`, catMeta)
+      : topCat
+        ? categoryTileClass(topCat, catMeta)
+        : guessCategoryPreset(pending.category).tile;
     trailRaw.push({
       label: pending.detail,
-      palette: itemPalette,
+      palette: itemTileClass(pendingItem, pending.detail, catFallback).cls,
       onClick: () => { setPending(null); setQtyInput(""); },
     });
   }
@@ -379,7 +507,7 @@ export default function HierarchyPicker({
                 onClick={() => setTopCat(cat)}
                 className={clsx(
                   "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
-                  TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                  categoryTileClass(cat, catMeta),
                 )}
                 initial={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -398,7 +526,7 @@ export default function HierarchyPicker({
           <ItemGrid
             gridItems={flatItems}
             cat={topCat}
-            btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            btnClass={categoryTileClass(topCat, catMeta)}
             isPending={isPending}
             onSelect={selectItem}
           />
@@ -414,7 +542,7 @@ export default function HierarchyPicker({
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
                   "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
-                  SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                  categoryTileClass(`${topCat} > ${sub}`, catMeta),
                 )}
                 initial={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -433,7 +561,7 @@ export default function HierarchyPicker({
           <ItemGrid
             gridItems={subItemsFor(topCat, bulkSub)}
             cat={bulkSub}
-            btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            btnClass={categoryTileClass(`${topCat} > ${bulkSub}`, catMeta)}
             isPending={isPending}
             onSelect={selectItem}
           />

@@ -20,6 +20,7 @@ import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
+import { categoryDotClass } from "../components/shorts/HierarchyPicker";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
@@ -37,6 +38,7 @@ import {
   useLoadDayOverride,
   useUnloadsDayOverride,
   useHolidayUnload,
+  useTrackedItemCategories,
   type TrackedItem,
 } from "../api/hooks";
 import { buildOperationalDayContext, countUnloadedFromContext } from "../utils/truckStatus";
@@ -177,6 +179,7 @@ export default function LiveReport() {
   const { data: shorts = [] } = useShortages(runDate);
   const { data: auditEntries = [] } = useAuditEntries(runDate);
   const { data: trackedItems = [] } = useTrackedItems();
+  const { data: trackedCatMeta } = useTrackedItemCategories();
   const { data: spares = [] } = useSpareAssignments(runDate);
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: pace } = usePaceAverage(30);
@@ -461,7 +464,7 @@ export default function LiveReport() {
             <div className="flex flex-wrap gap-1.5">
               {catRollup.map(([cat, qty]) => (
                 <span key={cat} className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-surface px-2.5 py-1 text-xs">
-                  <span className={clsx("h-2 w-2 rounded-full", TOP_CAT_DOT[cat] ?? "bg-slate-500")} />
+                  <span className={clsx("h-2 w-2 rounded-full", TOP_CAT_DOT[cat] ?? categoryDotClass(cat, trackedCatMeta))} />
                   <span className="text-ink-soft">{cat}</span>
                   <span className="font-mono font-semibold tabular-nums text-ink">{qty}</span>
                 </span>

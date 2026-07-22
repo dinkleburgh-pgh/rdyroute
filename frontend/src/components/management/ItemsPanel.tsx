@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { useTrackedItems, useUpdateTrackedItems, type TrackedItem } from "../../api/hooks";
+import {
+  useTrackedItems,
+  useUpdateTrackedItems,
+  useTrackedItemCategories,
+  useUpdateTrackedItemCategories,
+  type CategoryMetaMap,
+  type TrackedItem,
+} from "../../api/hooks";
+import { COLOR_PRESETS, categoryDotClass } from "../shorts/HierarchyPicker";
 import ConfirmDialog from "../ConfirmDialog";
 import { Plus, Trash2, Save, RotateCcw, Upload, Package, X, AlertTriangle } from "lucide-react";
 
@@ -11,38 +19,127 @@ function needsConfig(it: TrackedItem): boolean {
   return it.pack_size != null && it.pack_size > 0 && !it.unit_label?.trim();
 }
 
+// "Top > Sub" string helpers — same split-on-first-">" semantics as the
+// shortage pickers (HierarchyPicker topCatOf/subCatOf), string-based.
+function normalizeCategory(raw: string): string {
+  return raw.split(">").map((s) => s.trim()).filter(Boolean).join(" > ");
+}
+function topLevelOf(cat: string): string {
+  const i = cat.indexOf(">");
+  return (i >= 0 ? cat.slice(0, i) : cat).trim();
+}
+function subLevelOf(cat: string): string | null {
+  const i = cat.indexOf(">");
+  return i >= 0 ? cat.slice(i + 1).trim() : null;
+}
+
+// Fixed hues of the built-in palettes (shown on card dots; a chosen preset
+// only takes effect where the hardcoded palettes don't already color things).
+const BUILTIN_DOT: Record<string, string> = {
+  "3x10": "bg-sky-500", "3x5": "bg-violet-500", "4x6": "bg-emerald-500",
+  Paper: "bg-orange-500", Bulk: "bg-rose-500", Hygiene: "bg-cyan-500",
+  Aprons: "bg-violet-500", "Dust Mops": "bg-teal-500", Towels: "bg-amber-500",
+};
+function cardDotClass(cat: string, meta: CategoryMetaMap): string {
+  const sub = subLevelOf(cat);
+  return BUILTIN_DOT[sub ?? cat] ?? categoryDotClass(cat, meta);
+}
+
+function ColorSwatchPicker({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <button
+        type="button"
+        disabled={disabled}
+        title="Auto (best-guess color)"
+        onClick={() => onChange("")}
+        className={clsx(
+          "flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-[10px] font-bold text-slate-400",
+          value === "" && "ring-2 ring-white",
+        )}
+      >
+        A
+      </button>
+      {Object.entries(COLOR_PRESETS).map(([key, p]) => (
+        <button
+          key={key}
+          type="button"
+          disabled={disabled}
+          title={key}
+          onClick={() => onChange(key)}
+          className={clsx("h-6 w-6 rounded-full transition-transform hover:scale-110", p.swatch, value === key && "ring-2 ring-white")}
+        />
+      ))}
+    </div>
+  );
+}
+
 export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const { data: items, isLoading } = useTrackedItems();
+  const { data: persistedCatMeta, isLoading: catsLoading } = useTrackedItemCategories();
   const save = useUpdateTrackedItems();
+  const saveCats = useUpdateTrackedItemCategories();
   const [draft, setDraft] = useState<TrackedItem[]>([]);
+  const [catMeta, setCatMeta] = useState<CategoryMetaMap>({});
   const [activeTab, setActiveTab] = useState<string>("__all__");
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
   const [editingLabel, setEditingLabel] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState<{ label: string; packSize: string; unitLabel: string }>({ label: "", packSize: "", unitLabel: "" });
+  const [editForm, setEditForm] = useState<{ label: string; packSize: string; unitLabel: string; category: string; color: string }>({ label: "", packSize: "", unitLabel: "", category: "", color: "" });
   const [confirmRemoveLabel, setConfirmRemoveLabel] = useState<string | null>(null);
   const [addingToCategory, setAddingToCategory] = useState<string | null>(null);
   const [addForm, setAddForm] = useState({ label: "", packSize: "", unitLabel: "" });
-  const [extraCategories, setExtraCategories] = useState<string[]>([]);
   const [newCategoryName, setNewCategoryName] = useState("");
+  const [newCategoryParent, setNewCategoryParent] = useState("");
+  const [newCategoryColor, setNewCategoryColor] = useState("");
+  const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
+  const newCategoryInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (items) setDraft(items); }, [items]);
-  const dirty = JSON.stringify(draft) !== JSON.stringify(items ?? []);
+  useEffect(() => {
+    if (!persistedCatMeta) return;
+    const cleaned: CategoryMetaMap = {};
+    for (const [name, meta] of Object.entries(persistedCatMeta)) {
+      const key = normalizeCategory(name);
+      if (key) cleaned[key] = meta;
+    }
+    setCatMeta(cleaned);
+  }, [persistedCatMeta]);
+
+  const itemsDirty = JSON.stringify(draft) !== JSON.stringify(items ?? []);
+  const catsDirty = useMemo(() => {
+    const norm = (m: CategoryMetaMap) => JSON.stringify(
+      Object.entries(m)
+        .map(([k, v]) => [normalizeCategory(k), v.color ?? ""] as [string, string])
+        .filter(([k]) => k)
+        .sort((a, b) => a[0].localeCompare(b[0])),
+    );
+    return norm(catMeta) !== norm(persistedCatMeta ?? {});
+  }, [catMeta, persistedCatMeta]);
+  const dirty = itemsDirty || catsDirty;
 
   const itemCategories = useMemo(() => {
-    const s = new Set(draft.map((d) => d.category ?? "").filter(Boolean));
-    return Array.from(s).sort();
+    const s = new Set(draft.map((d) => normalizeCategory(d.category ?? "")).filter(Boolean));
+    return Array.from(s);
   }, [draft]);
 
   const categories = useMemo(() => {
-    const merged = new Set([...itemCategories, ...extraCategories.map((c) => c.trim()).filter(Boolean)]);
-    return Array.from(merged).sort();
-  }, [extraCategories, itemCategories]);
+    const merged = new Set([...itemCategories, ...Object.keys(catMeta)]);
+    // Hierarchical sort: top-level card first, then its subcategories.
+    return Array.from(merged).sort(
+      (a, b) => topLevelOf(a).localeCompare(topLevelOf(b)) || (subLevelOf(a) ?? "").localeCompare(subLevelOf(b) ?? ""),
+    );
+  }, [itemCategories, catMeta]);
+
+  const topLevelCategories = useMemo(
+    () => Array.from(new Set(categories.map(topLevelOf).filter(Boolean))).sort(),
+    [categories],
+  );
 
   const groups = useMemo(() => {
     const map = new Map<string, TrackedItem[]>();
     for (const it of draft) {
-      const key = it.category?.trim() || "";
+      const key = normalizeCategory(it.category ?? "");
       if (!map.has(key)) map.set(key, []);
       map.get(key)!.push(it);
     }
@@ -63,6 +160,12 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     return groups.filter(([k]) => k === activeTab || (activeTab === "" && k === ""));
   }, [activeTab, groups]);
 
+  // A deleted/renamed-away tab shouldn't leave the panel showing nothing.
+  useEffect(() => {
+    if (["__all__", "__needscfg__", ""].includes(activeTab)) return;
+    if (!groups.some(([k]) => k === activeTab)) setActiveTab("__all__");
+  }, [groups, activeTab]);
+
   function removeItem(label: string) {
     setConfirmRemoveLabel(label);
   }
@@ -76,7 +179,13 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   function startEdit(it: TrackedItem) {
     setEditingLabel(it.label);
-    setEditForm({ label: it.label, packSize: it.pack_size ? String(it.pack_size) : "", unitLabel: it.unit_label ?? "" });
+    setEditForm({
+      label: it.label,
+      packSize: it.pack_size ? String(it.pack_size) : "",
+      unitLabel: it.unit_label ?? "",
+      category: normalizeCategory(it.category ?? ""),
+      color: it.color ?? "",
+    });
   }
 
   function cancelEdit() {
@@ -90,11 +199,21 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     const parsedPack = parseInt(editForm.packSize, 10);
     const packSize = editForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
     const unitLabel = packSize ? (editForm.unitLabel.trim() || undefined) : undefined;
-    setDraft((d) => d.map((it) =>
+    const newCategory = normalizeCategory(editForm.category) || undefined;
+    const prev = draft.find((it) => it.label === editingLabel);
+    const oldCategory = normalizeCategory(prev?.category ?? "");
+    const next = draft.map((it) =>
       it.label === editingLabel
-        ? { ...it, label: newLabel, pack_size: packSize, unit_label: unitLabel }
+        ? { ...it, label: newLabel, pack_size: packSize, unit_label: unitLabel, category: newCategory, color: editForm.color || undefined }
         : it,
-    ));
+    );
+    setDraft(next);
+    // Keep the source card alive when a move empties it (persists on Save).
+    if (oldCategory && oldCategory !== (newCategory ?? "") &&
+        !next.some((it) => normalizeCategory(it.category ?? "") === oldCategory) &&
+        !catMeta[oldCategory]) {
+      setCatMeta((m) => ({ ...m, [oldCategory]: {} }));
+    }
     setEditingLabel(null);
   }
 
@@ -108,27 +227,44 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   function addItemToCategory(cat: string) {
     const label = addForm.label.trim();
-    const finalCat = cat.trim();
+    const finalCat = normalizeCategory(cat);
     if (!label || draft.some((d) => d.label.toLowerCase() === label.toLowerCase())) return;
     if (!finalCat) return;
     const parsedPack = parseInt(addForm.packSize, 10);
     const packSize = addForm.packSize.trim() && !isNaN(parsedPack) && parsedPack > 0 ? parsedPack : undefined;
     const unitLabel = packSize ? (addForm.unitLabel.trim() || undefined) : undefined;
     setDraft((d) => [...d, { label, qty_default: 1, category: finalCat, pack_size: packSize, unit_label: unitLabel }]);
-    setExtraCategories((current) => current.filter((category) => category !== finalCat));
     setAddForm({ label: "", packSize: "", unitLabel: "" });
     setAddingToCategory(null);
   }
 
   function addCategory() {
-    const category = newCategoryName.trim();
+    // The form can never nest two levels: with a parent chosen, ">" in the
+    // name is stripped; a hand-typed "A > B" with no parent still works.
+    const rawName = newCategoryParent ? newCategoryName.split(">").join(" ") : newCategoryName;
+    const category = normalizeCategory(newCategoryParent ? `${newCategoryParent} > ${rawName}` : rawName);
     if (!category) return;
     if (categories.some((existing) => existing.toLowerCase() === category.toLowerCase())) return;
-    setExtraCategories((current) => [...current, category]);
+    setCatMeta((m) => ({ ...m, [category]: { ...(newCategoryColor ? { color: newCategoryColor } : {}) } }));
     setNewCategoryName("");
+    setNewCategoryParent("");
+    setNewCategoryColor("");
     setActiveTab(category);
     setAddingToCategory(category);
     setAddForm({ label: "", packSize: "", unitLabel: "" });
+  }
+
+  function removeEmptyCategory(cat: string) {
+    setCatMeta((m) => {
+      const next = { ...m };
+      delete next[cat];
+      return next;
+    });
+    if (colorPickerFor === cat) setColorPickerFor(null);
+  }
+
+  function setCategoryColor(cat: string, color: string) {
+    setCatMeta((m) => ({ ...m, [cat]: { ...(color ? { color } : {}) } }));
   }
 
   function applyBulkImport() {
@@ -143,11 +279,39 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
         if (!label) continue;
         if (draft.some((d) => d.label.toLowerCase() === label.toLowerCase())) continue;
         if (incoming.some((d) => d.label.toLowerCase() === label.toLowerCase())) continue;
-        incoming.push({ label, qty_default: 1, category: cat.trim() || undefined });
+        incoming.push({ label, qty_default: 1, category: normalizeCategory(cat) || undefined });
       }
     }
     if (incoming.length) setDraft((d) => [...d, ...incoming]);
     setImportText(""); setImportOpen(false);
+  }
+
+  function handleSave() {
+    const cleanItems = draft.map((it) => {
+      const cat = normalizeCategory(it.category ?? "");
+      return { ...it, category: cat || undefined };
+    });
+    const seen = new Set<string>();
+    const cleanMeta: CategoryMetaMap = {};
+    for (const [name, meta] of Object.entries(catMeta)) {
+      const key = normalizeCategory(name);
+      if (!key || seen.has(key.toLowerCase())) continue;
+      seen.add(key.toLowerCase());
+      cleanMeta[key] = { ...(meta.color ? { color: meta.color } : {}) };
+    }
+    save.mutate(cleanItems);
+    saveCats.mutate(cleanMeta);
+  }
+
+  function handleRevert() {
+    setDraft(items ?? []);
+    const cleaned: CategoryMetaMap = {};
+    for (const [name, meta] of Object.entries(persistedCatMeta ?? {})) {
+      const key = normalizeCategory(name);
+      if (key) cleaned[key] = meta;
+    }
+    setCatMeta(cleaned);
+    setEditingLabel(null);
   }
 
   const unsavedCount = useMemo(() => {
@@ -156,7 +320,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     return a.filter((x, i) => JSON.stringify(x) !== JSON.stringify(b[i])).length;
   }, [draft, items]);
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
+  const saving = save.isPending || saveCats.isPending;
+
+  if (isLoading || catsLoading) return <p className="text-sm text-slate-500">Loading…</p>;
 
   return (
     <div className="space-y-4">
@@ -174,11 +340,15 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          {dirty && <span className="text-xs font-medium text-amber-400">{unsavedCount} unsaved</span>}
-          <button className="btn-primary" disabled={disabled || !dirty || save.isPending} onClick={() => save.mutate(draft)}>
-            {save.isPending ? "Saving…" : <><Save className="mr-1 h-3.5 w-3.5" /> Save</>}
+          {dirty && (
+            <span className="text-xs font-medium text-amber-400">
+              {itemsDirty ? `${unsavedCount} unsaved` : "category changes"}
+            </span>
+          )}
+          <button className="btn-primary" disabled={disabled || !dirty || saving} onClick={handleSave}>
+            {saving ? "Saving…" : <><Save className="mr-1 h-3.5 w-3.5" /> Save</>}
           </button>
-          <button className="btn-ghost" disabled={!dirty || save.isPending} onClick={() => { setDraft(items ?? []); setEditingLabel(null); }}>
+          <button className="btn-ghost" disabled={!dirty || saving} onClick={handleRevert}>
             <RotateCcw className="mr-1 h-3.5 w-3.5" /> Revert
           </button>
         </div>
@@ -186,7 +356,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
       {/* Category filter tabs */}
       <div className="flex flex-wrap gap-1 border-b border-slate-800 pb-1.5">
-        {[["__all__", `All (${draft.length})`], ...groups.map(([k, its]) => [k, `${k || "None"} (${(its as TrackedItem[]).length})`])].map(([tab, label]) => (
+        {[["__all__", `All (${draft.length})`], ...groups.map(([k, its]) => [k, `${(k || "None").replace(" > ", " › ")} (${(its as TrackedItem[]).length})`])].map(([tab, label]) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={clsx("rounded-md px-3 py-1 text-xs font-semibold transition-colors",
               activeTab === tab ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200")}>
@@ -209,19 +379,31 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
         </div>
       )}
 
-      {/* Add category */}
+      {/* Add category / subcategory */}
       <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add category</p>
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add category / subcategory</p>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:items-end">
-          <div className="min-w-0 sm:min-w-[14rem] sm:flex-1">
-            <label className="label">Category name</label>
-            <input className="input" placeholder="New category" value={newCategoryName} disabled={disabled}
+          <div className="min-w-0 sm:min-w-[12rem] sm:flex-1">
+            <label className="label">Name</label>
+            <input ref={newCategoryInputRef} className="input" placeholder="New category" value={newCategoryName} disabled={disabled}
               onChange={(e) => setNewCategoryName(e.target.value)}
               onKeyDown={(e) => { if (e.key === "Enter") addCategory(); }} />
+          </div>
+          <div className="sm:min-w-[10rem]">
+            <label className="label">Nest under</label>
+            <select className="input w-full" value={newCategoryParent} disabled={disabled}
+              onChange={(e) => setNewCategoryParent(e.target.value)}>
+              <option value="">— Top level —</option>
+              {topLevelCategories.map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
           <button className="btn-primary w-full sm:w-auto" disabled={disabled || !newCategoryName.trim()} onClick={addCategory}>
             <Plus className="mr-1 h-3.5 w-3.5" /> Add
           </button>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs text-slate-500">Color</span>
+          <ColorSwatchPicker value={newCategoryColor} onChange={setNewCategoryColor} disabled={disabled} />
         </div>
       </div>
 
@@ -229,22 +411,82 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       {visibleGroups.map(([cat, groupItems]) => {
         const catItems = groupItems as TrackedItem[];
         const isAdding = addingToCategory === cat;
+        const sub = subLevelOf(cat);
+        const isSub = sub !== null;
         return (
-          <div key={cat || "__none__"} className="overflow-hidden rounded-lg border border-slate-800 bg-slate-900">
+          <div
+            key={cat || "__none__"}
+            className={clsx(
+              "overflow-hidden rounded-lg border border-slate-800 bg-slate-900",
+              isSub && "ml-4 border-l-2 border-l-blue-800/60",
+            )}
+          >
             <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-4 py-2.5">
-              <span className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                {cat || "Uncategorised"}
-                <span className="ml-2 font-normal text-slate-600">{catItems.length}</span>
+              <span className="flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+                {cat !== "" && (
+                  <button
+                    type="button"
+                    disabled={disabled}
+                    title="Category color — a chosen color applies where the app doesn't already have a fixed color for this name"
+                    onClick={() => setColorPickerFor(colorPickerFor === cat ? null : cat)}
+                    className={clsx("h-3.5 w-3.5 shrink-0 rounded-full transition-transform hover:scale-125", cardDotClass(cat, catMeta))}
+                  />
+                )}
+                <span className="truncate">
+                  {isSub ? (
+                    <>
+                      <span className="font-normal text-slate-600">{topLevelOf(cat)} › </span>
+                      {sub}
+                    </>
+                  ) : (
+                    cat || "Uncategorised"
+                  )}
+                </span>
+                <span className="font-normal text-slate-600">{catItems.length}</span>
               </span>
-              {!disabled && cat !== "" && (
-                <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
-                  onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", packSize: "", unitLabel: "" }); }}>
-                  <Plus className="h-3 w-3" /> {isAdding ? "Cancel" : "Add Item"}
-                </button>
-              )}
+              <div className="flex shrink-0 items-center gap-1.5">
+                {!disabled && cat !== "" && !isSub && (
+                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                    title="Add a subcategory under this category"
+                    onClick={() => {
+                      setNewCategoryParent(cat);
+                      setNewCategoryName("");
+                      newCategoryInputRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+                      window.setTimeout(() => newCategoryInputRef.current?.focus(), 300);
+                    }}>
+                    <Plus className="h-3 w-3" /> Sub
+                  </button>
+                )}
+                {!disabled && cat !== "" && catItems.length === 0 && (
+                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-red-900/50 hover:text-red-300"
+                    title="Remove this empty category"
+                    onClick={() => removeEmptyCategory(cat)}>
+                    <Trash2 className="h-3 w-3" />
+                  </button>
+                )}
+                {!disabled && cat !== "" && (
+                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                    onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", packSize: "", unitLabel: "" }); }}>
+                    <Plus className="h-3 w-3" /> {isAdding ? "Cancel" : "Add Item"}
+                  </button>
+                )}
+              </div>
             </div>
 
+            {colorPickerFor === cat && !disabled && (
+              <div className="flex items-center gap-2 border-b border-slate-800/60 bg-slate-800/20 px-4 py-2">
+                <span className="text-xs text-slate-500">Color</span>
+                <ColorSwatchPicker
+                  value={catMeta[cat]?.color ?? ""}
+                  onChange={(c) => setCategoryColor(cat, c)}
+                />
+              </div>
+            )}
+
             <div className="flex flex-wrap gap-2 p-3">
+              {catItems.length === 0 && (
+                <span className="text-xs italic text-slate-600">No items yet.</span>
+              )}
               {catItems.map((it) => {
                 const isEditing = editingLabel === it.label;
                 const hasPack = it.pack_size != null && it.pack_size > 0;
@@ -259,6 +501,14 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                           onChange={(e) => setEditForm({ ...editForm, label: e.target.value })}
                           onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
                       </div>
+                      <div className="min-w-0 flex-1">
+                        <label className="label">Category</label>
+                        <select className="input w-full" value={editForm.category}
+                          onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                          <option value="">Uncategorised</option>
+                          {categories.map((c) => <option key={c} value={c}>{c.replace(" > ", " › ")}</option>)}
+                        </select>
+                      </div>
                       <div>
                         <label className="label">Pieces / unit</label>
                         <input type="number" min={1} className="input w-20" placeholder="12" value={editForm.packSize}
@@ -272,6 +522,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
                         </div>
                       )}
+                      <div className="flex w-full items-center gap-2">
+                        <span className="text-xs text-slate-500">Color</span>
+                        <ColorSwatchPicker value={editForm.color} onChange={(c) => setEditForm({ ...editForm, color: c })} />
+                      </div>
                       <div className="flex gap-1 pb-0.5">
                         <button className="btn-primary text-xs px-2 py-1" onClick={commitEdit}><Save className="h-3 w-3" /></button>
                         <button className="btn-ghost text-xs px-2 py-1" onClick={cancelEdit}><X className="h-3 w-3" /></button>
@@ -282,6 +536,9 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
                 return (
                   <div key={it.label} className="group flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800 pl-3 pr-1 py-1 text-sm text-slate-200 transition-colors hover:border-slate-600">
+                    {it.color && COLOR_PRESETS[it.color] && (
+                      <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", COLOR_PRESETS[it.color].swatch)} />
+                    )}
                     <button className="truncate font-medium leading-none max-w-[8rem]" disabled={disabled} onClick={() => startEdit(it)} title="Edit item">
                       {it.label}
                     </button>
@@ -362,8 +619,8 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       {importOpen && (
         <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-2">
           <p className="text-xs font-semibold text-slate-300">Bulk import</p>
-          <p className="text-xs text-slate-500">Paste a JSON object mapping category names to arrays of item labels:</p>
-          <pre className="rounded bg-slate-800/60 px-3 py-2 text-xs text-slate-400">{`{\n  "Dust Mops": ["24\"", "36\"", "46\""],\n  "Towels": ["Terry", "Glass", "Premium"]\n}`}</pre>
+          <p className="text-xs text-slate-500">Paste a JSON object mapping category names to arrays of item labels (use "Top &gt; Sub" for subcategories):</p>
+          <pre className="rounded bg-slate-800/60 px-3 py-2 text-xs text-slate-400">{`{\n  "Bulk > Dust Mops": ["24\"", "36\"", "46\""],\n  "Towels": ["Terry", "Glass", "Premium"]\n}`}</pre>
           <textarea className="input w-full font-mono text-xs" rows={5} placeholder='{ "Category": ["item1", "item2"] }'
             value={importText} onChange={(e) => setImportText(e.target.value)} />
           <div className="flex gap-2">

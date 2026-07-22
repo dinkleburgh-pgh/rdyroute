@@ -11,6 +11,7 @@ import clsx from "clsx";
 import {
   useBoard,
   useTrackedItems,
+  useTrackedItemCategories,
   useShortages,
   useShortageDates,
   useCreateShortage,
@@ -25,7 +26,7 @@ import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 import ItemFirstEntry from "../components/shorts/ItemFirstEntry";
-import HierarchyPicker, { CAT_CHIP_COLORS, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
+import HierarchyPicker, { categoryChipClass, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
 
@@ -259,6 +260,7 @@ export function ShortageLogger({
     setQuickKey((k) => k + 1);
   }
   const { data: trackedRaw = [] } = useTrackedItems();
+  const { data: catMeta } = useTrackedItemCategories();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
 
   async function logItem(category: string, detail: string, qty: number) {
@@ -295,7 +297,7 @@ export function ShortageLogger({
                   onClick={() => handleQuickTap(item.category, item.detail)}
                   className={clsx(
                     "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
-                    CAT_CHIP_COLORS[item.category] ?? "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                    categoryChipClass(item.category, catMeta),
                   )}
                 >
                   {item.category} {item.detail}
@@ -347,7 +349,7 @@ export function ShortageLogger({
                   onClick={() => handleQuickTap(item.category, item.detail)}
                   className={clsx(
                     "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
-                    CAT_CHIP_COLORS[item.category] ?? "bg-slate-800 text-slate-300 hover:bg-slate-700",
+                    categoryChipClass(item.category, catMeta),
                   )}
                 >
                   {item.category} {item.detail}
