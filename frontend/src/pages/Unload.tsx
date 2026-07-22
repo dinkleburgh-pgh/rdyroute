@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
-import { buildPrevDayCoverage, getCoverageRouteNumber, isScheduledOff, previousRunDate, takenOverRouteNumber } from "../utils/truckStatus";
+import { buildOperationalDayContext, buildPrevDayCoverage, countUnloadedFromContext, getCoverageRouteNumber, isScheduledOff, previousRunDate, takenOverRouteNumber } from "../utils/truckStatus";
 import CoverageTag from "../components/CoverageTag";
 import OverbatchedChip from "../components/OverbatchedChip";
 import type { TruckWithState } from "../types";
@@ -195,15 +195,15 @@ export default function Unload() {
     return arr;
   }, [unloaded, unloadedSort]);
 
-  // Header count: everything not yet unloaded across every dirty-family section.
-  // The dirty memos keep recently-unloaded trucks pinned (with Undo), so exclude
-  // those; unfinished already excludes them.
-  const notDone = (t: TruckWithState) => !recentlyUnloaded.has(t.truck_number);
-  const toGo =
-    requested.filter(notDone).length +
-    unfinished.length +
-    dirtyCoverages.filter(notDone).length +
-    dirtyRoute.filter(notDone).length;
+  // Header "N to go" badge.
+  // Sticks to the SCHEDULE count — same unload-day roster and done-counting
+  // as the sidebar bar / Day Overview / Report. The card sections below may
+  // show EXTRA off-schedule dirty/held trucks so nothing is hidden, but those
+  // must not inflate "N to go" past the schedule.
+  const toGo = useMemo(() => {
+    const ctx = buildOperationalDayContext(data ?? [], unloadsDay, holidayUnload, false, "unload");
+    return Math.max(0, ctx.activeTrucks.length - countUnloadedFromContext(ctx));
+  }, [data, unloadsDay, holidayUnload]);
 
   async function assignBatch(truckNumber: number) {
     await assign.mutateAsync({

@@ -162,12 +162,9 @@ function unloadPage() {
     if (t.truck_type === "Spare") return false;
     return holidayUnload || !isScheduledOff(t, unloadsDay);
   });
-  const dirtyFamily = allTrucks.filter((t) => {
-    const s = t.state?.status;
-    return s !== "unloaded" && s !== "loaded" && s !== "unfinished";
-  });
-  const unfinished = allTrucks.filter((t) => t.state?.status === "unfinished");
-  const toGo = dirtyFamily.length + unfinished.length;
+  // Badge = shared unload-day pending (Unload.tsx toGo), NOT the card-section
+  // sum — the sections deliberately show extra off-schedule dirty/held trucks.
+  const toGo = Math.max(0, unloadCtx.activeTrucks.length - unloadDone);
   const tally = allTrucks.filter((t) => {
     const s = t.state?.status;
     if (!(s === "unloaded" || s === "in_progress" || s === "loaded")) return false;
@@ -210,7 +207,7 @@ check("WARN", "sidebar OOS == Board oos grid", buckets.oos, boardFiltered("oos")
 check("WARN", "Day Overview unload cards == unload bar total", runDayUnloadCards().size, unloadCtx.activeTrucks.length, "grids fold in historical-fallback coverage the snapshot lacks");
 check("WARN", "Day Overview load cards == load bar total", runDayLoadCards().size, loadCtx.activeTrucks.length, "grid shows extra-schedule cards (holds etc.) by design");
 const up = unloadPage();
-check("WARN", "Unload page toGo == unload bar pending", up.toGo, unloadCtx.activeTrucks.length - unloadDone, "roster includes held/dirty extra-schedule trucks by design");
+check("HARD", "Unload page toGo == unload bar pending", up.toGo, unloadCtx.activeTrucks.length - unloadDone, "badge must stick to the schedule count");
 
 // Structural: no takeover pair double-represented on a single surface.
 let pairFails = 0;
