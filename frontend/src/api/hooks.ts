@@ -594,6 +594,37 @@ export function useCreateShortage() {
   });
 }
 
+export function useBulkCreateShortages() {
+  return useMutation({
+    mutationFn: async (payload: {
+      run_date: string;
+      item_category: string;
+      item_detail?: string;
+      initials?: string;
+      initials_ts?: number | null;
+      entries: { truck_number: number; quantity: number }[];
+    }): Promise<Shortage[] | { queued: true }> => {
+      // Whole batch queues as ONE mutation offline (replayed intact on flush).
+      if (!navigator.onLine) {
+        await offlineQueue.enqueue("bulk_create_shortage", "/shorts/bulk", "POST", payload);
+        return { queued: true };
+      }
+      try {
+        return (await api.post<Shortage[]>("/shorts/bulk", payload)).data;
+      } catch (err) {
+        if (offlineQueue.isNetworkError(err)) {
+          await offlineQueue.enqueue("bulk_create_shortage", "/shorts/bulk", "POST", payload);
+          return { queued: true };
+        }
+        throw err;
+      }
+    },
+    onSuccess: () => {
+      // Realtime handled by WebSocket broadcast; 30s staleTime on useShortages is fallback.
+    },
+  });
+}
+
 export function useUpdateShortage() {
   const qc = useQueryClient();
   return useMutation({

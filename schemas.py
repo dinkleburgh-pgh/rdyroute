@@ -201,6 +201,22 @@ class ShortageCreate(BaseModel):
     initials_ts: float | None = None
 
 
+class ShortageBulkEntry(BaseModel):
+    truck_number: int = Field(..., ge=1, le=999)
+    quantity: int = Field(default=1, ge=1)
+
+
+class ShortageBulkCreate(BaseModel):
+    """One item shorted across several trucks (item-first end-of-shift entry)."""
+
+    run_date: date
+    item_category: str = Field(..., min_length=1, max_length=120)
+    item_detail: str = Field(default="", max_length=120)
+    initials: str = Field(default="", max_length=20)
+    initials_ts: float | None = None
+    entries: list[ShortageBulkEntry] = Field(..., min_length=1, max_length=200)
+
+
 class ShortageUpdate(BaseModel):
     item_category: str | None = Field(default=None, max_length=120)
     item_detail: str | None = Field(default=None, max_length=120)

@@ -18,7 +18,15 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers.auth import get_current_user, require_non_guest
 from models import Shortage, User
-from schemas import ShortageCategoryPoint, ShortageCreate, ShortageDailyPoint, ShortageOut, ShortageSummary, ShortageUpdate
+from schemas import (
+    ShortageBulkCreate,
+    ShortageCategoryPoint,
+    ShortageCreate,
+    ShortageDailyPoint,
+    ShortageOut,
+    ShortageSummary,
+    ShortageUpdate,
+)
 from ws_manager import manager
 
 router = APIRouter(prefix="/shorts", tags=["shorts"])
@@ -84,6 +92,41 @@ def create_shortage(payload: ShortageCreate, background_tasks: BackgroundTasks, 
         {"type": "shortage_updated", "run_date": str(payload.run_date)},
     )
     return row
+
+
+@router.post("/bulk", response_model=list[ShortageOut], status_code=status.HTTP_201_CREATED)
+def create_shortages_bulk(
+    payload: ShortageBulkCreate,
+    background_tasks: BackgroundTasks,
+    _user: User = Depends(require_non_guest),
+    db: Session = Depends(get_db),
+):
+    """One shortage row per entry for a single item/run-date (item-first bulk entry).
+
+    Semantically identical to N single POSTs — no dedupe or merging — but
+    atomic, and emits ONE shortage_updated broadcast instead of N.
+    """
+    rows = [
+        Shortage(
+            truck_number=entry.truck_number,
+            run_date=payload.run_date,
+            item_category=payload.item_category,
+            item_detail=payload.item_detail,
+            quantity=entry.quantity,
+            initials=payload.initials,
+            initials_ts=payload.initials_ts,
+        )
+        for entry in payload.entries
+    ]
+    db.add_all(rows)
+    db.commit()
+    for row in rows:
+        db.refresh(row)
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "shortage_updated", "run_date": str(payload.run_date)},
+    )
+    return rows
 
 
 @router.patch("/{shortage_id}", response_model=ShortageOut)
