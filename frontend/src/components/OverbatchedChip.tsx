@@ -7,7 +7,7 @@
 export default function OverbatchedChip({ show }: { show: boolean }) {
   if (!show) return null;
   return (
-    <span className="inline-flex shrink-0 items-center rounded-full border border-red-500/40 bg-red-500/15 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-red-400">
+    <span className="inline-flex shrink-0 items-center rounded-full border border-red-500/40 bg-red-500/15 px-1 py-px text-[8px] font-bold uppercase tracking-wide text-red-400">
       Overbatched
     </span>
   );
