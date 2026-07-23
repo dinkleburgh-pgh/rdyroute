@@ -126,8 +126,12 @@ export default function RunDay() {
   //  - an "off" truck that physically came back dirty/unloaded shows that
   //    underlying badge (a dirty truck still needs unloading even if it's off
   //    the next load day), so sort it by that — keeping dirty trucks at the top.
-  function displayStatusFor(t: TruckWithState, dayNum: number, holiday: boolean): TruckStatus {
-    const cov = t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+  function displayStatusFor(t: TruckWithState, dayNum: number, holiday: boolean, role: "load" | "unload" = "load"): TruckStatus {
+    const covRaw = t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+    // Unload side: only a SPARE cover stands in. A route-truck carrier's
+    // same-day coverage describes TOMORROW's load — the covered truck ran
+    // its route today and sorts/displays by its own physical state.
+    const cov = role === "unload" && covRaw?.truck_type !== "Spare" ? undefined : covRaw;
     const base = cov ?? t;
     const eff = effectiveStatus(base, dayNum, holiday);
     if (eff === "off" && (base.state?.status === "dirty" || base.state?.status === "unloaded")) {
@@ -147,8 +151,8 @@ export default function RunDay() {
         .sort((a, b) => {
           // Clamp loaded→unloaded in unload sort: from this section's POV,
           // "loaded" is just a downstream state of "unloaded".
-          const sa = displayStatusFor(a, unloadsDay, holidayUnload);
-          const sb = displayStatusFor(b, unloadsDay, holidayUnload);
+          const sa = displayStatusFor(a, unloadsDay, holidayUnload, "unload");
+          const sb = displayStatusFor(b, unloadsDay, holidayUnload, "unload");
           const ka: TruckStatus = sa === "loaded" ? "unloaded" : sa;
           const kb: TruckStatus = sb === "loaded" ? "unloaded" : sb;
           const oa = UNLOAD_SORT[ka] ?? 9;
@@ -434,10 +438,14 @@ export default function RunDay() {
               const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
               const displayTruck = spareCover ?? t;
               const ownRaw = effectiveStatus(displayTruck, unloadsDay, holidayUnload);
-              // Non-spare (route-swap) cover still reflects the cover's status on
-              // the route's own card.
-              const raw = !spareCover && coveringTruck
-                ? effectiveStatus(coveringTruck, unloadsDay, holidayUnload)
+              // A non-spare cover's status substitutes ONLY when it covered the
+              // PREVIOUS load day (the covered truck genuinely didn't run and
+              // its cover's unload progress is its progress). A cover entered
+              // TODAY describes tomorrow's load — the covered truck ran today
+              // and must show its own pending state (32 cards read done while
+              // the bar said 29/32, 2026-07-22).
+              const raw = !spareCover && prevCover
+                ? effectiveStatus(prevCover, unloadsDay, holidayUnload)
                 : ownRaw;
               // The unload lifecycle ends at "Unloaded". Once a truck moves on
               // to "Loaded" (start of the load lifecycle), keep displaying it
