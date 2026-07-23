@@ -550,11 +550,15 @@ export function buildOperationalDayContext(
     // A taken-over route did NOT run, no matter what its own flags say — the
     // is_oos gate below missed covers whose covered truck had is_oos cleared.
     if (takeoverByRoute.has(truck.truck_number)) continue;
-    // An OOS route truck whose route is being covered by a route-swap truck
-    // does not run — its freight loads on the cover — so it's not part of the
-    // load/unload count. Uncovered OOS trucks are kept: still physically here
-    // to handle. Mirrors Unload.tsx's allTrucks filter.
-    if ((truck.is_oos || truck.state?.status === "oos") && coveredByAnyRoute.has(truck.truck_number)) continue;
+    // LOAD role only: an OOS route truck whose route is being covered does
+    // not load tonight — its freight rides the cover — so it leaves the load
+    // count. It must NOT leave the UNLOAD count: coverage markers exist only
+    // for the day they were entered (day-init never carries oos_spare_route
+    // forward), so a covered-OOS truck on today's board was covered TONIGHT
+    // for tomorrow — it ran its route today and still needs unloading
+    // (routes 91/4/69 on 2026-07-22: unload bar read 29/29 instead of x/32).
+    // Uncovered OOS trucks are kept in both roles: still physically here.
+    if (dayRole === "load" && (truck.is_oos || truck.state?.status === "oos") && coveredByAnyRoute.has(truck.truck_number)) continue;
     activeTrucks.push(truck);
   }
 
