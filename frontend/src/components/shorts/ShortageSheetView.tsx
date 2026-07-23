@@ -6,19 +6,48 @@
  *   Sheet · reads like the paper short sheet: one block per truck listing
  *          only the items that truck was actually short.
  */
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import type { Shortage, TruckWithState } from "../../types";
+import type { TrackedItem } from "../../api/hooks";
 import { useTrackedItemCategories, useTrackedItems } from "../../api/hooks";
-import { categoryChipClass, categoryDotClass, DEFAULT_TRACKED_ITEMS, findTrackedItem } from "./HierarchyPicker";
+import {
+  categoryChipClass,
+  categoryDotClass,
+  DEFAULT_TRACKED_ITEMS,
+  findTrackedItem,
+  MAT_SIZES_S,
+  subCatOf,
+  topCatOf,
+} from "./HierarchyPicker";
 
 interface SheetRow {
+  /** Top-level family: Mats / Bulk / Paper / Hygiene … */
+  group: string;
+  /** The logged category: 3x10 / 3x5 / 4x6 / Towels / Aprons / Paper … */
   category: string;
   detail: string;
+  /** Fully-qualified item name, e.g. "3x10 Onyx", "Aprons Black". */
   label: string;
   unit: string | null;
   byTruck: Map<number, number>;
   total: number;
+}
+
+// Families read in workflow order; anything unknown sorts after, alphabetically.
+const GROUP_ORDER = ["Mats", "Bulk", "Paper", "Hygiene"];
+
+/**
+ * The family a logged category belongs to. Mat sizes (3x10/3x5/4x6) roll up
+ * into "Mats"; a catalog SUBcategory (Towels, Aprons, Dust Mops) rolls up into
+ * its parent (Bulk); a top-level category is its own family.
+ */
+function superGroupOf(category: string, items: TrackedItem[]): string {
+  if (MAT_SIZES_S.has(category)) return "Mats";
+  for (const i of items) {
+    if (subCatOf(i) === category) return topCatOf(i);
+  }
+  return category;
 }
 
 export default function ShortageSheetView({
@@ -42,9 +71,12 @@ export default function ShortageSheetView({
       let row = rowMap.get(key);
       if (!row) {
         row = {
+          group: superGroupOf(s.item_category, items),
           category: s.item_category,
           detail: s.item_detail,
-          label: s.item_detail || s.item_category,
+          // Always fully qualified — "Onyx" alone is ambiguous across the
+          // three mat sizes, "Black" across mats/aprons/towels.
+          label: s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category,
           unit: findTrackedItem(items, s.item_category, s.item_detail)?.unit_label ?? null,
           byTruck: new Map(),
           total: 0,
@@ -55,11 +87,18 @@ export default function ShortageSheetView({
       row.total += s.quantity;
     }
     const trucks = [...truckSet].sort((a, b) => a - b);
-    // Rows grouped by category (categories alphabetical, items within too) but
-    // rendered as ONE flat list — the category rides along in the item cell so
-    // it costs no vertical space.
+    // Ordered by FAMILY (Mats → Bulk → Paper → Hygiene), then by the category
+    // inside it (3x10 → 3x5 → 4x6), then by item.
+    const groupRank = (g: string) => {
+      const i = GROUP_ORDER.indexOf(g);
+      return i === -1 ? GROUP_ORDER.length : i;
+    };
     const rows = [...rowMap.values()].sort(
-      (a, b) => a.category.localeCompare(b.category) || a.label.localeCompare(b.label),
+      (a, b) =>
+        groupRank(a.group) - groupRank(b.group) ||
+        a.group.localeCompare(b.group) ||
+        a.category.localeCompare(b.category) ||
+        a.label.localeCompare(b.label),
     );
     const truckTotals = new Map<number, number>();
     for (const row of rows) {
@@ -129,7 +168,7 @@ export default function ShortageSheetView({
               <tr>
                 {/* Sticky on the TH itself — a sticky <thead> doesn't hold in
                     every browser, which made the header drift while scrolling. */}
-                <th className="sticky left-0 top-0 z-30 w-[10.5rem] min-w-[10.5rem] border-b border-r border-slate-700 bg-slate-900 px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                <th className="sticky left-0 top-0 z-30 w-[12.5rem] min-w-[12.5rem] border-b border-r border-slate-700 bg-slate-900 px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
                   Item
                 </th>
                 {trucks.map((n) => (
@@ -148,49 +187,57 @@ export default function ShortageSheetView({
             </thead>
             <tbody>
               {rows.map((row, ri) => {
-                const prevCat = ri > 0 ? rows[ri - 1].category : null;
-                const newCat = row.category !== prevCat;
+                const newGroup = row.group !== (ri > 0 ? rows[ri - 1].group : null);
+                const newCat = row.category !== (ri > 0 ? rows[ri - 1].category : null);
                 return (
-                  <tr key={`${row.category}-${row.detail}`} className={ri % 2 ? "bg-slate-900/30" : undefined}>
-                    <td
-                      className={clsx(
-                        "sticky left-0 z-10 border-r border-slate-800 bg-slate-900 px-2 py-0.5",
-                        newCat && ri > 0 && "border-t border-t-slate-700",
-                      )}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        <span
-                          className={clsx("h-2 w-2 shrink-0 rounded-full", categoryDotClass(row.category, catMeta))}
-                          title={row.category}
-                        />
-                        <span className="truncate font-medium text-slate-200">{row.label}</span>
-                        {row.unit && <span className="shrink-0 text-[9px] text-slate-600">{row.unit}s</span>}
-                      </span>
-                    </td>
-                    {trucks.map((n) => {
-                      const q = row.byTruck.get(n);
-                      return (
+                  <Fragment key={`${row.category}-${row.detail}`}>
+                    {newGroup && (
+                      <tr>
                         <td
-                          key={n}
-                          className={clsx(
-                            "border-b border-slate-800/50 px-0.5 py-0.5 text-center font-mono tabular-nums",
-                            newCat && ri > 0 && "border-t border-t-slate-700",
-                            q != null ? "text-sm font-black text-amber-300" : "text-slate-800",
-                          )}
+                          colSpan={trucks.length + 2}
+                          className="border-y border-slate-700 bg-slate-900/95 px-2 py-[3px]"
                         >
-                          {q ?? ""}
+                          <span className="sticky left-2 inline-block text-[9px] font-black uppercase tracking-[0.15em] text-slate-300">
+                            {row.group}
+                          </span>
                         </td>
-                      );
-                    })}
-                    <td
-                      className={clsx(
-                        "sticky right-0 z-10 border-b border-l border-slate-800 bg-slate-900 px-1 py-0.5 text-center font-mono text-sm font-black tabular-nums text-slate-100",
-                        newCat && ri > 0 && "border-t border-t-slate-700",
-                      )}
-                    >
-                      {row.total}
-                    </td>
-                  </tr>
+                      </tr>
+                    )}
+                    <tr className={ri % 2 ? "bg-slate-900/30" : undefined}>
+                      <td
+                        className={clsx(
+                          "sticky left-0 z-10 border-r border-slate-800 bg-slate-900 px-2 py-0.5",
+                          newCat && !newGroup && "border-t border-t-slate-800",
+                        )}
+                      >
+                        <span className="flex items-center gap-1.5">
+                          <span
+                            className={clsx("h-2 w-2 shrink-0 rounded-full", categoryDotClass(row.category, catMeta))}
+                            title={row.category}
+                          />
+                          <span className="truncate font-medium text-slate-200">{row.label}</span>
+                          {row.unit && <span className="shrink-0 text-[9px] text-slate-600">{row.unit}s</span>}
+                        </span>
+                      </td>
+                      {trucks.map((n) => {
+                        const q = row.byTruck.get(n);
+                        return (
+                          <td
+                            key={n}
+                            className={clsx(
+                              "border-b border-slate-800/50 px-0.5 py-0.5 text-center font-mono tabular-nums",
+                              q != null ? "text-sm font-black text-amber-300" : "text-slate-800",
+                            )}
+                          >
+                            {q ?? ""}
+                          </td>
+                        );
+                      })}
+                      <td className="sticky right-0 z-10 border-b border-l border-slate-800 bg-slate-900 px-1 py-0.5 text-center font-mono text-sm font-black tabular-nums text-slate-100">
+                        {row.total}
+                      </td>
+                    </tr>
+                  </Fragment>
                 );
               })}
               <tr>
@@ -226,16 +273,23 @@ export default function ShortageSheetView({
                   </span>
                 </div>
                 <ul className="divide-y divide-slate-800/60">
-                  {(byTruckItems.get(n) ?? []).map(({ row, qty }) => (
-                    <li key={`${row.category}-${row.detail}`} className="flex items-baseline gap-1.5 px-2 py-1">
-                      <span
-                        className={clsx("h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full", categoryDotClass(row.category, catMeta))}
-                        title={row.category}
-                      />
-                      <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{row.label}</span>
-                      <span className="shrink-0 font-mono text-sm font-black tabular-nums text-amber-300">{qty}</span>
-                      {row.unit && <span className="shrink-0 text-[9px] text-slate-500">{row.unit}{qty !== 1 ? "s" : ""}</span>}
-                    </li>
+                  {(byTruckItems.get(n) ?? []).map(({ row, qty }, i, arr) => (
+                    <Fragment key={`${row.category}-${row.detail}`}>
+                      {row.group !== (i > 0 ? arr[i - 1].row.group : null) && (
+                        <li className="bg-slate-800/40 px-2 py-[1px] text-[8px] font-black uppercase tracking-[0.15em] text-slate-400">
+                          {row.group}
+                        </li>
+                      )}
+                      <li className="flex items-baseline gap-1.5 px-2 py-1">
+                        <span
+                          className={clsx("h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full", categoryDotClass(row.category, catMeta))}
+                          title={row.category}
+                        />
+                        <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{row.label}</span>
+                        <span className="shrink-0 font-mono text-sm font-black tabular-nums text-amber-300">{qty}</span>
+                        {row.unit && <span className="shrink-0 text-[9px] text-slate-500">{row.unit}{qty !== 1 ? "s" : ""}</span>}
+                      </li>
+                    </Fragment>
                   ))}
                 </ul>
               </div>
@@ -244,12 +298,17 @@ export default function ShortageSheetView({
         </div>
       )}
 
-      {/* Category legend — replaces the per-category header rows the grid used
-          to spend a full row on. */}
-      <div className="flex flex-wrap items-center gap-1.5">
-        {[...new Set(rows.map((r) => r.category))].sort().map((cat) => (
-          <span key={cat} className={clsx("rounded-full px-2 py-0.5 text-[10px] font-bold", categoryChipClass(cat, catMeta))}>
-            {cat}
+      {/* Legend: the dot colors are per CATEGORY (3x10 / Towels / …), grouped
+          under the family headers the sheet separates by. */}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+        {[...new Map(rows.map((r) => [r.group, r])).keys()].map((group) => (
+          <span key={group} className="flex flex-wrap items-center gap-1">
+            <span className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-500">{group}</span>
+            {[...new Set(rows.filter((r) => r.group === group).map((r) => r.category))].sort().map((cat) => (
+              <span key={cat} className={clsx("rounded-full px-2 py-0.5 text-[10px] font-bold", categoryChipClass(cat, catMeta))}>
+                {cat}
+              </span>
+            ))}
           </span>
         ))}
         <span className="ml-auto text-[10px] text-slate-600">
