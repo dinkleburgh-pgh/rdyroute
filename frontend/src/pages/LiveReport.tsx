@@ -44,7 +44,7 @@ import {
   useTrackedItemCategories,
   type TrackedItem,
 } from "../api/hooks";
-import { buildOperationalDayContext, countUnloadedFromContext } from "../utils/truckStatus";
+import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
 
 const DEFAULT_WEARER_CAP = 1800;
@@ -351,6 +351,55 @@ export default function LiveReport() {
           </div>
         }
       />
+      {/* Mobile date bar — PageHeader hides its actions under md, so on a
+          phone the report had no way to change the date (and no Live badge
+          or day numbers, which live in the md-only subtitle). */}
+      <div className="flex items-center gap-2 border-b border-hairline bg-surface/60 px-3 py-2 md:hidden">
+        <button
+          type="button"
+          aria-label="Previous run day"
+          onClick={() => setRunDate(previousRunDate(runDate))}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95"
+        >
+          ‹
+        </button>
+        <div className="min-w-0 flex-1">
+          <input
+            className="input w-full text-sm [color-scheme:dark]"
+            type="date"
+            max={todayIso()}
+            value={runDate}
+            onChange={(e) => e.target.value && setRunDate(e.target.value)}
+          />
+          <p className="mt-1 truncate text-center text-[10px] text-ink-muted">
+            Load Day {loadDay} · Unload Day {unloadsDay}
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Next run day"
+          disabled={isToday}
+          onClick={() => setRunDate(nextRunDate(runDate, todayIso()))}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95 disabled:opacity-30"
+        >
+          ›
+        </button>
+        {isToday ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-st-inprogress">
+            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+            Live
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setRunDate(todayIso())}
+            className="shrink-0 rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+          >
+            Today
+          </button>
+        )}
+      </div>
+
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-8 p-3 md:p-6">
         {/* ===================== UNLOAD ===================== */}
         <Section eyebrow="Unload" title="Batches">

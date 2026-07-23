@@ -273,6 +273,23 @@ export function previousRunDate(iso: string): string {
   return `${y}-${m}-${day}`;
 }
 
+/**
+ * The next OPERATING day (weekends skipped), never past `maxIso` (today by
+ * default) — stepping forward through a report shouldn't land on a Saturday
+ * with no run, or on a future date with no data.
+ */
+export function nextRunDate(iso: string, maxIso?: string): string {
+  const d = new Date(`${iso}T12:00:00`);
+  do {
+    d.setDate(d.getDate() + 1);
+  } while (d.getDay() === 0 || d.getDay() === 6);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  const next = `${y}-${m}-${day}`;
+  return maxIso && next > maxIso ? maxIso : next;
+}
+
 export interface PrevDayCoverage {
   /** The actual run_date the coverage was resolved from (<= prevRunDate), or null. */
   date: string | null;
