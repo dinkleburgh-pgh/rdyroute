@@ -500,11 +500,28 @@ export function usePrevDayCarriers(runDate: string, board: TruckWithState[]): Ma
     const byNum = new Map(board.map((t) => [t.truck_number, t]));
     const m = new Map<number, TruckWithState>();
     for (const c of prev.items) {
+      // Split entries are NOT coverage: the route ran itself, so the helper's
+      // unload never substitutes for the route's own.
+      if (c.isSplit) continue;
       const carrier = byNum.get(c.loadOn);
       if (carrier) m.set(c.route, carrier);
     }
     return m;
   }, [swapLog, runDate, board]);
+}
+
+/**
+ * Trucks that carried a route's split OVERFLOW on the previous load day —
+ * they ran and are EXTRA unload slots today (the live board carries no split
+ * marker the morning after; only the swap log knows). Pass to
+ * buildOperationalDayContext's extraUnloadTruckNumbers.
+ */
+export function usePrevDaySplitHelpers(runDate: string): Set<number> {
+  const { data: swapLog = [] } = useRouteSwapLog(14);
+  return useMemo(() => {
+    const prev = buildPrevDayCoverage(swapLog, previousRunDate(runDate));
+    return new Set(prev.splitHelpers.keys());
+  }, [swapLog, runDate]);
 }
 
 export function useActivityEvents(filters?: {

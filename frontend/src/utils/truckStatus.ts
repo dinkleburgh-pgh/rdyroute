@@ -272,12 +272,19 @@ export function previousRunDate(iso: string): string {
 export interface PrevDayCoverage {
   /** The actual run_date the coverage was resolved from (<= prevRunDate), or null. */
   date: string | null;
-  /** route -> covering truck, sorted by route for display. */
-  items: { route: number; loadOn: number }[];
-  /** route number -> the truck that covered it. */
+  /**
+   * route -> covering/helping truck, sorted by route for display. SPLIT
+   * entries (isSplit) are display-only: the route ALSO ran, so they never
+   * feed substitution (byRoute/byCover) or carrier attribution.
+   */
+  items: { route: number; loadOn: number; isSplit?: boolean }[];
+  /** route number -> the truck that covered it (non-split coverage only). */
   byRoute: Map<number, number>;
-  /** covering truck number -> the route it covered (inverse of byRoute). */
+  /** covering truck number -> the route it covered (non-split only). */
   byCover: Map<number, number>;
+  /** Trucks that carried a route's split OVERFLOW on the prev day — they ran
+   *  and must be unloaded as extra slots today. */
+  splitHelpers: Map<number, number>;
 }
 
 /**
@@ -297,21 +304,30 @@ export function buildPrevDayCoverage(
   // most recent swap on/before prevRunDate surfaced week-old coverage on days
   // that simply had no swaps — misleading, since those trucks returned and were
   // unloaded days ago. If the previous run day had no coverage, show nothing.
-  // Split rows are NOT coverage — the route ran itself; its helper's unload
-  // never substitutes for the route's own.
-  const onPrevDay = swapLog.filter((e) => e.run_date === prevRunDate && !e.is_split);
-  if (onPrevDay.length === 0) return { date: null, items: [], byRoute: new Map(), byCover: new Map() };
+  const onPrevDay = swapLog.filter((e) => e.run_date === prevRunDate);
+  const coverage = onPrevDay.filter((e) => !e.is_split);
+  const splits = onPrevDay.filter((e) => e.is_split);
+  if (onPrevDay.length === 0) {
+    return { date: null, items: [], byRoute: new Map(), byCover: new Map(), splitHelpers: new Map() };
+  }
   const byRoute = new Map<number, number>();
   // Newest-first log order → first entry seen per route is the most recent.
-  for (const e of onPrevDay) {
+  for (const e of coverage) {
     if (!byRoute.has(e.route_truck)) byRoute.set(e.route_truck, e.load_on_truck);
   }
-  const items = [...byRoute.entries()]
-    .map(([route, loadOn]) => ({ route, loadOn }))
-    .sort((a, b) => a.route - b.route);
+  // Split rows are NOT coverage — the route ran itself; the helper carried
+  // its overflow and needs its own unload slot. Display + extra-slot only.
+  const splitHelpers = new Map<number, number>();
+  for (const e of splits) {
+    if (!splitHelpers.has(e.load_on_truck)) splitHelpers.set(e.load_on_truck, e.route_truck);
+  }
+  const items = [
+    ...[...byRoute.entries()].map(([route, loadOn]) => ({ route, loadOn })),
+    ...[...splitHelpers.entries()].map(([loadOn, route]) => ({ route, loadOn, isSplit: true })),
+  ].sort((a, b) => a.route - b.route);
   const byCover = new Map<number, number>();
-  for (const { route, loadOn } of items) byCover.set(loadOn, route);
-  return { date: prevRunDate, items, byRoute, byCover };
+  for (const [route, loadOn] of byRoute) byCover.set(loadOn, route);
+  return { date: prevRunDate, items, byRoute, byCover, splitHelpers };
 }
 
 export function effectiveOperationalStatus(
@@ -507,6 +523,13 @@ export function buildOperationalDayContext(
   holidayMode = false,
   includeOffDayCoverage = false,
   dayRole: "load" | "unload" = "load",
+  /**
+   * UNLOAD role only: trucks that carried a route's split OVERFLOW on the
+   * previous load day (from the swap log — the live board has no marker the
+   * morning after). They ran and are extra unload slots on top of the
+   * schedule, growing the denominator by one each.
+   */
+  extraUnloadTruckNumbers?: Set<number>,
 ): OperationalDayContext {
   // A takeover assignment describes where the NEXT load rides — it does not
   // change who physically RAN today. In the "unload" role a ROUTE-truck
@@ -613,6 +636,17 @@ export function buildOperationalDayContext(
     // Uncovered OOS trucks are kept in both roles: still physically here.
     if (dayRole === "load" && (truck.is_oos || truck.state?.status === "oos") && coveredByAnyRoute.has(truck.truck_number)) continue;
     activeTrucks.push(truck);
+  }
+
+  // Previous-day split helpers: extra unload slots the schedule doesn't know
+  // about (the helper ran carrying a route's overflow yesterday).
+  if (dayRole === "unload" && extraUnloadTruckNumbers && extraUnloadTruckNumbers.size > 0) {
+    const present = new Set(activeTrucks.map((t) => t.truck_number));
+    for (const num of extraUnloadTruckNumbers) {
+      if (present.has(num)) continue;
+      const truck = trucks.find((t) => t.truck_number === num);
+      if (truck) activeTrucks.push(truck);
+    }
   }
 
   return {

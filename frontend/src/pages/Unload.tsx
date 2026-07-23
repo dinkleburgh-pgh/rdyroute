@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, usePrevDayCarriers, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, usePrevDayCarriers, usePrevDaySplitHelpers, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { buildOperationalDayContext, buildPrevDayCoverage, countUnloadedFromContext, getCoverageRouteNumber, previousRunDate } from "../utils/truckStatus";
@@ -95,9 +95,10 @@ export default function Unload() {
   // (sidebar unload bar, Day Overview, Report). The page can therefore never
   // show fewer trucks than the denominator counts; page-specific inclusions
   // are strictly ADDITIVE on top.
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const unloadCtx = useMemo(
-    () => buildOperationalDayContext(data ?? [], unloadsDay, holidayUnload ?? false, false, "unload"),
-    [data, unloadsDay, holidayUnload],
+    () => buildOperationalDayContext(data ?? [], unloadsDay, holidayUnload ?? false, false, "unload", prevSplitHelpers),
+    [data, unloadsDay, holidayUnload, prevSplitHelpers],
   );
 
   const allTrucks = useMemo(() => {
@@ -198,10 +199,10 @@ export default function Unload() {
   // show EXTRA off-schedule dirty/held trucks so nothing is hidden, but those
   // must not inflate "N to go" past the schedule.
   const prevDayCarriers = usePrevDayCarriers(runDate, data ?? []);
-  const toGo = useMemo(() => {
-    const ctx = buildOperationalDayContext(data ?? [], unloadsDay, holidayUnload, false, "unload");
-    return Math.max(0, ctx.activeTrucks.length - countUnloadedFromContext(ctx, prevDayCarriers));
-  }, [data, unloadsDay, holidayUnload, prevDayCarriers]);
+  const toGo = useMemo(
+    () => Math.max(0, unloadCtx.activeTrucks.length - countUnloadedFromContext(unloadCtx, prevDayCarriers)),
+    [unloadCtx, prevDayCarriers],
+  );
 
   async function assignBatch(truckNumber: number) {
     await assign.mutateAsync({
@@ -509,12 +510,13 @@ export default function Unload() {
           <div className="flex flex-wrap gap-1.5">
             {prevCoverage.items.map((c) => (
               <span
-                key={c.route}
+                key={`${c.route}-${c.loadOn}`}
                 className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-surface-3 px-2 py-0.5 text-xs"
               >
-                <span className="font-black text-st-dirty">#{c.route}</span>
-                <ArrowLeftRight className="h-3 w-3 text-ink-faint" />
+                <span className={clsx("font-black", c.isSplit ? "text-amber-300" : "text-st-dirty")}>#{c.route}</span>
+                {c.isSplit ? <span className="font-bold text-amber-500">+</span> : <ArrowLeftRight className="h-3 w-3 text-ink-faint" />}
                 <span className="font-black text-amber-200">#{c.loadOn}</span>
+                {c.isSplit && <span className="text-[8px] font-bold uppercase tracking-wider text-amber-500">Split</span>}
               </span>
             ))}
           </div>

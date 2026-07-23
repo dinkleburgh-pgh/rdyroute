@@ -1,4 +1,4 @@
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, Plus } from "lucide-react";
 import clsx from "clsx";
 
 /**
@@ -8,19 +8,38 @@ import clsx from "clsx";
  * identically on every surface.
  *
  * `prev` renders the muted amber previous-day variant; default is today's
- * sky-tinted variant.
+ * sky-tinted variant. `split` renders the amber `#route + #truck` SPLIT
+ * variant — the route ALSO runs; the truck carries its overflow.
  */
 export default function CoverageTag({
   route,
   truck,
   prev = false,
+  split = false,
   className,
 }: {
   route: number;
   truck: number;
   prev?: boolean;
+  split?: boolean;
   className?: string;
 }) {
+  if (split) {
+    return (
+      <span
+        className={clsx(
+          "inline-flex items-center gap-1 whitespace-nowrap rounded-pill border border-amber-600/40 bg-amber-950/40 px-2 py-0.5 text-[11px] font-bold",
+          className,
+        )}
+        title={`Split load — route ${route} also runs; #${truck} carries its overflow`}
+      >
+        <span className="font-black text-amber-300">#{route}</span>
+        <Plus className="h-3 w-3 text-amber-500/80" />
+        <span className="font-black text-amber-100">#{truck}</span>
+        <span className="ml-0.5 text-[8px] font-bold uppercase tracking-wider text-amber-500">Split</span>
+      </span>
+    );
+  }
   return (
     <span
       className={clsx(

@@ -16,6 +16,7 @@ import {
   useUpsertTruckState,
   useLoadSequenceSuggestions,
   usePrevDayCarriers,
+  usePrevDaySplitHelpers,
 } from "../api/hooks";
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
@@ -188,9 +189,10 @@ export default function Load() {
   );
   const loadPct = loadTotal > 0 ? Math.round((loadDone / loadTotal) * 100) : 0;
 
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const unloadScheduleContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload"),
-    [board, unloadsDay, holidayUnload],
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload", prevSplitHelpers),
+    [board, unloadsDay, holidayUnload, prevSplitHelpers],
   );
   const unloadTotal = unloadScheduleContext.activeTrucks.length;
   // Count "done" from the same context as the total so a spare covering an

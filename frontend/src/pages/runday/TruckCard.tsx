@@ -159,6 +159,8 @@ export default function TruckCard({
     <CoverageTag route={coversRoute} truck={t.truck_number} />
   ) : coveringSpare ? (
     <CoverageTag route={t.truck_number} truck={coveringSpare.truck_number} />
+  ) : t.route_split_route != null ? (
+    <CoverageTag route={t.route_split_route} truck={t.truck_number} split />
   ) : t.route_swap_route != null && t.truck_type !== "Spare" ? (
     <CoverageTag route={t.route_swap_route} truck={t.truck_number} />
   ) : null;

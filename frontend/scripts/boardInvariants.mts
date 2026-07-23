@@ -137,8 +137,10 @@ function runDayUnloadCards(): Set<number> {
 function runDayLoadCards(): Set<number> {
   const loadTrucks = board.filter(
     (t) =>
-      (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-      (holidayLoad || !isScheduledOff(t, loadDay)),
+      // Split helpers carry a route's overflow tonight — extra load cards.
+      t.route_split_route != null ||
+      ((t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
+      (holidayLoad || !isScheduledOff(t, loadDay))),
   );
   const rendered = new Set<number>();
   for (const t of loadTrucks) {

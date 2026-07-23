@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, usePrevDayCarriers, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, usePrevDayCarriers, usePrevDaySplitHelpers, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import ToolFab from "./ToolFab";
@@ -248,9 +248,11 @@ export default function Layout() {
   // Numerator = how many of THOSE same routes are unloaded — counted from the same
   // context as the denominator so a spare covering an off-day route can't push the
   // numerator above the total (was causing e.g. 29/28).
+  // Prev-day split helpers are extra unload slots (they ran carrying overflow).
+  const prevSplitHelpers = usePrevDaySplitHelpers(todayIso());
   const unloadScheduleContext = useMemo(
-    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, false, "unload"),
-    [board, unloadsDay, holidayUnload],
+    () => buildOperationalDayContext(board ?? [], unloadsDay, holidayUnload, false, "unload", prevSplitHelpers),
+    [board, unloadsDay, holidayUnload, prevSplitHelpers],
   );
   const totalScheduledUnload = unloadScheduleContext.activeTrucks.length;
   // Prev-day carriers so a covered route counts done once its carrier is.

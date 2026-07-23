@@ -39,6 +39,7 @@ import {
   useUnloadsDayOverride,
   useHolidayUnload,
   usePrevDayCarriers,
+  usePrevDaySplitHelpers,
   useTrackedItemCategories,
   type TrackedItem,
 } from "../api/hooks";
@@ -206,9 +207,10 @@ export default function LiveReport() {
   // The old whole-fleet raw-status filter started the day at the seed count
   // and climbed past the roster size as trucks loaded overnight.
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const unloadCtx = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload"),
-    [board, unloadsDay, holidayUnload],
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload", prevSplitHelpers),
+    [board, unloadsDay, holidayUnload, prevSplitHelpers],
   );
   const prevDayCarriers = usePrevDayCarriers(runDate, board);
   const unloadedCount = countUnloadedFromContext(unloadCtx, prevDayCarriers);

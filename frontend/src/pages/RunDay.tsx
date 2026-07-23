@@ -13,6 +13,7 @@ import {
   useTruckNotes,
   useOpenSpareAssignments,
   usePrevDayCarriers,
+  usePrevDaySplitHelpers,
   useRouteSwapLog,
   useSettings,
 } from "../api/hooks";
@@ -141,13 +142,19 @@ export default function RunDay() {
     return eff;
   }
 
+  // Prev-day split helpers: they ran carrying a route's overflow yesterday and
+  // are extra unload slots today. Declared before the grids that consume them.
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
+
   const unloadTrucks = useMemo(
     () =>
       board
         .filter(
           (t) =>
-            (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-            (holidayUnload || !isScheduledOff(t, unloadsDay)),
+            // Prev-day split helpers ran carrying overflow — extra unload cards.
+            prevSplitHelpers.has(t.truck_number) ||
+            ((t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
+            (holidayUnload || !isScheduledOff(t, unloadsDay))),
         )
         .sort((a, b) => {
           // Clamp loaded→unloaded in unload sort: from this section's POV,
@@ -162,7 +169,7 @@ export default function RunDay() {
           return a.truck_number - b.truck_number;
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [board, unloadsDay, holidayUnload, coveringTruckMap],
+    [board, unloadsDay, holidayUnload, coveringTruckMap, prevSplitHelpers],
   );
 
   const loadTrucks = useMemo(
@@ -170,8 +177,10 @@ export default function RunDay() {
       board
         .filter(
           (t) =>
-            (t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
-            (holidayLoad || !isScheduledOff(t, loadDay)),
+            // Split helpers carry a route's overflow tonight — extra load cards.
+            t.route_split_route != null ||
+            ((t.truck_type !== "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) &&
+            (holidayLoad || !isScheduledOff(t, loadDay))),
         )
         .sort((a, b) => {
           const sa = displayStatusFor(a, loadDay, holidayLoad);
@@ -189,8 +198,8 @@ export default function RunDay() {
   // Uses buildOperationalDayContext (same as loadContext) so the count is consistent:
   // one entry per running route (covering spare replaces its OOS route truck).
   const unloadContext = useMemo(
-    () => buildOperationalDayContext(board, unloadsDay, holidayUnload ?? false, false, "unload"),
-    [board, unloadsDay, holidayUnload],
+    () => buildOperationalDayContext(board, unloadsDay, holidayUnload ?? false, false, "unload", prevSplitHelpers),
+    [board, unloadsDay, holidayUnload, prevSplitHelpers],
   );
   const unloadActiveTrucks = unloadContext.activeTrucks;
   const unloadTotal = unloadActiveTrucks.length;
@@ -226,15 +235,25 @@ export default function RunDay() {
   // covered, the truck covering it, whether that's a spare or a route swap.
   const coverages = useMemo(() => {
     const byNum = new Map(board.map((t) => [t.truck_number, t]));
-    return [...coveringTruckMap.entries()]
+    const covers = [...coveringTruckMap.entries()]
       .map(([routeNum, cover]) => ({
         routeNum,
         routeTruck: byNum.get(routeNum),
         cover,
-        kind: (cover.truck_type === "Spare" ? "spare" : "swap") as "spare" | "swap",
+        kind: (cover.truck_type === "Spare" ? "spare" : "swap") as "spare" | "swap" | "split",
         coverStatus: effectiveStatus(cover, loadDay, holidayLoad),
-      }))
-      .sort((a, b) => a.routeNum - b.routeNum);
+      }));
+    // SPLIT helpers: the route also runs; the helper carries its overflow.
+    const splits = board
+      .filter((t) => t.route_split_route != null)
+      .map((t) => ({
+        routeNum: t.route_split_route as number,
+        routeTruck: byNum.get(t.route_split_route as number),
+        cover: t,
+        kind: "split" as const,
+        coverStatus: effectiveStatus(t, loadDay, holidayLoad),
+      }));
+    return [...covers, ...splits].sort((a, b) => a.routeNum - b.routeNum);
   }, [board, coveringTruckMap, loadDay, holidayLoad]);
 
   // The previous OPERATING day, stepping over the weekend — Monday's unload is
@@ -260,16 +279,18 @@ export default function RunDay() {
   // Lookups so the Unload grid can show each route's covering truck from the
   // PREVIOUS load day (what's being unloaded today was covered then).
   const boardByNum = useMemo(() => new Map(board.map((t) => [t.truck_number, t])), [board]);
+  // Split entries excluded: the route ran itself, so nothing substitutes.
   const prevCoverByRoute = useMemo(
-    () => new Map(prevCoverage.items.map((c) => [c.route, c.loadOn])),
+    () => new Map(prevCoverage.items.filter((c) => !c.isSplit).map((c) => [c.route, c.loadOn])),
     [prevCoverage],
   );
   // Covering spares from the previous load day — rendered in place of the route
-  // they covered, so drop their standalone card from the unload grid.
+  // they covered, so drop their standalone card from the unload grid. Split
+  // helpers are NOT covers — they keep their own card (they ran too).
   const prevSpareCoverNums = useMemo(() => {
     const s = new Set<number>();
     for (const c of prevCoverage.items) {
-      if (boardByNum.get(c.loadOn)?.truck_type === "Spare") s.add(c.loadOn);
+      if (!c.isSplit && boardByNum.get(c.loadOn)?.truck_type === "Spare") s.add(c.loadOn);
     }
     return s;
   }, [prevCoverage, boardByNum]);
@@ -404,12 +425,13 @@ export default function RunDay() {
             <div className="flex flex-wrap gap-1.5">
               {prevCoverage.items.map((c) => (
                 <span
-                  key={c.route}
+                  key={`${c.route}-${c.loadOn}`}
                   className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-xs"
                 >
-                  <span className="font-black text-red-300">#{c.route}</span>
-                  <ArrowLeftRight className="h-3 w-3 text-slate-600" />
+                  <span className={clsx("font-black", c.isSplit ? "text-amber-300" : "text-red-300")}>#{c.route}</span>
+                  {c.isSplit ? <span className="font-bold text-amber-500">+</span> : <ArrowLeftRight className="h-3 w-3 text-slate-600" />}
                   <span className="font-black text-amber-200">#{c.loadOn}</span>
+                  {c.isSplit && <span className="text-[8px] font-bold uppercase tracking-wider text-amber-500">Split</span>}
                 </span>
               ))}
             </div>
@@ -535,10 +557,17 @@ export default function RunDay() {
                     <span className="text-[9px] font-semibold uppercase tracking-wide text-red-400/70">
                       {routeOos ? "OOS" : "swap"}
                     </span>
-                    <ArrowLeftRight className="h-3 w-3 shrink-0 text-slate-600" />
-                    <span className="text-sm font-black text-sky-300">#{c.cover.truck_number}</span>
-                    <span className="rounded-full bg-sky-900/50 px-1.5 py-0.5 text-[9px] font-semibold text-sky-300 ring-1 ring-sky-700/40">
-                      {c.kind === "spare" ? "Spare" : "Route"}
+                    {c.kind === "split"
+                      ? <span className="shrink-0 text-sm font-bold text-amber-500">+</span>
+                      : <ArrowLeftRight className="h-3 w-3 shrink-0 text-slate-600" />}
+                    <span className={clsx("text-sm font-black", c.kind === "split" ? "text-amber-200" : "text-sky-300")}>#{c.cover.truck_number}</span>
+                    <span className={clsx(
+                      "rounded-full px-1.5 py-0.5 text-[9px] font-semibold ring-1",
+                      c.kind === "split"
+                        ? "bg-amber-900/50 text-amber-300 ring-amber-700/40"
+                        : "bg-sky-900/50 text-sky-300 ring-sky-700/40",
+                    )}>
+                      {c.kind === "spare" ? "Spare" : c.kind === "split" ? "Split" : "Route"}
                     </span>
                     <span
                       className={clsx(

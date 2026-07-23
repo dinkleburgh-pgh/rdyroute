@@ -308,12 +308,13 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
                     <div className="flex flex-wrap gap-1.5">
                       {prevCoverage.items.map((c) => (
                         <span
-                          key={c.route}
+                          key={`${c.route}-${c.loadOn}`}
                           className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-sm"
                         >
-                          <span className="font-black text-red-300">#{c.route}</span>
-                          <span className="text-slate-600">→</span>
+                          <span className={c.isSplit ? "font-black text-amber-300" : "font-black text-red-300"}>#{c.route}</span>
+                          <span className={c.isSplit ? "font-bold text-amber-500" : "text-slate-600"}>{c.isSplit ? "+" : "→"}</span>
                           <span className="font-black text-amber-200">#{c.loadOn}</span>
+                          {c.isSplit && <span className="text-[8px] font-bold uppercase tracking-wider text-amber-500">Split</span>}
                         </span>
                       ))}
                     </div>
