@@ -1,148 +1,190 @@
-import { useState } from "react";
-import clsx from "clsx";
-import { useSpareAssignments, useAssignSpare } from "../../api/hooks";
+/**
+ * Previous Day Coverage — management-panel port of the Fleet page's
+ * "Previous Day Coverage" modal (Board.tsx), which is the canonical tool:
+ * record who covered a route on the PREVIOUS run day so returning loads are
+ * unloaded as the right route (surfaces on Day Overview, Unload board, and
+ * Reminders). Spare covers become spare assignments; route-truck covers
+ * become one-way route swaps — same branching, guards, and removal actions
+ * as the Fleet modal. (Replaces the old "copy spare coverages onto today"
+ * behavior, which wrote to the wrong day.)
+ */
+import { useMemo, useState } from "react";
+import { format } from "date-fns";
+import { ArrowLeftRight } from "lucide-react";
+import {
+  useAssignSpare,
+  useBoard,
+  useCreateRouteSwap,
+  useDeleteRouteSwap,
+  useReturnSpare,
+  useRouteSwaps,
+  useSpareAssignments,
+} from "../../api/hooks";
 import { todayIso } from "../../api/client";
-import type { SpareAssignment } from "../../types";
-
-function yesterdayIso(): string {
-  const d = new Date();
-  d.setDate(d.getDate() - 1);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
+import { previousRunDate, recordSwapHistory } from "../../utils/truckStatus";
 
 export default function PrevDayCoveragePanel() {
-  const today = todayIso();
-  const [sourceDate, setSourceDate] = useState(yesterdayIso);
-  const [applied, setApplied] = useState<Set<number>>(new Set());
-  const [applying, setApplying] = useState<Set<number>>(new Set());
+  const runDate = todayIso();
+  const prevRunDate = useMemo(() => previousRunDate(runDate), [runDate]);
+  const prevLabel = format(new Date(`${prevRunDate}T12:00:00`), "EEE MMM d");
 
-  const { data: prevAssignments = [], isLoading } = useSpareAssignments(sourceDate);
-  const { data: todayAssignments = [] } = useSpareAssignments(today);
+  const { data: board = [] } = useBoard(runDate);
+  const { data: prevSwaps = [] } = useRouteSwaps(prevRunDate);
+  const { data: prevSpares = [] } = useSpareAssignments(prevRunDate, false);
+  const createSwap = useCreateRouteSwap();
+  const deleteSwap = useDeleteRouteSwap();
   const assignSpare = useAssignSpare();
+  const returnSpare = useReturnSpare();
 
-  // Active (not returned) assignments from source date
-  const active = prevAssignments.filter((a) => !a.returned);
+  const [route, setRoute] = useState("");
+  const [truck, setTruck] = useState("");
+  const [error, setError] = useState<string | null>(null);
 
-  // Already covered today: spare_truck_number already has an active assignment
-  const todayActiveSpares = new Set(
-    todayAssignments.filter((a) => !a.returned).map((a) => a.spare_truck_number),
+  const routeTrucks = useMemo(
+    () => board.filter((x) => x.truck_type !== "Spare").sort((a, b) => a.truck_number - b.truck_number),
+    [board],
   );
+  const spares = useMemo(
+    () => board.filter((x) => x.truck_type === "Spare").sort((a, b) => a.truck_number - b.truck_number),
+    [board],
+  );
+  const activePrevSpares = prevSpares.filter((s) => !s.returned);
 
-  async function applyOne(assignment: SpareAssignment) {
-    setApplying((s) => new Set(s).add(assignment.id));
+  async function addCoverage() {
+    const routeNum = parseInt(route, 10);
+    const coverNum = parseInt(truck, 10);
+    if (!Number.isFinite(routeNum) || !Number.isFinite(coverNum)) {
+      setError("Pick a route and a covering truck.");
+      return;
+    }
+    if (routeNum === coverNum) {
+      setError("A truck can't cover its own route.");
+      return;
+    }
+    const coverIsSpare = board.find((x) => x.truck_number === coverNum)?.truck_type === "Spare";
     try {
-      await assignSpare.mutateAsync({
-        run_date: today,
-        spare_truck_number: assignment.spare_truck_number,
-        covering_route_truck: assignment.covering_route_truck,
-      });
-      setApplied((s) => new Set(s).add(assignment.id));
-    } catch {
-      // conflict (already assigned) — mark applied anyway
-      setApplied((s) => new Set(s).add(assignment.id));
-    } finally {
-      setApplying((s) => { const n = new Set(s); n.delete(assignment.id); return n; });
+      if (coverIsSpare) {
+        await assignSpare.mutateAsync({
+          run_date: prevRunDate,
+          spare_truck_number: coverNum,
+          covering_route_truck: routeNum,
+        });
+      } else {
+        await createSwap.mutateAsync({
+          run_date: prevRunDate,
+          route_truck: routeNum,
+          load_on_truck: coverNum,
+          two_way: false,
+        });
+      }
+      recordSwapHistory(routeNum, coverNum);
+      setRoute("");
+      setTruck("");
+      setError(null);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } };
+      setError(e?.response?.data?.detail ?? "Failed to save coverage.");
     }
   }
 
-  async function applyAll() {
-    const toApply = active.filter(
-      (a) => !applied.has(a.id) && !todayActiveSpares.has(a.spare_truck_number),
-    );
-    await Promise.all(toApply.map(applyOne));
-  }
-
-  const unappliedCount = active.filter(
-    (a) => !applied.has(a.id) && !todayActiveSpares.has(a.spare_truck_number),
-  ).length;
-
   return (
     <div className="card space-y-4">
-      <div>
-        <p className="text-sm text-ink-soft">
-          Copy spare coverages from a previous run date onto today ({today}).
-        </p>
+      <p className="text-sm text-ink-soft">
+        Record who covered a route on the previous run day
+        {" "}(<span className="font-semibold text-ink">{prevLabel}</span>).
+        This surfaces on the Day Overview, Unload board, and Reminders so returning loads
+        are unloaded as the right route.
+      </p>
+
+      <div className="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label className="label">Route covered</label>
+          <select className="input w-full" value={route} onChange={(e) => setRoute(e.target.value)}>
+            <option value="">— pick route —</option>
+            {routeTrucks.map((x) => (
+              <option key={x.truck_number} value={x.truck_number}>#{x.truck_number}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label className="label">Covered by</label>
+          <select className="input w-full" value={truck} onChange={(e) => setTruck(e.target.value)}>
+            <option value="">— pick covering truck —</option>
+            <optgroup label="Spares">
+              {spares.map((x) => (
+                <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+              ))}
+            </optgroup>
+            <optgroup label="Route trucks">
+              {routeTrucks
+                .filter((x) => String(x.truck_number) !== route)
+                .map((x) => (
+                  <option key={x.truck_number} value={x.truck_number}>#{x.truck_number}</option>
+                ))}
+            </optgroup>
+          </select>
+        </div>
       </div>
 
-      {/* Date picker */}
-      <div className="flex items-center gap-3">
-        <label className="label mb-0">Source date</label>
-        <input
-          type="date"
-          value={sourceDate}
-          max={yesterdayIso()}
-          onChange={(e) => { setSourceDate(e.target.value); setApplied(new Set()); }}
-          className="input w-40"
-        />
+      {error && <p className="text-sm text-red-400">{error}</p>}
+
+      <div className="flex justify-end">
+        <button
+          className="rounded-md bg-green-700 px-4 py-1.5 text-sm font-semibold text-white transition-colors hover:bg-green-600 disabled:opacity-60"
+          disabled={createSwap.isPending || assignSpare.isPending || route === "" || truck === ""}
+          onClick={addCoverage}
+        >
+          {createSwap.isPending || assignSpare.isPending ? "Saving…" : "Add Coverage"}
+        </button>
       </div>
 
-      {/* Assignment list */}
-      {isLoading ? (
-        <p className="text-sm text-ink-muted">Loading…</p>
-      ) : active.length === 0 ? (
-        <p className="text-sm text-ink-faint">No active spare coverages on {sourceDate}.</p>
-      ) : (
-        <>
-          <div className="space-y-2">
-            {active.map((a) => {
-              const alreadyToday = todayActiveSpares.has(a.spare_truck_number);
-              const isApplied = applied.has(a.id) || alreadyToday;
-              const isBusy = applying.has(a.id);
-
-              return (
-                <div
-                  key={a.id}
-                  className={clsx(
-                    "flex items-center justify-between rounded-lg px-4 py-3 border",
-                    isApplied
-                      ? "border-st-unloaded/30 bg-st-unloaded/10"
-                      : "border-hairline bg-surface-2",
-                  )}
-                >
-                  <div className="flex items-center gap-3">
-                    <span className="font-mono text-sm font-bold text-st-spare">
-                      #{a.spare_truck_number}
-                    </span>
-                    <span className="text-ink-muted text-xs">covers</span>
-                    <span className="font-mono text-sm font-bold text-ink">
-                      #{a.covering_route_truck}
-                    </span>
-                  </div>
-
-                  {isApplied ? (
-                    <span className="text-[11px] font-semibold text-st-unloaded">
-                      {alreadyToday && !applied.has(a.id) ? "Already active" : "Applied"}
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => applyOne(a)}
-                      className="rounded-lg border border-sky-700/40 bg-sky-950/50 px-3 py-1 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-900/50 disabled:opacity-50"
-                    >
-                      {isBusy ? "Applying…" : "Apply Today"}
-                    </button>
-                  )}
+      {/* Existing previous-day coverage */}
+      <div className="border-t border-hairline pt-3">
+        <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-faint">
+          Set for {prevLabel}
+        </div>
+        {prevSwaps.length === 0 && activePrevSpares.length === 0 ? (
+          <p className="text-sm text-ink-faint">No coverage recorded for the previous day yet.</p>
+        ) : (
+          <div className="space-y-1.5">
+            {prevSwaps
+              .slice()
+              .sort((a, b) => a.route_truck - b.route_truck)
+              .map((s) => (
+                <div key={`sw-${s.id}`} className="flex items-center gap-2 rounded-md bg-surface-2 px-2.5 py-1.5 text-sm">
+                  <span className="font-black text-red-300">#{s.route_truck}</span>
+                  <ArrowLeftRight className="h-3.5 w-3.5 text-ink-faint" />
+                  <span className="font-black text-amber-200">#{s.load_on_truck}</span>
+                  <button
+                    className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 transition-colors hover:bg-surface-3 hover:text-red-300"
+                    onClick={() => deleteSwap.mutate({ id: s.id, runDate: prevRunDate })}
+                  >
+                    Remove
+                  </button>
                 </div>
-              );
-            })}
+              ))}
+            {activePrevSpares
+              .slice()
+              .sort((a, b) => a.covering_route_truck - b.covering_route_truck)
+              .map((s) => (
+                <div key={`sp-${s.id}`} className="flex items-center gap-2 rounded-md bg-surface-2 px-2.5 py-1.5 text-sm">
+                  <span className="font-black text-red-300">#{s.covering_route_truck}</span>
+                  <ArrowLeftRight className="h-3.5 w-3.5 text-ink-faint" />
+                  <span className="font-black text-cyan-200">
+                    #{s.spare_truck_number}
+                    <span className="ml-1 text-[10px] text-ink-faint">spare</span>
+                  </span>
+                  <button
+                    className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 transition-colors hover:bg-surface-3 hover:text-red-300"
+                    onClick={() => returnSpare.mutate(s.id)}
+                  >
+                    Remove
+                  </button>
+                </div>
+              ))}
           </div>
-
-          {unappliedCount > 1 && (
-            <button
-              type="button"
-              onClick={applyAll}
-              disabled={assignSpare.isPending}
-              className="btn-primary w-full"
-            >
-              Apply All ({unappliedCount})
-            </button>
-          )}
-        </>
-      )}
+        )}
+      </div>
     </div>
   );
 }
