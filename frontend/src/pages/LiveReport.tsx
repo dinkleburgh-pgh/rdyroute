@@ -20,7 +20,8 @@ import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { categoryDotClass, qtyWithUnit } from "../components/shorts/HierarchyPicker";
+import { categoryDotClass } from "../components/shorts/HierarchyPicker";
+import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
@@ -277,6 +278,28 @@ export default function LiveReport() {
   }, [shorts]);
   const totalPieces = useMemo(() => shorts.reduce((n, s) => n + s.quantity, 0), [shorts]);
   const distinctItems = useMemo(() => new Set(shorts.map(shortLabel)).size, [shorts]);
+  // Worst offenders — ranked by total quantity short (ties → more line items).
+  const topItem = useMemo(() => {
+    const m = new Map<string, { label: string; qty: number; trucks: Set<number> }>();
+    for (const s of shorts) {
+      const label = shortLabel(s);
+      const e = m.get(label) ?? { label, qty: 0, trucks: new Set<number>() };
+      e.qty += s.quantity;
+      e.trucks.add(s.truck_number);
+      m.set(label, e);
+    }
+    return [...m.values()].sort((a, b) => b.qty - a.qty || b.trucks.size - a.trucks.size)[0] ?? null;
+  }, [shorts]);
+  const topTruck = useMemo(() => {
+    const m = new Map<number, { truck: number; qty: number; items: number }>();
+    for (const s of shorts) {
+      const e = m.get(s.truck_number) ?? { truck: s.truck_number, qty: 0, items: 0 };
+      e.qty += s.quantity;
+      e.items += 1;
+      m.set(s.truck_number, e);
+    }
+    return [...m.values()].sort((a, b) => b.qty - a.qty || b.items - a.items)[0] ?? null;
+  }, [shorts]);
 
   // ---- Audit ----
   const itemByLabel = useMemo(() => new Map(trackedItems.map((i) => [i.label, i])), [trackedItems]);
@@ -425,35 +448,30 @@ export default function LiveReport() {
 
         {/* ===================== LOAD · SHORTAGES ===================== */}
         <Section eyebrow="Load" title="Shortages">
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
             <Kpi label="Distinct items" value={distinctItems} />
             <Kpi label="Trucks shorted" value={shortsByTruck.length} />
+            <Kpi
+              label="Most shorted item"
+              value={topItem ? topItem.label : "—"}
+              sub={topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : undefined}
+              tone="text-amber-300"
+            />
+            <Kpi
+              label="Most shorted truck"
+              value={topTruck ? `#${topTruck.truck}` : "—"}
+              sub={topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : undefined}
+              tone="text-amber-300"
+            />
           </div>
-          {shortsByTruck.length === 0 ? (
+          {shorts.length === 0 ? (
             <Empty>No shortages logged for this day.</Empty>
           ) : (
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-              {shortsByTruck.map(([truck, rows]) => (
-                <AnimateCard key={truck} className="card space-y-1.5 p-3">
-                  <div className="flex items-center justify-between">
-                    <span className="font-mono font-bold tabular-nums text-ink">#{truck}</span>
-                    <span className="text-[11px] text-ink-muted">
-                      {rows.length} item{rows.length === 1 ? "" : "s"}
-                    </span>
-                  </div>
-                  <ul className="space-y-0.5">
-                    {rows.map((s) => (
-                      <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
-                        <span className="truncate text-ink-soft">{shortLabel(s)}</span>
-                        <span className="shrink-0 font-mono font-semibold tabular-nums text-red-400">
-                          ×{qtyWithUnit(trackedItems, s.item_category, s.item_detail, s.quantity)}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </AnimateCard>
-              ))}
+            /* The full short sheet — same Grid / Sheet views as the Short Sheet
+               page, so the report shows the crew's actual sheet. */
+            <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
+              <ShortageSheetView shorts={shorts} board={board} />
             </div>
           )}
         </Section>
