@@ -145,9 +145,71 @@ export const COLOR_PRESETS: Record<string, { tile: string; chip: string; dot: st
   green:   { tile: "bg-gradient-to-b from-green-600 to-green-900 ring-1 ring-green-400/20 hover:from-green-500 hover:to-green-800",     chip: "bg-green-900/40 text-green-300 hover:bg-green-800/60",   dot: "bg-green-500",   swatch: "bg-green-500" },
   blue:    { tile: "bg-gradient-to-b from-blue-600 to-blue-900 ring-1 ring-blue-400/20 hover:from-blue-500 hover:to-blue-800",           chip: "bg-blue-900/40 text-blue-300 hover:bg-blue-800/60",       dot: "bg-blue-500",    swatch: "bg-blue-500" },
   indigo:  { tile: "bg-gradient-to-b from-indigo-600 to-indigo-900 ring-1 ring-indigo-400/20 hover:from-indigo-500 hover:to-indigo-800", chip: "bg-indigo-900/40 text-indigo-300 hover:bg-indigo-800/60", dot: "bg-indigo-500",  swatch: "bg-indigo-500" },
+  pink:    { tile: "bg-gradient-to-b from-pink-600 to-pink-900 ring-1 ring-pink-400/20 hover:from-pink-500 hover:to-pink-800",           chip: "bg-pink-900/40 text-pink-300 hover:bg-pink-800/60",       dot: "bg-pink-500",    swatch: "bg-pink-500" },
+  fuchsia: { tile: "bg-gradient-to-b from-fuchsia-600 to-fuchsia-900 ring-1 ring-fuchsia-400/20 hover:from-fuchsia-500 hover:to-fuchsia-800", chip: "bg-fuchsia-900/40 text-fuchsia-300 hover:bg-fuchsia-800/60", dot: "bg-fuchsia-500", swatch: "bg-fuchsia-500" },
   lime:    { tile: "bg-gradient-to-b from-lime-600 to-lime-900 ring-1 ring-lime-400/20 hover:from-lime-500 hover:to-lime-800",           chip: "bg-lime-900/40 text-lime-300 hover:bg-lime-800/60",       dot: "bg-lime-500",    swatch: "bg-lime-500" },
   stone:   { tile: "bg-gradient-to-b from-stone-500 to-stone-800 ring-1 ring-stone-300/20 hover:from-stone-400 hover:to-stone-700",     chip: "bg-stone-800/60 text-stone-300 hover:bg-stone-700/60",   dot: "bg-stone-400",   swatch: "bg-stone-400" },
 };
+
+/**
+ * The preset each built-in palette category is really painted with. The
+ * hardcoded TOP_PALETTE/SUB_PALETTE/CAT_CHIP_COLORS strings are gradients, so
+ * a dot or swatch can't be derived from them — without this table
+ * categoryDotClass fell through to the name-hash and a category's dot
+ * disagreed with its own chip (3x10 chip sky, dot green).
+ */
+export const BUILTIN_PRESET: Record<string, string> = {
+  "3x10": "sky",
+  "3x5": "violet",
+  "4x6": "emerald",
+  Paper: "orange",
+  Bulk: "rose",
+  Hygiene: "cyan",
+  Towels: "amber",
+  "Dust Mops": "teal",
+  Aprons: "violet", // collides with 3x5 — resolved by buildCategoryPalette
+};
+
+// Assignment order for categories with no built-in/user color. Ordered for
+// visual spread so adjacent categories don't land on neighbouring hues.
+const PRESET_ORDER = [
+  "sky", "orange", "emerald", "violet", "rose", "cyan", "amber", "teal",
+  "blue", "red", "lime", "fuchsia", "indigo", "green", "pink", "stone",
+];
+
+/**
+ * Assign every category its OWN preset colour — no two categories share one
+ * (3x5 and Aprons were both violet). Deterministic: user-chosen colours win,
+ * then built-in hues where still free, then the first unused preset in
+ * PRESET_ORDER by sorted category name. Feed it the full catalog so a
+ * category keeps the same colour regardless of which ones are on screen.
+ */
+export function buildCategoryPalette(
+  categories: string[],
+  meta?: CategoryMetaMap,
+): Map<string, string> {
+  const sorted = [...new Set(categories.filter(Boolean))].sort();
+  const out = new Map<string, string>();
+  const taken = new Set<string>();
+  const claim = (cat: string, preset: string) => { out.set(cat, preset); taken.add(preset); };
+
+  for (const cat of sorted) {
+    const chosen = meta?.[cat]?.color;
+    if (chosen && COLOR_PRESETS[chosen] && !taken.has(chosen)) claim(cat, chosen);
+  }
+  for (const cat of sorted) {
+    if (out.has(cat)) continue;
+    const sub = cat.includes(">") ? cat.slice(cat.indexOf(">") + 1).trim() : cat;
+    const pref = BUILTIN_PRESET[cat] ?? BUILTIN_PRESET[sub] ?? SEMANTIC_CATEGORY_PRESET[sub.toLowerCase()];
+    if (pref && COLOR_PRESETS[pref] && !taken.has(pref)) claim(cat, pref);
+  }
+  for (const cat of sorted) {
+    if (out.has(cat)) continue;
+    const free = PRESET_ORDER.find((p) => !taken.has(p));
+    claim(cat, free ?? guessPresetKey(cat));
+  }
+  return out;
+}
 
 // Categories whose NAME implies a hue — used before the hash fallback.
 const SEMANTIC_CATEGORY_PRESET: Record<string, string> = {
@@ -158,15 +220,20 @@ const SEMANTIC_CATEGORY_PRESET: Record<string, string> = {
 
 const PRESET_POOL = Object.keys(COLOR_PRESETS).filter((k) => k !== "stone");
 
-/** Best-guess preset for a category with no palette entry and no user color. */
-export function guessCategoryPreset(cat: string): { tile: string; chip: string; dot: string; swatch: string } {
+/** Best-guess preset KEY for a category with no palette entry / user color. */
+export function guessPresetKey(cat: string): string {
   const idx = cat.indexOf(">");
   const part = (idx >= 0 ? cat.slice(idx + 1) : cat).trim().toLowerCase();
   const semantic = SEMANTIC_CATEGORY_PRESET[part];
-  if (semantic) return COLOR_PRESETS[semantic];
+  if (semantic) return semantic;
   let h = 0;
   for (let i = 0; i < part.length; i++) h = (h * 31 + part.charCodeAt(i)) >>> 0;
-  return COLOR_PRESETS[PRESET_POOL[h % PRESET_POOL.length]];
+  return PRESET_POOL[h % PRESET_POOL.length];
+}
+
+/** Best-guess preset for a category with no palette entry and no user color. */
+export function guessCategoryPreset(cat: string): { tile: string; chip: string; dot: string; swatch: string } {
+  return COLOR_PRESETS[guessPresetKey(cat)];
 }
 
 // Color words in item labels → solid tile classes (extends the MAT_COLOR_PALETTE idea).
@@ -232,7 +299,15 @@ export function categoryChipClass(catKey: string, meta?: CategoryMetaMap): strin
 
 export function categoryDotClass(catKey: string, meta?: CategoryMetaMap): string {
   const userColor = meta?.[catKey]?.color;
-  return (userColor ? COLOR_PRESETS[userColor]?.dot : undefined) ?? guessCategoryPreset(catKey).dot;
+  const idx = catKey.indexOf(">");
+  const sub = idx >= 0 ? catKey.slice(idx + 1).trim() : catKey;
+  // Built-in palette hue FIRST so a dot always agrees with its own chip/tile.
+  const builtIn = BUILTIN_PRESET[catKey] ?? BUILTIN_PRESET[sub];
+  return (
+    (userColor ? COLOR_PRESETS[userColor]?.dot : undefined) ??
+    (builtIn ? COLOR_PRESETS[builtIn]?.dot : undefined) ??
+    guessCategoryPreset(catKey).dot
+  );
 }
 
 /** Item tile: MAT palette → user item color → color word in label → category class. */

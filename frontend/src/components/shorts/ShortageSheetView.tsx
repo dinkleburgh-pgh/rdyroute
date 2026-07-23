@@ -12,8 +12,8 @@ import type { Shortage, TruckWithState } from "../../types";
 import type { TrackedItem } from "../../api/hooks";
 import { useTrackedItemCategories, useTrackedItems } from "../../api/hooks";
 import {
-  categoryChipClass,
-  categoryDotClass,
+  buildCategoryPalette,
+  COLOR_PRESETS,
   DEFAULT_TRACKED_ITEMS,
   findTrackedItem,
   MAT_SIZES_S,
@@ -123,6 +123,21 @@ export default function ShortageSheetView({
     [board],
   );
 
+  // One distinct colour per category. Seeded from the WHOLE catalog (not just
+  // today's shorted categories) so a category keeps its colour every day.
+  const palette = useMemo(() => {
+    const all = new Set<string>();
+    for (const i of items) {
+      all.add(topCatOf(i));
+      const sub = subCatOf(i);
+      if (sub) all.add(sub);
+    }
+    for (const r of rows) all.add(r.category);
+    return buildCategoryPalette([...all], catMeta);
+  }, [items, rows, catMeta]);
+  const dotOf = (cat: string) => COLOR_PRESETS[palette.get(cat) ?? "stone"]?.dot ?? "bg-stone-400";
+  const chipOf = (cat: string) => COLOR_PRESETS[palette.get(cat) ?? "stone"]?.chip ?? "bg-stone-800/60 text-stone-300";
+
   if (shorts.length === 0) {
     return (
       <div className="p-6">
@@ -212,7 +227,7 @@ export default function ShortageSheetView({
                       >
                         <span className="flex items-center gap-1.5">
                           <span
-                            className={clsx("h-2 w-2 shrink-0 rounded-full", categoryDotClass(row.category, catMeta))}
+                            className={clsx("h-2 w-2 shrink-0 rounded-full", dotOf(row.category))}
                             title={row.category}
                           />
                           <span className="truncate font-medium text-slate-200">{row.label}</span>
@@ -282,7 +297,7 @@ export default function ShortageSheetView({
                       )}
                       <li className="flex items-baseline gap-1.5 px-2 py-1">
                         <span
-                          className={clsx("h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full", categoryDotClass(row.category, catMeta))}
+                          className={clsx("h-1.5 w-1.5 shrink-0 translate-y-[-1px] rounded-full", dotOf(row.category))}
                           title={row.category}
                         />
                         <span className="min-w-0 flex-1 truncate text-[11px] text-slate-200">{row.label}</span>
@@ -305,7 +320,7 @@ export default function ShortageSheetView({
           <span key={group} className="flex flex-wrap items-center gap-1">
             <span className="text-[9px] font-black uppercase tracking-[0.15em] text-slate-500">{group}</span>
             {[...new Set(rows.filter((r) => r.group === group).map((r) => r.category))].sort().map((cat) => (
-              <span key={cat} className={clsx("rounded-full px-2 py-0.5 text-[10px] font-bold", categoryChipClass(cat, catMeta))}>
+              <span key={cat} className={clsx("rounded-full px-2 py-0.5 text-[10px] font-bold", chipOf(cat))}>
                 {cat}
               </span>
             ))}
