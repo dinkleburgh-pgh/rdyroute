@@ -111,18 +111,42 @@ export function isPureUnloadSeed(t: TruckWithState): boolean {
  * A truck counts as unloaded when its raw status is "unloaded" or "loaded"
  * (loaded means it unloaded previously and already moved to load workflow) —
  * except pure day-init seeds, which are pending work, not completed work.
+ *
+ * carrierByRoute (optional): route → the truck that carried this route's
+ * freight on the PREVIOUS load day (from the route-swap log). A covered route
+ * whose own status isn't done counts as done once its carrier is unloaded —
+ * the covered truck never ran, so its carrier's unload IS its unload. Without
+ * this, a multi-day-OOS route sat pending forever (29/32 while the Day
+ * Overview grid correctly showed all 32 done, 2026-07-22: routes 4/69/91
+ * rode 7/60/52 which were unloaded).
  */
-export function unloadedTruckNumbersFromContext(ctx: OperationalDayContext): number[] {
-  return ctx.activeTrucks.filter((t) => {
+export function unloadedTruckNumbersFromContext(
+  ctx: OperationalDayContext,
+  carrierByRoute?: Map<number, TruckWithState>,
+): number[] {
+  const isDone = (t: TruckWithState): boolean => {
     if (isPureUnloadSeed(t)) return false;
     const raw = (t.state?.status ?? "dirty") as TruckStatus;
     return raw === "unloaded" || raw === "loaded";
+  };
+  return ctx.activeTrucks.filter((t) => {
+    if (isDone(t)) return true;
+    const carrier = carrierByRoute?.get(t.truck_number);
+    if (!carrier || carrier.truck_number === t.truck_number) return false;
+    if (isPureUnloadSeed(carrier)) return false;
+    const raw = (carrier.state?.status ?? "dirty") as TruckStatus;
+    // in_progress also counts: the carrier was unloaded earlier and has
+    // already moved on to loading tonight.
+    return raw === "unloaded" || raw === "in_progress" || raw === "loaded";
   }).map((t) => t.truck_number);
 }
 
 /** Count of unloaded trucks from an unload context (see {@link unloadedTruckNumbersFromContext}). */
-export function countUnloadedFromContext(ctx: OperationalDayContext): number {
-  return unloadedTruckNumbersFromContext(ctx).length;
+export function countUnloadedFromContext(
+  ctx: OperationalDayContext,
+  carrierByRoute?: Map<number, TruckWithState>,
+): number {
+  return unloadedTruckNumbersFromContext(ctx, carrierByRoute).length;
 }
 
 export function getCoverageRouteNumber(t: TruckWithState): number | null {
@@ -155,6 +179,8 @@ export interface RouteSwapLogEntryLike {
   run_date: string;
   route_truck: number;
   load_on_truck: number;
+  /** SPLIT load: the route also ran — not coverage, never substitutes. */
+  is_split?: boolean;
 }
 
 export interface OpenSpareAssignmentLike {
@@ -271,7 +297,9 @@ export function buildPrevDayCoverage(
   // most recent swap on/before prevRunDate surfaced week-old coverage on days
   // that simply had no swaps — misleading, since those trucks returned and were
   // unloaded days ago. If the previous run day had no coverage, show nothing.
-  const onPrevDay = swapLog.filter((e) => e.run_date === prevRunDate);
+  // Split rows are NOT coverage — the route ran itself; its helper's unload
+  // never substitutes for the route's own.
+  const onPrevDay = swapLog.filter((e) => e.run_date === prevRunDate && !e.is_split);
   if (onPrevDay.length === 0) return { date: null, items: [], byRoute: new Map(), byCover: new Map() };
   const byRoute = new Map<number, number>();
   // Newest-first log order → first entry seen per route is the most recent.
@@ -427,7 +455,8 @@ export function buildRouteStatusCounts(
       } else {
         const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? fallbackRouteByTruck.get(t.truck_number) ?? null;
         // Covering spares also surface in their live workflow bucket (e.g. unloaded).
-        if (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) {
+        // Split helpers likewise — they're carrying a real extra load tonight.
+        if ((coveredRoute != null && oosRouteNumbers.has(coveredRoute)) || t.route_split_route != null) {
           out[statusFor(t)] += 1;
         }
       }
@@ -441,6 +470,18 @@ export function buildRouteStatusCounts(
     // Route trucks always count in their effective status (OOS stays OOS).
     // Unfinished trucks surface under Dirty in the sidebar.
     const s = statusFor(t);
+    // A LOADED truck that is scheduled off the load day and isn't carrying a
+    // route was loaded ahead for a future day — it belongs to Off, not to
+    // tonight's Loaded count (sidebar read 34 while the load bar's roster was
+    // 33, 2026-07-22: #81 loaded but off day 4). Dirty/in-progress off-day
+    // trucks keep their workflow bucket: that's physical work happening today.
+    const offLoadedAhead =
+      getCoverageRouteNumber(t) == null && t.route_split_route == null &&
+      !holidayLoad && isScheduledOff(t, loadDayNum) && s === "loaded";
+    if (offLoadedAhead) {
+      out.off += 1;
+      continue;
+    }
     out[s === "unfinished" ? "dirty" : s] += 1;
     // If this truck is off for the load day but its workflow status resolved to
     // a real-work status (dirty/in_progress/loaded), count it in "off" too so
@@ -523,6 +564,18 @@ export function buildOperationalDayContext(
 
   const activeTrucks: TruckWithState[] = [];
   for (const truck of trucks) {
+    // SPLIT helper (LOAD role): the route ALSO runs — the helper carries the
+    // overflow as an EXTRA load slot on top of the schedule, regardless of
+    // its own schedule/type. Never applies to the unload role: a split marker
+    // exists only for the day it was entered (tomorrow's load), so the helper
+    // didn't run today.
+    if (dayRole === "load" && truck.route_split_route != null) {
+      const splitRoute = routeTruckByNumber.get(truck.route_split_route);
+      if (splitRoute && (holidayMode || includeOffDayCoverage || !isScheduledOff(splitRoute, dayNum))) {
+        activeTrucks.push(truck);
+        continue;
+      }
+    }
     // Covering trucks (spare-style takeover; any type in the load role,
     // Spares only in the unload role) stand in for the route truck — count
     // the cover instead, gated on the covered route's schedule, not the

@@ -69,6 +69,8 @@ export interface TruckWithState extends Truck {  // qr_token inherited from Truc
   route_swap_route?: number | null;
   /** True = reciprocal swap (both trucks run); false = one-way (takeover). */
   route_swap_two_way?: boolean | null;
+  /** SPLIT: this truck carries route N's overflow — route N also runs. */
+  route_split_route?: number | null;
 }
 
 export interface BatchTruck {
@@ -300,6 +302,8 @@ export interface RouteSwap {
   route_truck: number;
   /** The truck who is actually loading this route. */
   load_on_truck: number;
+  /** SPLIT load: route_truck also runs; load_on carries the overflow. */
+  is_split?: boolean;
   created_at: string;
 }
 
@@ -321,6 +325,7 @@ export interface RouteSwapLog {
   run_date: string;
   route_truck: number;
   load_on_truck: number;
+  is_split?: boolean;
   created_at: string;
 }
 

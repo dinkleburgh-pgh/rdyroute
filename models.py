@@ -36,6 +36,7 @@ from sqlalchemy import (
     Text,
     UniqueConstraint,
     func,
+    text,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -578,6 +579,9 @@ class RouteSwap(Base):
     route_truck: Mapped[int] = mapped_column(Integer, nullable=False)
     # The truck who is actually loading this route today
     load_on_truck: Mapped[int] = mapped_column(Integer, nullable=False)
+    # SPLIT load: the route truck ALSO runs — load_on_truck carries the
+    # overflow as an EXTRA load, not a takeover. Very rare (oversized routes).
+    is_split: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
@@ -599,6 +603,7 @@ class RouteSwapLog(Base):
     run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     route_truck: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     load_on_truck: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_split: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )

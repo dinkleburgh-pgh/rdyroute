@@ -38,6 +38,7 @@ import {
   useLoadDayOverride,
   useUnloadsDayOverride,
   useHolidayUnload,
+  usePrevDayCarriers,
   useTrackedItemCategories,
   type TrackedItem,
 } from "../api/hooks";
@@ -209,7 +210,8 @@ export default function LiveReport() {
     () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload"),
     [board, unloadsDay, holidayUnload],
   );
-  const unloadedCount = countUnloadedFromContext(unloadCtx);
+  const prevDayCarriers = usePrevDayCarriers(runDate, board);
+  const unloadedCount = countUnloadedFromContext(unloadCtx, prevDayCarriers);
   const unloadRosterSize = unloadCtx.activeTrucks.length;
 
   // ---- Coverage ("routes covered") ----

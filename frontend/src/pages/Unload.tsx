@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useHolidayUnload, usePrevDayCarriers, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import { buildOperationalDayContext, buildPrevDayCoverage, countUnloadedFromContext, getCoverageRouteNumber, previousRunDate } from "../utils/truckStatus";
@@ -197,10 +197,11 @@ export default function Unload() {
   // as the sidebar bar / Day Overview / Report. The card sections below may
   // show EXTRA off-schedule dirty/held trucks so nothing is hidden, but those
   // must not inflate "N to go" past the schedule.
+  const prevDayCarriers = usePrevDayCarriers(runDate, data ?? []);
   const toGo = useMemo(() => {
     const ctx = buildOperationalDayContext(data ?? [], unloadsDay, holidayUnload, false, "unload");
-    return Math.max(0, ctx.activeTrucks.length - countUnloadedFromContext(ctx));
-  }, [data, unloadsDay, holidayUnload]);
+    return Math.max(0, ctx.activeTrucks.length - countUnloadedFromContext(ctx, prevDayCarriers));
+  }, [data, unloadsDay, holidayUnload, prevDayCarriers]);
 
   async function assignBatch(truckNumber: number) {
     await assign.mutateAsync({

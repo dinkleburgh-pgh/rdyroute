@@ -471,6 +471,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       // For the "off" filter use load-day effectiveStatus directly so trucks
       // scheduled off tomorrow appear here even if they still need unloading today.
       if (filter === "off") {
+        // Loaded-ahead-while-off: a non-carrier truck loaded but scheduled off
+        // the load day lives HERE, not on tonight's Loaded board (the sidebar
+        // bucket counts it under Off the same way).
+        if (t.truck_type !== "Spare" && getCoverageRouteNumber(t) == null && t.route_split_route == null &&
+            !holidayLoad && isScheduledOff(t, runDayNum) && t.state?.status === "loaded") return true;
         if (loadDayEff !== "off") return false;
         if (t.truck_type === "Spare") {
           const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
@@ -510,6 +515,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       // For all other filters, re-evaluate auto-off trucks against unloadsDay
       // so they surface under their real workflow status.
       const s = effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
+      // Loaded-ahead-while-off: a non-carrier truck loaded but scheduled off
+      // the load day belongs to the Off view, not tonight's Loaded board
+      // (keeps the grid lock-step with the sidebar bucket clamp).
+      const offLoadedAhead =
+        t.truck_type !== "Spare" && getCoverageRouteNumber(t) == null && t.route_split_route == null &&
+        !holidayLoad && isScheduledOff(t, runDayNum) && s === "loaded";
+      if (offLoadedAhead) return false; // shown in the Off view instead
       // In dirty view, also include unfinished trucks (rendered as a sub-section)
       const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
       if (!matchStatus) return false;

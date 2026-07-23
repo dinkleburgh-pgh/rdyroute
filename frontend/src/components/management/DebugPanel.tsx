@@ -5,7 +5,7 @@
  * The full offline cross-check is `npm run check:boards` in frontend/.
  */
 import { useMemo, useState } from "react";
-import { useBoard, useHolidayLoad, useHolidayUnload } from "../../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, usePrevDayCarriers } from "../../api/hooks";
 import { todayIso } from "../../api/client";
 import { workdayNumbers } from "../Clock";
 import { clearDebugLog, getDebugLog } from "../../utils/debugLog";
@@ -28,6 +28,7 @@ export default function DebugPanel() {
 
   const log = useMemo(() => getDebugLog().slice().reverse(), [tick]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const prevDayCarriers = usePrevDayCarriers(runDate, board);
   const consistency = useMemo(() => {
     const buckets = buildRouteStatusCounts(board, loadDay, holidayLoad, unloadsDay, holidayUnload);
     const loadCtx = buildOperationalDayContext(board, loadDay, holidayLoad, false);
@@ -35,9 +36,9 @@ export default function DebugPanel() {
     return {
       buckets: Object.entries(buckets).filter(([, v]) => v > 0).map(([k, v]) => `${k}:${v}`).join("  "),
       load: `${countLoaded(board, loadDay, holidayLoad, unloadsDay, holidayUnload)} / ${loadCtx.activeTrucks.length}`,
-      unload: `${countUnloadedFromContext(unloadCtx)} / ${unloadCtx.activeTrucks.length}`,
+      unload: `${countUnloadedFromContext(unloadCtx, prevDayCarriers)} / ${unloadCtx.activeTrucks.length}`,
     };
-  }, [board, loadDay, unloadsDay, holidayLoad, holidayUnload]);
+  }, [board, loadDay, unloadsDay, holidayLoad, holidayUnload, prevDayCarriers]);
 
   async function copyLog() {
     try {

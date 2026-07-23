@@ -12,6 +12,7 @@ import {
   useUnloadsDayOverride,
   useTruckNotes,
   useOpenSpareAssignments,
+  usePrevDayCarriers,
   useRouteSwapLog,
   useSettings,
 } from "../api/hooks";
@@ -194,8 +195,13 @@ export default function RunDay() {
   const unloadActiveTrucks = unloadContext.activeTrucks;
   const unloadTotal = unloadActiveTrucks.length;
   // Shared counter so pure day-init seeds count as pending, not done —
-  // same rule as the sidebar and Load page unload bars.
-  const unloadDone = useMemo(() => countUnloadedFromContext(unloadContext), [unloadContext]);
+  // same rule as the sidebar and Load page unload bars. Prev-day carriers
+  // credit a covered route once its carrier is unloaded.
+  const prevDayCarriers = usePrevDayCarriers(runDate, board);
+  const unloadDone = useMemo(
+    () => countUnloadedFromContext(unloadContext, prevDayCarriers),
+    [unloadContext, prevDayCarriers],
+  );
   const unloadSpareCount = unloadActiveTrucks.filter((t) => t.truck_type === "Spare").length;
 
   // On holiday, two days' worth of routes run in one shift.

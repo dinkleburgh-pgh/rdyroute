@@ -137,6 +137,7 @@ class TruckWithState(_OrmBase):
     state: TruckStateOut | None = None
     route_swap_route: int | None = None  # set when this truck is the load_on_truck in a route swap
     route_swap_two_way: bool | None = None  # True = reciprocal swap (both trucks run); False = one-way (takeover)
+    route_split_route: int | None = None  # SPLIT: this truck carries route N's overflow — route N also runs
 
 
 # ---------------------------------------------------------------------------
@@ -640,6 +641,7 @@ class RouteSwapCreate(BaseModel):
     route_truck: int = Field(..., ge=1, le=999)
     load_on_truck: int = Field(..., ge=1, le=999)
     two_way: bool = Field(default=False, description="Also create the reciprocal swap row")
+    split: bool = Field(default=False, description="SPLIT load: the route truck also runs; load_on carries the overflow as an extra load")
 
 
 class RouteSwapOut(_OrmBase):
@@ -647,6 +649,7 @@ class RouteSwapOut(_OrmBase):
     run_date: date
     route_truck: int
     load_on_truck: int
+    is_split: bool = False
     created_at: datetime
 
 
@@ -655,6 +658,7 @@ class RouteSwapLogOut(_OrmBase):
     run_date: date
     route_truck: int
     load_on_truck: int
+    is_split: bool = False
     created_at: datetime
 
 

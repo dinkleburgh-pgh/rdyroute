@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import RouteSwap, RouteSwapLog, TruckState, TruckStateSource, TruckStatus, User
+from models import RouteSwap, RouteSwapLog, SpareAssignment, TruckState, TruckStateSource, TruckStatus, User
 from notification_service import (
     coverage_assigned_notification,
     coverage_removed_notification,
@@ -68,6 +68,46 @@ def create_swap(
             detail="route_truck and load_on_truck must be different. Use DELETE to clear an assignment.",
         )
 
+    if payload.split and payload.two_way:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A split load cannot also be a two-way swap.",
+        )
+
+    if payload.split:
+        # Splits are rare and deliberate — hard-guard against double-assigning
+        # the helper or splitting a route that isn't actually running.
+        helper_covering = db.scalars(
+            select(SpareAssignment).where(
+                SpareAssignment.run_date == payload.run_date,
+                SpareAssignment.spare_truck_number == payload.load_on_truck,
+                SpareAssignment.returned.is_(False),
+            )
+        ).first()
+        if helper_covering:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Truck {payload.load_on_truck} is already covering route "
+                    f"{helper_covering.covering_route_truck} — it can't also carry a split load."
+                ),
+            )
+        route_covered = db.scalars(
+            select(SpareAssignment).where(
+                SpareAssignment.run_date == payload.run_date,
+                SpareAssignment.covering_route_truck == payload.route_truck,
+                SpareAssignment.returned.is_(False),
+            )
+        ).first()
+        if route_covered:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Route {payload.route_truck} is covered by truck "
+                    f"{route_covered.spare_truck_number} — a covered route can't be split."
+                ),
+            )
+
     # Prevent double-booking load_on_truck across routes on this date
     conflict = db.scalars(
         select(RouteSwap).where(
@@ -99,10 +139,11 @@ def create_swap(
         if existing:
             previous_load_on_by_route[rt] = existing.load_on_truck
             existing.load_on_truck = lo
+            existing.is_split = payload.split
             db.flush()
             return existing
         previous_load_on_by_route[rt] = None
-        row = RouteSwap(run_date=payload.run_date, route_truck=rt, load_on_truck=lo)
+        row = RouteSwap(run_date=payload.run_date, route_truck=rt, load_on_truck=lo, is_split=payload.split)
         db.add(row)
         db.flush()
         return row
@@ -135,6 +176,7 @@ def create_swap(
             run_date=row.run_date,
             route_truck=row.route_truck,
             load_on_truck=row.load_on_truck,
+            is_split=row.is_split,
         ))
 
     # Activate covering trucks: if a load_on_truck is still in "spare" (idle)
@@ -167,7 +209,8 @@ def create_swap(
     # rides load_on_truck. Transfer it so the carrier doesn't reappear as fresh
     # work and the covered truck doesn't keep credit. Two-way swaps are a real
     # exchange (both trucks run their swapped loads) and are left untouched.
-    if not payload.two_way:
+    # SPLIT loads too: the route truck keeps its own load — nothing transfers.
+    if not payload.two_way and not payload.split:
         rt_state = db.scalars(
             select(TruckState).where(
                 TruckState.truck_number == payload.route_truck,
@@ -242,6 +285,8 @@ def create_swap(
         summary=(
             f"Created two-way route swap {payload.route_truck} ↔ {payload.load_on_truck}"
             if payload.two_way
+            else f"Split route {payload.route_truck} — overflow loads on truck {payload.load_on_truck}"
+            if payload.split
             else f"Assigned truck {payload.load_on_truck} to cover route {payload.route_truck}"
         ),
         diff_json={

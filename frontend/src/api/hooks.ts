@@ -1,8 +1,10 @@
+import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosProgressEvent } from "axios";
 import { api, todayIso } from "./client";
 import * as offlineQueue from "./offlineQueue";
 import { logDebug } from "../utils/debugLog";
+import { buildPrevDayCoverage, previousRunDate } from "../utils/truckStatus";
 import type {
   AppSetting,
   ActivityEventPage,
@@ -444,10 +446,13 @@ export function useCreateRouteSwap() {
       route_truck: number;
       load_on_truck: number;
       two_way?: boolean;
+      /** SPLIT load: the route also runs; load_on carries the overflow. */
+      split?: boolean;
     }) =>
       (await api.post<RouteSwap[]>("/route-swaps", {
         ...payload,
         two_way: payload.two_way ?? false,
+        split: payload.split ?? false,
       })).data,
     onSuccess: (_data, vars) => {
       // Prefix key invalidates every ["route-swaps", *] query at once.
@@ -480,6 +485,26 @@ export function useRouteSwapLog(days = 30) {
       (await api.get<RouteSwapLog[]>("/route-swaps/log", { params: { days } })).data,
     staleTime: 60_000,
   });
+}
+
+/**
+ * route → the truck that carried that route's freight on the PREVIOUS load
+ * day (from the route-swap log). Feed to countUnloadedFromContext so a
+ * covered route counts as unloaded once its carrier is — the covered truck
+ * never ran, so its carrier's unload IS its unload.
+ */
+export function usePrevDayCarriers(runDate: string, board: TruckWithState[]): Map<number, TruckWithState> {
+  const { data: swapLog = [] } = useRouteSwapLog(14);
+  return useMemo(() => {
+    const prev = buildPrevDayCoverage(swapLog, previousRunDate(runDate));
+    const byNum = new Map(board.map((t) => [t.truck_number, t]));
+    const m = new Map<number, TruckWithState>();
+    for (const c of prev.items) {
+      const carrier = byNum.get(c.loadOn);
+      if (carrier) m.set(c.route, carrier);
+    }
+    return m;
+  }, [swapLog, runDate, board]);
 }
 
 export function useActivityEvents(filters?: {

@@ -9,7 +9,7 @@
 import { useState, useMemo } from "react";
 import clsx from "clsx";
 import { todayIso } from "../api/client";
-import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useLoadDayOverride, useRouteSwapLog, useSettings, useUpsertSetting } from "../api/hooks";
+import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useLoadDayOverride, useRouteSwapLog, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useSettings, useUpsertSetting } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import { formatRunDate } from "../utils/dates";
@@ -35,6 +35,11 @@ export default function RouteSwapModal({ onClose }: Props) {
 
   const assignSpare = useAssignSpare();
   const deleteSpare = useDeleteSpare();
+  const createSwap = useCreateRouteSwap();
+  const deleteSwap = useDeleteRouteSwap();
+  const { data: routeSwapRows = [] } = useRouteSwaps(runDate);
+  // Active SPLIT loads — the route also runs; the helper carries overflow.
+  const splitRows = useMemo(() => routeSwapRows.filter((r) => r.is_split), [routeSwapRows]);
   const { data: swapLog = [] } = useRouteSwapLog(60);
 
   // Per route_truck: ordered list of the last 2 distinct load_on_truck values used historically
@@ -58,6 +63,7 @@ export default function RouteSwapModal({ onClose }: Props) {
 
   const [routeTruck, setRouteTruck] = useState("");
   const [loadOnTruck, setLoadOnTruck] = useState("");
+  const [splitMode, setSplitMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
@@ -259,9 +265,15 @@ export default function RouteSwapModal({ onClose }: Props) {
     if (rt === lo) { setError("Route truck and load-on truck must be different."); return; }
     setError(null);
     try {
-      await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: lo, covering_route_truck: rt });
+      if (splitMode) {
+        // SPLIT: route rt ALSO runs — lo carries the overflow as an extra load.
+        await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, split: true });
+      } else {
+        await assignSpare.mutateAsync({ run_date: runDate, spare_truck_number: lo, covering_route_truck: rt });
+      }
       setRouteTruck("");
       setLoadOnTruck("");
+      setSplitMode(false);
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
       setError(e?.response?.data?.detail ?? "Failed to save swap.");
@@ -367,6 +379,37 @@ export default function RouteSwapModal({ onClose }: Props) {
             )}
           </section>
 
+          {/* Active split loads */}
+          {splitRows.length > 0 && (
+            <section>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-amber-400">
+                Split loads <span className="ml-1 rounded-full bg-amber-800/60 px-2 py-0.5 text-amber-300">{splitRows.length}</span>
+              </p>
+              <div className="space-y-2">
+                {splitRows.map((r) => (
+                  <div
+                    key={r.id}
+                    className="flex items-center justify-between gap-3 rounded-lg border border-amber-800/50 bg-amber-950/20 px-4 py-3"
+                  >
+                    <div className="flex min-w-0 flex-1 items-center gap-3">
+                      <span className="text-xl font-black text-amber-300">#{r.route_truck}</span>
+                      <span className="text-base font-bold text-slate-500">+</span>
+                      <span className="text-xl font-black text-blue-300">#{r.load_on_truck}</span>
+                      <span className="text-xs text-slate-500">route runs on both trucks</span>
+                    </div>
+                    <button
+                      className="rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                      disabled={deleteSwap.isPending}
+                      onClick={() => deleteSwap.mutate({ id: r.id, runDate })}
+                    >
+                      Remove
+                    </button>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {/* Add swap form */}
           <section className="overflow-hidden rounded-lg border border-sky-800/50 bg-sky-950/20">
             <button
@@ -434,6 +477,19 @@ export default function RouteSwapModal({ onClose }: Props) {
               </div>
             </div>
 
+            <label className="flex items-start gap-2 rounded-md border border-amber-800/40 bg-amber-950/20 px-3 py-2">
+              <input
+                type="checkbox"
+                className="mt-0.5"
+                checked={splitMode}
+                onChange={(e) => { setSplitMode(e.target.checked); setError(null); }}
+              />
+              <span className="text-xs text-amber-200">
+                <span className="font-semibold">Split load</span> — the route truck STILL runs its route;
+                the second truck carries the overflow as an extra load. Very rare (oversized routes).
+              </span>
+            </label>
+
             {error && (
               <p className="rounded-md border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
                 {error}
@@ -441,11 +497,11 @@ export default function RouteSwapModal({ onClose }: Props) {
             )}
 
             <button
-              className="btn-primary w-full"
-              disabled={!routeTruck || !loadOnTruck || assignSpare.isPending}
+              className={clsx("w-full", splitMode ? "rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-500 disabled:opacity-40" : "btn-primary")}
+              disabled={!routeTruck || !loadOnTruck || assignSpare.isPending || createSwap.isPending}
               onClick={handleAdd}
             >
-              {assignSpare.isPending ? "Saving…" : "Add Swap"}
+              {assignSpare.isPending || createSwap.isPending ? "Saving…" : splitMode ? "Add Split Load" : "Add Swap"}
             </button>
             </div>
             )}

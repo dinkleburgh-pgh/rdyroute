@@ -75,6 +75,9 @@ function boardFiltered(filter: string): TruckWithState[] {
   return board.filter((t) => {
     const loadDayEff = effectiveStatus(t, loadDay, holidayLoad);
     if (filter === "off") {
+      // Loaded-ahead-while-off lives in the Off view (mirrors Board.tsx).
+      if (t.truck_type !== "Spare" && getCoverageRouteNumber(t) == null && t.route_split_route == null &&
+          !holidayLoad && isScheduledOff(t, loadDay) && t.state?.status === "loaded") return true;
       if (loadDayEff !== "off") return false;
       if (t.truck_type === "Spare") {
         const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
@@ -94,6 +97,11 @@ function boardFiltered(filter: string): TruckWithState[] {
     // Mutual/two-way takeover data: a truck that is itself a carrier stays.
     if (t.truck_type !== "Spare" && takenOverRoutes.has(t.truck_number) && takenOverRouteNumber(t) == null) return false;
     const s = effectiveWorkflowStatus(t, loadDay, holidayLoad, unloadsDay, holidayUnload);
+    // Loaded-ahead-while-off → Off view only (mirrors Board.tsx + bucket clamp).
+    const offLoadedAhead =
+      t.truck_type !== "Spare" && getCoverageRouteNumber(t) == null && t.route_split_route == null &&
+      !holidayLoad && isScheduledOff(t, loadDay) && s === "loaded";
+    if (offLoadedAhead) return false; // shown in the Off view instead
     const matchStatus = filter === "dirty" ? (s === "dirty" || s === "unfinished") : s === filter;
     if (!matchStatus) return false;
     if (t.truck_type === "Spare") {

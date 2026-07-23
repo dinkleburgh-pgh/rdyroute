@@ -26,6 +26,7 @@ import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 import ItemFirstEntry from "../components/shorts/ItemFirstEntry";
+import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import HierarchyPicker, { categoryChipClass, DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit } from "../components/shorts/HierarchyPicker";
 import type { TrackedItem } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
@@ -389,7 +390,7 @@ export function ShortageLogger({
 export function ShortsWorkspace() {
   const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
-  const [viewMode, setViewMode] = useState<"byItem" | "log" | "imports">("byItem");
+  const [viewMode, setViewMode] = useState<"byItem" | "log" | "sheet" | "imports">("byItem");
   const [searchParams]               = useSearchParams();
 
   const { data: shortDates = [] } = useShortageDates();
@@ -490,6 +491,16 @@ export function ShortsWorkspace() {
               </button>
               <button
                 type="button"
+                onClick={() => setViewMode("sheet")}
+                className={clsx(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
+                  viewMode === "sheet" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
+                )}
+              >
+                Sheet
+              </button>
+              <button
+                type="button"
                 onClick={() => setViewMode("imports")}
                 className={clsx(
                   "rounded-md px-3 py-1.5 text-sm font-medium transition",
@@ -507,6 +518,8 @@ export function ShortsWorkspace() {
         <div className="p-3 md:p-6">
           <ShortageImportPanel defaultRunDate={runDate} lockedRunDate />
         </div>
+      ) : viewMode === "sheet" ? (
+        <ShortageSheetView shorts={shorts} board={board} />
       ) : viewMode === "byItem" ? (
         <ItemFirstEntry
           runDate={runDate}

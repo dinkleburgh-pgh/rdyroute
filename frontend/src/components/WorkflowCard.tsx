@@ -30,6 +30,10 @@ export default function WorkflowCard({
   ringClassName?: string;
 }) {
   const coverRoute = getCoverageRouteNumber(truck);
+  // SPLIT helper: carries route N's overflow while route N ALSO runs — same
+  // big pair display, but a "+" connector and a Split label.
+  const splitRoute = coverRoute == null ? (truck.route_split_route ?? null) : null;
+  const pairRoute = coverRoute ?? splitRoute;
   return (
     <div
       className={clsx(
@@ -44,7 +48,7 @@ export default function WorkflowCard({
           const badges = (
             <span className={clsx(
               "flex min-h-[1.5rem] shrink-0 gap-1",
-              coverRoute != null ? "flex-row flex-wrap items-center justify-end" : "flex-col items-end justify-start",
+              pairRoute != null ? "flex-row flex-wrap items-center justify-end" : "flex-col items-end justify-start",
             )}>
               <span className={clsx("badge", statusClassName)}>{statusLabel}</span>
               {truck.state?.priority_hold && statusLabel !== "HOLD" && (
@@ -63,7 +67,7 @@ export default function WorkflowCard({
               )}
             </span>
           );
-          if (coverRoute == null) {
+          if (pairRoute == null) {
             return (
               <div className="flex w-full items-start justify-between gap-2">
                 <div className="flex min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
@@ -85,14 +89,17 @@ export default function WorkflowCard({
               <div className="flex w-full justify-end">{badges}</div>
               <div className="flex min-h-[2.5rem] min-w-0 items-start gap-1.5 md:min-h-[4rem] md:gap-2">
                 <div className="flex flex-col items-center">
-                  <span className="font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl text-sky-300 md:text-4xl">
-                    {coverRoute}
+                  <span className={clsx(
+                    "font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl md:text-4xl",
+                    splitRoute != null ? "text-amber-300" : "text-sky-300",
+                  )}>
+                    {pairRoute}
                   </span>
                   <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.18em] text-ink-faint md:text-[9px]">
-                    Route
+                    {splitRoute != null ? "Split" : "Route"}
                   </span>
                 </div>
-                <span className="pt-1 font-mono text-base leading-none text-ink-muted md:pt-1.5 md:text-2xl">→</span>
+                <span className="pt-1 font-mono text-base leading-none text-ink-muted md:pt-1.5 md:text-2xl">{splitRoute != null ? "+" : "→"}</span>
                 <div className="flex flex-col items-center">
                   <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl md:text-4xl", accent)}>
                     {truck.truck_number}

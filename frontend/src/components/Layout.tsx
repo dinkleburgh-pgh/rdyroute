@@ -4,7 +4,7 @@ import { useMemo, useState, useEffect } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, usePrevDayCarriers, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import ToolFab from "./ToolFab";
@@ -253,9 +253,11 @@ export default function Layout() {
     [board, unloadsDay, holidayUnload],
   );
   const totalScheduledUnload = unloadScheduleContext.activeTrucks.length;
+  // Prev-day carriers so a covered route counts done once its carrier is.
+  const prevDayCarriers = usePrevDayCarriers(todayIso(), board ?? []);
   const unloadedScheduled = useMemo(
-    () => countUnloadedFromContext(unloadScheduleContext),
-    [unloadScheduleContext],
+    () => countUnloadedFromContext(unloadScheduleContext, prevDayCarriers),
+    [unloadScheduleContext, prevDayCarriers],
   );
 
   // Debug: capture the intermittent "N+1 of N" progress overflow with the

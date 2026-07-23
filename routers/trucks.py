@@ -369,7 +369,14 @@ def get_board(
     route_swaps = db.scalars(
         select(RouteSwap).where(RouteSwap.run_date == run_date)
     ).all()
-    swap_by_load_on: dict[int, int] = {rs.load_on_truck: rs.route_truck for rs in route_swaps}
+    # SPLIT rows are a different animal: the route truck ALSO runs, the helper
+    # carries overflow — serialized as route_split_route, never as a takeover.
+    swap_by_load_on: dict[int, int] = {
+        rs.load_on_truck: rs.route_truck for rs in route_swaps if not rs.is_split
+    }
+    split_by_load_on: dict[int, int] = {
+        rs.load_on_truck: rs.route_truck for rs in route_swaps if rs.is_split
+    }
 
     result = []
     for t in trucks:
@@ -396,6 +403,7 @@ def get_board(
                 state=TruckStateOut.model_validate(s) if s else None,
                 route_swap_route=swap_route,
                 route_swap_two_way=swap_two_way,
+                route_split_route=split_by_load_on.get(t.truck_number),
             )
         )
     return result

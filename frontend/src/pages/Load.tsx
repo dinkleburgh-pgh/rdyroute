@@ -15,6 +15,7 @@ import {
   useSettings,
   useUpsertTruckState,
   useLoadSequenceSuggestions,
+  usePrevDayCarriers,
 } from "../api/hooks";
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
@@ -194,9 +195,11 @@ export default function Load() {
   const unloadTotal = unloadScheduleContext.activeTrucks.length;
   // Count "done" from the same context as the total so a spare covering an
   // off-day route can't push the numerator above the denominator (29/28 bug).
+  // Prev-day carriers credit a covered route once its carrier is unloaded.
+  const prevDayCarriers = usePrevDayCarriers(runDate, board);
   const unloadDone = useMemo(
-    () => countUnloadedFromContext(unloadScheduleContext),
-    [unloadScheduleContext],
+    () => countUnloadedFromContext(unloadScheduleContext, prevDayCarriers),
+    [unloadScheduleContext, prevDayCarriers],
   );
   const unloadPct = unloadTotal > 0 ? Math.round((unloadDone / unloadTotal) * 100) : 0;
 
