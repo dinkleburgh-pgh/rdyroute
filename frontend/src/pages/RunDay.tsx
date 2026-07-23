@@ -1,7 +1,8 @@
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { Clock, Calendar, Check, ArrowLeftRight } from "lucide-react";
+import { Clock, Calendar, Check, ArrowLeftRight, AlertTriangle } from "lucide-react";
 import {
+  useAssignSpare,
   useBoard,
   useDailyNotes,
   useHolidayLoad,
@@ -122,6 +123,88 @@ export default function RunDay() {
     return m;
   }, [board, swapLog, openSpareAssignments, runDate]);
 
+  /**
+   * TODAY's coverage only — no historical fallback. The fallback exists so the
+   * UNLOAD side can show who covered a route yesterday (that's what's being
+   * unloaded), but on the LOAD side it made a stale pairing look like a live
+   * assignment: an OOS truck nobody has covered yet today rendered "#4 ⇄ #57"
+   * from last shift's swap log instead of asking to be assigned.
+   */
+  const liveCoveringTruckMap = useMemo(
+    () =>
+      new Map<number, TruckWithState>(
+        board
+          .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
+          .map((t) => [(t.route_swap_route ?? t.state!.oos_spare_route) as number, t]),
+      ),
+    [board],
+  );
+
+  // Route trucks running today that are OOS with nobody covering them yet.
+  const needsAssignment = useMemo(
+    () =>
+      board
+        .filter(
+          (t) =>
+            t.truck_type !== "Spare" &&
+            t.is_active &&
+            (t.is_oos || t.state?.status === "oos") &&
+            !liveCoveringTruckMap.has(t.truck_number) &&
+            (holidayLoad || !isScheduledOff(t, loadDay)),
+        )
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board, liveCoveringTruckMap, holidayLoad, loadDay],
+  );
+
+  // Inline assignment for the Needs-assignment strip (mirrors the Route Swaps
+  // modal: a spare covering an OOS route is a SpareAssignment).
+  const assignSpare = useAssignSpare();
+  const [assignFor, setAssignFor] = useState<Record<number, string>>({});
+  const [assignError, setAssignError] = useState<string | null>(null);
+
+  const assignOptions = useMemo(() => {
+    const sorted = [...board].sort((a, b) => a.truck_number - b.truck_number);
+    const covering = new Set(
+      board
+        .filter((t) => t.route_swap_route != null || t.state?.oos_spare_route != null)
+        .map((t) => t.truck_number),
+    );
+    const free = (t: TruckWithState) => !covering.has(t.truck_number);
+    return {
+      spares: sorted.filter((t) => t.truck_type === "Spare" && free(t)),
+      // Schedule-based, matching RouteSwapModal — a scheduled-off truck is the
+      // natural candidate to carry a route tomorrow.
+      offToday: sorted.filter(
+        (t) =>
+          t.truck_type !== "Spare" && free(t) &&
+          !(t.is_oos || t.state?.status === "oos") &&
+          !holidayLoad && isScheduledOff(t, loadDay),
+      ),
+      routes: sorted.filter(
+        (t) =>
+          t.truck_type !== "Spare" && free(t) &&
+          !(t.is_oos || t.state?.status === "oos") &&
+          (holidayLoad || !isScheduledOff(t, loadDay)),
+      ),
+    };
+  }, [board, holidayLoad, loadDay]);
+
+  async function assignCoverage(routeTruck: number, coveringTruck: number) {
+    setAssignError(null);
+    try {
+      await assignSpare.mutateAsync({
+        run_date: runDate,
+        spare_truck_number: coveringTruck,
+        covering_route_truck: routeTruck,
+      });
+      setAssignFor((p) => { const n = { ...p }; delete n[routeTruck]; return n; });
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setAssignError(detail ?? `Could not assign #${coveringTruck} to route #${routeTruck}.`);
+      setAssignFor((p) => { const n = { ...p }; delete n[routeTruck]; return n; });
+    }
+  }
+
   // The status a card actually displays, used for sorting so the order matches
   // the visible badge:
   //  - an OOS route that's covered reflects its covering truck's status, and
@@ -129,7 +212,10 @@ export default function RunDay() {
   //    underlying badge (a dirty truck still needs unloading even if it's off
   //    the next load day), so sort it by that — keeping dirty trucks at the top.
   function displayStatusFor(t: TruckWithState, dayNum: number, holiday: boolean, role: "load" | "unload" = "load"): TruckStatus {
-    const covRaw = t.state?.status === "oos" ? coveringTruckMap.get(t.truck_number) : undefined;
+    // Load side sorts on TODAY's coverage only — an unassigned OOS route sorts
+    // as OOS (it needs assignment), not as whoever covered it last shift.
+    const map = role === "unload" ? coveringTruckMap : liveCoveringTruckMap;
+    const covRaw = t.state?.status === "oos" ? map.get(t.truck_number) : undefined;
     // Unload side: only a SPARE cover stands in. A route-truck carrier's
     // same-day coverage describes TOMORROW's load — the covered truck ran
     // its route today and sorts/displays by its own physical state.
@@ -235,7 +321,7 @@ export default function RunDay() {
   // covered, the truck covering it, whether that's a spare or a route swap.
   const coverages = useMemo(() => {
     const byNum = new Map(board.map((t) => [t.truck_number, t]));
-    const covers = [...coveringTruckMap.entries()]
+    const covers = [...liveCoveringTruckMap.entries()]
       .map(([routeNum, cover]) => ({
         routeNum,
         routeTruck: byNum.get(routeNum),
@@ -254,7 +340,7 @@ export default function RunDay() {
         coverStatus: effectiveStatus(t, loadDay, holidayLoad),
       }));
     return [...covers, ...splits].sort((a, b) => a.routeNum - b.routeNum);
-  }, [board, coveringTruckMap, loadDay, holidayLoad]);
+  }, [board, liveCoveringTruckMap, loadDay, holidayLoad]);
 
   // The previous OPERATING day, stepping over the weekend — Monday's unload is
   // Friday's load, so the prior run day is the most recent weekday before today.
@@ -537,6 +623,72 @@ export default function RunDay() {
           }}
         >
         <div style={{ overflow: "hidden" }}>
+        {/* OOS routes with nobody covering them yet — the Day Overview's
+            equivalent of Fleet's "Needs Assignment", shown until coverage is
+            actually recorded for TODAY. */}
+        {needsAssignment.length > 0 && (
+          <div className="mb-3 rounded-lg border border-amber-700/50 bg-amber-950/20 px-3 py-2.5">
+            <div className="mb-1.5 flex items-center gap-2">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">Needs assignment</span>
+              <span className="rounded-full bg-amber-700/50 px-2 py-0.5 text-[10px] font-bold text-amber-200">{needsAssignment.length}</span>
+              <span className="hidden text-[10px] text-amber-500/80 sm:inline">
+                out of service with no truck covering the route today
+              </span>
+            </div>
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {needsAssignment.map((t) => (
+                <div
+                  key={t.truck_number}
+                  className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-slate-900/60 px-2.5 py-1.5"
+                >
+                  <span className="text-sm font-black text-amber-300">#{t.truck_number}</span>
+                  <span className="text-[9px] font-semibold uppercase tracking-wide text-amber-500">OOS</span>
+                  <span className="text-slate-600">→</span>
+                  <select
+                    className="input min-w-0 flex-1 py-1 text-xs"
+                    value={assignFor[t.truck_number] ?? ""}
+                    disabled={assignSpare.isPending}
+                    onChange={(e) => {
+                      const val = e.target.value;
+                      setAssignFor((p) => ({ ...p, [t.truck_number]: val }));
+                      if (val) assignCoverage(t.truck_number, parseInt(val, 10));
+                    }}
+                  >
+                    <option value="">— Assign truck —</option>
+                    {assignOptions.spares.length > 0 && (
+                      <optgroup label="Spare trucks">
+                        {assignOptions.spares.map((x) => (
+                          <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {assignOptions.offToday.length > 0 && (
+                      <optgroup label={`Off — Day ${loadDay}`}>
+                        {assignOptions.offToday.map((x) => (
+                          <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {assignOptions.routes.filter((x) => x.truck_number !== t.truck_number).length > 0 && (
+                      <optgroup label="Route trucks">
+                        {assignOptions.routes
+                          .filter((x) => x.truck_number !== t.truck_number)
+                          .map((x) => (
+                            <option key={x.truck_number} value={x.truck_number}>#{x.truck_number}</option>
+                          ))}
+                      </optgroup>
+                    )}
+                  </select>
+                </div>
+              ))}
+            </div>
+            {assignError && (
+              <p className="mt-1.5 text-[11px] text-red-300">{assignError}</p>
+            )}
+          </div>
+        )}
+
         {/* Today's live coverages — who is covering which route on this load day. */}
         {coverages.length > 0 && (
           <div className="mb-3 rounded-lg border border-sky-800/40 bg-sky-950/15 px-3 py-2.5">
@@ -591,8 +743,10 @@ export default function RunDay() {
             .map((t) => {
               // A truck can be OOS via the is_oos flag while its status reads
               // dirty/unloaded, so substitute whenever coverage exists for the
-              // route rather than gating on status === "oos".
-              const coveringTruck = coveringTruckMap.get(t.truck_number);
+              // route rather than gating on status === "oos". TODAY's coverage
+              // only — an unassigned OOS route keeps its own card (and shows up
+              // under Needs assignment) instead of wearing a stale pairing.
+              const coveringTruck = liveCoveringTruckMap.get(t.truck_number);
               // Once a truck takes over an OOS route (any type), show the
               // cover's card instead of the empty OOS truck.
               const spareCover =
