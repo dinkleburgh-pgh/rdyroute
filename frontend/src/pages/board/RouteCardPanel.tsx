@@ -226,11 +226,12 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
                               const lastUsedNums = selectedRoute != null ? getSwapHistory(selectedRoute) : [];
                               const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                               const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
-                              const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDayNum, holidayLoad) === "off");
+                              // Schedule-based off group — see RouteSwapModal.
+                              const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDayNum, holidayLoad) !== "oos" && !holidayLoad && isScheduledOff(t, loadDayNum));
                               const otherTrucks = sorted.filter((t) => {
                                 if (t.truck_type === "Spare") return false;
-                                const s = effectiveStatus(t, loadDayNum, holidayLoad);
-                                return s !== "off" && s !== "oos";
+                                if (effectiveStatus(t, loadDayNum, holidayLoad) === "oos") return false;
+                                return holidayLoad || !isScheduledOff(t, loadDayNum);
                               });
                               return (
                                 <>

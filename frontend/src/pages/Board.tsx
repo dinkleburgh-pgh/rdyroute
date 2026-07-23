@@ -1217,11 +1217,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   const lastUsedNums = getSwapHistory(truck.truck_number);
                   const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                   const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
-                  const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) === "off");
+                  // Off group is SCHEDULE-based: a scheduled-off truck stays a
+                  // candidate even when flags (needs-check, coverage, loaded)
+                  // stop effectiveStatus from displaying it as "off".
+                  const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) !== "oos" && !holidayLoad && isScheduledOff(x, runDayNum));
                   const otherTrucks = sorted.filter((x) => {
                     if (x.truck_type === "Spare") return false;
-                    const nextStatus = effectiveStatus(x, runDayNum, holidayLoad);
-                    return nextStatus !== "off" && nextStatus !== "oos";
+                    if (effectiveStatus(x, runDayNum, holidayLoad) === "oos") return false;
+                    return holidayLoad || !isScheduledOff(x, runDayNum);
                   });
 
                   return (

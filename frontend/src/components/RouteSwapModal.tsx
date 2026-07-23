@@ -9,7 +9,7 @@
 import { useState, useMemo } from "react";
 import clsx from "clsx";
 import { todayIso } from "../api/client";
-import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useRouteSwapLog, useSettings, useUpsertSetting } from "../api/hooks";
+import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useLoadDayOverride, useRouteSwapLog, useSettings, useUpsertSetting } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import { formatRunDate } from "../utils/dates";
@@ -29,7 +29,9 @@ export default function RouteSwapModal({ onClose }: Props) {
   const { data: allSpareAssignments = [], isLoading: swapsLoading } = useSpareAssignments(runDate);
   const swaps = useMemo(() => allSpareAssignments.filter((s) => !s.returned), [allSpareAssignments]);
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
-  const { loadDay } = workdayNumbers();
+  const { loadDay: computedLoadDay } = workdayNumbers();
+  const { data: loadDayOverride } = useLoadDayOverride(runDate);
+  const loadDay = loadDayOverride ?? computedLoadDay;
 
   const assignSpare = useAssignSpare();
   const deleteSpare = useDeleteSpare();
@@ -155,13 +157,17 @@ export default function RouteSwapModal({ onClose }: Props) {
       (holidayLoad || !isScheduledOff(t, loadDay)),
   );
 
-  // Load On options: all trucks (grouped), including OOS trucks
+  // Load On options: all trucks (grouped), including OOS trucks.
+  // "Off today" is SCHEDULE-based (isScheduledOff on the load day), not the
+  // board's display status — a scheduled-off truck that ran coverage or is
+  // sitting mid-workflow (needs-check, loaded, …) is still free to carry a
+  // route tomorrow, but effectiveStatus stops calling it "off" (#64, day 4).
   const spares        = sorted.filter((t) => t.truck_type === "Spare");
-  const offTrucks     = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off");
+  const offTrucks     = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "oos" && !holidayLoad && isScheduledOff(t, loadDay));
   // OOS trucks whose route is already covered are especially good candidates
   const oosRouteless  = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && swapRouteSet.has(t.truck_number));
   const oosUncovered  = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swapRouteSet.has(t.truck_number));
-  const otherTrucks   = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
+  const otherTrucks   = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "oos" && (holidayLoad || !isScheduledOff(t, loadDay)));
 
   // Board truck map for quick label lookup
   const boardByNum = useMemo(() => new Map(board.map((t) => [t.truck_number, t])), [board]);
@@ -174,8 +180,8 @@ export default function RouteSwapModal({ onClose }: Props) {
     if (!t) return `${prefix}#${truckNum}`;
     if (t.truck_type === "Spare") return `${prefix}#${truckNum} — Spare`;
     const eff = effectiveStatus(t, loadDay, holidayLoad);
-    if (eff === "off") return `${prefix}#${truckNum} — Off`;
     if (eff === "oos") return `${prefix}#${truckNum} — OOS${swapRouteSet.has(truckNum) ? " / route covered" : ""}`;
+    if (!holidayLoad && isScheduledOff(t, loadDay)) return `${prefix}#${truckNum} — Off`;
     if (alreadyCovering) return `${prefix}#${truckNum} — already covering a route`;
     return `${prefix}#${truckNum}`;
   }
