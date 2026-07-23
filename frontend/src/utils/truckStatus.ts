@@ -236,6 +236,10 @@ export function buildHistoricalCoverageFallback(
     let bestDate: string | null = null;
     let bestLoadOn: number | null = null;
     for (const e of swapLog) {
+      // Split rows are NOT coverage — the route ran itself, so a split helper
+      // must never be resolved as standing in for it (the Spare board showed
+      // an idle split helper as "60 → 11 ROUTE/TRUCK").
+      if (e.is_split) continue;
       if (e.route_truck !== t.truck_number || e.run_date > asOfDate) continue;
       if (bestDate === null || e.run_date > bestDate) {
         bestDate = e.run_date;

@@ -533,6 +533,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         // or when the filter is "unloaded" and the spare is unloaded.
         if (filter === "dirty" && (t.state?.status === "dirty" || t.state?.status === "unfinished" || t.state == null)) return true;
         if (filter === "unloaded" && t.state?.status === "unloaded") return true;
+        // A SPLIT helper carries a real load tonight — it belongs in every
+        // lifecycle view (loaded/in_progress) like a covering spare, even
+        // though the route it helps is running normally (not OOS).
+        if (t.route_split_route != null) return true;
         const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
         if (coveredRoute == null) return false;
         const coveredStatus = truckStatusByNumber.get(coveredRoute);
@@ -760,11 +764,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             dirtyCoverageRows = dirtyRows.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) && t.state?.priority_hold !== true && t.state?.needs_checked !== true);
             needsCheckedRows = filtered.filter((t) => t.state?.needs_checked === true && t.state?.priority_hold !== true);
           } else if (!fleetMode && filter === "spare") {
+            // A split helper has a real job tonight — it belongs with the
+            // assigned spares, not the idle ones.
             coveringSpares = filtered.filter((t) =>
-              t.route_swap_route != null || t.state?.oos_spare_route != null
+              t.route_swap_route != null || t.route_split_route != null || t.state?.oos_spare_route != null
             );
             idleSpares = filtered.filter((t) =>
-              t.route_swap_route == null && t.state?.oos_spare_route == null
+              t.route_swap_route == null && t.route_split_route == null && t.state?.oos_spare_route == null
             );
           } else if (!fleetMode && filter === "oos") {
             holdRows = (data ?? []).filter((t) =>
@@ -850,7 +856,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 ? "text-amber-300"
                 : "hover:text-blue-300";
             const coverageRoute = getCoverageRouteNumber(truck) ?? coveringRouteByTruckNum.get(truck.truck_number) ?? null;
-            const showCoverageBadge = !fleetMode && coverageRoute != null;
+            // SPLIT helper: shows the same big pair but as "route + truck" —
+            // the route ALSO runs, so it's an extra load, not a takeover.
+            const splitRoute = coverageRoute == null ? (truck.route_split_route ?? null) : null;
+            const showCoverageBadge = !fleetMode && (coverageRoute != null || splitRoute != null);
             // Reverse lookup: this truck's own route is being covered by another
             // truck (route swap / OOS). Show it so the covered card isn't blank.
             const coveredBy = coverageRoute == null ? coveringTruckByRoute.get(truck.truck_number) : undefined;
@@ -901,9 +910,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     if (
                       truck.truck_type === "Spare" &&
                       truck.route_swap_route == null &&
+                      truck.route_split_route == null &&
                       truck.state?.oos_spare_route == null
                     ) {
-                      // A spare only loads to cover a route — make them pick one first.
+                      // A spare only loads to cover a route — make them pick one
+                      // first. A SPLIT assignment already gives it a job.
                       setSpareCoverageTruck(truck);
                       setSpareCoverageRoute("");
                       setSpareCoverageError(null);
@@ -950,12 +961,21 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                            (showCoveredByBadge) — one style everywhere. */
                         <div className="flex items-center gap-1 md:gap-1.5">
                           <span className="flex flex-col items-center leading-none">
-                            <span className="text-lg font-extrabold tracking-tight tabular-nums text-[#7cc4ff] md:text-3xl">
-                              {showCoverageBadge ? coverageRoute : truck.truck_number}
+                            <span className={clsx(
+                              "text-lg font-extrabold tracking-tight tabular-nums md:text-3xl",
+                              splitRoute != null ? "text-amber-300" : "text-[#7cc4ff]",
+                            )}>
+                              {showCoverageBadge ? (splitRoute ?? coverageRoute) : truck.truck_number}
                             </span>
-                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-[#5b87b3] md:text-[10px]">route</span>
+                            <span className={clsx(
+                              "mt-0.5 text-[9px] font-semibold uppercase tracking-wide md:text-[10px]",
+                              splitRoute != null ? "text-amber-500" : "text-[#5b87b3]",
+                            )}>{splitRoute != null ? "split" : "route"}</span>
                           </span>
-                          <span className="text-base font-bold text-[#7cc4ff] md:text-2xl">→</span>
+                          <span className={clsx(
+                            "text-base font-bold md:text-2xl",
+                            splitRoute != null ? "text-amber-400" : "text-[#7cc4ff]",
+                          )}>{splitRoute != null ? "+" : "→"}</span>
                           <span className="flex flex-col items-center leading-none">
                             <span className={clsx("text-lg font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>
                               {showCoverageBadge ? truck.truck_number : coveredBy!.num}
