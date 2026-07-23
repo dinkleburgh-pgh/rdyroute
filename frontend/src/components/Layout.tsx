@@ -96,7 +96,7 @@ const ROLE_NAV_ACCESS: Record<AuthRole, Set<string>> = {
   lead: new Set(["/unload", "/load", "/fleet", "/communications", "/shorts", "/notes", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
   loader: new Set(["/load", "/communications", "/audit"]),
   unloader: new Set(["/unload", "/communications"]),
-  guest: new Set(["/fleet-schedule"]),
+  guest: new Set(["/fleet-schedule", "/report"]),
 };
 
 const ROLE_LABELS: Record<AuthRole, string> = {
@@ -200,11 +200,14 @@ export default function Layout() {
     setMoreOpen(false);
   }, [location.pathname]);
 
-  // Guests are read-only and locked to Day Overview
+  // Guests are read-only and locked to the pages they're allowed to view
+  // (Day Overview, Fleet Schedule, and the shareable Run Report).
+  const GUEST_PATHS = ["/", "/fleet-schedule", "/report"];
   useEffect(() => {
-    if (user?.role === "guest" && location.pathname !== "/" && location.pathname !== "/fleet-schedule") {
+    if (user?.role === "guest" && !GUEST_PATHS.includes(location.pathname)) {
       nav("/", { replace: true });
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.role, location.pathname, nav]);
 
   const { loadDay, unloadsDay } = workdayNumbers();
