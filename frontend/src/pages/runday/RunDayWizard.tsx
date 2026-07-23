@@ -476,10 +476,11 @@ export default function RunDayWizard({
                           const lastUsedNums = getSwapHistory(t.truck_number);
                           const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                           const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
-                          const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "off");
+                          // Schedule-based off group — matches RouteSwapModal.
+                          const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) !== "oos" && !holidayLoad && isScheduledOff(x, loadDay));
                           const swappedRouteSet = coveredRouteSet;
                           const oosRouteless = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(x.truck_number) && x.truck_number !== t.truck_number);
-                          const otherTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) !== "off" && effectiveStatus(x, loadDay, holidayLoad) !== "oos");
+                          const otherTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, loadDay, holidayLoad) !== "oos" && (holidayLoad || !isScheduledOff(x, loadDay)));
                           return (
                             <>
                               {lastUsed.length > 0 && (
@@ -592,12 +593,13 @@ export default function RunDayWizard({
                         const lastUsedNums = !isNaN(routeNum) ? getSwapHistory(routeNum) : [];
                         const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
                         const spareTrucks = sorted.filter((t) => t.truck_type === "Spare");
-                        const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "off");
+                        // Schedule-based off group — matches RouteSwapModal.
+                        const offTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "oos" && !holidayLoad && isScheduledOff(t, loadDay));
                         // OOS trucks whose route is already covered are routeless and available
                         const swappedRouteSet = coveredRouteSet;
                         const oosRouteless = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && swappedRouteSet.has(t.truck_number));
                         const oosUncovered = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) === "oos" && !swappedRouteSet.has(t.truck_number));
-                        const otherTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "off" && effectiveStatus(t, loadDay, holidayLoad) !== "oos");
+                        const otherTrucks = sorted.filter((t) => t.truck_type !== "Spare" && effectiveStatus(t, loadDay, holidayLoad) !== "oos" && (holidayLoad || !isScheduledOff(t, loadDay)));
                         return (
                           <>
                             {lastUsed.length > 0 && (

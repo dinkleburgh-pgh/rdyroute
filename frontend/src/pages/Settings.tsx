@@ -11,7 +11,6 @@ import RoleAccessPanel from "../components/management/RoleAccessPanel";
 import ActivityPanel from "../components/management/ActivityPanel";
 import ColorsPanel from "../components/management/ColorsPanel";
 import WorkflowsPanel from "../components/management/WorkflowsPanel";
-import BatchingPanel from "../components/management/BatchingPanel";
 import CommunicationsPanel from "../components/management/CommunicationsPanel";
 import AdvancedPanel from "../components/management/AdvancedPanel";
 import DevelopmentPanel from "../components/management/DevelopmentPanel";
@@ -27,7 +26,7 @@ import ExportImportPanel from "../components/management/ExportImportPanel";
 import PDFReportsPanel from "../components/management/PDFReportsPanel";
 import DriverQRPanel from "../components/management/DriverQRPanel";
 import TruckOpsActivityPanel from "../components/management/TruckOpsActivityPanel";
-import PrevDayCoveragePanel from "../components/management/PrevDayCoveragePanel";
+import PreviousDataEntryPanel from "../components/management/PreviousDataEntryPanel";
 import PageHeader from "../components/PageHeader";
 import { ShortsWorkspace } from "./Shorts";
 
@@ -61,7 +60,7 @@ type Category =
   | "driver_qr"
   | "connections"
   | "short_imports"
-  | "prev_coverage";
+  | "prev_entry";
 
 // Two-level navigation: Cards (groups) → Tabs (sub-categories)
 type GroupId = "app" | "users" | "items" | "fleet" | "comms" | "ops" | "advanced" | "data" | "shortages";
@@ -158,16 +157,14 @@ const CARD_GROUPS: CardGroup[] = [
   {
     id: "ops",
     label: "Operations",
-    desc: "Workflows, end-of-day batching, force-finish loads, and workday resets",
-    mobileDesc: "Workflows, batching, resets",
+    desc: "Workflows, force-finish loads, and workday resets",
+    mobileDesc: "Workflows and resets",
     borderColor: "border-l-orange-500",
     bgTint: "bg-orange-950/35",
     tabs: [
       { id: "workflows",    label: "Workflows" },
-      { id: "batching",     label: "Batching" },
       { id: "recovery",     label: "Recovery" },
       { id: "resets",       label: "Resets" },
-      { id: "prev_coverage", label: "Prev Day Coverage" },
     ],
   },
   {
@@ -187,11 +184,12 @@ const CARD_GROUPS: CardGroup[] = [
   {
     id: "data",
     label: "Data & Reports",
-    desc: "Export / import backups, PDF day reports",
-    mobileDesc: "Import and reports",
+    desc: "End-of-shift data entry, export / import backups, PDF day reports",
+    mobileDesc: "Data entry, import, reports",
     borderColor: "border-l-emerald-500",
     bgTint: "bg-emerald-950/35",
     tabs: [
+      { id: "prev_entry",    label: "Previous Data Entry" },
       { id: "history_activity", label: "History & Activity" },
       { id: "export_import", label: "Export & Import", adminOnly: true },
       { id: "pdf_reports",   label: "PDF Reports", adminOnly: true },
@@ -287,7 +285,6 @@ export default function Management() {
     switch (activeTab) {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
-      case "batching":       return <BatchingPanel />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
       case "development":    return <DevelopmentPanel />;
       case "connections":    return <ConnectionsPanel />;
@@ -308,7 +305,7 @@ export default function Management() {
       case "driver_qr":      return <DriverQRPanel />;
       case "export_import":  return <ExportImportPanel />;
       case "pdf_reports":    return <PDFReportsPanel />;
-      case "prev_coverage":  return <PrevDayCoveragePanel />;
+      case "prev_entry":     return <PreviousDataEntryPanel />;
       default:               return null;
     }
   }
