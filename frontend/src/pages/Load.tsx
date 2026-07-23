@@ -221,11 +221,14 @@ export default function Load() {
   }, [board, loadDay, unloadsDay, holidayLoad, holidayUnload, loadDisplayTrucks, unloadScheduleContext, runDate]);
 
   const anyInProgress = Boolean(inProgress);
-  // A spare can't load until it's covering a route (enforced on the backend too).
+  // A spare can't load until it's covering a route (enforced on the backend
+  // too). A SPLIT assignment counts — the spare is carrying a route's
+  // overflow even though it isn't "covering" it.
   const confirmIsUncoveredSpare =
     confirmLoadTruck != null &&
     confirmLoadTruck.truck_type === "Spare" &&
     confirmLoadTruck.route_swap_route == null &&
+    confirmLoadTruck.route_split_route == null &&
     confirmLoadTruck.state?.oos_spare_route == null;
 
   async function startLoad(t: TruckWithState) {
@@ -662,6 +665,8 @@ export default function Load() {
                 ? "Another truck is already in progress. Finish it first."
                 : confirmIsUncoveredSpare
                 ? "This spare has no route to cover yet. Assign a route to it on the board before loading."
+                : confirmLoadTruck.route_split_route != null
+                ? `Split load — carrying route #${confirmLoadTruck.route_split_route}'s overflow.`
                 : `${confirmLoadTruck.truck_type}${confirmLoadTruck.state?.batch_id != null ? ` · Batch ${confirmLoadTruck.state.batch_id}` : ""}${confirmLoadTruck.state?.wearers ? ` · ${confirmLoadTruck.state.wearers} wearers` : ""}`}
             </p>
             <div className="flex justify-end gap-2">
