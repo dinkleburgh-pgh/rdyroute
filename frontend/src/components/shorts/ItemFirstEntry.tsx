@@ -36,6 +36,8 @@ import HierarchyPicker, {
 } from "./HierarchyPicker";
 
 interface SessionBatch {
+  /** `${category}||${detail}` — one box per ITEM, merged across submits. */
+  key: string;
   ids: number[];
   queuedCount: number;
   label: string;
@@ -144,11 +146,27 @@ export default function ItemFirstEntry({
         initials: user?.username?.slice(0, 3).toUpperCase() ?? "",
         entries,
       });
+      const key = `${selectedItem.category}||${selectedItem.detail}`;
+      // Merge into the item's existing box (and float it to the top) instead
+      // of stacking a second identical box for the same item.
+      const merge = (log: SessionBatch[], addIds: number[], addQueued: number): SessionBatch[] => {
+        const prev = log.find((b) => b.key === key);
+        const rest = log.filter((b) => b.key !== key);
+        return [
+          {
+            key,
+            label,
+            ids: [...new Set([...(prev?.ids ?? []), ...addIds])],
+            queuedCount: (prev?.queuedCount ?? 0) + addQueued,
+          },
+          ...rest,
+        ];
+      };
       if (Array.isArray(result)) {
-        setSessionLog((log) => [{ ids: result.map((r) => r.id), queuedCount: 0, label }, ...log]);
+        setSessionLog((log) => merge(log, result.map((r) => r.id), 0));
         toast.success(`Logged ${label} for ${entries.length} truck${entries.length !== 1 ? "s" : ""}`);
       } else {
-        setSessionLog((log) => [{ ids: [], queuedCount: entries.length, label }, ...log]);
+        setSessionLog((log) => merge(log, [], entries.length));
         toast.info(`Offline — ${entries.length} row${entries.length !== 1 ? "s" : ""} queued, will sync`);
       }
       setQtyByTruck(new Map());
@@ -159,6 +177,15 @@ export default function ItemFirstEntry({
       toast.error(typeof detail === "string" ? detail : `Could not log ${label}.`);
     }
   }
+
+  // Resolve each box's live rows and drop boxes whose rows were all undone
+  // (an emptied box used to linger with no chips).
+  const visibleSessionLog = useMemo(() => {
+    const byId = new Map(shorts.map((s) => [s.id, s]));
+    return sessionLog
+      .map((batch) => ({ batch, rows: batch.ids.map((id) => byId.get(id)).filter((s): s is Shortage => s != null) }))
+      .filter(({ batch, rows }) => rows.length > 0 || batch.queuedCount > 0);
+  }, [sessionLog, shorts]);
 
   const packSize = selTracked?.pack_size;
   const unitLabel = selTracked?.unit_label;
@@ -339,16 +366,16 @@ export default function ItemFirstEntry({
         </>
       )}
 
-      {/* Session log — everything logged through this mode since page open */}
-      {sessionLog.length > 0 && (
+      {/* Session log — everything logged through this mode since page open.
+          One box per ITEM; a box disappears once its last row is undone. */}
+      {visibleSessionLog.length > 0 && (
         <section className="space-y-2">
           <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Logged this session</h4>
           <div className="space-y-2">
-            {sessionLog.map((batch, bi) => {
-              const rows = shorts.filter((s) => batch.ids.includes(s.id));
+            {visibleSessionLog.map(({ batch, rows }) => {
               return (
                 <AnimateCard
-                  key={`${batch.label}-${bi}-${batch.ids[0] ?? "q"}`}
+                  key={batch.key}
                   className="rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3"
                 >
                   <div className="flex flex-wrap items-center gap-2">
