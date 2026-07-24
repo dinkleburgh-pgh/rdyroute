@@ -59,6 +59,21 @@ export default function Unload() {
   // or null. This — not today's assignment — is the coverage the unload
   // workflow cares about.
   const prevCoverOf = (t: TruckWithState): number | null => prevCoverage.byCover.get(t.truck_number) ?? null;
+  // Route whose SPLIT overflow this truck carried on the prev load day. A
+  // split truck ran too, so it comes back dirty and needs calling out for the
+  // route it helped — but the route ALSO ran itself (byCover excludes splits),
+  // so this is a separate signal.
+  const prevSplitCoverOf = (t: TruckWithState): number | null => prevCoverage.splitHelpers.get(t.truck_number) ?? null;
+  const isSplitHelper = (t: TruckWithState): boolean => prevSplitCoverOf(t) != null;
+  // What this truck is unloaded AS: prev-day coverage (route → truck), or a
+  // prev-day split it carried (route + truck), or nothing.
+  const coverDisplay = (t: TruckWithState): { route: number | null; split: boolean } => {
+    const c = prevCoverOf(t);
+    if (c != null) return { route: c, split: false };
+    const s = prevSplitCoverOf(t);
+    if (s != null) return { route: s, split: true };
+    return { route: null, split: false };
+  };
 
   const batchingDisabled = useMemo(
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
@@ -150,12 +165,16 @@ export default function Unload() {
     [allTrucks, recentlyUnloaded],
   );
   const dirtyRoute = useMemo(
-    () => dirty.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && t.state?.priority_hold !== true),
-    [dirty],
+    () => dirty.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && !isSplitHelper(t) && t.state?.priority_hold !== true),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dirty, prevCoverage],
   );
+  // Coverage section = today's covering trucks + prev-day SPLIT helpers (they
+  // carried a route's overflow yesterday, so call them out for that route).
   const dirtyCoverages = useMemo(
-    () => dirty.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) && t.state?.priority_hold !== true),
-    [dirty],
+    () => dirty.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null || isSplitHelper(t)) && t.state?.priority_hold !== true),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dirty, prevCoverage],
   );
   const requested = useMemo(
     () => dirty.filter((t) => t.state?.priority_hold === true),
@@ -303,6 +322,7 @@ export default function Unload() {
   /** Cards style: a tappable dirty-family truck card (opens the action menu). */
   function DirtyCard({ t, index, accent, label, labelClass }: { t: TruckWithState; index: number; accent: string; label: string; labelClass: string }) {
     const isUndo = recentlyUnloaded.has(t.truck_number);
+    const cd = coverDisplay(t);
     return (
       <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.02} className="h-full">
         <button type="button" onClick={() => openTruckMenu(t)} className="h-full w-full text-left transition-all duration-150 active:scale-[0.98]">
@@ -311,7 +331,8 @@ export default function Unload() {
             accent={isUndo ? "text-st-unloaded" : accent}
             statusLabel={isUndo ? "Unloaded" : label}
             statusClassName={isUndo ? "bg-st-unloaded text-[#052e16]" : labelClass}
-            coverageRoute={prevCoverOf(t)}
+            coverageRoute={cd.route}
+            coverageSplit={cd.split}
             footer={t.state?.wearers ? <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span> : null}
             interactive
             ringClassName={isUndo ? "hover:ring-st-unloaded" : "hover:ring-st-dirty"}
@@ -327,7 +348,7 @@ export default function Unload() {
     const isBusy = busy === t.truck_number;
     const isBatchOpen = batchOpen === t.truck_number;
     const isOverflowOpen = overflowOpen === t.truck_number;
-    const coveredRoute = prevCoverOf(t); // prev-day coverage — what it's unloaded as
+    const cd = coverDisplay(t); // prev-day coverage / split — what it's unloaded as
     const detailParts: string[] = [];
     if (t.truck_type === "Spare") detailParts.push("Spare");
     if (t.state?.batch_id != null) detailParts.push(`Batch ${t.state.batch_id}`);
@@ -336,7 +357,7 @@ export default function Unload() {
       <AnimateCard key={t.truck_number} delay={index * 0.03} className={clsx("card flex flex-col !p-0", opts.accentClass)}>
         <div className="flex items-center gap-3 px-4 py-3">
           <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
-          {coveredRoute != null && <CoverageTag route={coveredRoute} truck={t.truck_number} className="shrink-0" />}
+          {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} className="shrink-0" />}
           <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
           {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
           {isUndo ? (
@@ -443,13 +464,13 @@ export default function Unload() {
               </p>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 {trucks.map((t) => {
-                  const cr = prevCoverOf(t);
+                  const cd = coverDisplay(t);
                   return (
                     <span key={t.truck_number} className="flex min-h-[3.35rem] items-start justify-between rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5">
                       <span className="pt-0.5 text-lg font-extrabold tracking-tight tabular-nums text-ink">#{t.truck_number}</span>
                       <span className="flex flex-col items-end gap-1">
                         <span className="rounded-full bg-red-950/60 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-300 ring-1 ring-red-900/80">Dirty</span>
-                        {cr != null && <CoverageTag route={cr} truck={t.truck_number} />}
+                        {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
                         {t.state?.priority_hold && (
                           <span className="inline-flex items-center rounded-pill bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-300 ring-1 ring-amber-900/80">Hold</span>
                         )}
@@ -505,12 +526,12 @@ export default function Unload() {
               <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
                 {unloadedSorted.map((t, index) => {
                   const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
-                  const cov = prevCoverOf(t);
+                  const cd = coverDisplay(t);
                   return (
                     <AnimateCard key={t.truck_number} delay={index * 0.02} className="h-full">
                       <button type="button" onClick={() => openTruckMenu(t)} className="flex h-full min-h-[6rem] w-full flex-col items-center justify-center rounded-[10px] border border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.06)] px-1.5 py-2.5 text-center transition-shadow hover:ring-2 hover:ring-st-unloaded">
                         <span className="font-mono text-[17px] font-extrabold leading-none text-ink">#{t.truck_number}</span>
-                        {cov != null && <span className="mt-1 flex justify-center"><CoverageTag route={cov} truck={t.truck_number} /></span>}
+                        {cd.route != null && <span className="mt-1 flex justify-center"><CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} /></span>}
                         <span className="mt-1 font-mono text-[10px] text-ink-muted">{unloadedSort === "order" ? `#${index + 1} · ${time}` : time}</span>
                       </button>
                     </AnimateCard>
@@ -528,7 +549,7 @@ export default function Unload() {
                           <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-unloaded ring-1 ring-st-unloaded/60">{idx + 1}</span>
                         )}
                         <button type="button" onClick={() => openTruckMenu(t)} className="h-full w-full text-left transition-all duration-150 active:scale-[0.98]">
-                          <LoadWorkflowCard truck={t} accent="text-st-unloaded" statusLabel="Unloaded" statusClassName="bg-st-unloaded text-[#052e16]" coverageRoute={prevCoverOf(t)} footer={<span className="text-xs text-ink-muted">{time}</span>} interactive ringClassName="hover:ring-st-unloaded" />
+                          <LoadWorkflowCard truck={t} accent="text-st-unloaded" statusLabel="Unloaded" statusClassName="bg-st-unloaded text-[#052e16]" coverageRoute={coverDisplay(t).route} coverageSplit={coverDisplay(t).split} footer={<span className="text-xs text-ink-muted">{time}</span>} interactive ringClassName="hover:ring-st-unloaded" />
                         </button>
                       </div>
                     </AnimateCard>
@@ -570,7 +591,7 @@ export default function Unload() {
           const t = allTrucks.find((x) => x.truck_number === menuTruck.truck_number) ?? menuTruck;
           const isUndo = recentlyUnloaded.has(t.truck_number);
           const isUnfin = t.state?.status === "unfinished";
-          const cov = prevCoverOf(t);
+          const cd = coverDisplay(t);
           const isBusy = busy === t.truck_number;
           const close = () => setMenuTruck(null);
           return createPortal(
@@ -582,7 +603,7 @@ export default function Unload() {
                     <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
                       {t.truck_type}
                       {isUnfin ? " · Unfinished" : ""}
-                      {cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
+                      {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
                     </p>
                   </div>
                   <button className="btn-ghost" onClick={close}>Close</button>

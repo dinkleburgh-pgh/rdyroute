@@ -20,6 +20,7 @@ export default function WorkflowCard({
   interactive = false,
   ringClassName = "hover:ring-blue-500",
   coverageRoute,
+  coverageSplit = false,
 }: {
   truck: TruckWithState;
   accent: string;
@@ -37,15 +38,17 @@ export default function WorkflowCard({
    * being unloaded), never tonight's assignment. null hides the pair.
    */
   coverageRoute?: number | null;
+  /** With coverageRoute set, render the pair as a SPLIT ("route + truck",
+   *  amber) — the truck carried that route's overflow (prev-day split). */
+  coverageSplit?: boolean;
 }) {
   const overrideActive = coverageRoute !== undefined;
   const derivedCover = getCoverageRouteNumber(truck);
-  const coverRoute = overrideActive ? coverageRoute : derivedCover;
   // SPLIT helper: carries route N's overflow while route N ALSO runs — same
-  // big pair display, but a "+" connector and a Split label. Split never
-  // applies under an explicit override (the unload side shows prev-day cover).
-  const splitRoute = overrideActive ? null : (derivedCover == null ? (truck.route_split_route ?? null) : null);
-  const pairRoute = coverRoute ?? splitRoute;
+  // big pair display, but a "+" connector and a Split label.
+  const derivedSplit = derivedCover == null ? (truck.route_split_route ?? null) : null;
+  const pairRoute = overrideActive ? (coverageRoute ?? null) : (derivedCover ?? derivedSplit);
+  const isSplit = overrideActive ? (coverageSplit && pairRoute != null) : (derivedCover == null && derivedSplit != null);
   return (
     <div
       className={clsx(
@@ -103,15 +106,15 @@ export default function WorkflowCard({
                 <div className="flex flex-col items-center">
                   <span className={clsx(
                     "font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl md:text-4xl",
-                    splitRoute != null ? "text-amber-300" : "text-sky-300",
+                    isSplit ? "text-amber-300" : "text-sky-300",
                   )}>
                     {pairRoute}
                   </span>
                   <span className="mt-0.5 text-[7px] font-bold uppercase tracking-[0.18em] text-ink-faint md:text-[9px]">
-                    {splitRoute != null ? "Split" : "Route"}
+                    {isSplit ? "Split" : "Route"}
                   </span>
                 </div>
-                <span className="pt-1 font-mono text-base leading-none text-ink-muted md:pt-1.5 md:text-2xl">{splitRoute != null ? "+" : "→"}</span>
+                <span className="pt-1 font-mono text-base leading-none text-ink-muted md:pt-1.5 md:text-2xl">{isSplit ? "+" : "→"}</span>
                 <div className="flex flex-col items-center">
                   <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl md:text-4xl", accent)}>
                     {truck.truck_number}
