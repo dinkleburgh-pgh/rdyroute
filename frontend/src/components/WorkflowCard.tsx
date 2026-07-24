@@ -19,6 +19,7 @@ export default function WorkflowCard({
   disabled = false,
   interactive = false,
   ringClassName = "hover:ring-blue-500",
+  coverageRoute,
 }: {
   truck: TruckWithState;
   accent: string;
@@ -28,11 +29,22 @@ export default function WorkflowCard({
   disabled?: boolean;
   interactive?: boolean;
   ringClassName?: string;
+  /**
+   * Override the coverage route shown in the ROUTE → TRUCK pair. Undefined
+   * (default) derives TODAY's coverage from the truck — used by the Load page.
+   * Passing a value (number or null) uses it verbatim — the Unload page passes
+   * PREVIOUS-day coverage (the route this truck actually carried, i.e. what's
+   * being unloaded), never tonight's assignment. null hides the pair.
+   */
+  coverageRoute?: number | null;
 }) {
-  const coverRoute = getCoverageRouteNumber(truck);
+  const overrideActive = coverageRoute !== undefined;
+  const derivedCover = getCoverageRouteNumber(truck);
+  const coverRoute = overrideActive ? coverageRoute : derivedCover;
   // SPLIT helper: carries route N's overflow while route N ALSO runs — same
-  // big pair display, but a "+" connector and a Split label.
-  const splitRoute = coverRoute == null ? (truck.route_split_route ?? null) : null;
+  // big pair display, but a "+" connector and a Split label. Split never
+  // applies under an explicit override (the unload side shows prev-day cover).
+  const splitRoute = overrideActive ? null : (derivedCover == null ? (truck.route_split_route ?? null) : null);
   const pairRoute = coverRoute ?? splitRoute;
   return (
     <div
