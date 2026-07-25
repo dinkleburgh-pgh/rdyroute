@@ -6,16 +6,18 @@ import clsx from "clsx";
 /**
  * "Download image" button that saves a target report section as a PNG.
  *
- * Capture: renders a fully-expanded off-screen CLONE (scroll regions opened,
- * sticky cells un-stuck, sized to content) so the whole report is captured at
- * content width on any device — not the clipped mobile viewport.
+ * Layout: the report is captured inside an off-screen DESKTOP-width iframe, so
+ * responsive layouts resolve to their wide/horizontal form (KPIs in a row, the
+ * full grid / all batch cards) instead of the narrow phone stack. The result is
+ * one landscape image that shows the whole sheet — legible when opened on a
+ * phone. html-to-image reads styles via the global getComputedStyle, which does
+ * reflect the iframe's viewport, so the desktop media queries apply.
  *
- * Delivery: `<a download>` is silently ignored on iOS Safari / installed PWAs,
- * and firing `navigator.share()` right after the async capture fails because
- * iOS has already spent the tap's "user gesture". So on touch devices we pop a
- * small sheet with a "Save image" button — tapping THAT is a fresh gesture, so
- * the native share sheet (Save Image / Save to Files) opens reliably. Desktop
- * just downloads the file.
+ * Delivery: `<a download>` is ignored on iOS Safari / installed PWAs, and firing
+ * navigator.share() right after the async capture fails (the tap's gesture is
+ * spent). So touch devices get a sheet with a "Save image" button — that fresh
+ * tap opens the native share sheet (Save Image / Save to Files). Desktop just
+ * downloads the file.
  */
 export default function DownloadImageButton({
   targetRef,
@@ -31,7 +33,6 @@ export default function DownloadImageButton({
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
-  // On touch devices we stage the captured image and let a fresh tap share it.
   const [sheet, setSheet] = useState<{ url: string; file: File; canShare: boolean } | null>(null);
 
   function closeSheet() {
@@ -46,26 +47,8 @@ export default function DownloadImageButton({
     if (!node || busy) return;
     setBusy(true);
     setErr(false);
-    const wrapper = document.createElement("div");
-    wrapper.style.cssText =
-      "position:fixed;left:-100000px;top:0;z-index:-1;background:#07090d;padding:20px;";
     try {
-      const clone = node.cloneNode(true) as HTMLElement;
-      wrapper.appendChild(clone);
-      document.body.appendChild(wrapper);
-      expandForCapture(clone);
-      const width = clone.scrollWidth || clone.offsetWidth;
-      const pixelRatio = width > 2600 ? 1 : width > 1500 ? 1.5 : 2;
-
-      const blob = await toBlob(clone, {
-        pixelRatio,
-        cacheBust: true,
-        backgroundColor: "#07090d",
-        width: clone.scrollWidth,
-        height: clone.scrollHeight,
-      });
-      if (!blob) throw new Error("capture produced no image");
-
+      const blob = await captureNode(node);
       const safe = filename.trim().replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
       const fname = safe.endsWith(".png") ? safe : `${safe}.png`;
       const file = new File([blob], fname, { type: "image/png" });
@@ -73,14 +56,12 @@ export default function DownloadImageButton({
         typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 
       if (coarse) {
-        // Stage it — the actual save happens on a fresh tap in the sheet.
         const canShare =
           typeof navigator.canShare === "function" &&
           typeof navigator.share === "function" &&
           navigator.canShare({ files: [file] });
         setSheet({ url: URL.createObjectURL(blob), file, canShare });
       } else {
-        // Desktop: a real file download.
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
@@ -94,7 +75,6 @@ export default function DownloadImageButton({
       console.error("DownloadImageButton: capture failed", e);
       setErr(true);
     } finally {
-      wrapper.remove();
       setBusy(false);
     }
   }
@@ -105,7 +85,6 @@ export default function DownloadImageButton({
       await navigator.share({ files: [sheet.file], title: sheet.file.name });
       closeSheet();
     } catch (e) {
-      // Dismissed the share sheet — leave ours open so they can retry.
       if (e instanceof DOMException && e.name === "AbortError") return;
       console.error("share failed", e);
     }
@@ -131,7 +110,7 @@ export default function DownloadImageButton({
           className="fixed inset-0 z-[9999] flex flex-col items-center gap-3 overflow-auto bg-black/90 p-4"
           onClick={closeSheet}
         >
-          <div className="flex w-full max-w-3xl items-center justify-between gap-2 text-sm text-white">
+          <div className="flex w-full max-w-5xl items-center justify-between gap-2 text-sm text-white">
             <span className="font-semibold">Report image ready</span>
             <button
               type="button"
@@ -149,12 +128,12 @@ export default function DownloadImageButton({
                 e.stopPropagation();
                 shareFromSheet();
               }}
-              className="inline-flex w-full max-w-3xl items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-base font-bold text-white active:bg-emerald-600"
+              className="inline-flex w-full max-w-5xl items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-base font-bold text-white active:bg-emerald-600"
             >
               <ShareIcon className="h-5 w-5" /> Save image
             </button>
           ) : (
-            <p className="w-full max-w-3xl text-center text-sm text-white/80">
+            <p className="w-full max-w-5xl text-center text-sm text-white/80">
               Press &amp; hold the image, then choose <b>Save Image</b>.
             </p>
           )}
@@ -171,6 +150,92 @@ export default function DownloadImageButton({
   );
 }
 
+/** Capture a node to PNG. Prefer the desktop-width iframe (horizontal layout);
+ *  fall back to a plain off-screen clone if the iframe path fails. */
+async function captureNode(node: HTMLElement): Promise<Blob> {
+  try {
+    return await captureInDesktopFrame(node);
+  } catch (e) {
+    console.warn("DownloadImageButton: desktop-frame capture failed, falling back", e);
+    return await captureInline(node);
+  }
+}
+
+const CAPTURE_BG = "#07090d";
+const DESKTOP_WIDTH = 1280; // ≥ Tailwind lg/xl so responsive grids go horizontal
+
+async function toPngBlob(clone: HTMLElement): Promise<Blob> {
+  expandForCapture(clone);
+  const width = clone.scrollWidth || clone.offsetWidth;
+  const pixelRatio = width > 2600 ? 1 : width > 1500 ? 1.5 : 2;
+  const blob = await toBlob(clone, {
+    pixelRatio,
+    cacheBust: true,
+    backgroundColor: CAPTURE_BG,
+    width: clone.scrollWidth,
+    height: clone.scrollHeight,
+  });
+  if (!blob) throw new Error("capture produced no image");
+  return blob;
+}
+
+async function captureInDesktopFrame(node: HTMLElement): Promise<Blob> {
+  const iframe = document.createElement("iframe");
+  iframe.setAttribute("aria-hidden", "true");
+  iframe.style.cssText = `position:fixed;left:-100000px;top:0;width:${DESKTOP_WIDTH}px;height:800px;border:0;visibility:hidden`;
+  document.body.appendChild(iframe);
+  try {
+    const idoc = iframe.contentDocument;
+    if (!idoc) throw new Error("no iframe document");
+    idoc.open();
+    idoc.write("<!doctype html><html><head></head><body></body></html>");
+    idoc.close();
+    // Carry over theme classes and drop in the app's stylesheets so Tailwind
+    // utilities resolve inside the frame.
+    idoc.documentElement.className = document.documentElement.className;
+    idoc.documentElement.style.background = CAPTURE_BG;
+    idoc.body.className = document.body.className;
+    idoc.body.style.cssText = `margin:0;padding:20px;background:${CAPTURE_BG};width:max-content`;
+
+    const waits: Promise<unknown>[] = [];
+    for (const s of document.querySelectorAll('style, link[rel="stylesheet"]')) {
+      const c = s.cloneNode(true) as HTMLElement;
+      idoc.head.appendChild(c);
+      if (c.tagName === "LINK") {
+        waits.push(
+          new Promise((r) => {
+            c.addEventListener("load", () => r(null), { once: true });
+            c.addEventListener("error", () => r(null), { once: true });
+            setTimeout(() => r(null), 3000);
+          }),
+        );
+      }
+    }
+
+    const clone = node.cloneNode(true) as HTMLElement;
+    idoc.body.appendChild(clone);
+    await Promise.all(waits);
+    // Let styles apply + layout settle before capture.
+    await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(() => r(null))));
+    return await toPngBlob(clone);
+  } finally {
+    iframe.remove();
+  }
+}
+
+async function captureInline(node: HTMLElement): Promise<Blob> {
+  const wrapper = document.createElement("div");
+  wrapper.style.cssText = `position:fixed;left:-100000px;top:0;z-index:-1;background:${CAPTURE_BG};padding:20px;`;
+  try {
+    const clone = node.cloneNode(true) as HTMLElement;
+    wrapper.appendChild(clone);
+    document.body.appendChild(wrapper);
+    return await toPngBlob(clone);
+  } finally {
+    wrapper.remove();
+  }
+}
+
 /**
  * Open up a cloned subtree so nothing is clipped in the capture: drop the
  * download button, un-scroll every overflow container, un-stick sticky cells,
@@ -185,12 +250,8 @@ function expandForCapture(root: HTMLElement) {
       el.style.maxHeight = "none";
       el.style.maxWidth = "none";
     }
-    // Sticky headers / frozen first+last columns must land in normal flow so
-    // they render once, in place, instead of floating over the capture.
     if (cs.position === "sticky") el.style.position = "static";
   }
-  // Tables are w-full against a (now un-clipped) parent; let them take their
-  // real column width so every truck column is included.
   root.querySelectorAll<HTMLElement>("table").forEach((t) => {
     t.style.width = "max-content";
   });
