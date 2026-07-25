@@ -134,20 +134,31 @@ async function deliver(
   const coarse =
     typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
 
-  if (coarse && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
-    try {
-      await navigator.share({ files: [file], title: fname });
-      return;
-    } catch (e) {
-      // User dismissed the share sheet — nothing more to do.
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      // Any other failure: fall through to the inline preview below.
+  // Touch devices: <a download> is silently ignored (iOS Safari, installed
+  // PWAs), so it must never be the path here — that's the "nothing happens"
+  // bug. Try the native share sheet first, and whenever it's unavailable or
+  // fails, show the image inline to press-and-hold save. One of the two always
+  // gives the user something.
+  if (coarse) {
+    const canShareFile =
+      typeof navigator.canShare === "function" &&
+      typeof navigator.share === "function" &&
+      navigator.canShare({ files: [file] });
+    if (canShareFile) {
+      try {
+        await navigator.share({ files: [file], title: fname });
+        return;
+      } catch (e) {
+        // User dismissed the share sheet — nothing more to do.
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        // Any other failure: fall through to the inline preview.
+      }
     }
     showPreview(URL.createObjectURL(blob));
     return;
   }
 
-  // Desktop (and Android browsers that honor it): a real file download.
+  // Desktop: a real file download (blob URL, anchor in the DOM).
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
