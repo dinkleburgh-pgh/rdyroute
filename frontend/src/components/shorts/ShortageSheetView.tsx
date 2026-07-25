@@ -183,7 +183,9 @@ export default function ShortageSheetView({
               <tr>
                 {/* Sticky on the TH itself — a sticky <thead> doesn't hold in
                     every browser, which made the header drift while scrolling. */}
-                <th className="sticky left-0 top-0 z-30 w-[12.5rem] min-w-[12.5rem] border-b border-r border-slate-700 bg-slate-900 px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                {/* w-px + nowrap makes this column shrink to its content (the
+                    longest item name) so more truck columns fit on mobile. */}
+                <th className="sticky left-0 top-0 z-30 w-px whitespace-nowrap border-b border-r border-slate-700 bg-slate-900 px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
                   Item
                 </th>
                 {trucks.map((n) => (
@@ -221,7 +223,7 @@ export default function ShortageSheetView({
                     <tr className={ri % 2 ? "bg-slate-900/30" : undefined}>
                       <td
                         className={clsx(
-                          "sticky left-0 z-10 border-r border-slate-800 bg-slate-900 px-2 py-0.5",
+                          "sticky left-0 z-10 w-px whitespace-nowrap border-r border-slate-800 bg-slate-900 px-2 py-0.5",
                           newCat && !newGroup && "border-t border-t-slate-800",
                         )}
                       >
@@ -230,7 +232,7 @@ export default function ShortageSheetView({
                             className={clsx("h-2 w-2 shrink-0 rounded-full", dotOf(row.category))}
                             title={row.category}
                           />
-                          <span className="truncate font-medium text-slate-200">{row.label}</span>
+                          <span className="max-w-[11rem] truncate font-medium text-slate-200">{row.label}</span>
                           {row.unit && <span className="shrink-0 text-[9px] text-slate-600">{row.unit}s</span>}
                         </span>
                       </td>
@@ -256,7 +258,7 @@ export default function ShortageSheetView({
                 );
               })}
               <tr>
-                <td className="sticky bottom-0 left-0 z-30 border-r border-t border-slate-700 bg-slate-900 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                <td className="sticky bottom-0 left-0 z-30 w-px whitespace-nowrap border-r border-t border-slate-700 bg-slate-900 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-400">
                   Truck total
                 </td>
                 {trucks.map((n) => (
