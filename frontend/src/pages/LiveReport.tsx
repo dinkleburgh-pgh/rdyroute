@@ -417,7 +417,18 @@ export default function LiveReport() {
         )}
       </div>
 
-      <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-8 p-3 md:p-6">
+      {/* Horizontal padding respects the landscape safe area so the system nav
+          bar (right side in landscape) doesn't cover the grid's last columns. */}
+      <motion.div
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ duration: 0.3 }}
+        className="space-y-8 py-3 md:py-6"
+        style={{
+          paddingLeft: "calc(0.75rem + env(safe-area-inset-left))",
+          paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
+        }}
+      >
         {/* ===================== UNLOAD ===================== */}
         <Section eyebrow="Unload" title="Batches" downloadName={`Batches ${runDate}`}>
           {batchingDisabled ? (

@@ -52,24 +52,20 @@ export default function DownloadImageButton({
       const safe = filename.trim().replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
       const fname = safe.endsWith(".png") ? safe : `${safe}.png`;
       const file = new File([blob], fname, { type: "image/png" });
-      const coarse =
-        typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+      const mm = typeof window.matchMedia === "function" ? window.matchMedia.bind(window) : null;
+      const touch =
+        !!mm && (mm("(any-pointer: coarse)").matches || mm("(pointer: coarse)").matches);
 
-      if (coarse) {
+      if (touch) {
+        // Touch devices get a sheet with an actionable button — never a bare
+        // <a download> (iOS ignores it) or a passive hint.
         const canShare =
           typeof navigator.canShare === "function" &&
           typeof navigator.share === "function" &&
           navigator.canShare({ files: [file] });
         setSheet({ url: URL.createObjectURL(blob), file, canShare });
       } else {
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = fname;
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        setTimeout(() => URL.revokeObjectURL(url), 15000);
+        triggerDownload(URL.createObjectURL(blob), fname, true);
       }
     } catch (e) {
       console.error("DownloadImageButton: capture failed", e);
@@ -79,14 +75,22 @@ export default function DownloadImageButton({
     }
   }
 
-  async function shareFromSheet() {
+  async function saveFromSheet() {
     if (!sheet) return;
-    try {
-      await navigator.share({ files: [sheet.file], title: sheet.file.name });
-      closeSheet();
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return;
-      console.error("share failed", e);
+    if (sheet.canShare) {
+      // Fresh tap → native share sheet (Save Image / Save to Files) on iOS/Android.
+      try {
+        await navigator.share({ files: [sheet.file], title: sheet.file.name });
+        closeSheet();
+      } catch (e) {
+        if (e instanceof DOMException && e.name === "AbortError") return;
+        console.error("share failed", e);
+      }
+    } else {
+      // No file sharing (some Android browsers/webviews): a blob download works
+      // here. Keep the sheet open so the press-and-hold image stays available if
+      // the download is intercepted; the URL is revoked when the sheet closes.
+      triggerDownload(sheet.url, sheet.file.name, false);
     }
   }
 
@@ -121,22 +125,24 @@ export default function DownloadImageButton({
             </button>
           </div>
 
-          {sheet.canShare ? (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                shareFromSheet();
-              }}
-              className="inline-flex w-full max-w-5xl items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-base font-bold text-white active:bg-emerald-600"
-            >
-              <ShareIcon className="h-5 w-5" /> Save image
-            </button>
-          ) : (
-            <p className="w-full max-w-5xl text-center text-sm text-white/80">
-              Press &amp; hold the image, then choose <b>Save Image</b>.
-            </p>
-          )}
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              saveFromSheet();
+            }}
+            className="inline-flex w-full max-w-5xl items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-base font-bold text-white active:bg-emerald-600"
+          >
+            {sheet.canShare ? (
+              <>
+                <ShareIcon className="h-5 w-5" /> Save image
+              </>
+            ) : (
+              <>
+                <Download className="h-5 w-5" /> Download image
+              </>
+            )}
+          </button>
 
           <img
             src={sheet.url}
@@ -144,10 +150,25 @@ export default function DownloadImageButton({
             className="max-w-full rounded-lg border border-white/15"
             onClick={(e) => e.stopPropagation()}
           />
+          <p className="w-full max-w-5xl text-center text-xs text-white/60">
+            …or press &amp; hold the image to save it.
+          </p>
         </div>
       )}
     </>
   );
+}
+
+/** Save a blob URL as a file via an anchor. `revoke` frees the URL afterward —
+ *  pass false when the URL is still needed (e.g. a live sheet preview). */
+function triggerDownload(url: string, fname: string, revoke: boolean) {
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  if (revoke) setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
 
 /** Capture a node to PNG. Prefer the desktop-width iframe (horizontal layout);
