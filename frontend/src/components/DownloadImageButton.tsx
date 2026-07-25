@@ -1,18 +1,20 @@
 import { useState, type RefObject } from "react";
-import { toPng } from "html-to-image";
-import { Download } from "lucide-react";
+import { toBlob } from "html-to-image";
+import { Download, X } from "lucide-react";
 import clsx from "clsx";
 
 /**
- * Renders a "Download image" button that saves a target report section as a
- * PNG — so a report can be shared without screenshotting the app.
+ * "Download image" button that saves a target report section as a PNG.
  *
- * Rather than snapshotting the on-screen node (which on mobile clips whatever
- * is scrolled out of an overflow container — e.g. the wide shortages grid), it
- * captures a fully-expanded off-screen CLONE: inner scroll regions are opened
- * up, sticky cells drop to normal flow, and the layout sizes to its content.
- * The result is the whole report at desktop width regardless of the device, not
- * a cramped phone screenshot.
+ * Capture: rather than snapshotting the on-screen node (which on mobile clips
+ * whatever is scrolled out of an overflow container — e.g. the wide shortages
+ * grid), it renders a fully-expanded off-screen CLONE so the whole report is
+ * captured at content width on any device.
+ *
+ * Delivery: `<a download>` with a data/blob URL is silently ignored by iOS
+ * Safari and installed PWAs, so on touch devices we hand the file to the native
+ * share sheet (Save Image / Save to Files). Desktop gets a normal download, and
+ * if neither path is available we show the image inline to press-and-hold-save.
  */
 export default function DownloadImageButton({
   targetRef,
@@ -28,13 +30,21 @@ export default function DownloadImageButton({
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
+  // Set when we fall back to an inline preview (press-and-hold to save).
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+
+  function closePreview() {
+    setPreviewUrl((url) => {
+      if (url) URL.revokeObjectURL(url);
+      return null;
+    });
+  }
 
   async function handleDownload() {
     const node = targetRef.current;
     if (!node || busy) return;
     setBusy(true);
     setErr(false);
-    // Off-screen wrapper holding an expanded clone we actually capture.
     const wrapper = document.createElement("div");
     wrapper.style.cssText =
       "position:fixed;left:-100000px;top:0;z-index:-1;background:#07090d;padding:20px;";
@@ -47,19 +57,18 @@ export default function DownloadImageButton({
       const width = clone.scrollWidth || clone.offsetWidth;
       const pixelRatio = width > 2600 ? 1 : width > 1500 ? 1.5 : 2;
 
-      const dataUrl = await toPng(clone, {
+      const blob = await toBlob(clone, {
         pixelRatio,
         cacheBust: true,
         backgroundColor: "#07090d",
         width: clone.scrollWidth,
         height: clone.scrollHeight,
       });
+      if (!blob) throw new Error("capture produced no image");
 
       const safe = filename.trim().replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
-      const a = document.createElement("a");
-      a.href = dataUrl;
-      a.download = safe.endsWith(".png") ? safe : `${safe}.png`;
-      a.click();
+      const fname = safe.endsWith(".png") ? safe : `${safe}.png`;
+      await deliver(blob, fname, setPreviewUrl);
     } catch (e) {
       console.error("DownloadImageButton: capture failed", e);
       setErr(true);
@@ -70,19 +79,83 @@ export default function DownloadImageButton({
   }
 
   return (
-    <div data-download-exclude className={clsx("flex items-center gap-2", className)}>
-      <button
-        type="button"
-        onClick={handleDownload}
-        disabled={busy}
-        className="inline-flex items-center gap-2 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface-2 disabled:opacity-50"
-      >
-        <Download className="h-4 w-4" />
-        {busy ? "Generating…" : label}
-      </button>
-      {err && <span className="text-xs text-st-dirty">Couldn't generate image — try again.</span>}
-    </div>
+    <>
+      <div data-download-exclude className={clsx("flex items-center gap-2", className)}>
+        <button
+          type="button"
+          onClick={handleDownload}
+          disabled={busy}
+          className="inline-flex items-center gap-2 rounded-lg border border-hairline bg-surface px-3 py-2 text-sm font-semibold text-ink-soft transition-colors hover:bg-surface-2 disabled:opacity-50"
+        >
+          <Download className="h-4 w-4" />
+          {busy ? "Generating…" : label}
+        </button>
+        {err && <span className="text-xs text-st-dirty">Couldn't generate image — try again.</span>}
+      </div>
+
+      {previewUrl && (
+        <div
+          className="fixed inset-0 z-[9999] flex flex-col items-center gap-3 overflow-auto bg-black/90 p-4"
+          onClick={closePreview}
+        >
+          <div className="flex w-full items-center justify-between text-sm text-white">
+            <span>Press &amp; hold the image to save it</span>
+            <button
+              type="button"
+              onClick={closePreview}
+              className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-3 py-1.5 font-semibold"
+            >
+              <X className="h-4 w-4" /> Close
+            </button>
+          </div>
+          <img
+            src={previewUrl}
+            alt={filename}
+            className="max-w-full rounded-lg border border-white/15"
+            onClick={(e) => e.stopPropagation()}
+          />
+        </div>
+      )}
+    </>
   );
+}
+
+/**
+ * Hand the PNG to the OS. Touch devices get the native share sheet (the
+ * reliable Save-Image path where `<a download>` is ignored); desktop gets a
+ * blob download; anything left over renders inline for press-and-hold save.
+ */
+async function deliver(
+  blob: Blob,
+  fname: string,
+  showPreview: (url: string) => void,
+) {
+  const file = new File([blob], fname, { type: "image/png" });
+  const coarse =
+    typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+
+  if (coarse && typeof navigator.canShare === "function" && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: fname });
+      return;
+    } catch (e) {
+      // User dismissed the share sheet — nothing more to do.
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      // Any other failure: fall through to the inline preview below.
+    }
+    showPreview(URL.createObjectURL(blob));
+    return;
+  }
+
+  // Desktop (and Android browsers that honor it): a real file download.
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = fname;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
 
 /**
