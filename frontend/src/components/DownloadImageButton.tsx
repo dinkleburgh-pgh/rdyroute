@@ -1,20 +1,21 @@
 import { useState, type RefObject } from "react";
 import { toBlob } from "html-to-image";
-import { Download, X } from "lucide-react";
+import { Download, Share as ShareIcon, X } from "lucide-react";
 import clsx from "clsx";
 
 /**
  * "Download image" button that saves a target report section as a PNG.
  *
- * Capture: rather than snapshotting the on-screen node (which on mobile clips
- * whatever is scrolled out of an overflow container — e.g. the wide shortages
- * grid), it renders a fully-expanded off-screen CLONE so the whole report is
- * captured at content width on any device.
+ * Capture: renders a fully-expanded off-screen CLONE (scroll regions opened,
+ * sticky cells un-stuck, sized to content) so the whole report is captured at
+ * content width on any device — not the clipped mobile viewport.
  *
- * Delivery: `<a download>` with a data/blob URL is silently ignored by iOS
- * Safari and installed PWAs, so on touch devices we hand the file to the native
- * share sheet (Save Image / Save to Files). Desktop gets a normal download, and
- * if neither path is available we show the image inline to press-and-hold-save.
+ * Delivery: `<a download>` is silently ignored on iOS Safari / installed PWAs,
+ * and firing `navigator.share()` right after the async capture fails because
+ * iOS has already spent the tap's "user gesture". So on touch devices we pop a
+ * small sheet with a "Save image" button — tapping THAT is a fresh gesture, so
+ * the native share sheet (Save Image / Save to Files) opens reliably. Desktop
+ * just downloads the file.
  */
 export default function DownloadImageButton({
   targetRef,
@@ -30,12 +31,12 @@ export default function DownloadImageButton({
 }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(false);
-  // Set when we fall back to an inline preview (press-and-hold to save).
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  // On touch devices we stage the captured image and let a fresh tap share it.
+  const [sheet, setSheet] = useState<{ url: string; file: File; canShare: boolean } | null>(null);
 
-  function closePreview() {
-    setPreviewUrl((url) => {
-      if (url) URL.revokeObjectURL(url);
+  function closeSheet() {
+    setSheet((s) => {
+      if (s) URL.revokeObjectURL(s.url);
       return null;
     });
   }
@@ -53,7 +54,6 @@ export default function DownloadImageButton({
       wrapper.appendChild(clone);
       document.body.appendChild(wrapper);
       expandForCapture(clone);
-      // Reflow, then keep the raster within sane bounds for very wide grids.
       const width = clone.scrollWidth || clone.offsetWidth;
       const pixelRatio = width > 2600 ? 1 : width > 1500 ? 1.5 : 2;
 
@@ -68,13 +68,46 @@ export default function DownloadImageButton({
 
       const safe = filename.trim().replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
       const fname = safe.endsWith(".png") ? safe : `${safe}.png`;
-      await deliver(blob, fname, setPreviewUrl);
+      const file = new File([blob], fname, { type: "image/png" });
+      const coarse =
+        typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
+
+      if (coarse) {
+        // Stage it — the actual save happens on a fresh tap in the sheet.
+        const canShare =
+          typeof navigator.canShare === "function" &&
+          typeof navigator.share === "function" &&
+          navigator.canShare({ files: [file] });
+        setSheet({ url: URL.createObjectURL(blob), file, canShare });
+      } else {
+        // Desktop: a real file download.
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = fname;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 15000);
+      }
     } catch (e) {
       console.error("DownloadImageButton: capture failed", e);
       setErr(true);
     } finally {
       wrapper.remove();
       setBusy(false);
+    }
+  }
+
+  async function shareFromSheet() {
+    if (!sheet) return;
+    try {
+      await navigator.share({ files: [sheet.file], title: sheet.file.name });
+      closeSheet();
+    } catch (e) {
+      // Dismissed the share sheet — leave ours open so they can retry.
+      if (e instanceof DOMException && e.name === "AbortError") return;
+      console.error("share failed", e);
     }
   }
 
@@ -93,23 +126,41 @@ export default function DownloadImageButton({
         {err && <span className="text-xs text-st-dirty">Couldn't generate image — try again.</span>}
       </div>
 
-      {previewUrl && (
+      {sheet && (
         <div
           className="fixed inset-0 z-[9999] flex flex-col items-center gap-3 overflow-auto bg-black/90 p-4"
-          onClick={closePreview}
+          onClick={closeSheet}
         >
-          <div className="flex w-full items-center justify-between text-sm text-white">
-            <span>Press &amp; hold the image to save it</span>
+          <div className="flex w-full max-w-3xl items-center justify-between gap-2 text-sm text-white">
+            <span className="font-semibold">Report image ready</span>
             <button
               type="button"
-              onClick={closePreview}
+              onClick={closeSheet}
               className="inline-flex items-center gap-1 rounded-lg bg-white/15 px-3 py-1.5 font-semibold"
             >
               <X className="h-4 w-4" /> Close
             </button>
           </div>
+
+          {sheet.canShare ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                shareFromSheet();
+              }}
+              className="inline-flex w-full max-w-3xl items-center justify-center gap-2 rounded-xl bg-emerald-500 px-4 py-3 text-base font-bold text-white active:bg-emerald-600"
+            >
+              <ShareIcon className="h-5 w-5" /> Save image
+            </button>
+          ) : (
+            <p className="w-full max-w-3xl text-center text-sm text-white/80">
+              Press &amp; hold the image, then choose <b>Save Image</b>.
+            </p>
+          )}
+
           <img
-            src={previewUrl}
+            src={sheet.url}
             alt={filename}
             className="max-w-full rounded-lg border border-white/15"
             onClick={(e) => e.stopPropagation()}
@@ -118,55 +169,6 @@ export default function DownloadImageButton({
       )}
     </>
   );
-}
-
-/**
- * Hand the PNG to the OS. Touch devices get the native share sheet (the
- * reliable Save-Image path where `<a download>` is ignored); desktop gets a
- * blob download; anything left over renders inline for press-and-hold save.
- */
-async function deliver(
-  blob: Blob,
-  fname: string,
-  showPreview: (url: string) => void,
-) {
-  const file = new File([blob], fname, { type: "image/png" });
-  const coarse =
-    typeof window.matchMedia === "function" && window.matchMedia("(pointer: coarse)").matches;
-
-  // Touch devices: <a download> is silently ignored (iOS Safari, installed
-  // PWAs), so it must never be the path here — that's the "nothing happens"
-  // bug. Try the native share sheet first, and whenever it's unavailable or
-  // fails, show the image inline to press-and-hold save. One of the two always
-  // gives the user something.
-  if (coarse) {
-    const canShareFile =
-      typeof navigator.canShare === "function" &&
-      typeof navigator.share === "function" &&
-      navigator.canShare({ files: [file] });
-    if (canShareFile) {
-      try {
-        await navigator.share({ files: [file], title: fname });
-        return;
-      } catch (e) {
-        // User dismissed the share sheet — nothing more to do.
-        if (e instanceof DOMException && e.name === "AbortError") return;
-        // Any other failure: fall through to the inline preview.
-      }
-    }
-    showPreview(URL.createObjectURL(blob));
-    return;
-  }
-
-  // Desktop: a real file download (blob URL, anchor in the DOM).
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = fname;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 15000);
 }
 
 /**
