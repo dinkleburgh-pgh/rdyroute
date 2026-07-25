@@ -157,6 +157,27 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const isAdmin = user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor";
   const navigate = useNavigate();
 
+  // "Remove from OOS" on the OOS live-status card: return the truck to service.
+  // Clears the persistent OOS flag, resets today's status to dirty, and frees
+  // whatever was covering its route — the cover is no longer needed once the
+  // truck is back. Mirrors FleetTruckEditor's OOS toggle-off plus coverage
+  // teardown. (Just clearing coverage is a separate action — "Reassign".)
+  const returnFromOos = (truck: TruckWithState) => {
+    const spareAsgn = spareAssignments.find((a) => a.covering_route_truck === truck.truck_number);
+    const swap = routeSwaps.find((s) => s.route_truck === truck.truck_number);
+    if (spareAsgn) returnSpare.mutate(spareAsgn.id);
+    if (swap) deleteSwap.mutate({ id: swap.id, runDate });
+    updateTruck.mutate({ truck_number: truck.truck_number, is_oos: false });
+    upsert.mutate({
+      truck_number: truck.truck_number,
+      run_date: runDate,
+      status: "dirty",
+      wearers: truck.state?.wearers ?? 0,
+    });
+  };
+  const oosActionPending =
+    returnSpare.isPending || deleteSwap.isPending || updateTruck.isPending || upsert.isPending;
+
   const { runDayNum, runUnloadsDay } = useMemo(() => {
     const [y, m, d] = runDate.split("-").map(Number);
     const wd = workdayNumbers(new Date(y, m - 1, d));
@@ -1204,13 +1225,17 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   const swap = routeSwaps.find((s) => s.route_truck === truck.truck_number);
                   const isOpen = oosAssignOpen.has(truck.truck_number);
 
-                  if (cov) {
+                  // Covered display yields to the picker when the user hits
+                  // Reassign (isOpen) — otherwise the read-only historical
+                  // fallback would keep re-showing coverage and the picker
+                  // could never open.
+                  if (cov && !isOpen) {
                     return (
                       <div
                         className="mt-1 border-t border-slate-700 pt-2"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                           <div className="flex min-w-0 flex-wrap items-center gap-1.5">
                             <span className="text-xs text-slate-400">Covered by</span>
                               <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2.5 py-0.5 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
@@ -1222,25 +1247,45 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                               </span>
                             )}
                           </div>
+                          {/* Reassign: drop this cover and reopen the picker, keeping the truck OOS. */}
                           <button
-                            className="ml-auto shrink-0 rounded px-2 py-1 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
-                            disabled={returnSpare.isPending || deleteSwap.isPending}
+                            className="ml-auto shrink-0 rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200 disabled:opacity-40"
+                            disabled={oosActionPending}
                             onClick={() => {
                               if (spareAsgn) returnSpare.mutate(spareAsgn.id);
                               else if (swap) deleteSwap.mutate({ id: swap.id, runDate });
+                              setOosAssignOpen((prev) => new Set(prev).add(truck.truck_number));
                             }}
                           >
-                            Remove
+                            Reassign
                           </button>
                         </div>
+                        {/* Remove from OOS: truck is back — clear OOS + free the cover. */}
+                        <button
+                          className="mt-2 w-full rounded-lg border border-red-700/50 bg-red-950/40 px-2 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-40"
+                          disabled={oosActionPending}
+                          onClick={() => returnFromOos(truck)}
+                        >
+                          Remove from OOS
+                        </button>
                       </div>
                     );
                   }
 
                   if (!isOpen) {
                     return (
-                      <div className="mt-1 border-t border-slate-700 pt-2 text-center">
-                        <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
+                      <div className="mt-1 space-y-1.5 border-t border-slate-700 pt-2">
+                        <div className="text-center">
+                          <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
+                        </div>
+                        {/* Remove from OOS without ever covering it (truck came back). */}
+                        <button
+                          className="w-full rounded-lg border border-red-700/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-40"
+                          disabled={oosActionPending}
+                          onClick={(e) => { e.stopPropagation(); returnFromOos(truck); }}
+                        >
+                          Remove from OOS
+                        </button>
                       </div>
                     );
                   }
@@ -1333,6 +1378,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           {assignSpare.isPending || createSwap.isPending ? "…" : "Assign"}
                         </button>
                       </div>
+                      {/* Or skip assigning — the truck is back in service. */}
+                      <button
+                        className="w-full rounded-lg border border-red-700/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-40"
+                        disabled={oosActionPending}
+                        onClick={() => returnFromOos(truck)}
+                      >
+                        Remove from OOS
+                      </button>
                     </div>
                   );
                 })()}
