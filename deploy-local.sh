@@ -57,13 +57,21 @@ if [ -n "${SKIP_STANDBY:-}" ]; then
 elif [ ! -f "$STANDBY_KEY" ]; then
   echo "[local-deploy] WARNING: $STANDBY_KEY missing — standby NOT updated" >&2
 else
-  echo "[local-deploy] chaining standby update (${STANDBY_HOST})…"
-  if timeout 600 ssh -i "$STANDBY_KEY" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$STANDBY_HOST" true; then
-    echo "[local-deploy] standby update OK → in sync with ${APP_VERSION}"
-  else
-    echo "[local-deploy] WARNING: standby update FAILED (prod is deployed & fine)." >&2
-    echo "[local-deploy]          retry: ssh -i $STANDBY_KEY $STANDBY_HOST true" >&2
-  fi
+  # Detach the standby's full image rebuild (minutes) so it no longer blocks the
+  # deploy — prod is already live, and the standby is best-effort. nohup + a log
+  # redirect keep it running after this script and its SSH session exit; check
+  # progress/result with:  tail -f $STANDBY_LOG
+  STANDBY_LOG="/tmp/rdyroute-standby-update.log"
+  echo "[local-deploy] chaining standby update in the background (${STANDBY_HOST})…"
+  nohup env SK="$STANDBY_KEY" SH="$STANDBY_HOST" AV="$APP_VERSION" bash -c '
+    if timeout 600 ssh -i "$SK" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$SH" true; then
+      echo "$(date -u +%FT%TZ) [standby] OK → in sync with $AV"
+    else
+      echo "$(date -u +%FT%TZ) [standby] FAILED (prod is fine); retry: ssh -i $SK $SH true"
+    fi
+  ' >"$STANDBY_LOG" 2>&1 &
+  disown 2>/dev/null || true
+  echo "[local-deploy] standby syncing in background → tail -f $STANDBY_LOG"
 fi
 
 # ---------------------------------------------------------------------------
