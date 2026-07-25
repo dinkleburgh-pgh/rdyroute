@@ -16,7 +16,7 @@ Business logic preserved from V1:
 """
 
 import time
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -165,6 +165,24 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 )
             ).all()
         }
+
+        # Retire spare assignments from run days BEFORE the previous one. Left
+        # open they linger forever (assignments are per-day and never auto-closed
+        # otherwise) and the historical-coverage fallback resurfaces months-old
+        # coverage — a truck now running its own route gets tagged as still
+        # covering a route it only covered weeks ago. The route-swap log (written
+        # when a spare is assigned) preserves the coverage history, and the
+        # previous run day's own assignments stay open for its coverage editor.
+        stale_open_spares = db.scalars(
+            select(SpareAssignment).where(
+                SpareAssignment.run_date < prev_run_date,
+                SpareAssignment.returned == False,
+            )
+        ).all()
+        _now = datetime.now(timezone.utc)
+        for _sp in stale_open_spares:
+            _sp.returned = True
+            _sp.returned_at = _now
 
     # When force_unloaded is set, close out the previous day first — mark any
     # trucks that are still dirty/in_progress/unfinished as unloaded so that
