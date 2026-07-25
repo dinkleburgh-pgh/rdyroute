@@ -11,13 +11,14 @@
  * (board 5s, batches 10s, spares/route-swaps 10s, shortages via WS). The audit
  * query has no live channel of its own, so we poke it on an interval here.
  */
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
 import { format } from "date-fns";
 import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
+import DownloadImageButton from "../components/DownloadImageButton";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
 import { categoryDotClass } from "../components/shorts/HierarchyPicker";
@@ -90,14 +91,30 @@ function Kpi({ label, value, sub, tone }: { label: string; value: ReactNode; sub
   );
 }
 
-function Section({ eyebrow, title, children }: { eyebrow: string; title: string; children: ReactNode }) {
+function Section({
+  eyebrow,
+  title,
+  children,
+  downloadName,
+}: {
+  eyebrow: string;
+  title: string;
+  children: ReactNode;
+  /** When set, renders a "Download image" button that snapshots this whole
+   *  section (title + content) to a PNG with the given base filename. */
+  downloadName?: string;
+}) {
+  const captureRef = useRef<HTMLElement>(null);
   return (
-    <section className="space-y-3">
+    <section ref={captureRef} className="space-y-3">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</p>
         <h2 className="text-lg font-bold text-ink">{title}</h2>
       </div>
       {children}
+      {downloadName && (
+        <DownloadImageButton targetRef={captureRef} filename={downloadName} className="pt-1" />
+      )}
     </section>
   );
 }
@@ -402,7 +419,7 @@ export default function LiveReport() {
 
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-8 p-3 md:p-6">
         {/* ===================== UNLOAD ===================== */}
-        <Section eyebrow="Unload" title="Batches">
+        <Section eyebrow="Unload" title="Batches" downloadName={`Batches ${runDate}`}>
           {batchingDisabled ? (
             <Empty>Batching is turned off for this day.</Empty>
           ) : (
@@ -496,7 +513,7 @@ export default function LiveReport() {
         </Section>
 
         {/* ===================== LOAD · SHORTAGES ===================== */}
-        <Section eyebrow="Load" title="Shortages">
+        <Section eyebrow="Load" title="Shortages" downloadName={`Shortages ${runDate}`}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
             <Kpi label="Distinct items" value={distinctItems} />

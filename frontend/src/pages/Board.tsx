@@ -120,6 +120,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [holdAlertTruck, setHoldAlertTruck] = useState<TruckWithState | null>(null);
   const [oosAssignOpen, setOosAssignOpen] = useState<Set<number>>(new Set());
   const [oosCardSelects, setOosCardSelects] = useState<Record<number, string>>({});
+  // Trucks whose "Remove from OOS" has been armed — a second tap confirms, so
+  // an accidental tap can't drop a truck out of service.
+  const [confirmRemoveOos, setConfirmRemoveOos] = useState<Set<number>>(new Set());
   const [pendingOffLoadTruck, setPendingOffLoadTruck] = useState<TruckWithState | null>(null);
   const [pendingOffLoadRoute, setPendingOffLoadRoute] = useState<string>("");
   const [pendingOffLoadError, setPendingOffLoadError] = useState<string | null>(null);
@@ -177,6 +180,42 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   };
   const oosActionPending =
     returnSpare.isPending || deleteSwap.isPending || updateTruck.isPending || upsert.isPending;
+  const disarmRemoveOos = (n: number) =>
+    setConfirmRemoveOos((p) => { const next = new Set(p); next.delete(n); return next; });
+  // "Remove from OOS" control with a two-tap confirm. First tap arms it and
+  // swaps in Cancel / Confirm; Confirm runs returnFromOos. compact = smaller
+  // padding for the tighter uncovered / picker layouts.
+  const renderRemoveFromOos = (truck: TruckWithState, compact = false) => {
+    const pad = compact ? "px-2 py-1 text-[11px]" : "px-2 py-1.5 text-xs";
+    if (!confirmRemoveOos.has(truck.truck_number)) {
+      return (
+        <button
+          className={clsx("w-full rounded-lg border border-red-700/50 bg-red-950/40 font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-40", pad)}
+          disabled={oosActionPending}
+          onClick={(e) => { e.stopPropagation(); setConfirmRemoveOos((p) => new Set(p).add(truck.truck_number)); }}
+        >
+          Remove from OOS
+        </button>
+      );
+    }
+    return (
+      <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
+        <button
+          className={clsx("flex-1 rounded-lg border border-slate-600 bg-slate-800 font-semibold text-slate-300 hover:bg-slate-700", pad)}
+          onClick={() => disarmRemoveOos(truck.truck_number)}
+        >
+          Cancel
+        </button>
+        <button
+          className={clsx("flex-1 rounded-lg border border-red-600 bg-red-700 font-semibold text-white hover:bg-red-600 disabled:opacity-40", pad)}
+          disabled={oosActionPending}
+          onClick={() => { returnFromOos(truck); disarmRemoveOos(truck.truck_number); }}
+        >
+          Confirm
+        </button>
+      </div>
+    );
+  };
 
   const { runDayNum, runUnloadsDay } = useMemo(() => {
     const [y, m, d] = runDate.split("-").map(Number);
@@ -1261,13 +1300,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           </button>
                         </div>
                         {/* Remove from OOS: truck is back — clear OOS + free the cover. */}
-                        <button
-                          className="mt-2 w-full rounded-lg border border-red-700/50 bg-red-950/40 px-2 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-40"
-                          disabled={oosActionPending}
-                          onClick={() => returnFromOos(truck)}
-                        >
-                          Remove from OOS
-                        </button>
+                        <div className="mt-2">{renderRemoveFromOos(truck)}</div>
                       </div>
                     );
                   }
@@ -1279,13 +1312,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
                         </div>
                         {/* Remove from OOS without ever covering it (truck came back). */}
-                        <button
-                          className="w-full rounded-lg border border-red-700/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-40"
-                          disabled={oosActionPending}
-                          onClick={(e) => { e.stopPropagation(); returnFromOos(truck); }}
-                        >
-                          Remove from OOS
-                        </button>
+                        {renderRemoveFromOos(truck, true)}
                       </div>
                     );
                   }
@@ -1379,13 +1406,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         </button>
                       </div>
                       {/* Or skip assigning — the truck is back in service. */}
-                      <button
-                        className="w-full rounded-lg border border-red-700/50 bg-red-950/40 px-2 py-1 text-[11px] font-semibold text-red-300 hover:bg-red-900/40 disabled:opacity-40"
-                        disabled={oosActionPending}
-                        onClick={() => returnFromOos(truck)}
-                      >
-                        Remove from OOS
-                      </button>
+                      {renderRemoveFromOos(truck, true)}
                     </div>
                   );
                 })()}
