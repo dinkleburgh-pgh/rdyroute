@@ -318,7 +318,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
   // Unified: OOS route truck number → {truckNumber, status} of the covering truck
   // Combines spare assignments (SpareAssignment rows) and route swaps.
-  const coveringTruckByRoute = useMemo(() => {
+  // Coverage recorded LIVE for today — spare assignments + route swaps only,
+  // NO historical fallback. A truck covers a route today only if today's record
+  // says so. This is what drives the per-card coverage badge; the fallback
+  // (below) is for OOS-route status continuity, not for tagging a truck that's
+  // running its own route today as still covering yesterday's OOS route.
+  const liveCoveringTruckByRoute = useMemo(() => {
     const m = new Map<number, { num: number; status: TruckStatus | undefined }>();
     for (const a of spareAssignments) {
       const st = (data ?? []).find((t) => t.truck_number === a.spare_truck_number);
@@ -336,6 +341,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         });
       }
     }
+    return m;
+  }, [spareAssignments, routeSwaps, data, runDayNum, holidayLoad]);
+
+  const coveringTruckByRoute = useMemo(() => {
+    const m = new Map(liveCoveringTruckByRoute);
     // Read-only fallback: a route truck that's STILL is_oos but has no live
     // assignment today (e.g. nobody has re-confirmed the swap yet this shift)
     // is still represented by whoever covered it most recently — it didn't
@@ -353,23 +363,23 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       });
     }
     return m;
-  }, [spareAssignments, routeSwaps, swapLog, openSpareAssignments, data, runDate, runDayNum, holidayLoad]);
+  }, [liveCoveringTruckByRoute, swapLog, openSpareAssignments, data, runDate, runDayNum, holidayLoad]);
 
   const truckStatusByNumber = useMemo(
     () => new Map<number, TruckStatus>((data ?? []).map((t) => [t.truck_number, effectiveStatus(t, runDayNum, holidayLoad)])),
     [data, runDayNum, holidayLoad],
   );
 
-  // Reverse of coveringTruckByRoute (route -> covering truck) so a covering
-  // truck's OWN card can show which route it covers even when that coverage
-  // is only known via the historical fallback (no live route_swap_route /
-  // oos_spare_route field on its own state, e.g. truck 1 covering 68 after
-  // today's assignment lapsed but is still recognized from the swap log).
+  // Reverse of the LIVE coverage map (route -> covering truck) so a covering
+  // truck's OWN card can show which route it covers today. Built from live
+  // coverage only — the historical fallback must not tag a truck that's running
+  // its own route today as still covering a route it only covered on a past day
+  // (that surfaced stale "95 → 92" / "69 → 64" pairs on the loaded board).
   const coveringRouteByTruckNum = useMemo(() => {
     const m = new Map<number, number>();
-    for (const [route, cover] of coveringTruckByRoute) m.set(cover.num, route);
+    for (const [route, cover] of liveCoveringTruckByRoute) m.set(cover.num, route);
     return m;
-  }, [coveringTruckByRoute]);
+  }, [liveCoveringTruckByRoute]);
 
   async function startLoad(t: TruckWithState) {
     if (t.state?.priority_hold) return;
