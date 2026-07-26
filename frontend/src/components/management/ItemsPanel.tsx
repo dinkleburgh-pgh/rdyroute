@@ -10,7 +10,7 @@ import {
 } from "../../api/hooks";
 import { COLOR_PRESETS, useCategoryPalette } from "../shorts/HierarchyPicker";
 import ConfirmDialog from "../ConfirmDialog";
-import { Plus, Trash2, Save, RotateCcw, Upload, Package, X, AlertTriangle } from "lucide-react";
+import { Plus, Trash2, Save, RotateCcw, Upload, Package, X, AlertTriangle, FolderInput } from "lucide-react";
 
 const UNIT_PRESETS = ["Case", "Bag", "Bundle", "Roll", "Box", "Pack"];
 
@@ -91,6 +91,11 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const [newCategoryParent, setNewCategoryParent] = useState("");
   const [newCategoryColor, setNewCategoryColor] = useState("");
   const [colorPickerFor, setColorPickerFor] = useState<string | null>(null);
+  // Re-parent a whole category ("move under"): which card's mover is open, the
+  // chosen parent ("" = top level, "__new__" = type a new one), and its name.
+  const [movingCat, setMovingCat] = useState<string | null>(null);
+  const [moveParent, setMoveParent] = useState<string>("");
+  const [moveNewParent, setMoveNewParent] = useState<string>("");
   const newCategoryInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => { if (items) setDraft(items); }, [items]);
@@ -284,6 +289,38 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
     setCatMeta((m) => ({ ...m, [cat]: { ...(color ? { color } : {}) } }));
   }
 
+  function closeMove() {
+    setMovingCat(null);
+    setMoveParent("");
+    setMoveNewParent("");
+  }
+
+  // Move a whole leaf category (with all its items) under `parentRaw` — "" means
+  // promote to top level. The category keeps its own leaf name; only its parent
+  // changes, so "3x10" under "Mats" becomes "Mats > 3x10". Rewrites every item's
+  // category string and carries the colour pin (catMeta) to the new key. Stays
+  // within the two-level model: the picker only offers this for leaf categories.
+  function moveCategoryUnder(cat: string, parentRaw: string) {
+    const leaf = subLevelOf(cat) ?? topLevelOf(cat);
+    // A parent is always a single top-level segment — strip any ">" so a stray
+    // "A > B" can't deepen the tree to three levels.
+    const parentClean = parentRaw.split(">").join(" ").replace(/\s+/g, " ").trim();
+    const target = parentClean ? normalizeCategory(`${parentClean} > ${leaf}`) : leaf;
+    if (!target || target === cat) { closeMove(); return; }
+    setDraft((d) => d.map((it) =>
+      normalizeCategory(it.category ?? "") === cat ? { ...it, category: target } : it));
+    setCatMeta((m) => {
+      const meta = m[cat];
+      if (meta === undefined) return m; // no colour pin to carry
+      const next = { ...m };
+      delete next[cat];
+      next[target] = { ...(next[target] ?? {}), ...meta };
+      return next;
+    });
+    setActiveTab(target);
+    closeMove();
+  }
+
   function applyBulkImport() {
     let parsed: unknown;
     try { parsed = JSON.parse(importText); } catch { return; }
@@ -430,6 +467,15 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
         const isAdding = addingToCategory === cat;
         const sub = subLevelOf(cat);
         const isSub = sub !== null;
+        // A top-level category with subcategories isn't a leaf — moving it would
+        // orphan its children into a third level, so it can't be re-parented.
+        const catHasSubs = !isSub && categories.some((c) => c.startsWith(cat + " > "));
+        const canMove = cat !== "" && !catHasSubs;
+        // Top-level parents this category could nest under (never itself; for a
+        // sub, never its current parent — that'd be a no-op).
+        const parentOpts = topLevelCategories.filter(
+          (p) => p !== (sub ?? topLevelOf(cat)) && !(isSub && p === topLevelOf(cat)),
+        );
         return (
           <div
             key={cat || "__none__"}
@@ -474,6 +520,13 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                     <Plus className="h-3 w-3" /> Sub
                   </button>
                 )}
+                {!disabled && canMove && (
+                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                    title="Move this category under another (e.g. group the mat sizes under 'Mats')"
+                    onClick={() => { if (movingCat === cat) closeMove(); else { closeMove(); setMovingCat(cat); } }}>
+                    <FolderInput className="h-3 w-3" /> Move
+                  </button>
+                )}
                 {!disabled && cat !== "" && (
                   <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-red-900/50 hover:text-red-300"
                     title={catItems.length === 0 ? "Remove this empty category" : "Remove this category…"}
@@ -497,6 +550,35 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                   value={catMeta[cat]?.color ?? ""}
                   onChange={(c) => setCategoryColor(cat, c)}
                 />
+              </div>
+            )}
+
+            {movingCat === cat && !disabled && (
+              <div className="flex flex-wrap items-end gap-2 border-b border-slate-800/60 bg-slate-800/20 px-4 py-2.5">
+                <div className="min-w-[10rem]">
+                  <label className="label">Move under</label>
+                  <select className="input w-full" value={moveParent} onChange={(e) => setMoveParent(e.target.value)}>
+                    {isSub
+                      ? <option value="">— Top level —</option>
+                      : <option value="" disabled>— Choose parent —</option>}
+                    {parentOpts.map((p) => <option key={p} value={p}>{p}</option>)}
+                    <option value="__new__">+ New parent…</option>
+                  </select>
+                </div>
+                {moveParent === "__new__" && (
+                  <div className="min-w-[10rem] flex-1">
+                    <label className="label">New parent name</label>
+                    <input className="input w-full" placeholder="e.g. Mats" value={moveNewParent} autoFocus
+                      onChange={(e) => setMoveNewParent(e.target.value)}
+                      onKeyDown={(e) => { if (e.key === "Enter") moveCategoryUnder(cat, moveNewParent); if (e.key === "Escape") closeMove(); }} />
+                  </div>
+                )}
+                <button className="btn-primary text-xs"
+                  disabled={(moveParent === "" && !isSub) || (moveParent === "__new__" && !moveNewParent.trim())}
+                  onClick={() => moveCategoryUnder(cat, moveParent === "__new__" ? moveNewParent : moveParent)}>
+                  Move
+                </button>
+                <button className="btn-ghost text-xs" onClick={closeMove}>Cancel</button>
               </div>
             )}
 
