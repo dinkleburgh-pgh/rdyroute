@@ -1390,6 +1390,13 @@ export interface ShortageCategoryPoint {
   total_qty: number;
 }
 
+export interface ShortageItemPoint {
+  category: string;
+  detail: string;
+  label: string; // fully-qualified exact item, e.g. "Bulk > Towels Red Shop"
+  total_qty: number;
+}
+
 export interface ShortageSummary {
   total_qty: number;
   avg_per_day: number;
@@ -1594,6 +1601,15 @@ export function useShortageByCategory(daysBack = 14) {
     queryKey: ["shortage-trend-cat", daysBack],
     queryFn: async () =>
       (await api.get<ShortageCategoryPoint[]>("/shorts/trends/by-category", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useShortageByItem(daysBack = 14) {
+  return useQuery({
+    queryKey: ["shortage-trend-item", daysBack],
+    queryFn: async () =>
+      (await api.get<ShortageItemPoint[]>("/shorts/trends/by-item", { params: { days_back: daysBack } })).data,
     staleTime: 60_000,
   });
 }

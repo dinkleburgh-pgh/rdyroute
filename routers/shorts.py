@@ -23,6 +23,7 @@ from schemas import (
     ShortageCategoryPoint,
     ShortageCreate,
     ShortageDailyPoint,
+    ShortageItemPoint,
     ShortageOut,
     ShortageSummary,
     ShortageUpdate,
@@ -199,6 +200,39 @@ def shortage_by_category_trend(
     ).all()
     return [
         ShortageCategoryPoint(category=r[0], total_qty=r[1] or 0)
+        for r in rows
+    ]
+
+
+@router.get("/trends/by-item", response_model=list[ShortageItemPoint])
+def shortage_by_item_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Shortage quantities grouped by EXACT item (item_category + item_detail),
+    sorted descending. The label is fully-qualified the same way the Live Report
+    and shortage matrix build it ('Bulk > Towels Red Shop'), so the exact item
+    names are consistent across surfaces — a bare 'Black'/'Onyx' would be
+    ambiguous across mats/aprons/towels."""
+    start, end = window_bounds(days_back)
+    rows = db.execute(
+        select(
+            Shortage.item_category.label("category"),
+            Shortage.item_detail.label("detail"),
+            func.sum(Shortage.quantity).label("total_qty"),
+        )
+        .where(Shortage.run_date >= start, Shortage.run_date <= end)
+        .group_by(Shortage.item_category, Shortage.item_detail)
+        .order_by(func.sum(Shortage.quantity).desc())
+    ).all()
+    return [
+        ShortageItemPoint(
+            category=r[0],
+            detail=r[1] or "",
+            label=f"{r[0]} {r[1]}" if r[1] else r[0],
+            total_qty=r[2] or 0,
+        )
         for r in rows
     ]
 

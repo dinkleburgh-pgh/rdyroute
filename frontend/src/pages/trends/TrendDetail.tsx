@@ -10,7 +10,7 @@ import {
   useWearersTrend,
   useCycleTimeTrend,
   useShortageDailyTrend,
-  useShortageByCategory,
+  useShortageByItem,
   useShortageSummary,
   useTruckAnomalies,
   useAuditAnomalies,
@@ -47,7 +47,7 @@ export default function TrendDetail() {
   const { data: wearers } = useWearersTrend(days);
   const { data: cycle } = useCycleTimeTrend(days);
   const { data: shortageDaily } = useShortageDailyTrend(days);
-  const { data: shortageByCat } = useShortageByCategory(days);
+  const { data: shortageByItem } = useShortageByItem(days);
   const { data: shortageSummary } = useShortageSummary(days, days);
   const { data: truckAnomalies } = useTruckAnomalies(90);
   const { data: auditAnomalies } = useAuditAnomalies(90);
@@ -79,7 +79,7 @@ export default function TrendDetail() {
       {metric === "completion" && <CompletionTable data={completion} />}
       {metric === "wearers" && <WearersTable data={wearers} />}
       {metric === "cycle" && <CycleTable data={cycle} />}
-      {metric === "shortages" && <ShortageTable data={shortageDaily} byCat={shortageByCat} summary={shortageSummary} />}
+      {metric === "shortages" && <ShortageTable data={shortageDaily} byItem={shortageByItem} summary={shortageSummary} />}
       {metric === "anomalies" && <AnomalyTable data={anomalies} />}
     </motion.div>
   );
@@ -277,7 +277,7 @@ function CycleTable({ data }: { data: { run_date: string; avg_seconds: number; t
   );
 }
 
-function ShortageTable({ data, byCat, summary }: { data: { run_date: string; total_qty: number; entry_count: number }[] | undefined; byCat: { category: string; total_qty: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
+function ShortageTable({ data, byItem, summary }: { data: { run_date: string; total_qty: number; entry_count: number }[] | undefined; byItem: { label: string; total_qty: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
   const s = summary ?? { total_qty: 0, avg_per_day: 0, peak_qty: 0, entry_count: 0, days_with_data: 0 };
   return (
     <div className="space-y-4">
@@ -287,21 +287,21 @@ function ShortageTable({ data, byCat, summary }: { data: { run_date: string; tot
         <KpiCard label="Days" value={s.days_with_data} status="Stable" />
         <KpiCard label="Entries" value={s.entry_count.toLocaleString()} status="Stable" />
       </div>
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">By Category</h3>
+      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">By Item</h3>
       <Table>
         <thead>
           <tr>
-            <Th>Category</Th>
+            <Th>Item</Th>
             <Th>Total Qty</Th>
           </tr>
         </thead>
         <tbody>
-          {(byCat ?? []).length === 0 && (
+          {(byItem ?? []).length === 0 && (
             <tr><td colSpan={2} className="px-3 py-4 text-center text-slate-500">No data.</td></tr>
           )}
-          {(byCat ?? []).map((r, i) => (
+          {(byItem ?? []).map((r, i) => (
             <tr key={i} className="hover:bg-slate-800/40">
-              <Td>{r.category}</Td>
+              <Td>{r.label}</Td>
               <Td className="font-semibold">{r.total_qty}</Td>
             </tr>
           ))}

@@ -21,7 +21,7 @@ from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from database import settings as app_settings
-from models import TruckState
+from models import Truck, TruckState, TruckType
 
 # One valid-load-duration band for every "average load time" metric (pace daily,
 # pace-average, cycle time). Replaces the old 30–7200 / 120–1800 / no-cap mix.
@@ -110,3 +110,22 @@ def is_running_filter():
     """SQLAlchemy predicate for the completion 'running roster' denominator —
     trucks that were expected to run (excludes off/oos/shop/spare)."""
     return TruckState.status.notin_(RUNNING_STATUS_EXCLUDE)
+
+
+def operational_running_filter():
+    """The completion/anomaly DENOMINATOR — the trucks that actually had load /
+    unload work that day. Running roster (``is_running_filter``) MINUS idle
+    (non-covering) Spares.
+
+    The backend never sets ``status == 'spare'`` automatically, so a non-covering
+    spare is seeded to ``unloaded`` at day-init and would otherwise pass
+    ``is_running_filter`` and inflate the denominator — dragging completion % down
+    with trucks that had no route to load/unload. A spare that IS working covers a
+    route, which stamps ``oos_spare_route`` on its state, so we keep those.
+
+    REQUIRES the query to join ``Truck`` onto ``TruckState``. Loaded trucks are
+    still pulled back in by ``| loaded_load_filter()`` at the call site, so the
+    numerator stays a subset of the denominator (pct <= 100)."""
+    return is_running_filter() & ~(
+        (Truck.truck_type == TruckType.spare) & TruckState.oos_spare_route.is_(None)
+    )

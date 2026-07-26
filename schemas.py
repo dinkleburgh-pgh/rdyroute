@@ -1060,6 +1060,15 @@ class ShortageCategoryPoint(BaseModel):
     total_qty: int
 
 
+class ShortageItemPoint(BaseModel):
+    """A single EXACT shorted item (category + detail) with its windowed total —
+    e.g. category='Bulk > Towels', detail='Red Shop', label='Bulk > Towels Red Shop'."""
+    category: str
+    detail: str
+    label: str  # fully-qualified item name, matching the Live Report / shortage matrix
+    total_qty: int
+
+
 class ShortageSummary(BaseModel):
     total_qty: int
     avg_per_day: float

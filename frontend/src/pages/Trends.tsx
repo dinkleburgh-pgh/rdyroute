@@ -10,7 +10,7 @@ import {
   useLoadPaceTrend,
   useQualityRate,
   useRouteSwapLog,
-  useShortageByCategory,
+  useShortageByItem,
   useShortageDailyTrend,
   useShortageSummary,
   useTrendComparison,
@@ -54,7 +54,7 @@ export default function Trends() {
   const { data: wearersData, isLoading: wearersLoading } = useWearersTrend(days);
   const { data: cycleData, isLoading: cycleLoading } = useCycleTimeTrend(days);
   const { data: shortageDaily, isLoading: shortageDailyLoading } = useShortageDailyTrend(days);
-  const { data: shortageByCat } = useShortageByCategory(days);
+  const { data: shortageByItem } = useShortageByItem(days);
   const { data: shortageSummary, isLoading: shortageSummaryLoading } = useShortageSummary(days, days);
   const { data: qualityRate, isLoading: qualityRateLoading } = useQualityRate(days, days);
   const { data: truckAnomalies } = useTruckAnomalies(90);
@@ -101,10 +101,10 @@ export default function Trends() {
   }, [byRoute]);
 
   const topShortageItems = useMemo(() => {
-    return (shortageByCat ?? [])
-      .map((r) => ({ label: r.category, value: r.total_qty }))
+    return (shortageByItem ?? [])
+      .map((r) => ({ label: r.label, value: r.total_qty }))
       .sort((a, b) => b.value - a.value);
-  }, [shortageByCat]);
+  }, [shortageByItem]);
 
     function computeTrend(values: number[] | undefined): "up" | "down" | "stable" | null {
     if (!values || values.length < 4) return null;
@@ -218,7 +218,7 @@ export default function Trends() {
             </div>
             <TopNCard
               title="Top Shortage Items"
-              subtitle="Most shorted categories"
+              subtitle="Most shorted items"
               rows={topShortageItems}
               accentColor="bg-amber-500"
             />
