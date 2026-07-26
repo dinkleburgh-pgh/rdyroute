@@ -21,6 +21,7 @@ import base64
 import html
 import time
 from collections import defaultdict, deque
+from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
@@ -70,16 +71,25 @@ def _clean_png_b64(raw: str) -> str:
 
     Strips an optional `data:` prefix, requires the remainder to be strict
     base64 (validate=True rejects anything outside the base64 alphabet — so no
-    quotes/brackets can survive into the data URI), and requires the decoded
-    bytes to start with the PNG signature. Returns the cleaned base64 string.
+    quotes/brackets can survive into the data URI), requires the decoded bytes
+    to start with the PNG signature, and fully decodes the image so a truncated
+    or corrupt PNG is a clean 422 here rather than an unhandled 500 later inside
+    WeasyPrint. Returns the cleaned base64 string.
     """
     s = raw.split(",", 1)[-1].strip() if raw.startswith("data:") else raw.strip()
     try:
         decoded = base64.b64decode(s, validate=True)
     except Exception:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid image encoding")
+        raise HTTPException(422, "invalid image encoding")
     if decoded[:8] != _PNG_MAGIC:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "each image must be a PNG")
+        raise HTTPException(422, "each image must be a PNG")
+    try:
+        from PIL import Image
+
+        with Image.open(BytesIO(decoded)) as im:
+            im.load()  # force a full decode; raises on a truncated/corrupt PNG
+    except Exception:
+        raise HTTPException(422, "corrupt or truncated image")
     return s
 
 
