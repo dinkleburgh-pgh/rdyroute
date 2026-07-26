@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Annotated, Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models import AuditSource, AuthRequestStatus, AuthRole, NoteType, TruckStatus, TruckType
 
@@ -486,25 +486,155 @@ class BatchSummary(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Run Report PDF — the client captures each report section as a styled PNG (the
-# same html-to-image capture the "Download image" button uses) and POSTs them
-# here; the backend wraps them, one per landscape page, into a single PDF via
-# WeasyPrint. Rendering the actual UI (not a re-derived table) is what makes the
-# PDF match the screen — colour, progress bars, chips and all. Field caps bound
-# abuse since the render endpoint is guest-callable and CPU-heavy.
+# Run Report PDF — the client POSTs its already-computed view-model (the exact
+# numbers/rows it renders, plus the hex colours it paints them with) and the
+# backend renders that to a dark, app-matching PDF via WeasyPrint. Rendering
+# real HTML/CSS (not pasted screenshots) keeps the PDF text SELECTABLE while
+# still matching the screen. KPI values are pre-formatted display strings; the
+# shortage matrix ships as arrays aligned to `trucks`. Field caps + a strict hex
+# pattern bound abuse since the render endpoint is guest-callable and colours are
+# interpolated into inline style="…".
 # ---------------------------------------------------------------------------
 
-# One report section as a base64-encoded PNG. 18 MB of base64 ≈ a ~13 MB PNG —
-# far above any real section capture, but a hard ceiling on a guest-callable
-# body (nginx also caps the whole POST at 25 MB).
-Base64Png = Annotated[str, Field(max_length=18_000_000)]
+# A colour the template drops into an inline style="…" attribute. The strict
+# 6-digit-hex pattern is a security boundary: it makes attribute-breakout (a
+# quote/bracket escaping the style value) impossible.
+HexColor = Annotated[str, Field(pattern=r"^#[0-9a-fA-F]{6}$")]
 
 
-class ReportImagesRequest(BaseModel):
-    run_date: date                                              # names the file
+class ReportKpiVM(BaseModel):
+    label: str = Field(max_length=48)
+    value: str = Field(max_length=64)
+    sub: str | None = Field(default=None, max_length=64)
+    tone: HexColor | None = None  # value colour (else default ink)
+
+
+# ---- Batches -------------------------------------------------------------
+class ReportBatchTruckVM(BaseModel):
+    truck_number: int
+    wearers: int
+
+
+class ReportBatchCardVM(BaseModel):
+    batch_number: int
+    total_wearers: int
+    cap_label: str = Field(default="", max_length=24)  # "1,200 / 1,800" or "1,200"
+    pct: int = Field(default=0, ge=0, le=100)          # bar width
+    bar_hex: HexColor                                  # bar fill
+    text_hex: HexColor                                 # count text
+    overbatched: bool = False
+    trucks: list[ReportBatchTruckVM] = Field(default_factory=list, max_length=80)
+
+
+class BatchesSectionVM(BaseModel):
+    disabled: bool = False
+    kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    cap: int = 0
+    no_cap: bool = False
+    cards: list[ReportBatchCardVM] = Field(default_factory=list, max_length=12)
+
+
+# ---- Routes covered ------------------------------------------------------
+class CoverageRowVM(BaseModel):
+    route_truck: int
+    load_on_truck: int
+    type: str = Field(max_length=24)             # "Route swap" / "Spare cover"
+    recurring: bool = False
+    returned: bool = False
+    status_label: str = Field(max_length=64)     # "Loaded · 7:12 AM · 08:40" / "Not loaded"
+    status_hex: HexColor
+
+
+class CoverageSectionVM(BaseModel):
+    rows: list[CoverageRowVM] = Field(default_factory=list, max_length=300)
+
+
+# ---- Load times ----------------------------------------------------------
+class LoadTimeRowVM(BaseModel):
+    truck_number: int
+    finish_label: str = Field(max_length=24)     # clock()
+    duration_label: str = Field(max_length=24)   # formatDuration()
+    tone: HexColor
+
+
+class LoadTimesSectionVM(BaseModel):
+    kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    rows: list[LoadTimeRowVM] = Field(default_factory=list, max_length=300)
+
+
+# ---- Shortages -----------------------------------------------------------
+class ShortageRowVM(BaseModel):
+    group: str = Field(max_length=32)
+    category: str = Field(max_length=48)
+    detail: str = Field(default="", max_length=64)
+    label: str = Field(max_length=96)
+    unit: str | None = Field(default=None, max_length=24)
+    dot_hex: HexColor                                 # category dot
+    cells: list[int | None] = Field(max_length=200)   # aligned to matrix.trucks
+    total: int
+
+
+class ShortageMatrixVM(BaseModel):
+    trucks: list[int] = Field(max_length=200)
+    rows: list[ShortageRowVM] = Field(default_factory=list, max_length=500)
+    truck_totals: list[int] = Field(max_length=200)    # aligned to trucks
+    grand_total: int
+
+    @model_validator(mode="after")
+    def _aligned(self) -> "ShortageMatrixVM":
+        n = len(self.trucks)
+        if len(self.truck_totals) != n:
+            raise ValueError("truck_totals must align to trucks")
+        for row in self.rows:
+            if len(row.cells) != n:
+                raise ValueError("each row's cells must align to trucks")
+        return self
+
+
+class ShortagesSectionVM(BaseModel):
+    kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    matrix: ShortageMatrixVM | None = None   # None when no shortages logged
+
+
+# ---- Audit ---------------------------------------------------------------
+class AuditChipVM(BaseModel):
+    category: str = Field(max_length=48)
+    qty: int
+    dot_hex: HexColor
+
+
+class AuditEntryVM(BaseModel):
+    item_label: str = Field(max_length=120)
+    quantity: int
+    warn: bool = False
+    warn_applied: bool = False
+
+
+class AuditTruckCardVM(BaseModel):
+    truck_number: int
+    route_override: int | None = None
+    entries: list[AuditEntryVM] = Field(default_factory=list, max_length=200)
+
+
+class AuditSectionVM(BaseModel):
+    kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    chips: list[AuditChipVM] = Field(default_factory=list, max_length=40)
+    cards: list[AuditTruckCardVM] = Field(default_factory=list, max_length=200)
+
+
+class ReportViewModel(BaseModel):
+    run_date: date
+    generated_at: datetime | None = None
+    load_day: int | None = None
+    unload_day: int | None = None
+    shift_label: str | None = Field(default=None, max_length=64)
     title: str = Field(default="Run Report", max_length=64)
-    subtitle: str | None = Field(default=None, max_length=200)  # pre-formatted header line
-    images: list[Base64Png] = Field(min_length=1, max_length=12)
+    # Each section is present only when the user picked it in the section picker.
+    batches: BatchesSectionVM | None = None
+    coverage: CoverageSectionVM | None = None
+    load_times: LoadTimesSectionVM | None = None
+    shortages: ShortagesSectionVM | None = None
+    audit: AuditSectionVM | None = None
 
 
 class BatchHistoryCreate(BaseModel):

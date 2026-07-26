@@ -12,6 +12,7 @@
  * query has no live channel of its own, so we poke it on an interval here.
  */
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
@@ -21,9 +22,9 @@ import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { categoryDotClass } from "../components/shorts/HierarchyPicker";
-import { downloadReportPdf } from "../lib/reportPdf";
-import { captureNodeToPngBase64 } from "../lib/captureImage";
+import { buildCategoryPalette, categoryDotClass, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
+import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
+import { downloadReportPdf, PRESET_HEX, dotClassToHex, type ReportViewModel } from "../lib/reportPdf";
 import { FileDown } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
@@ -61,6 +62,25 @@ function capacityColor(total: number, _noCap: boolean, cap: number) {
   if (total >= cap * 0.7) return { bar: "bg-amber-500", text: "text-amber-400" };
   return { bar: "bg-emerald-500", text: "text-emerald-400" };
 }
+
+// Tailwind class → hex, so the PDF view-model can ship concrete colours that
+// match what capacityColor / durTone / the KPI tones paint on screen.
+const BAR_HEX: Record<string, string> = {
+  "bg-red-500": "#ef4444",
+  "bg-amber-500": "#f59e0b",
+  "bg-emerald-500": "#10b981",
+};
+const TONE_HEX: Record<string, string> = {
+  "text-ink": "#f2f6fb",
+  "text-emerald-400": "#34d399",
+  "text-amber-400": "#fbbf24",
+  "text-amber-300": "#fcd34d",
+  "text-red-400": "#f87171",
+  "text-sky-300": "#7dd3fc",
+};
+
+// The report sections the PDF picker offers, in on-screen order.
+type SectionKey = "batches" | "coverage" | "loadTimes" | "shortages" | "audit";
 
 // Top-level audit category = text before the first ">" in the "Top > Sub"
 // category string (mirrors Audit.tsx topCatOf).
@@ -109,9 +129,7 @@ function Section({
 }) {
   const captureRef = useRef<HTMLElement>(null);
   return (
-    // data-report-capture marks this section so the page-level "PDF" button can
-    // snapshot every section in order and wrap them into one landscape PDF.
-    <section ref={captureRef} data-report-capture={title} className="space-y-3">
+    <section ref={captureRef} className="space-y-3">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</p>
         <h2 className="text-lg font-bold text-ink">{title}</h2>
@@ -350,29 +368,186 @@ export default function LiveReport() {
   }, [auditEntries, itemByLabel]);
 
   // ---- PDF export ----
-  // Snapshot every report section (the same styled html-to-image capture the
-  // per-section "Download image" uses) and POST the images; the server wraps
-  // them one-per-landscape-page into a single PDF. Capturing the real UI is what
-  // makes the PDF match the screen — colour, progress bars, chips and all.
+  // Assemble the exact numbers/rows the page shows — plus the hex colours it
+  // paints them with — into the server's view-model, which renders a dark,
+  // app-matching PDF whose text stays SELECTABLE. A picker lets the user choose
+  // which sections to include before generating.
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfErr, setPdfErr] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [selected, setSelected] = useState<Record<SectionKey, boolean>>({
+    batches: true, coverage: true, loadTimes: true, shortages: true, audit: true,
+  });
 
-  async function handleDownloadPdf() {
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPickerOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [pickerOpen]);
+
+  function buildViewModel(sel: Record<SectionKey, boolean>): ReportViewModel {
+    const vm: ReportViewModel = {
+      run_date: runDate,
+      generated_at: new Date().toISOString(),
+      load_day: loadDay,
+      unload_day: unloadsDay,
+      title: "Run Report",
+    };
+
+    if (sel.batches) {
+      vm.batches = {
+        disabled: batchingDisabled,
+        cap,
+        no_cap: noCap,
+        kpis: batchingDisabled
+          ? []
+          : [
+              { label: "Trucks batched", value: String(trucksBatched) },
+              { label: "Total wearers", value: totalWearers.toLocaleString(), sub: `cap ${noCap ? "∞" : cap.toLocaleString()}/batch` },
+              { label: "Batches used", value: `${batchesUsed} / 6` },
+              { label: "Unloaded", value: `${unloadedCount} / ${unloadRosterSize}`, sub: "trucks this shift" },
+            ],
+        cards: batchingDisabled
+          ? []
+          : batches.map((b) => {
+              const { bar, text } = capacityColor(b.total_wearers, noCap, cap);
+              return {
+                batch_number: b.batch_number,
+                total_wearers: b.total_wearers,
+                cap_label: noCap ? b.total_wearers.toLocaleString() : `${b.total_wearers.toLocaleString()} / ${cap.toLocaleString()}`,
+                pct: Math.min(100, Math.round((b.total_wearers / Math.max(cap, 1)) * 100)),
+                bar_hex: BAR_HEX[bar] ?? "#10b981",
+                text_hex: TONE_HEX[text] ?? "#f2f6fb",
+                overbatched: b.total_wearers > cap,
+                trucks: b.trucks.map((t) => ({ truck_number: t.truck_number, wearers: t.wearers })),
+              };
+            }),
+      };
+    }
+
+    if (sel.coverage) {
+      vm.coverage = {
+        rows: coverageRows.map((r) => {
+          const st = boardByNum.get(r.loadOnTruck)?.state;
+          const done = st?.status === "loaded";
+          const status_label = done
+            ? "Loaded" +
+              (st?.load_finish_time ? ` · ${clock(st.load_finish_time)}` : "") +
+              (st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : "")
+            : st?.status === "in_progress"
+              ? "Loading…"
+              : "Not loaded";
+          return {
+            route_truck: r.routeTruck,
+            load_on_truck: r.loadOnTruck,
+            type: r.type,
+            recurring: isRecurring(r.routeTruck, r.loadOnTruck),
+            returned: r.returned,
+            status_label,
+            status_hex: done ? "#3b82f6" : "#7a8698",
+          };
+        }),
+      };
+    }
+
+    if (sel.loadTimes) {
+      vm.load_times = {
+        kpis: [
+          { label: "Trucks timed", value: String(durations.length) },
+          {
+            label: "Day average",
+            value: dayAvg != null ? formatDuration(dayAvg) : "—",
+            sub: paceAvg != null ? `30-day avg ${formatDuration(paceAvg)}` : null,
+            tone: dayAvg != null && paceAvg != null ? (dayAvg <= paceAvg ? "#34d399" : "#fbbf24") : null,
+          },
+          { label: "Fastest", value: fastest ? formatDuration(fastest.state!.load_duration_seconds!) : "—", sub: fastest ? `#${fastest.truck_number}` : null, tone: "#34d399" },
+          { label: "Slowest", value: slowest ? formatDuration(slowest.state!.load_duration_seconds!) : "—", sub: slowest ? `#${slowest.truck_number}` : null, tone: "#f87171" },
+        ],
+        rows: finished.map((t) => {
+          const d = t.state!.load_duration_seconds!;
+          return {
+            truck_number: t.truck_number,
+            finish_label: clock(t.state?.load_finish_time),
+            duration_label: formatDuration(d),
+            tone: TONE_HEX[durTone(d)] ?? "#f2f6fb",
+          };
+        }),
+      };
+    }
+
+    if (sel.shortages) {
+      const items = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
+      const m = buildShortageMatrix(shorts, items);
+      const palette = buildCategoryPalette(m.rows.map((r) => r.category), trackedCatMeta);
+      const dotHex = (cat: string) => PRESET_HEX[palette.get(cat) ?? "stone"] ?? PRESET_HEX.stone;
+      vm.shortages = {
+        kpis: [
+          { label: "Qty short", value: String(totalPieces), sub: "total units", tone: totalPieces > 0 ? "#f87171" : "#34d399" },
+          { label: "Distinct items", value: String(distinctItems) },
+          { label: "Trucks shorted", value: String(shortsByTruck.length) },
+          { label: "Most shorted item", value: topItem ? topItem.label : "—", sub: topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
+          { label: "Most shorted truck", value: topTruck ? `#${topTruck.truck}` : "—", sub: topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
+        ],
+        matrix:
+          shorts.length > 0
+            ? {
+                trucks: m.trucks,
+                rows: m.rows.map((r) => ({
+                  group: r.group,
+                  category: r.category,
+                  detail: r.detail,
+                  label: r.label,
+                  unit: r.unit,
+                  dot_hex: dotHex(r.category),
+                  cells: m.trucks.map((n) => r.byTruck.get(n) ?? null),
+                  total: r.total,
+                })),
+                truck_totals: m.trucks.map((n) => m.truckTotals.get(n) ?? 0),
+                grand_total: m.grandTotal,
+              }
+            : null,
+      };
+    }
+
+    if (sel.audit) {
+      vm.audit = {
+        kpis: [
+          { label: "Trucks audited", value: String(auditByTruck.length) },
+          { label: "Items logged", value: String(itemsLogged) },
+          { label: "Pieces removed", value: String(piecesRemoved) },
+          { label: "Open warnings", value: String(openWarnings), tone: openWarnings > 0 ? "#fbbf24" : null },
+        ],
+        chips: catRollup.map(([cat, qty]) => ({
+          category: cat,
+          qty,
+          dot_hex: dotClassToHex(TOP_CAT_DOT[cat] ?? categoryDotClass(cat, trackedCatMeta)),
+        })),
+        cards: auditByTruck.map(([truck, entries]) => ({
+          truck_number: truck,
+          route_override: entries.find((e) => e.route_override != null)?.route_override ?? null,
+          entries: entries.map((e) => ({
+            item_label: e.item_label,
+            quantity: e.quantity,
+            warn: e.warn_on_next_load,
+            warn_applied: e.warning_applied,
+          })),
+        })),
+      };
+    }
+
+    return vm;
+  }
+
+  async function handleDownloadPdf(sel: Record<SectionKey, boolean>) {
     if (pdfBusy) return;
     setPdfBusy(true);
     setPdfErr(false);
     try {
-      const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-report-capture]"));
-      if (nodes.length === 0) throw new Error("no report sections to capture");
-      const images: string[] = [];
-      for (const node of nodes) images.push(await captureNodeToPngBase64(node));
-      const generated = format(new Date(), "MMM d, yyyy · h:mm a");
-      await downloadReportPdf({
-        run_date: runDate,
-        title: "Run Report",
-        subtitle: `${formatRunDate(runDate)} · Load Day ${loadDay} · Unload Day ${unloadsDay} · Generated ${generated}`,
-        images,
-      });
+      await downloadReportPdf(buildViewModel(sel));
+      setPickerOpen(false);
     } catch (e) {
       console.error("report pdf failed", e);
       setPdfErr(true);
@@ -381,10 +556,23 @@ export default function LiveReport() {
     }
   }
 
+  // Which sections have content today (drives the picker's muted hints).
+  const sectionDefs: { key: SectionKey; label: string; hint?: string }[] = [
+    { key: "batches", label: "Batches", hint: batchingDisabled ? "off" : batches.length ? undefined : "empty" },
+    { key: "coverage", label: "Routes covered", hint: coverageRows.length ? undefined : "empty" },
+    { key: "loadTimes", label: "Load times", hint: finished.length ? undefined : "empty" },
+    { key: "shortages", label: "Shortages", hint: shorts.length ? undefined : "empty" },
+    { key: "audit", label: "Audit", hint: auditByTruck.length ? undefined : "empty" },
+  ];
+  const anySelected = Object.values(selected).some(Boolean);
+
   const pdfButton = (
     <button
       type="button"
-      onClick={handleDownloadPdf}
+      onClick={() => {
+        setPdfErr(false);
+        setPickerOpen(true);
+      }}
       disabled={pdfBusy}
       title="Download the report as a PDF"
       className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95 disabled:opacity-50"
@@ -394,8 +582,60 @@ export default function LiveReport() {
     </button>
   );
 
+  const sectionPicker = pickerOpen
+    ? createPortal(
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => !pdfBusy && setPickerOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Choose report sections"
+            className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-slate-100">Download report PDF</h3>
+            <p className="mt-1 text-sm text-slate-400">Choose which sections to include.</p>
+            <div className="mt-4 space-y-0.5">
+              {sectionDefs.map((s) => (
+                <label
+                  key={s.key}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-800/60"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected[s.key]}
+                    onChange={(e) => setSelected((p) => ({ ...p, [s.key]: e.target.checked }))}
+                    className="h-4 w-4 accent-blue-600"
+                  />
+                  <span className="flex-1 text-sm text-slate-200">{s.label}</span>
+                  {s.hint && <span className="text-[11px] text-slate-500">{s.hint}</span>}
+                </label>
+              ))}
+            </div>
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+              {pdfErr && <span className="mr-auto text-xs text-st-dirty">Couldn't generate — try again.</span>}
+              <button className="btn-ghost" onClick={() => setPickerOpen(false)} disabled={pdfBusy}>
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => handleDownloadPdf(selected)}
+                disabled={pdfBusy || !anySelected}
+              >
+                {pdfBusy ? "Generating…" : "Generate PDF"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
   return (
     <>
+      {sectionPicker}
       <PageHeader
         eyebrow="Live Report"
         title="Run Report"

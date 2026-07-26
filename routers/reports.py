@@ -3,31 +3,36 @@ Router: /reports
 
 Server-side rendering of the run report to a downloadable PDF.
 
-The report is composed entirely in the browser (LiveReport.tsx) with a lot of
-business logic and heavy styling (colour, progress bars, chips). Rather than
-re-derive and re-style it in Python — which never matched the screen — the
-client captures each report section as a PNG (the same html-to-image capture
-the "Download image" button uses) and POSTs the images here. This endpoint wraps
-them, one per landscape page, into a single PDF via WeasyPrint. So the PDF *is*
-the on-screen report.
+The report is composed in the browser (LiveReport.tsx) with a lot of business
+logic, so rather than re-derive it in Python, the client POSTs its already-
+computed view-model — the exact numbers/rows it shows plus the hex colours it
+paints them with — and this endpoint renders that to a dark, app-matching PDF
+via WeasyPrint. Rendering real HTML/CSS (not pasted screenshots) keeps the PDF
+text SELECTABLE while still matching the screen.
 
-Read-only and guest-readable (the /report page is public). Each image is decoded
-and verified to be a real PNG before it goes anywhere near the HTML, so a crafted
-string can't inject markup, and WeasyPrint's resource fetcher is disabled so it
-can't fetch a network/file resource.
+Read-only and guest-readable (the /report page is public). Every text value is
+HTML-escaped; every colour is pattern-validated 6-digit hex at the schema layer
+(so nothing can break out of an inline style="…"); and WeasyPrint's resource
+fetcher refuses everything but inline data: URIs, so a crafted string can neither
+inject markup nor fetch a network/file resource.
 """
 
-import base64
 import html
 import time
 from collections import defaultdict, deque
-from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from models import User
 from routers.auth import get_current_user
-from schemas import ReportImagesRequest
+from schemas import (
+    AuditSectionVM,
+    BatchesSectionVM,
+    CoverageSectionVM,
+    LoadTimesSectionVM,
+    ReportViewModel,
+    ShortagesSectionVM,
+)
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -63,66 +68,31 @@ def _rate_limit(request: Request) -> None:
     dq.append(now)
 
 
-_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
-
-
-def _clean_png_b64(raw: str) -> str:
-    """Validate one client image and return safe-to-inline base64.
-
-    Strips an optional `data:` prefix, requires the remainder to be strict
-    base64 (validate=True rejects anything outside the base64 alphabet — so no
-    quotes/brackets can survive into the data URI), requires the decoded bytes
-    to start with the PNG signature, and fully decodes the image so a truncated
-    or corrupt PNG is a clean 422 here rather than an unhandled 500 later inside
-    WeasyPrint. Returns the cleaned base64 string.
-    """
-    s = raw.split(",", 1)[-1].strip() if raw.startswith("data:") else raw.strip()
-    try:
-        decoded = base64.b64decode(s, validate=True)
-    except Exception:
-        raise HTTPException(422, "invalid image encoding")
-    if decoded[:8] != _PNG_MAGIC:
-        raise HTTPException(422, "each image must be a PNG")
-    try:
-        from PIL import Image
-
-        with Image.open(BytesIO(decoded)) as im:
-            im.load()  # force a full decode; raises on a truncated/corrupt PNG
-    except Exception:
-        raise HTTPException(422, "corrupt or truncated image")
-    return s
-
-
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
 
 @router.post("/pdf")
 def report_pdf(
-    req: ReportImagesRequest,
+    vm: ReportViewModel,
     request: Request,
     current_user: User = Depends(get_current_user),  # any valid session incl. guest
 ) -> Response:
     _rate_limit(request)
-
-    images = [_clean_png_b64(img) for img in req.images]
 
     # Import WeasyPrint lazily so the rest of the app (and tests) don't require
     # its native libs just to import this router.
     from weasyprint import HTML, default_url_fetcher
 
     def _no_network_fetcher(url: str, *args, **kwargs):
-        # The template references no external assets — only inline data: URIs
-        # (the report images). Refuse network/file access outright.
+        # The template references no external assets. Allow only inline data:
+        # URIs and refuse network/file access outright.
         if url.startswith("data:"):
             return default_url_fetcher(url, *args, **kwargs)
         raise ValueError(f"external resource blocked: {url[:64]}")
 
-    pdf_bytes = HTML(
-        string=render_report_html(req.title, req.subtitle, images),
-        url_fetcher=_no_network_fetcher,
-    ).write_pdf()
-    filename = f"ReadyRoute-Report-{req.run_date.isoformat()}.pdf"
+    pdf_bytes = HTML(string=render_report_html(vm), url_fetcher=_no_network_fetcher).write_pdf()
+    filename = f"ReadyRoute-Report-{vm.run_date.isoformat()}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -131,8 +101,10 @@ def report_pdf(
 
 
 # ---------------------------------------------------------------------------
-# HTML template (plain Python — no jinja2 in this codebase). Each section image
-# fills its own landscape page; a slim title band sits atop the first page.
+# Dark HTML template (plain Python f-strings — no jinja2 in this codebase). The
+# palette mirrors the app's Tailwind theme so the PDF reads like the screen;
+# WeasyPrint paints backgrounds by default, so the dark theme renders. Every
+# text value is escaped; hex colours come only from schema-validated fields.
 # ---------------------------------------------------------------------------
 
 _e = html.escape
@@ -141,29 +113,271 @@ _CSS = """
 @page { size: A4 landscape; margin: 8mm; }
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
-body { font-family: "DejaVu Sans", sans-serif; background: #ffffff; }
-.head { margin: 0 0 4mm; }
-.head h1 { font-size: 15px; margin: 0; color: #0b1220; }
-.head .sub { font-size: 10px; color: #556; margin: 1px 0 0; }
-.pg { page-break-after: always; text-align: center; }
-.pg:last-child { page-break-after: auto; }
-/* Fit each capture within one landscape page (usable height ≈ 210 − 2·8 mm),
-   leaving room on page 1 for the title band. Wide captures are width-bound. */
-.pg img { max-width: 100%; max-height: 178mm; }
+body { font-family: "DejaVu Sans", sans-serif; background: #07090d; color: #f2f6fb;
+       font-size: 10px; print-color-adjust: exact; -weasy-print-color-adjust: exact; }
+.mono { font-family: "DejaVu Sans Mono", monospace; }
+.dim { color: #7a8698; }
+.head { margin: 0 0 10px; }
+.head h1 { font-size: 17px; margin: 0; }
+.head .sub { font-size: 10px; color: #8a96a8; margin: 2px 0 0; }
+section { margin: 0 0 12px; page-break-inside: avoid; }
+.eyebrow { font-size: 8px; text-transform: uppercase; letter-spacing: .14em; color: #7a8698; }
+h2 { font-size: 14px; font-weight: 700; margin: 1px 0 6px; }
+.empty { border: 1px dashed rgba(255,255,255,0.10); background: rgba(22,29,43,0.5);
+         color: #8a96a8; text-align: center; padding: 10px; border-radius: 8px; }
+
+.kpis { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+.kpi { flex: 1 1 130px; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+       border-radius: 10px; padding: 7px 10px; }
+.klabel { font-size: 8px; text-transform: uppercase; letter-spacing: .06em; color: #7a8698; }
+.kvalue { font-size: 16px; font-weight: 700; }
+.ksub { font-size: 9px; color: #8a96a8; margin-top: 1px; }
+
+.cards { display: flex; flex-wrap: wrap; gap: 8px; }
+.batch { flex: 1 1 200px; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+         border-radius: 12px; padding: 9px 10px; }
+.bh { display: flex; justify-content: space-between; align-items: baseline; }
+.bname { font-weight: 700; font-size: 11px; }
+.cnt { font-size: 11px; }
+.bar-track { height: 6px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.06);
+             background: #111722; margin: 6px 0; overflow: hidden; }
+.bar-fill { height: 100%; border-radius: 999px; }
+.chips { line-height: 1.8; }
+.chip { display: inline-block; background: #141a27; border-radius: 6px; padding: 1px 6px;
+        margin: 0 3px 0 0; font-size: 9px; }
+.pill { display: inline-block; border-radius: 6px; padding: 0 5px; margin-left: 5px;
+        font-size: 8px; font-weight: 700; background: #141a27; color: #8a96a8; }
+.pill.rec, .pill.over { background: rgba(245,158,11,0.20); color: #fcd34d; }
+
+.list { border: 1px solid rgba(255,255,255,0.06); border-radius: 12px; overflow: hidden; }
+.row { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: 10px; }
+.row + .row { border-top: 1px solid rgba(255,255,255,0.06); }
+.route { color: #7dd3fc; }
+.w12 { min-width: 34px; }
+.status, .dur { margin-left: auto; }
+
+table { border-collapse: collapse; width: 100%; font-size: 8.5px; }
+th, td { border: 1px solid rgba(255,255,255,0.06); padding: 2px 3px; text-align: center;
+         font-variant-numeric: tabular-nums; }
+th.item, td.item { text-align: left; white-space: nowrap; }
+thead { display: table-header-group; }
+thead th { background: #111722; color: #8a96a8; font-size: 9px; }
+tr.group td { background: #141a27; color: #cdd6e2; font-weight: 700; text-align: left;
+              text-transform: uppercase; letter-spacing: .1em; font-size: 8px; }
+tr.alt td { background: rgba(255,255,255,0.02); }
+td.qty { color: #fcd34d; font-weight: 700; }
+td.z { color: #33404f; }
+td.tot, th.tot { color: #fcd34d; font-weight: 700; background: #111722; }
+tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
+.dot { display: inline-block; width: 7px; height: 7px; border-radius: 999px;
+       margin-right: 5px; vertical-align: middle; }
+.unit { font-size: 8px; }
+
+.achips { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 8px; }
+.achip { display: inline-flex; align-items: center; gap: 5px; border: 1px solid rgba(255,255,255,0.06);
+         background: #161d2b; border-radius: 999px; padding: 2px 9px; font-size: 10px; }
+.acards { display: flex; flex-wrap: wrap; gap: 8px; }
+.acard { flex: 1 1 220px; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+         border-radius: 12px; padding: 8px 10px; }
+.ah { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
+.alist { list-style: none; margin: 0; padding: 0; }
+.alist li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 9.5px; }
+.il { color: #cdd6e2; }
+.warn { display: inline-block; border-radius: 4px; padding: 0 4px; margin-left: 5px; font-size: 8px;
+        font-weight: 700; text-transform: uppercase; background: rgba(245,158,11,0.20); color: #fcd34d; }
+.warn.done { background: #334155; color: #cbd5e1; }
 """
 
 
-def render_report_html(title: str, subtitle: str | None, images: list[str]) -> str:
-    head = [f"<h1>{_e(title)}</h1>"]
-    if subtitle:
-        head.append(f'<p class="sub">{_e(subtitle)}</p>')
-    pages = "".join(
-        f'<div class="pg"><img src="data:image/png;base64,{b64}"></div>' for b64 in images
+def _kpis_html(kpis) -> str:
+    if not kpis:
+        return ""
+    cells = []
+    for k in kpis:
+        tone = f' style="color:{k.tone}"' if k.tone else ""
+        sub = f'<div class="ksub">{_e(k.sub)}</div>' if k.sub else ""
+        cells.append(
+            f'<div class="kpi"><div class="klabel">{_e(k.label)}</div>'
+            f'<div class="kvalue"{tone}>{_e(k.value)}</div>{sub}</div>'
+        )
+    return f'<div class="kpis">{"".join(cells)}</div>'
+
+
+def _batches_html(b: BatchesSectionVM | None) -> str:
+    if b is None:
+        return ""
+    out = ['<section><div class="eyebrow">Unload</div><h2>Batches</h2>']
+    if b.disabled:
+        out.append('<div class="empty">Batching is turned off for this day.</div></section>')
+        return "".join(out)
+    out.append(_kpis_html(b.kpis))
+    if not b.cards:
+        out.append('<div class="empty">No batches.</div>')
+    else:
+        cards = []
+        for c in b.cards:
+            over = '<span class="pill over">over</span>' if c.overbatched else ""
+            chips = "".join(
+                f'<span class="chip"><span class="mono">#{int(t.truck_number)}</span> '
+                f'<span class="dim">({int(t.wearers)})</span></span>'
+                for t in c.trucks
+            ) or '<span class="dim">Empty</span>'
+            cards.append(
+                f'<div class="batch"><div class="bh">'
+                f'<span class="bname">Batch {int(c.batch_number)}{over}</span>'
+                f'<span class="cnt mono" style="color:{c.text_hex}">{_e(c.cap_label)}</span></div>'
+                f'<div class="bar-track"><div class="bar-fill" style="width:{int(c.pct)}%;background:{c.bar_hex}"></div></div>'
+                f'<div class="chips">{chips}</div></div>'
+            )
+        out.append(f'<div class="cards">{"".join(cards)}</div>')
+    out.append("</section>")
+    return "".join(out)
+
+
+def _coverage_html(c: CoverageSectionVM | None) -> str:
+    if c is None:
+        return ""
+    out = ['<section><div class="eyebrow">Load</div><h2>Routes covered</h2>']
+    if not c.rows:
+        out.append('<div class="empty">No route coverage recorded for this day.</div></section>')
+        return "".join(out)
+    rows = []
+    for r in c.rows:
+        rec = '<span class="pill rec">recurring</span>' if r.recurring else ""
+        ret = '<span class="pill">returned</span>' if r.returned else ""
+        rows.append(
+            f'<div class="row"><span class="mono route">#{int(r.route_truck)}</span>'
+            f'<span class="dim">loads on</span><span class="mono">#{int(r.load_on_truck)}</span>'
+            f'<span class="chip">{_e(r.type)}</span>{rec}{ret}'
+            f'<span class="status" style="color:{r.status_hex}">{_e(r.status_label)}</span></div>'
+        )
+    out.append(f'<div class="list">{"".join(rows)}</div></section>')
+    return "".join(out)
+
+
+def _load_times_html(lt: LoadTimesSectionVM | None) -> str:
+    if lt is None:
+        return ""
+    out = ['<section><div class="eyebrow">Load</div><h2>Load times</h2>', _kpis_html(lt.kpis)]
+    if not lt.rows:
+        out.append('<div class="empty">No trucks have finished loading yet.</div></section>')
+        return "".join(out)
+    rows = []
+    for r in lt.rows:
+        rows.append(
+            f'<div class="row"><span class="mono w12">#{int(r.truck_number)}</span>'
+            f'<span class="dim">{_e(r.finish_label)}</span>'
+            f'<span class="dur mono" style="color:{r.tone}">{_e(r.duration_label)}</span></div>'
+        )
+    out.append(f'<div class="list">{"".join(rows)}</div></section>')
+    return "".join(out)
+
+
+def _shortages_html(s: ShortagesSectionVM | None) -> str:
+    if s is None:
+        return ""
+    out = ['<section><div class="eyebrow">Load</div><h2>Shortages</h2>', _kpis_html(s.kpis)]
+    m = s.matrix
+    if m is None or not m.rows:
+        out.append('<div class="empty">No shortages logged for this day.</div></section>')
+        return "".join(out)
+
+    header = ['<th class="item">Item</th>']
+    header += [f"<th>{int(t)}</th>" for t in m.trucks]
+    header.append('<th class="tot">Tot</th>')
+
+    body = []
+    prev_group = None
+    span = len(m.trucks) + 2
+    di = 0
+    for row in m.rows:
+        if row.group != prev_group:
+            body.append(f'<tr class="group"><td colspan="{span}">{_e(row.group)}</td></tr>')
+            prev_group = row.group
+        tr_cls = ' class="alt"' if di % 2 else ""
+        di += 1
+        unit = f' <span class="dim unit">{_e(row.unit)}s</span>' if row.unit else ""
+        label = f'<span class="dot" style="background:{row.dot_hex}"></span>{_e(row.label)}{unit}'
+        cells = "".join(
+            (f'<td class="qty">{int(v)}</td>' if v is not None else '<td class="z">·</td>')
+            for v in row.cells
+        )
+        body.append(f'<tr{tr_cls}><td class="item">{label}</td>{cells}<td class="tot">{int(row.total)}</td></tr>')
+
+    totals = "".join(f"<td>{int(v)}</td>" for v in m.truck_totals)
+    foot = (
+        f'<tr class="trucktot"><td class="item">Truck total</td>{totals}'
+        f'<td class="tot">{int(m.grand_total)}</td></tr>'
+    )
+    out.append(
+        f'<table><thead><tr>{"".join(header)}</tr></thead>'
+        f'<tbody>{"".join(body)}{foot}</tbody></table></section>'
+    )
+    return "".join(out)
+
+
+def _audit_html(a: AuditSectionVM | None) -> str:
+    if a is None:
+        return ""
+    out = ['<section><div class="eyebrow">Load</div><h2>Audit</h2>', _kpis_html(a.kpis)]
+    if a.chips:
+        chips = "".join(
+            f'<span class="achip"><span class="dot" style="background:{c.dot_hex}"></span>'
+            f'<span class="dim">{_e(c.category)}</span> <span class="mono">{int(c.qty)}</span></span>'
+            for c in a.chips
+        )
+        out.append(f'<div class="achips">{chips}</div>')
+    if not a.cards:
+        out.append('<div class="empty">No audit entries logged for this day.</div></section>')
+        return "".join(out)
+    cards = []
+    for c in a.cards:
+        ro = ""
+        if c.route_override is not None and c.route_override != c.truck_number:
+            ro = f' <span class="dim">(route {int(c.route_override)})</span>'
+        items = []
+        for e in c.entries:
+            warn = ""
+            if e.warn:
+                warn = f'<span class="warn{" done" if e.warn_applied else ""}">warn</span>'
+            items.append(
+                f'<li><span class="il">{_e(e.item_label)}{warn}</span>'
+                f'<span class="mono">×{int(e.quantity)}</span></li>'
+            )
+        n = len(c.entries)
+        cards.append(
+            f'<div class="acard"><div class="ah">'
+            f'<span><span class="mono">#{int(c.truck_number)}</span>{ro}</span>'
+            f'<span class="dim">{n} item{"" if n == 1 else "s"}</span></div>'
+            f'<ul class="alist">{"".join(items)}</ul></div>'
+        )
+    out.append(f'<div class="acards">{"".join(cards)}</div></section>')
+    return "".join(out)
+
+
+def render_report_html(vm: ReportViewModel) -> str:
+    bits = [vm.run_date.strftime("%A, %B %d, %Y")]
+    if vm.load_day is not None:
+        bits.append(f"Load Day {int(vm.load_day)}")
+    if vm.unload_day is not None:
+        bits.append(f"Unload Day {int(vm.unload_day)}")
+    if vm.shift_label:
+        bits.append(vm.shift_label)
+    if vm.generated_at is not None:
+        bits.append("Generated " + vm.generated_at.strftime("%b %d, %Y %I:%M %p"))
+    body = "".join(
+        [
+            _batches_html(vm.batches),
+            _coverage_html(vm.coverage),
+            _load_times_html(vm.load_times),
+            _shortages_html(vm.shortages),
+            _audit_html(vm.audit),
+        ]
     )
     return (
         "<!doctype html><html><head><meta charset='utf-8'>"
         f"<style>{_CSS}</style></head><body>"
-        f'<div class="head">{"".join(head)}</div>'
-        f"{pages}"
-        "</body></html>"
+        f'<div class="head"><h1>{_e(vm.title)}</h1>'
+        f'<p class="sub">{_e(" · ".join(bits))}</p></div>'
+        f"{body}</body></html>"
     )
