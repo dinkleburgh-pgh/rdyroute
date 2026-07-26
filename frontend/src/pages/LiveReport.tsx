@@ -239,16 +239,19 @@ export default function LiveReport() {
 
   // ---- Coverage ("routes covered") ----
   const coverageRows = useMemo(() => {
-    type Row = { routeTruck: number; loadOnTruck: number; type: string; returned: boolean };
+    type Row = { routeTruck: number; loadOnTruck: number; type: string; returned: boolean; split: boolean };
     const rows: Row[] = [];
     const seen = new Set<string>();
-    const add = (routeTruck: number, loadOnTruck: number, type: string, returned = false) => {
+    const add = (routeTruck: number, loadOnTruck: number, type: string, returned = false, split = false) => {
       const key = `${routeTruck}->${loadOnTruck}`;
       if (seen.has(key)) return;
       seen.add(key);
-      rows.push({ routeTruck, loadOnTruck, type, returned });
+      rows.push({ routeTruck, loadOnTruck, type, returned, split });
     };
-    for (const rs of routeSwaps) add(rs.route_truck, rs.load_on_truck, "Route swap");
+    // A SPLIT swap means the route ALSO ran (the truck carried only its overflow)
+    // — label it "Split", not full "Route swap", so the report doesn't imply the
+    // route was covered.
+    for (const rs of routeSwaps) add(rs.route_truck, rs.load_on_truck, rs.is_split ? "Split" : "Route swap", false, rs.is_split);
     // Today's live view shows only still-active spare coverage; a historical
     // report also includes spares that were later returned, since the freight
     // did load on that spare that day (a returned spare keeps its run_date, so

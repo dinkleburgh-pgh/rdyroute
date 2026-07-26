@@ -10,6 +10,7 @@ import {
   useHolidayUnload,
   useReturnSpare,
   useOpenSpareAssignments,
+  useCoverageForRole,
   useRouteSwapLog,
   useRouteSwaps,
   useSettings,
@@ -21,6 +22,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useCollapseState } from "../utils/useCollapseState";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
+import CoverageList from "../components/CoverageList";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
@@ -141,6 +143,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const isFuture  = runDate > todayIso();
   const isReadOnly = runDate !== todayIso();
   const { data, isLoading, error } = useBoard(runDate);
+  // Fleet is the master view — all of today's coverage (spares + one-way/two-way
+  // swaps + splits) AND the previous-day coverage, via the shared selector.
+  const fleetCoverage = useCoverageForRole("fleet", runDate, data ?? []);
   const { data: spareAssignments = [] } = useSpareAssignments(runDate, false);
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: swapLog = [] } = useRouteSwapLog(60);
@@ -753,6 +758,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           onApplyBulk={applyBulkEdit}
         />
       )}
+      {/* Master coverage overview — everything covered today + previous day */}
+      {fleetMode && fleetCoverage.length > 0 && (
+        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage</p>
+          <CoverageList entries={fleetCoverage} grouped />
+        </div>
+      )}
       {/* Previous Day Coverage — directly below the bulk-edit section */}
       {fleetMode && (
         <div className="flex justify-start">
@@ -929,7 +941,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             // SPLIT helper: shows the same big pair but as "route + truck" —
             // the route ALSO runs, so it's an extra load, not a takeover.
             const splitRoute = coverageRoute == null ? (truck.route_split_route ?? null) : null;
-            const showCoverageBadge = !fleetMode && (coverageRoute != null || splitRoute != null);
+            // Fleet is the master view — show the ROUTE→TRUCK pair here too
+            // (it used to be suppressed in fleet mode).
+            const showCoverageBadge = coverageRoute != null || splitRoute != null;
             // Reverse lookup: this truck's own route is being covered by another
             // truck (route swap / OOS). Show it so the covered card isn't blank.
             const coveredBy = coverageRoute == null ? coveringTruckByRoute.get(truck.truck_number) : undefined;

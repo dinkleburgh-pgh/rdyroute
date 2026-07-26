@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
+import CoverageList from "../components/CoverageList";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import {
@@ -70,6 +71,9 @@ export default function Unload() {
     const c = prevDayCarriers.get(t.truck_number);
     return !!c && c.truck_number !== t.truck_number && carrierCountsAsUnloaded(c);
   };
+  // Previous-day coverage chips, via the shared selector (same normalization as
+  // Load/Fleet/Report) — what's being unloaded under coverage today.
+  const unloadCoverage = useCoverageForRole("unload", runDate, data ?? []);
   // Route this truck carried on the PREVIOUS load day (what it's unloaded as),
   // or null. This — not today's assignment — is the coverage the unload
   // workflow cares about.
@@ -451,16 +455,7 @@ export default function Unload() {
                 <span className="text-[10px] text-amber-500/70">({format(new Date(`${prevCoverage.date}T12:00:00`), "EEE MMM d")})</span>
               )}
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {prevCoverage.items.map((c) => (
-                <span key={`${c.route}-${c.loadOn}`} className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-surface-3 px-2 py-0.5 text-xs">
-                  <span className={clsx("font-black", c.isSplit ? "text-amber-300" : "text-st-dirty")}>#{c.route}</span>
-                  {c.isSplit ? <span className="font-bold text-amber-500">+</span> : <ArrowLeftRight className="h-3 w-3 text-ink-faint" />}
-                  <span className="font-black text-amber-200">#{c.loadOn}</span>
-                  {c.isSplit && <span className="text-[8px] font-bold uppercase tracking-wider text-amber-500">Split</span>}
-                </span>
-              ))}
-            </div>
+            <CoverageList entries={unloadCoverage} />
           </div>
         )}
 

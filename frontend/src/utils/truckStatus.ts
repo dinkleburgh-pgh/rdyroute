@@ -381,6 +381,69 @@ export function buildPrevDayCoverage(
   return { date: prevRunDate, items, byRoute, byCover, splitHelpers, twoWayRoutes };
 }
 
+// ---------------------------------------------------------------------------
+// Normalized coverage list — the single source every surface renders coverage
+// from, scoped by role so each page shows only its side (Load = today's
+// load-side, Unload = previous-day, Fleet = both/all types).
+// ---------------------------------------------------------------------------
+
+export type CoverageKind = "spare" | "swap-oneway" | "swap-twoway" | "split";
+
+export interface CoverageEntry {
+  /** the covered route */
+  route: number;
+  /** the covering truck */
+  cover: number;
+  kind: CoverageKind;
+  /** previous-day coverage (vs today's) */
+  prev: boolean;
+}
+
+/**
+ * Build the coverage list a surface should show. Today's entries come from the
+ * board's per-truck fields (oos_spare_route / route_swap_route+route_swap_two_way
+ * / route_split_route); previous-day entries come from the resolved
+ * PrevDayCoverage. Role filter: load = today only, unload = previous only,
+ * fleet = today + previous (the master view).
+ */
+export function buildCoverageList(args: {
+  role: "load" | "unload" | "fleet";
+  board: TruckWithState[];
+  prevCoverage: PrevDayCoverage;
+}): CoverageEntry[] {
+  const { role, board, prevCoverage } = args;
+  const out: CoverageEntry[] = [];
+  const seen = new Set<string>();
+  const push = (route: number, cover: number, kind: CoverageKind, prev: boolean) => {
+    const key = `${route}|${cover}|${prev ? 1 : 0}`;
+    if (seen.has(key)) return;
+    seen.add(key);
+    out.push({ route, cover, kind, prev });
+  };
+  if (role === "load" || role === "fleet") {
+    for (const t of board) {
+      const spareRoute = t.state?.oos_spare_route ?? null;
+      if (spareRoute != null) push(spareRoute, t.truck_number, "spare", false);
+      if (t.route_swap_route != null) {
+        push(t.route_swap_route, t.truck_number, t.route_swap_two_way ? "swap-twoway" : "swap-oneway", false);
+      }
+      if (t.route_split_route != null) push(t.route_split_route, t.truck_number, "split", false);
+    }
+  }
+  if (role === "unload" || role === "fleet") {
+    // Prev-day coverage: the log can't distinguish spare vs one-way swap, so
+    // label plain coverage as swap-oneway; twoWayRoutes/splitHelpers are known.
+    for (const [route, cover] of prevCoverage.byRoute) {
+      push(route, cover, prevCoverage.twoWayRoutes.has(route) ? "swap-twoway" : "swap-oneway", true);
+    }
+    for (const [cover, route] of prevCoverage.splitHelpers) {
+      push(route, cover, "split", true);
+    }
+  }
+  // Today first, then previous; each block sorted by route.
+  return out.sort((a, b) => (a.prev === b.prev ? a.route - b.route : a.prev ? 1 : -1));
+}
+
 export function effectiveOperationalStatus(
   t: TruckWithState,
   dayNum: number,

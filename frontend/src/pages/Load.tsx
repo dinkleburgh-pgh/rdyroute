@@ -11,13 +11,14 @@ import {
   usePaceAverage,
   useRecordLoadDuration,
   useShortages,
-  useSpareAssignments,
+  useCoverageForRole,
   useSettings,
   useUpsertTruckState,
   useLoadSequenceSuggestions,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
 } from "../api/hooks";
+import CoverageList from "../components/CoverageList";
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
@@ -80,13 +81,15 @@ export default function Load() {
 
   // Today's coverage assignments (manual + auto-applied recurring) — surfaced as
   // a notice so loaders know which route's freight loads on which truck.
-  const { data: spareAssignments = [] } = useSpareAssignments(runDate);
   const { data: appSettings = [] } = useSettings();
   const recurringRules = useMemo<RecurringRouteSwap[]>(() => {
     const row = appSettings.find((s) => s.key === "recurring_route_swaps");
     return Array.isArray(row?.value) ? (row!.value as RecurringRouteSwap[]) : [];
   }, [appSettings]);
-  const activeCoverage = useMemo(() => spareAssignments.filter((s) => !s.returned), [spareAssignments]);
+  // All of today's load-side coverage — spares AND one-way/two-way swaps AND
+  // splits — via the shared selector. (The old banner showed only spares, so
+  // route swaps created in the wizard/Fleet were invisible here.)
+  const loadCoverage = useCoverageForRole("load", runDate, data ?? []);
   function isRecurringCoverage(routeTruck: number, loadOnTruck: number): boolean {
     return recurringRules.some(
       (r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay),
@@ -327,7 +330,7 @@ export default function Load() {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
       {/* Coverage notice — which route's freight loads on which truck today */}
-      {activeCoverage.length > 0 && (
+      {loadCoverage.length > 0 && (
         <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
           <button
             type="button"
@@ -336,27 +339,16 @@ export default function Load() {
           >
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage today</span>
             <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
-              <span className="font-mono tabular-nums">{activeCoverage.length} route{activeCoverage.length === 1 ? "" : "s"}</span>
+              <span className="font-mono tabular-nums">{loadCoverage.length} route{loadCoverage.length === 1 ? "" : "s"}</span>
               <ChevronDown className={clsx("h-3.5 w-3.5 text-sky-400/60 transition-transform", coverageCollapsed && "-rotate-90")} />
             </span>
           </button>
           {!coverageCollapsed && (
             <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-              <div className="flex flex-col gap-1.5">
-                {activeCoverage
-                  .slice()
-                  .sort((a, b) => a.covering_route_truck - b.covering_route_truck)
-                  .map((s) => (
-                    <div key={s.id} className="flex items-center gap-2 text-sm">
-                      <span className="text-base font-black text-sky-300">{s.covering_route_truck}</span>
-                      <span className="text-xs text-ink-muted">loads on</span>
-                      <span className="text-base font-black text-ink">{s.spare_truck_number}</span>
-                      {isRecurringCoverage(s.covering_route_truck, s.spare_truck_number) && (
-                        <span className="ml-1 rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
-                      )}
-                    </div>
-                  ))}
-              </div>
+              <CoverageList
+                entries={loadCoverage}
+                isRecurring={(e) => isRecurringCoverage(e.route, e.cover)}
+              />
             </div>
           )}
         </div>

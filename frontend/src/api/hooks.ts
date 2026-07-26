@@ -4,7 +4,7 @@ import type { AxiosProgressEvent } from "axios";
 import { api, todayIso } from "./client";
 import * as offlineQueue from "./offlineQueue";
 import { logDebug } from "../utils/debugLog";
-import { buildPrevDayCoverage, resolvePrevRunDate } from "../utils/truckStatus";
+import { buildCoverageList, buildPrevDayCoverage, resolvePrevRunDate, type CoverageEntry } from "../utils/truckStatus";
 import type {
   AppSetting,
   ActivityEventPage,
@@ -547,6 +547,21 @@ export function usePrevOperatingDay(runDate: string) {
       ).data.prev_run_date,
     staleTime: 60_000,
   });
+}
+
+/**
+ * The normalized coverage list a surface should display, scoped by role — the
+ * single selector every coverage banner/list renders from. Load = today's
+ * load-side coverage, Unload = previous-day, Fleet = today (all types) +
+ * previous-day. Shares the corrected previous-operating-day + two-way labeling.
+ */
+export function useCoverageForRole(role: "load" | "unload" | "fleet", runDate: string, board: TruckWithState[]): CoverageEntry[] {
+  const { data: swapLog = [] } = useRouteSwapLog(role === "fleet" ? 60 : 14);
+  const { data: prevOp } = usePrevOperatingDay(runDate);
+  return useMemo(() => {
+    const prevCoverage = buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp));
+    return buildCoverageList({ role, board, prevCoverage });
+  }, [role, runDate, board, swapLog, prevOp]);
 }
 
 export function useActivityEvents(filters?: {
