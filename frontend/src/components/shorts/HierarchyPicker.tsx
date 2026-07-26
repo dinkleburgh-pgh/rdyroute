@@ -417,7 +417,7 @@ function ItemGrid({
             whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
             whileTap={{ scale: 0.94 }}
           >
-            {suffix ? `${disp} ${suffix}` : disp}
+            {suffix && colorWordClass(disp) ? `${disp} ${suffix}` : disp}
           </motion.button>
         );
       })}

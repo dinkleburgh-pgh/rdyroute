@@ -9,7 +9,7 @@ import { motion } from "framer-motion";
 import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { useCategoryPalette } from "../components/shorts/HierarchyPicker";
+import { colorWordClass, useCategoryPalette } from "../components/shorts/HierarchyPicker";
 import {
   auditPhotoFileUrl,
   useAuditByRoute,
@@ -321,7 +321,7 @@ function HierarchyPicker({
                 MAT_COLOR_PALETTE[disp] ?? btnClass,
               )}
             >
-              {suffix ? `${disp} ${suffix}` : disp}
+              {suffix && colorWordClass(disp) ? `${disp} ${suffix}` : disp}
             </button>
           );
         })}
