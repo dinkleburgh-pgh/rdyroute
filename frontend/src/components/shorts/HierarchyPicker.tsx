@@ -381,12 +381,16 @@ function ItemGrid({
   btnClass,
   isPending,
   onSelect,
+  suffix,
 }: {
   gridItems: TrackedItem[];
   cat: string;
   btnClass: string;
   isPending: boolean;
   onSelect: (category: string, detail: string) => void;
+  /** Appended to the button label for context (e.g. "Aprons" → "Black Aprons").
+   *  Display only — the logged detail stays the bare item label. */
+  suffix?: string;
 }) {
   return (
     <div className="grid grid-cols-3 gap-2">
@@ -413,7 +417,7 @@ function ItemGrid({
             whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
             whileTap={{ scale: 0.94 }}
           >
-            {disp}
+            {suffix ? `${disp} ${suffix}` : disp}
           </motion.button>
         );
       })}
@@ -732,6 +736,7 @@ export default function HierarchyPicker({
             btnClass={catPalette.tileClass(`${topCat} > ${bulkSub}`)}
             isPending={isPending}
             onSelect={selectItem}
+            suffix={bulkSub}
           />
         </div>
       )}

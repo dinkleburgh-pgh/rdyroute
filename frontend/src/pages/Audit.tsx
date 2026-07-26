@@ -302,7 +302,7 @@ function HierarchyPicker({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [bulkSub]);
 
-  function ItemGrid({ gridItems, cat, btnClass }: { gridItems: TrackedItem[]; cat: string; btnClass: string }) {
+  function ItemGrid({ gridItems, cat, btnClass, suffix }: { gridItems: TrackedItem[]; cat: string; btnClass: string; suffix?: string }) {
     return (
       <div className="grid grid-cols-3 gap-2">
         {gridItems.map((item) => {
@@ -321,7 +321,7 @@ function HierarchyPicker({
                 MAT_COLOR_PALETTE[disp] ?? btnClass,
               )}
             >
-              {disp}
+              {suffix ? `${disp} ${suffix}` : disp}
             </button>
           );
         })}
@@ -506,6 +506,7 @@ function HierarchyPicker({
             gridItems={subItemsFor(topCat, bulkSub)}
             cat={bulkSub}
             btnClass={catPalette.tileClass(bulkSub)}
+            suffix={bulkSub}
           />
         </div>
       )}
