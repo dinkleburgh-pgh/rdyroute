@@ -489,6 +489,15 @@ function HierarchyPicker({
               </button>
             ))}
           </div>
+          {/* Direct items under this top category (no subcategory) — shown with
+              the subcategory buttons so they aren't hidden when a category has
+              both (e.g. Hygiene items + a Hygiene > Soap sub). */}
+          {flatItems.length > 0 && (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{MAT_SIZES.has(topCat) ? "Color" : "Item"}</p>
+              <ItemGrid gridItems={flatItems} cat={topCat} btnClass={catPalette.tileClass(topCat)} />
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-2">

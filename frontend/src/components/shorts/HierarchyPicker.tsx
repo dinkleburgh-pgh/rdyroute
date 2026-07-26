@@ -707,6 +707,21 @@ export default function HierarchyPicker({
               </motion.button>
             ))}
           </div>
+          {/* Items placed directly under this top category (no subcategory) —
+              shown alongside the subcategory buttons so they aren't hidden when
+              the category has both (e.g. Hygiene items + a Hygiene > Soap sub). */}
+          {flatItems.length > 0 && (
+            <>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Item</p>
+              <ItemGrid
+                gridItems={flatItems}
+                cat={topCat}
+                btnClass={catPalette.tileClass(topCat)}
+                isPending={isPending}
+                onSelect={selectItem}
+              />
+            </>
+          )}
         </div>
       ) : (
         <div className="space-y-2">
