@@ -20,9 +20,12 @@ inject markup nor fetch a network/file resource.
 import html
 import time
 from collections import defaultdict, deque
+from datetime import timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
+from database import settings
 from models import User
 from routers.auth import get_current_user
 from schemas import (
@@ -364,7 +367,13 @@ def render_report_html(vm: ReportViewModel) -> str:
     if vm.shift_label:
         bits.append(vm.shift_label)
     if vm.generated_at is not None:
-        bits.append("Generated " + vm.generated_at.strftime("%b %d, %Y %I:%M %p"))
+        # The client sends an ISO instant (UTC). Show it in the app timezone
+        # (Eastern) so the "Generated" stamp reads as local wall-clock.
+        gen = vm.generated_at
+        if gen.tzinfo is None:
+            gen = gen.replace(tzinfo=timezone.utc)
+        gen = gen.astimezone(ZoneInfo(settings.timezone))
+        bits.append("Generated " + gen.strftime("%b %d, %Y %I:%M %p"))
     body = "".join(
         [
             _batches_html(vm.batches),

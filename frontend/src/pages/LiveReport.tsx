@@ -16,7 +16,6 @@ import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { motion } from "framer-motion";
-import { format } from "date-fns";
 import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
@@ -30,7 +29,7 @@ import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
-import { formatRunDate } from "../utils/dates";
+import { formatEasternTime, formatRunDate } from "../utils/dates";
 import {
   useBatchSummary,
   useBoard,
@@ -101,7 +100,7 @@ const TOP_CAT_DOT: Record<string, string> = {
 };
 
 function clock(epochSec: number | null | undefined): string {
-  return epochSec ? format(new Date(epochSec * 1000), "h:mm a") : "—";
+  return epochSec ? formatEasternTime(epochSec) : "—";
 }
 
 function Kpi({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
