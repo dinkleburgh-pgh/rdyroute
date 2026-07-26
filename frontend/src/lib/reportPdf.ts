@@ -83,8 +83,20 @@ export interface ShortageMatrixVM {
   grand_total: number;
 }
 
+export interface ShortageTruckItemVM {
+  label: string;
+  qty: number;
+}
+
+export interface ShortageTopTruckVM {
+  truck_number: number;
+  total: number;
+  items: ShortageTruckItemVM[];
+}
+
 export interface ShortagesSectionVM {
   kpis: ReportKpiVM[];
+  top_trucks?: ShortageTopTruckVM[];
   matrix?: ShortageMatrixVM | null;
 }
 

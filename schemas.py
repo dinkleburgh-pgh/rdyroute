@@ -591,8 +591,20 @@ class ShortageMatrixVM(BaseModel):
         return self
 
 
+class ShortageTruckItemVM(BaseModel):
+    label: str = Field(max_length=96)
+    qty: int
+
+
+class ShortageTopTruckVM(BaseModel):
+    truck_number: int
+    total: int
+    items: list[ShortageTruckItemVM] = Field(default_factory=list, max_length=6)
+
+
 class ShortagesSectionVM(BaseModel):
     kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    top_trucks: list[ShortageTopTruckVM] = Field(default_factory=list, max_length=3)
     matrix: ShortageMatrixVM | None = None   # None when no shortages logged
 
 

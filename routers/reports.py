@@ -276,10 +276,36 @@ def _load_times_html(lt: LoadTimesSectionVM | None) -> str:
     return "".join(out)
 
 
+def _top_trucks_html(top) -> str:
+    if not top:
+        return ""
+    cards = []
+    for i, t in enumerate(top, 1):
+        items = "".join(
+            f'<li><span class="il">{_e(it.label)}</span>'
+            f'<span class="mono" style="color:#fcd34d">{int(it.qty)}</span></li>'
+            for it in t.items
+        )
+        cards.append(
+            f'<div class="acard"><div class="ah">'
+            f'<span><span class="dim">#{i}</span> <span class="mono">#{int(t.truck_number)}</span></span>'
+            f'<span class="mono" style="color:#fcd34d">{int(t.total)} <span class="dim">qty</span></span></div>'
+            f'<ul class="alist">{items}</ul></div>'
+        )
+    return (
+        '<div class="eyebrow" style="margin:2px 0 4px">Top shorted trucks</div>'
+        f'<div class="acards">{"".join(cards)}</div>'
+    )
+
+
 def _shortages_html(s: ShortagesSectionVM | None) -> str:
     if s is None:
         return ""
-    out = ['<section><div class="eyebrow">Load</div><h2>Shortages</h2>', _kpis_html(s.kpis)]
+    out = [
+        '<section><div class="eyebrow">Load</div><h2>Shortages</h2>',
+        _kpis_html(s.kpis),
+        _top_trucks_html(s.top_trucks),
+    ]
     m = s.matrix
     if m is None or not m.rows:
         out.append('<div class="empty">No shortages logged for this day.</div></section>')

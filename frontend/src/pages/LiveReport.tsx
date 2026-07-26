@@ -328,6 +328,29 @@ export default function LiveReport() {
     }
     return [...m.values()].sort((a, b) => b.qty - a.qty || b.items - a.items)[0] ?? null;
   }, [shorts]);
+  // Top 3 shorted trucks, each with its biggest items — a quick "worst trucks"
+  // breakdown for the report (and PDF), beyond the single "most shorted truck" KPI.
+  const topTrucks = useMemo(() => {
+    const m = new Map<number, { truck: number; total: number; items: Map<string, number> }>();
+    for (const s of shorts) {
+      const e = m.get(s.truck_number) ?? { truck: s.truck_number, total: 0, items: new Map<string, number>() };
+      e.total += s.quantity;
+      const label = shortLabel(s);
+      e.items.set(label, (e.items.get(label) ?? 0) + s.quantity);
+      m.set(s.truck_number, e);
+    }
+    return [...m.values()]
+      .sort((a, b) => b.total - a.total || b.items.size - a.items.size)
+      .slice(0, 3)
+      .map((t) => ({
+        truck: t.truck,
+        total: t.total,
+        items: [...t.items.entries()]
+          .map(([label, qty]) => ({ label, qty }))
+          .sort((a, b) => b.qty - a.qty)
+          .slice(0, 3),
+      }));
+  }, [shorts]);
 
   // ---- Audit ----
   const itemByLabel = useMemo(() => new Map(trackedItems.map((i) => [i.label, i])), [trackedItems]);
@@ -477,6 +500,11 @@ export default function LiveReport() {
           { label: "Most shorted item", value: topItem ? topItem.label : "—", sub: topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
           { label: "Most shorted truck", value: topTruck ? `#${topTruck.truck}` : "—", sub: topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
         ],
+        top_trucks: topTrucks.map((t) => ({
+          truck_number: t.truck,
+          total: t.total,
+          items: t.items.map((it) => ({ label: it.label, qty: it.qty })),
+        })),
         matrix:
           shorts.length > 0
             ? {
@@ -727,6 +755,38 @@ export default function LiveReport() {
               tone="text-amber-300"
             />
           </div>
+          {topTrucks.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                Top shorted trucks
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {topTrucks.map((t, i) => (
+                  <div key={t.truck} className="rounded-xl border border-hairline bg-surface p-3">
+                    <div className="flex items-baseline justify-between gap-2 border-b border-hairline pb-1.5">
+                      <span className="flex items-baseline gap-1.5">
+                        <span className="text-[10px] font-bold text-ink-faint">#{i + 1}</span>
+                        <span className="font-mono text-lg font-black tabular-nums text-ink">#{t.truck}</span>
+                      </span>
+                      <span className="font-mono text-sm font-bold tabular-nums text-amber-300">
+                        {t.total.toLocaleString()} <span className="text-[10px] font-normal text-ink-faint">qty</span>
+                      </span>
+                    </div>
+                    <ul className="mt-1.5 space-y-0.5">
+                      {t.items.map((it) => (
+                        <li key={it.label} className="flex items-baseline justify-between gap-2 text-xs">
+                          <span className="min-w-0 truncate text-ink-soft">{it.label}</span>
+                          <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">
+                            {it.qty.toLocaleString()}
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {shorts.length === 0 ? (
             <Empty>No shortages logged for this day.</Empty>
           ) : (
