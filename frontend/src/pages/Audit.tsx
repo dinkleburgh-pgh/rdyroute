@@ -488,6 +488,23 @@ function ItemLogger({
   const deleteEntry = useDeleteAuditEntry();
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
+
+  // An audit entry stores only the bare item label ("Black"), which is ambiguous
+  // across categories (Aprons Black vs a mat colour). Qualify it with its
+  // category group — subcategory, else top category — from the catalog so chips
+  // and the log read "Aprons Black" instead of just "Black". Labels are globally
+  // unique keys, so the lookup is exact; unknown/removed labels fall back as-is,
+  // and a label that already starts with its group (e.g. "4x6 Black") isn't
+  // double-prefixed.
+  function itemDisplayName(label: string): string {
+    const it = items.find((i) => i.label === label);
+    if (!it) return label;
+    const group = subCatOf(it) ?? topCatOf(it);
+    return group && !label.toLowerCase().startsWith(group.toLowerCase())
+      ? `${group} ${label}`
+      : label;
+  }
+
   const [quickSelect, setQuickSelect] = useState<{ label: string } | null>(null);
   const [quickKey, setQuickKey] = useState(0);
 
@@ -625,7 +642,7 @@ function ItemLogger({
                   onClick={() => handleQuickTap(item.label)}
                   className="shrink-0 rounded-full bg-emerald-900/40 px-4 py-2 text-sm font-semibold text-emerald-300 hover:bg-emerald-800/60 transition"
                 >
-                  {item.label}
+                  {itemDisplayName(item.label)}
                 </button>
               ))}
             </div>
@@ -645,7 +662,7 @@ function ItemLogger({
                   key={e.id}
                   className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 w-full sm:w-auto"
                 >
-                  <span className="flex-1 min-w-0 text-sm font-semibold text-slate-200">{e.item_label}</span>
+                  <span className="flex-1 min-w-0 text-sm font-semibold text-slate-200">{itemDisplayName(e.item_label)}</span>
                   <span className="shrink-0 text-xl font-black text-white">×{e.quantity}</span>
                   {e.warn_on_next_load && (
                     <span className="shrink-0 text-amber-400 text-sm font-bold" title="Warn on next load">!</span>
