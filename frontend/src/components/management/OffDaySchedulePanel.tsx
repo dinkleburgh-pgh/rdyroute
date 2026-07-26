@@ -169,8 +169,8 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                 >
                   <td
                     className={clsx(
-                      "sticky left-0 z-10 border border-slate-700/50 bg-slate-900 px-1 py-1.5 text-center font-bold text-slate-200 transition-colors cursor-pointer select-none",
-                      activeRow === t.truck_number && "!bg-blue-900/30",
+                      "sticky left-0 z-10 border border-slate-700/50 bg-blue-900/30 px-1 py-1.5 text-center font-bold text-slate-200 transition-colors cursor-pointer select-none",
+                      activeRow === t.truck_number && "!bg-blue-800/40",
                     )}
                     onMouseEnter={() => setHoveredRow(t.truck_number)}
                     onMouseLeave={() => setHoveredRow(null)}
@@ -194,16 +194,14 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                           isSaving
                             ? "opacity-40"
                             : off
-                              ? highlight
-                                ? clsx("bg-red-900/50 text-red-300 opacity-100", editing && "hover:bg-emerald-900/40")
-                                : clsx("bg-red-900/30 text-red-300/60 opacity-40", editing && "hover:opacity-80 hover:bg-red-900/50")
-                              : highlight
-                                ? "bg-slate-800/50 text-slate-500"
-                                : isLoadDay(day)
-                                  ? clsx("text-blue-300 bg-blue-900/30 ring-1 ring-inset ring-blue-500/30 font-bold", editing && "hover:bg-red-900/30 hover:text-red-300/80")
-                                  : isUnloadDay(day)
-                                    ? clsx("text-emerald-300 bg-emerald-900/30 ring-1 ring-inset ring-emerald-500/30 font-bold", editing && "hover:bg-red-900/30 hover:text-red-300/80")
-                                    : clsx("bg-emerald-900/40 text-emerald-300", editing && "hover:bg-red-900/30 hover:text-red-300/80"),
+                              ? clsx(
+                                  highlight ? "bg-red-800/60 text-red-200" : "bg-red-900/50 text-red-300",
+                                  editing && "hover:bg-slate-700/60 hover:text-slate-300",
+                                )
+                              : clsx(
+                                  highlight ? "bg-slate-700/70 text-slate-300" : "bg-slate-800/50 text-slate-500",
+                                  editing && "hover:bg-red-900/40 hover:text-red-300/80",
+                                ),
                         )}
                       >
                         {isSaving ? "…" : off ? "OFF" : "RUN"}
