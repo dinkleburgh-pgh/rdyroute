@@ -8,7 +8,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from models import AuditSource, AuthRequestStatus, AuthRole, NoteType, TruckStatus, TruckType
 
@@ -483,6 +483,86 @@ class BatchSummary(BaseModel):
     batch_number: int
     trucks: list[BatchTruck]
     total_wearers: int
+
+
+# ---------------------------------------------------------------------------
+# Run Report PDF — the client POSTs its already-computed view-model (the exact
+# numbers/rows it renders) and the backend turns it into a PDF. KPI values are
+# pre-formatted display strings so the PDF matches the screen; the shortage
+# matrix ships as arrays aligned to `trucks`. Field caps bound abuse since the
+# render endpoint is guest-callable and CPU-heavy.
+# ---------------------------------------------------------------------------
+
+class ReportKpiVM(BaseModel):
+    label: str = Field(max_length=48)
+    value: str = Field(max_length=64)
+    sub: str | None = Field(default=None, max_length=64)
+
+
+class ReportBatchTruckVM(BaseModel):
+    truck_number: int
+    wearers: int
+
+
+class ReportBatchCardVM(BaseModel):
+    batch_number: int
+    total_wearers: int
+    trucks: list[ReportBatchTruckVM] = Field(default_factory=list, max_length=80)
+
+
+class BatchesSectionVM(BaseModel):
+    disabled: bool = False
+    kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    cap: int = 0
+    no_cap: bool = False
+    cards: list[ReportBatchCardVM] = Field(default_factory=list, max_length=12)
+
+
+class ShortageRowVM(BaseModel):
+    group: str = Field(max_length=32)
+    category: str = Field(max_length=48)
+    detail: str = Field(default="", max_length=64)
+    label: str = Field(max_length=96)
+    unit: str | None = Field(default=None, max_length=24)
+    cells: list[int | None] = Field(max_length=200)   # aligned to matrix.trucks
+    total: int
+
+
+class ShortageMatrixVM(BaseModel):
+    trucks: list[int] = Field(max_length=200)
+    rows: list[ShortageRowVM] = Field(default_factory=list, max_length=500)
+    truck_totals: list[int] = Field(max_length=200)    # aligned to trucks
+    grand_total: int
+
+    @model_validator(mode="after")
+    def _aligned(self) -> "ShortageMatrixVM":
+        n = len(self.trucks)
+        if len(self.truck_totals) != n:
+            raise ValueError("truck_totals must align to trucks")
+        for row in self.rows:
+            if len(row.cells) != n:
+                raise ValueError("each row's cells must align to trucks")
+        return self
+
+
+class ShortagesSectionVM(BaseModel):
+    kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    matrix: ShortageMatrixVM | None = None   # None when no shortages logged
+
+
+class ReportViewModel(BaseModel):
+    run_date: date
+    generated_at: datetime | None = None
+    load_day: int | None = None
+    unload_day: int | None = None
+    shift_label: str | None = Field(default=None, max_length=64)
+    title: str = Field(default="Run Report", max_length=64)
+    batches: BatchesSectionVM | None = None
+    shortages: ShortagesSectionVM | None = None
+    # Extension slots (same pattern) for the full report later:
+    # coverage: CoverageSectionVM | None = None
+    # load_times: LoadTimesSectionVM | None = None
+    # audit: AuditSectionVM | None = None
 
 
 class BatchHistoryCreate(BaseModel):

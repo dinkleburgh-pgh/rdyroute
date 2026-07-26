@@ -21,7 +21,10 @@ import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { categoryDotClass } from "../components/shorts/HierarchyPicker";
+import { categoryDotClass, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
+import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
+import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
+import { FileDown } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
@@ -344,6 +347,97 @@ export default function LiveReport() {
     return [...m.entries()].sort((a, b) => b[1] - a[1]);
   }, [auditEntries, itemByLabel]);
 
+  // ---- PDF export ----
+  // Assemble the exact numbers/rows the page shows into the server's view-model
+  // (server renders them to a PDF, so the file matches the screen). KPI value/
+  // sub strings use the SAME expressions as the on-screen JSX below.
+  const [pdfBusy, setPdfBusy] = useState(false);
+  const [pdfErr, setPdfErr] = useState(false);
+
+  function buildViewModel(): ReportViewModel {
+    const items = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
+    const m = buildShortageMatrix(shorts, items);
+    const matrix =
+      shorts.length > 0
+        ? {
+            trucks: m.trucks,
+            rows: m.rows.map((r) => ({
+              group: r.group,
+              category: r.category,
+              detail: r.detail,
+              label: r.label,
+              unit: r.unit,
+              cells: m.trucks.map((n) => r.byTruck.get(n) ?? null),
+              total: r.total,
+            })),
+            truck_totals: m.trucks.map((n) => m.truckTotals.get(n) ?? 0),
+            grand_total: m.grandTotal,
+          }
+        : null;
+    return {
+      run_date: runDate,
+      generated_at: new Date().toISOString(),
+      load_day: loadDay,
+      unload_day: unloadsDay,
+      title: "Run Report",
+      batches: {
+        disabled: batchingDisabled,
+        kpis: batchingDisabled
+          ? []
+          : [
+              { label: "Trucks batched", value: String(trucksBatched) },
+              { label: "Total wearers", value: totalWearers.toLocaleString(), sub: `cap ${noCap ? "∞" : cap.toLocaleString()}/batch` },
+              { label: "Batches used", value: `${batchesUsed} / 6` },
+              { label: "Unloaded", value: `${unloadedCount} / ${unloadRosterSize}`, sub: "trucks this shift" },
+            ],
+        cap,
+        no_cap: noCap,
+        cards: batches.map((b) => ({
+          batch_number: b.batch_number,
+          total_wearers: b.total_wearers,
+          trucks: b.trucks.map((t) => ({ truck_number: t.truck_number, wearers: t.wearers })),
+        })),
+      },
+      shortages: {
+        kpis: [
+          { label: "Qty short", value: String(totalPieces), sub: "total units" },
+          { label: "Distinct items", value: String(distinctItems) },
+          { label: "Trucks shorted", value: String(shortsByTruck.length) },
+          { label: "Most shorted item", value: topItem ? topItem.label : "—", sub: topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : null },
+          { label: "Most shorted truck", value: topTruck ? `#${topTruck.truck}` : "—", sub: topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : null },
+        ],
+        matrix,
+      },
+    };
+  }
+
+  async function handleDownloadPdf() {
+    if (pdfBusy) return;
+    setPdfBusy(true);
+    setPdfErr(false);
+    try {
+      await downloadReportPdf(buildViewModel());
+    } catch (e) {
+      console.error("report pdf failed", e);
+      setPdfErr(true);
+    } finally {
+      setPdfBusy(false);
+    }
+  }
+
+  const pdfButton = (
+    <button
+      type="button"
+      onClick={handleDownloadPdf}
+      disabled={pdfBusy}
+      title="Download the report as a PDF"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95 disabled:opacity-50"
+    >
+      <FileDown className="h-4 w-4" />
+      {pdfBusy ? "…" : "PDF"}
+    </button>
+  );
+
   return (
     <>
       <PageHeader
@@ -365,6 +459,8 @@ export default function LiveReport() {
               value={runDate}
               onChange={(e) => setRunDate(e.target.value)}
             />
+            {pdfButton}
+            {pdfErr && <span className="text-[10px] text-st-dirty">PDF failed</span>}
           </div>
         }
       />
@@ -415,6 +511,7 @@ export default function LiveReport() {
             Today
           </button>
         )}
+        {pdfButton}
       </div>
 
       {/* Horizontal padding respects the landscape safe area so the system nav

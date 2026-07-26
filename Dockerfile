@@ -22,7 +22,9 @@ RUN set -eux; \
     echo "deb [signed-by=/usr/share/keyrings/postgresql.gpg] https://apt.postgresql.org/pub/repos/apt ${VERSION_CODENAME}-pgdg main" \
         > /etc/apt/sources.list.d/pgdg.list; \
     apt-get update; \
-    apt-get install -y --no-install-recommends postgresql-client-18; \
+    apt-get install -y --no-install-recommends postgresql-client-18 \
+        libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
+        libgdk-pixbuf-2.0-0 libffi8 fonts-dejavu-core; \
     rm -rf /var/lib/apt/lists/*
 
 # Install Python deps first for better layer caching. Install from the pinned
