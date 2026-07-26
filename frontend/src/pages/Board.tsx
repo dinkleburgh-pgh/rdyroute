@@ -23,7 +23,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useCollapseState } from "../utils/useCollapseState";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
 import CoverageList from "../components/CoverageList";
-import CoverageTag from "../components/CoverageTag";
+import CoverageCardBadges from "../components/CoverageCardBadges";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
@@ -1113,32 +1113,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       {!holidayLoad && truck.truck_type !== "Spare" && isScheduledOff(truck, runDayNum) && status !== "off" && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
                         <span className="badge bg-slate-600 text-slate-200">L Off</span>
                       )}
-                      {/* 4. OOS coverage (fleet) */}
-                      {fleetMode && displayStatus === "oos" && (() => {
-                        const cov = coveringTruckByRoute.get(truck.truck_number);
-                        if (!cov) return <span className="text-[10px] font-semibold text-amber-400">Needs assignment</span>;
-                        const coveringTruck = data?.find((d) => d.truck_number === cov.num);
-                        const rawStatus = coveringTruck?.state?.status
-                          ? (coveringTruck.state.status as TruckStatus)
-                          : cov.status;
-                        return (
-                          <>
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setDetailNum(cov.num); }}
-                              className="transition-transform active:scale-95"
-                              title="View covering truck"
-                            >
-                              <CoverageTag route={truck.truck_number} truck={cov.num} />
-                            </button>
-                            {rawStatus && (
-                              <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white", rawStatus === "dirty" && "bg-red-600", rawStatus === "unloaded" && "bg-green-600", rawStatus === "loaded" && "bg-blue-600", rawStatus === "in_progress" && "bg-amber-500", rawStatus === "off" && "bg-slate-500", rawStatus === "oos" && "bg-slate-600", rawStatus === "shop" && "bg-purple-600", rawStatus === "spare" && "bg-cyan-700", rawStatus === "unfinished" && "bg-fuchsia-600")}>
-                                {STATUS_LABELS[rawStatus]}
-                              </span>
-                            )}
-                          </>
-                        );
-                      })()}
+                      {/* 4. Fleet coverage/swap badges (both sides) moved to the
+                          detail block below via <CoverageCardBadges>. */}
                       {/* 5. Priority hold / REQUEST */}
                       {!fleetMode && filter === "dirty" && truck.state?.priority_hold && (
                         <motion.span
@@ -1174,24 +1150,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         {truck.truck_type === "Uniform" && truck.uniform_size != null && ` · ${truck.uniform_size}ft`}
                         {truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
                       </div>
-                      {(() => {
-                        if (status === "oos") {
-                          return null;
-                        }
-                        const coverageRoute = truck.route_swap_route ?? truck.state?.oos_spare_route ?? coveringRouteByTruckNum.get(truck.truck_number) ?? null;
-                        if (coverageRoute != null) {
-                          return (
-                            <button
-                              type="button"
-                              onClick={(e) => { e.stopPropagation(); setDetailNum(coverageRoute); }}
-                              className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-1.5 py-0.5 text-[10px] font-bold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-sky-800/60 hover:ring-sky-400/60 cursor-pointer lg:px-3 lg:py-1 lg:text-xs"
-                            >
-                              #{coverageRoute} <ArrowLeftRight className="h-3 w-3" /> #{truck.truck_number}
-                            </button>
-                          );
-                        }
-                        return null;
-                      })()}
+                      <CoverageCardBadges
+                        truck={truck}
+                        board={data ?? []}
+                        coveringTruckByRoute={coveringTruckByRoute}
+                        coveringRouteByTruckNum={coveringRouteByTruckNum}
+                        isOos={displayStatus === "oos"}
+                        onNavigate={setDetailNum}
+                      />
                       {truck.state?.off_note?.toLowerCase().includes("ran special") && (
                         isAdmin && !isReadOnly ? (
                           <button
