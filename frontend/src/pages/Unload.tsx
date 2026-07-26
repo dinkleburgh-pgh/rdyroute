@@ -14,6 +14,7 @@ import {
 } from "../utils/truckStatus";
 import CoverageTag from "../components/CoverageTag";
 import OverbatchedChip from "../components/OverbatchedChip";
+import { capacityColor, capacityPct } from "../utils/batchCapacity";
 import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
 import type { TruckWithState } from "../types";
@@ -564,25 +565,33 @@ export default function Unload() {
         <section>
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">Batches</h3>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-            {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => (
-              <AnimateCard key={b.batch_number} delay={index * 0.03} className="card space-y-2 p-4">
-                <p className="flex items-center gap-2 font-bold text-ink">
-                  Batch {b.batch_number}
-                  <OverbatchedChip show={b.total_wearers > wearerCap} />
-                </p>
-                <div className="flex min-h-[1.5rem] flex-wrap gap-1">
-                  {b.trucks.length === 0 ? (
-                    <span className="text-xs text-ink-muted">No trucks</span>
-                  ) : (
-                    b.trucks.map((t) => <span key={t.truck_number} className="badge bg-track text-ink-soft">#{t.truck_number}</span>)
-                  )}
-                </div>
-                <p className="text-xs text-ink-muted">
-                  Total wearers:{" "}
-                  <span className={b.total_wearers > 0 ? "font-semibold text-st-unloaded" : ""}>{b.total_wearers}</span>{" "}/ {wearerCap}
-                </p>
-              </AnimateCard>
-            ))}
+            {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => {
+              const { bar, text } = capacityColor(b.total_wearers, false, wearerCap);
+              const pct = capacityPct(b.total_wearers, wearerCap);
+              return (
+                <AnimateCard key={b.batch_number} delay={index * 0.03} className="card space-y-2 p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="flex min-w-0 items-center gap-2 font-bold text-ink">
+                      Batch {b.batch_number}
+                      <OverbatchedChip show={b.total_wearers > wearerCap} />
+                    </span>
+                    <span className={clsx("shrink-0 font-mono text-xs font-semibold tabular-nums", text)}>
+                      {b.total_wearers.toLocaleString()} / {wearerCap.toLocaleString()}
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full overflow-hidden rounded-full border border-hairline bg-surface-3">
+                    <div className={clsx("h-full rounded-full transition-all", bar)} style={{ width: `${pct}%` }} />
+                  </div>
+                  <div className="flex min-h-[1.5rem] flex-wrap gap-1">
+                    {b.trucks.length === 0 ? (
+                      <span className="text-xs text-ink-muted">No trucks</span>
+                    ) : (
+                      b.trucks.map((t) => <span key={t.truck_number} className="badge bg-track text-ink-soft">#{t.truck_number}</span>)
+                    )}
+                  </div>
+                </AnimateCard>
+              );
+            })}
           </div>
         </section>
 

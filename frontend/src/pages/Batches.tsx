@@ -8,16 +8,9 @@ import { todayIso } from "../api/client";
 import type { BatchSummary } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
+import { capacityColor } from "../utils/batchCapacity";
 
 const DEFAULT_WEARER_CAP = 1800;
-
-// Always graded against the configured cap, even when the cap is not enforced
-// (no-cap mode), so the bar still shows how close to a full batch it is.
-function capacityColor(total: number, _noCap: boolean, cap: number) {
-  if (total >= cap * 0.95) return { bar: "bg-red-500",    text: "text-red-400"    };
-  if (total >= cap * 0.70) return { bar: "bg-amber-500",  text: "text-amber-400"  };
-  return                          { bar: "bg-emerald-500", text: "text-emerald-400" };
-}
 
 function BatchCard({
   batch,

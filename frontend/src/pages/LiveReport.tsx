@@ -24,6 +24,7 @@ import OverbatchedChip from "../components/OverbatchedChip";
 import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "../components/shorts/HierarchyPicker";
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
+import { capacityColor } from "../utils/batchCapacity";
 import { FileDown } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
@@ -51,15 +52,6 @@ import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, prev
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
 
 const DEFAULT_WEARER_CAP = 1800;
-
-// Colour bands for a batch's wearer load — mirrors Batches.tsx capacityColor.
-// Always graded against the configured cap, even when the cap is not enforced
-// (no-cap mode), so the bar still shows how close to a full batch it is.
-function capacityColor(total: number, _noCap: boolean, cap: number) {
-  if (total >= cap * 0.95) return { bar: "bg-red-500", text: "text-red-400" };
-  if (total >= cap * 0.7) return { bar: "bg-amber-500", text: "text-amber-400" };
-  return { bar: "bg-emerald-500", text: "text-emerald-400" };
-}
 
 // Tailwind class → hex, so the PDF view-model can ship concrete colours that
 // match what capacityColor / durTone / the KPI tones paint on screen.
