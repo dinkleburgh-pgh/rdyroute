@@ -7,6 +7,8 @@ interface Props {
   value: string | number;
   change?: number | null;
   direction?: "up" | "down" | "stable";
+  /** false → a RISING value is bad (shortages/discrepancies): the % turns red. */
+  higherIsBetter?: boolean;
   status?: "Improving" | "Stable" | "Watch" | "Critical";
   icon?: ReactNode;
   children?: ReactNode;
@@ -19,7 +21,18 @@ const STATUS_STYLES: Record<string, string> = {
   Critical: "bg-red-900/40 text-red-400 border-red-700/40",
 };
 
-export default function KpiCard({ label, value, change, direction, status, icon, children }: Props) {
+export default function KpiCard({ label, value, change, direction, higherIsBetter = true, status, icon, children }: Props) {
+  // Arrow follows the SAME comparison as the % (the vs-prior change) so the two
+  // can't contradict; falls back to the trend direction when there's no prior %.
+  const arrow = change != null ? (change > 0 ? "up" : change < 0 ? "down" : "stable") : direction;
+  // Colour is domain-aware: for a "lower is better" metric, a rising % is red.
+  const rising = (change ?? 0) > 0;
+  const changeColor =
+    change == null || change === 0
+      ? "text-slate-400"
+      : (higherIsBetter ? rising : !rising)
+        ? "text-emerald-400"
+        : "text-red-400";
   return (
     <motion.div
       initial={{ opacity: 0, y: 12 }}
@@ -37,18 +50,9 @@ export default function KpiCard({ label, value, change, direction, status, icon,
       <div className="flex min-w-0 flex-col gap-0.5">
         <span className="truncate text-2xl font-bold tabular-nums text-slate-100">{value}</span>
         {change != null && (
-          <span
-            className={
-              "flex items-center gap-0.5 text-xs font-semibold tabular-nums " +
-              (change > 0
-                ? "text-emerald-400"
-                : change < 0
-                  ? "text-red-400"
-                  : "text-slate-400")
-            }
-          >
-            {direction === "up" && <ArrowUp className="h-3 w-3" strokeWidth={2.5} />}
-            {direction === "down" && <ArrowDown className="h-3 w-3" strokeWidth={2.5} />}
+          <span className={"flex items-center gap-0.5 text-xs font-semibold tabular-nums " + changeColor}>
+            {arrow === "up" && <ArrowUp className="h-3 w-3" strokeWidth={2.5} />}
+            {arrow === "down" && <ArrowDown className="h-3 w-3" strokeWidth={2.5} />}
             {Math.abs(change) > 999 ? ">999%" : `${Math.abs(change).toFixed(1)}%`}
           </span>
         )}

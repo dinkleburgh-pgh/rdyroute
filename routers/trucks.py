@@ -29,6 +29,14 @@ from database import get_db, settings as app_settings
 from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin, require_non_guest
+from routers.trends_common import (
+    MAX_LOAD_SECONDS,
+    MIN_LOAD_SECONDS,
+    completed_load_filter,
+    is_running_filter,
+    operational_today,
+    window_bounds,
+)
 from schemas import (
     AnomalyDay,
     CompletionDailyPoint,
@@ -62,20 +70,10 @@ def _ran_special(note: str | None) -> bool:
 
 
 def _operational_today() -> date:
-    """The current OPERATIONAL run date, mirroring the frontend's todayIso():
-    before 06:00 we're still on the previous calendar day's 3rd shift, and the
-    weekend is one continuous run period mapped to the preceding Friday —
-    nothing rolls over until Monday 06:00."""
-    now = datetime.now(ZoneInfo(app_settings.timezone))
-    d = now.date()
-    if now.hour < 6:
-        d = d - timedelta(days=1)
-    wd = d.weekday()  # Mon=0 .. Sun=6
-    if wd == 5:
-        d = d - timedelta(days=1)
-    elif wd == 6:
-        d = d - timedelta(days=2)
-    return d
+    """The current OPERATIONAL run date (06:00 rollover + weekend→Friday). The
+    canonical implementation now lives in routers.trends_common so every trend
+    window shares the same run-day; kept as an alias for the callers here."""
+    return operational_today()
 
 
 def _ensure_day_initialized(run_date: date, db: Session) -> None:
@@ -1000,24 +998,26 @@ def truck_completion_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-    """Per-day: total route trucks scheduled vs loaded, expressed as pct."""
-    cutoff = date.today() - timedelta(days=days_back)
+    """Per-day completion: trucks that completed loading (persisted
+    load_finish_time) ÷ trucks that ran (the running roster — excludes
+    off/oos/shop/spare). Keys off load_finish_time, not the transient
+    status=='loaded' which a truck sheds by end of shift."""
+    start, end = window_bounds(days_back)
+    ran = is_running_filter() | completed_load_filter()  # ran a route OR completed a load
     rows = db.execute(
         select(
             TruckState.run_date,
-            func.count(TruckState.id).label("total"),
-            func.sum(
-                case((TruckState.status == "loaded", 1), else_=0)
-            ).label("loaded"),
+            func.sum(case((ran, 1), else_=0)).label("total"),
+            func.sum(case((completed_load_filter(), 1), else_=0)).label("loaded"),
         )
-        .where(TruckState.run_date >= cutoff)
+        .where(TruckState.run_date >= start, TruckState.run_date <= end)
         .group_by(TruckState.run_date)
         .order_by(TruckState.run_date)
     ).all()
     return [
         CompletionDailyPoint(
             run_date=r[0],
-            total_trucks=r[1],
+            total_trucks=r[1] or 0,
             loaded_trucks=r[2] or 0,
             pct=round((r[2] or 0) / r[1] * 100, 1) if r[1] else 0,
         )
@@ -1030,8 +1030,8 @@ def truck_wearers_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-    """Per-day average wearer count for trucks that were loaded."""
-    cutoff = date.today() - timedelta(days=days_back)
+    """Per-day average wearer count for trucks that ran (completed loading)."""
+    start, end = window_bounds(days_back)
     rows = db.execute(
         select(
             TruckState.run_date,
@@ -1039,8 +1039,9 @@ def truck_wearers_trend(
             func.count(TruckState.id).label("tc"),
         )
         .where(
-            TruckState.run_date >= cutoff,
-            TruckState.status == "loaded",
+            TruckState.run_date >= start,
+            TruckState.run_date <= end,
+            completed_load_filter(),
             TruckState.wearers > 0,
         )
         .group_by(TruckState.run_date)
@@ -1061,8 +1062,9 @@ def truck_cycle_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-    """Per-day average load duration (from TruckState.load_duration_seconds)."""
-    cutoff = date.today() - timedelta(days=days_back)
+    """Per-day average load duration (from TruckState.load_duration_seconds),
+    over completed loads within the shared valid-duration band."""
+    start, end = window_bounds(days_back)
     rows = db.execute(
         select(
             TruckState.run_date,
@@ -1070,10 +1072,11 @@ def truck_cycle_trend(
             func.count(TruckState.id).label("tc"),
         )
         .where(
-            TruckState.run_date >= cutoff,
-            TruckState.status == "loaded",
-            TruckState.load_duration_seconds.isnot(None),
-            TruckState.load_duration_seconds >= 30,
+            TruckState.run_date >= start,
+            TruckState.run_date <= end,
+            completed_load_filter(),
+            TruckState.load_duration_seconds >= MIN_LOAD_SECONDS,
+            TruckState.load_duration_seconds <= MAX_LOAD_SECONDS,
         )
         .group_by(TruckState.run_date)
         .order_by(TruckState.run_date)
@@ -1093,28 +1096,27 @@ def truck_anomalies(
     days_back: int = Query(default=90, ge=14, le=365),
     db: Session = Depends(get_db),
 ):
-    """Days where completion rate, pace, or wearers diverge >2σ from the mean."""
+    """Days where completion rate, pace, or wearers diverge >2σ from the rest of
+    the window. Metrics use the same persisted-load basis as the other trends,
+    and each day's z-score is LEAVE-ONE-OUT (the day is excluded from its own
+    mean/σ) so an extreme day doesn't damp its own signal."""
     from statistics import mean, stdev
-    cutoff = date.today() - timedelta(days=days_back)
+
+    start, end = window_bounds(days_back)
+    ran = is_running_filter() | completed_load_filter()
+    done = completed_load_filter()
+    in_band = (TruckState.load_duration_seconds >= MIN_LOAD_SECONDS) & (
+        TruckState.load_duration_seconds <= MAX_LOAD_SECONDS
+    )
     daily = db.execute(
         select(
             TruckState.run_date,
-            func.count(TruckState.id).label("tot"),
-            func.sum(case((TruckState.status == "loaded", 1), else_=0)).label("lod"),
-            func.avg(
-                case(
-                    (TruckState.status == "loaded", TruckState.load_duration_seconds),
-                    else_=None,
-                )
-            ).label("pac"),
-            func.avg(
-                case(
-                    (TruckState.status == "loaded", TruckState.wearers),
-                    else_=None,
-                )
-            ).label("wav"),
+            func.sum(case((ran, 1), else_=0)).label("tot"),
+            func.sum(case((done, 1), else_=0)).label("lod"),
+            func.avg(case((done & in_band, TruckState.load_duration_seconds), else_=None)).label("pac"),
+            func.avg(case((done & (TruckState.wearers > 0), TruckState.wearers), else_=None)).label("wav"),
         )
-        .where(TruckState.run_date >= cutoff)
+        .where(TruckState.run_date >= start, TruckState.run_date <= end)
         .group_by(TruckState.run_date)
         .order_by(TruckState.run_date)
     ).all()
@@ -1123,28 +1125,35 @@ def truck_anomalies(
     if len(daily) < 7:
         return anomalies
 
-    pcts = [d[2] / d[1] * 100 if d[1] else 0 for d in daily]
-    paces = [d[3] for d in daily if d[3] is not None and d[3] >= 30]
-    wearers_list = [d[4] for d in daily if d[4] is not None and d[4] > 0]
+    comp_series = [(d[0], (d[2] / d[1] * 100) if d[1] else 0.0) for d in daily]
+    pace_series = [(d[0], float(d[3])) for d in daily if d[3] is not None]
+    wear_series = [(d[0], float(d[4])) for d in daily if d[4] is not None and d[4] > 0]
 
-    for d in daily:
-        if len(pcts) >= 7:
-            m = mean(pcts)
-            s = stdev(pcts) if len(pcts) > 1 else 1
-            z = (d[2] / d[1] * 100 - m) / s if d[1] and s else 0
+    def flag(series: list[tuple], metric: str) -> None:
+        if len(series) < 7:
+            return
+        for run_date, value in series:
+            others = [v for (rd, v) in series if rd != run_date]
+            if len(others) < 2:
+                continue
+            m = mean(others)
+            s = stdev(others)
+            if not s:
+                continue
+            z = (value - m) / s
             if abs(z) > 2:
-                anomalies.append(AnomalyDay(run_date=d[0], metric="completion", value=round(d[2] / d[1] * 100, 1) if d[1] else 0, mean=round(m, 1), sigma=round(s, 2), z_score=round(z, 2)))
-        if d[3] is not None and d[3] >= 30 and len(paces) >= 7:
-            m = mean(paces)
-            s = stdev(paces) if len(paces) > 1 else 1
-            z = (d[3] - m) / s if s else 0
-            if abs(z) > 2:
-                anomalies.append(AnomalyDay(run_date=d[0], metric="pace", value=round(d[3], 1), mean=round(m, 1), sigma=round(s, 2), z_score=round(z, 2)))
-        if d[4] is not None and d[4] > 0 and len(wearers_list) >= 7:
-            m = mean(wearers_list)
-            s = stdev(wearers_list) if len(wearers_list) > 1 else 1
-            z = (d[4] - m) / s if s else 0
-            if abs(z) > 2:
-                anomalies.append(AnomalyDay(run_date=d[0], metric="wearers", value=round(d[4], 1), mean=round(m, 1), sigma=round(s, 2), z_score=round(z, 2)))
+                anomalies.append(
+                    AnomalyDay(
+                        run_date=run_date,
+                        metric=metric,
+                        value=round(value, 1),
+                        mean=round(m, 1),
+                        sigma=round(s, 2),
+                        z_score=round(z, 2),
+                    )
+                )
 
+    flag(comp_series, "completion")
+    flag(pace_series, "pace")
+    flag(wear_series, "wearers")
     return sorted(anomalies, key=lambda a: a.run_date, reverse=True)

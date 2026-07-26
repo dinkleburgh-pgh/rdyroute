@@ -17,6 +17,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routers.auth import get_current_user, require_non_guest
+from routers.trends_common import half_split_change, prior_bounds, window_bounds
 from models import Shortage, User
 from schemas import (
     ShortageBulkCreate,
@@ -192,14 +193,14 @@ def shortage_daily_trend(
     db: Session = Depends(get_db),
 ):
     """Per-day total shortage quantity and entry count."""
-    cutoff = date.today() - timedelta(days=days_back)
+    start, end = window_bounds(days_back)
     rows = db.execute(
         select(
             Shortage.run_date,
             func.sum(Shortage.quantity).label("total_qty"),
             func.count(Shortage.id).label("entry_count"),
         )
-        .where(Shortage.run_date >= cutoff)
+        .where(Shortage.run_date >= start, Shortage.run_date <= end)
         .group_by(Shortage.run_date)
         .order_by(Shortage.run_date)
     ).all()
@@ -216,13 +217,13 @@ def shortage_by_category_trend(
     db: Session = Depends(get_db),
 ):
     """Shortage quantities grouped by item category, sorted descending."""
-    cutoff = date.today() - timedelta(days=days_back)
+    start, end = window_bounds(days_back)
     rows = db.execute(
         select(
             Shortage.item_category.label("category"),
             func.sum(Shortage.quantity).label("total_qty"),
         )
-        .where(Shortage.run_date >= cutoff)
+        .where(Shortage.run_date >= start, Shortage.run_date <= end)
         .group_by(Shortage.item_category)
         .order_by(func.sum(Shortage.quantity).desc())
     ).all()
@@ -240,14 +241,14 @@ def shortage_trend_summary(
     db: Session = Depends(get_db),
 ):
     """Consolidated shortage KPIs with trend direction and prior-period comparison."""
-    cutoff = date.today() - timedelta(days=days_back)
+    start, end = window_bounds(days_back)
     rows = db.execute(
         select(
             Shortage.run_date,
             func.sum(Shortage.quantity).label("total_qty"),
             func.count(Shortage.id).label("entry_count"),
         )
-        .where(Shortage.run_date >= cutoff)
+        .where(Shortage.run_date >= start, Shortage.run_date <= end)
         .group_by(Shortage.run_date)
         .order_by(Shortage.run_date)
     ).all()
@@ -265,31 +266,24 @@ def shortage_trend_summary(
     peak_day = peak[0] if peak else None
     peak_qty = peak[1] or 0 if peak else 0
 
-    mid = len(daily_series) // 2
-    if mid >= 2 and len(daily_series) >= 4:
-        first_half = sum(d.total_qty for d in daily_series[:mid])
-        second_half = sum(d.total_qty for d in daily_series[mid:])
-        change = ((second_half - first_half) / first_half) * 100
-        trend_direction = "up" if change > 5 else ("down" if change < -5 else "stable")
-    else:
-        change = None
+    change = half_split_change([(d.run_date, d.total_qty) for d in daily_series], days_back)
+    if change is None:
         trend_direction = "stable"
+    else:
+        trend_direction = "up" if change > 5 else ("down" if change < -5 else "stable")
 
     change_vs_prior_pct = None
     if compare_days_back and days_back > 0:
-        prior_cutoff = cutoff - timedelta(days=compare_days_back)
-        prior_cutoff_end = cutoff - timedelta(days=1)
+        p_start, p_end = prior_bounds(days_back)
         prior_total = db.execute(
             select(func.sum(Shortage.quantity))
             .where(
-                Shortage.run_date >= prior_cutoff,
-                Shortage.run_date <= prior_cutoff_end,
+                Shortage.run_date >= p_start,
+                Shortage.run_date <= p_end,
             )
-        ).scalar()
-        if prior_total and total_qty > 0:
-            change_vs_prior_pct = round(
-                ((total_qty - prior_total) / prior_total) * 100, 1
-            )
+        ).scalar() or 0
+        if prior_total > 0:
+            change_vs_prior_pct = round(((total_qty - prior_total) / prior_total) * 100, 1)
 
     return ShortageSummary(
         total_qty=total_qty,

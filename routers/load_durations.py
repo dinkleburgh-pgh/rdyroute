@@ -18,14 +18,17 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from routers.auth import get_current_user
+from routers.trends_common import MAX_LOAD_SECONDS, MIN_LOAD_SECONDS, window_bounds
 from models import LoadDuration, TruckState, User
 from schemas import LoadDurationCreate, LoadDurationOut, PaceDailyPoint
 
 router = APIRouter(prefix="/load-durations", tags=["load-durations"])
 
 _DEFAULT_LOOKBACK_DAYS = 30
-_MIN_VALID_SECONDS = 30
-_MAX_VALID_SECONDS = 7200
+# Single valid-load-duration band, shared with the cycle-time trend, so every
+# "average load time" agrees on which records count.
+_MIN_VALID_SECONDS = MIN_LOAD_SECONDS
+_MAX_VALID_SECONDS = MAX_LOAD_SECONDS
 
 
 @router.get("", response_model=list[LoadDurationOut])
@@ -61,17 +64,18 @@ def pace_average(
     db: Session = Depends(get_db),
 ):
     """
-    Compute the average load duration in seconds over the last *lookback_days* days,
-    excluding abnormally short (<120 s) or long (>1800 s) records.
-    Mirrors _pace_recent_average_seconds from V1.
+    Compute the average load duration in seconds over the last *lookback_days*
+    operational days, excluding records outside the shared valid band (so it
+    agrees with the pace-daily and cycle-time trends).
     """
-    cutoff = date.today() - timedelta(days=lookback_days)
+    start, end = window_bounds(lookback_days)
     result = db.execute(
         select(func.avg(LoadDuration.duration_seconds).label("avg_seconds"))
         .where(
-            LoadDuration.run_date >= cutoff,
-            LoadDuration.duration_seconds >= 120,
-            LoadDuration.duration_seconds <= 1800,
+            LoadDuration.run_date >= start,
+            LoadDuration.run_date <= end,
+            LoadDuration.duration_seconds >= _MIN_VALID_SECONDS,
+            LoadDuration.duration_seconds <= _MAX_VALID_SECONDS,
         )
     ).scalar_one_or_none()
 
@@ -113,8 +117,8 @@ def load_pace_daily_trend(
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Per-day average load duration over the last N days (excluding <30s / >7200s)."""
-    cutoff = date.today() - timedelta(days=days_back)
+    """Per-day average load duration over the window (shared valid band)."""
+    start, end = window_bounds(days_back)
     rows = db.execute(
         select(
             LoadDuration.run_date,
@@ -122,7 +126,8 @@ def load_pace_daily_trend(
             func.count(LoadDuration.id).label("load_count"),
         )
         .where(
-            LoadDuration.run_date >= cutoff,
+            LoadDuration.run_date >= start,
+            LoadDuration.run_date <= end,
             LoadDuration.duration_seconds >= _MIN_VALID_SECONDS,
             LoadDuration.duration_seconds <= _MAX_VALID_SECONDS,
         )

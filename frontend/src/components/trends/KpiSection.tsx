@@ -71,6 +71,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
           label="Total Pieces"
           value={summary.total_qty.toLocaleString()}
           change={summary.change_vs_prior_pct}
+          higherIsBetter={false}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
           status={summary.trend_direction === "down" ? "Improving" : summary.trend_direction === "up" ? "Watch" : "Stable"}
         >
@@ -80,9 +81,10 @@ export default function KpiSection({ summary, isLoading }: Props) {
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }}>
         <KpiCard
-          label="Avg / Day"
+          label="Avg / Op Day"
           value={summary.avg_per_day >= 1000 ? summary.avg_per_day.toLocaleString(undefined, { maximumFractionDigits: 0 }) : summary.avg_per_day.toFixed(1)}
           change={summary.change_vs_prior_pct}
+          higherIsBetter={false}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
           status="Stable"
         >
@@ -117,6 +119,7 @@ export default function KpiSection({ summary, isLoading }: Props) {
           label="Trend"
           value={summary.trend_direction === "up" ? "↑ Up" : summary.trend_direction === "down" ? "↓ Down" : "→ Stable"}
           change={summary.change_vs_prior_pct}
+          higherIsBetter={false}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
           status={summary.trend_direction === "down" ? "Improving" : summary.trend_direction === "up" ? "Critical" : "Stable"}
         />

@@ -108,10 +108,11 @@ export default function Trends() {
 
     function computeTrend(values: number[] | undefined): "up" | "down" | "stable" | null {
     if (!values || values.length < 4) return null;
-    const nums = values;
-    const mid = Math.floor(nums.length / 2);
-    const first = nums.slice(0, mid).reduce((s, v) => s + v, 0);
-    const second = nums.slice(mid).reduce((s, v) => s + v, 0);
+    // Equal halves — for an odd count drop the middle point so neither half is
+    // longer (a longer second half biased every trend toward "up").
+    const half = Math.floor(values.length / 2);
+    const first = values.slice(0, half).reduce((s, v) => s + v, 0);
+    const second = (values.length % 2 === 0 ? values.slice(half) : values.slice(half + 1)).reduce((s, v) => s + v, 0);
     if (first === 0) return null;
     const change = ((second - first) / first) * 100;
     if (change > 5) return "up";
@@ -132,7 +133,7 @@ export default function Trends() {
   }
 
   function viewDetails(metric: string) {
-    navigate(`/trends/${metric}`);
+    navigate(`/trends/${metric}?days=${days}`);
   }
 
   return (

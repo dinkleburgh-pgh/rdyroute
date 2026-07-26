@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import { Link, useParams } from "react-router-dom";
+import { Link, useParams, useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   useAuditByTruck,
@@ -32,8 +32,11 @@ const METRICS: Record<string, { label: string; color: string }> = {
 
 export default function TrendDetail() {
   const { metric } = useParams<{ metric: string }>();
+  const [params] = useSearchParams();
   const cfg = metric ? METRICS[metric] : null;
-  const days = 30;
+  // Honor the range chosen on the Trends page (?days=…); anomalies stay at 90.
+  const parsedDays = Number(params.get("days"));
+  const days = [7, 14, 30, 90].includes(parsedDays) ? parsedDays : 30;
 
   const { data: summary } = useTrendSummary(days, days);
   const { data: byTruck } = useAuditByTruck(days);
@@ -134,8 +137,9 @@ function VolumeTable({ data, daily, summary }: { data: { truck_number: number; i
 }
 
 function PaceTable({ data }: { data: { run_date: string; avg_seconds: number; load_count: number }[] | undefined }) {
-  const avg = data && data.length > 0 ? data.reduce((s, d) => s + d.avg_seconds, 0) / data.length : 0;
   const totalLoads = data?.reduce((s, d) => s + d.load_count, 0) ?? 0;
+  // Count-weighted (a day with 40 loads should outweigh a day with 1).
+  const avg = totalLoads > 0 ? (data ?? []).reduce((s, d) => s + d.avg_seconds * d.load_count, 0) / totalLoads : 0;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -170,7 +174,9 @@ function PaceTable({ data }: { data: { run_date: string; avg_seconds: number; lo
 
 function CompletionTable({ data }: { data: { run_date: string; total_trucks: number; loaded_trucks: number; pct: number }[] | undefined }) {
   const totalLoaded = data?.reduce((s, d) => s + d.loaded_trucks, 0) ?? 0;
-  const avgPct = data && data.length > 0 ? data.reduce((s, d) => s + d.pct, 0) / data.length : 0;
+  const totalTrucks = data?.reduce((s, d) => s + d.total_trucks, 0) ?? 0;
+  // Weighted completion = total loaded ÷ total running (not a mean of daily %s).
+  const avgPct = totalTrucks > 0 ? (totalLoaded / totalTrucks) * 100 : 0;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -204,7 +210,8 @@ function CompletionTable({ data }: { data: { run_date: string; total_trucks: num
 }
 
 function WearersTable({ data }: { data: { run_date: string; avg_wearers: number; truck_count: number }[] | undefined }) {
-  const avgW = data && data.length > 0 ? data.reduce((s, d) => s + d.avg_wearers, 0) / data.length : 0;
+  const totalWTrucks = data?.reduce((s, d) => s + d.truck_count, 0) ?? 0;
+  const avgW = totalWTrucks > 0 ? (data ?? []).reduce((s, d) => s + d.avg_wearers * d.truck_count, 0) / totalWTrucks : 0;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -237,7 +244,8 @@ function WearersTable({ data }: { data: { run_date: string; avg_wearers: number;
 }
 
 function CycleTable({ data }: { data: { run_date: string; avg_seconds: number; truck_count: number }[] | undefined }) {
-  const avgCycle = data && data.length > 0 ? data.reduce((s, d) => s + d.avg_seconds, 0) / data.length : 0;
+  const totalCTrucks = data?.reduce((s, d) => s + d.truck_count, 0) ?? 0;
+  const avgCycle = totalCTrucks > 0 ? (data ?? []).reduce((s, d) => s + d.avg_seconds * d.truck_count, 0) / totalCTrucks : 0;
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">

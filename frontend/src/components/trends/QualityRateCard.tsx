@@ -8,7 +8,7 @@ interface Props {
   isLoading: boolean;
 }
 
-function MiniSparkline({ data }: { data: number[] }) {
+function MiniSparkline({ data }: { data: (number | null)[] }) {
   return (
     <div className="h-8 w-full">
       <Line
@@ -17,6 +17,7 @@ function MiniSparkline({ data }: { data: number[] }) {
           datasets: [
             {
               data,
+              spanGaps: true, // days with no loaded trucks are gaps, not zeros
               borderColor: "#22c55e",
               backgroundColor: "rgba(34,197,94,0.1)",
               fill: true,
@@ -54,7 +55,9 @@ export default function QualityRateCard({ data, isLoading }: Props) {
   if (!data) return null;
 
   const series = data.daily_series ?? [];
-  const values = series.map((d) => d.items_per_truck ?? 0);
+  // Days with no completed trucks have no ratio — keep them as gaps (null) so the
+  // sparkline doesn't dive to 0 as if quality were perfect on a no-data day.
+  const values = series.map((d) => d.items_per_truck ?? null);
   const value = data.avg_items_per_truck?.toFixed(2) ?? "—";
 
   return (
@@ -63,6 +66,7 @@ export default function QualityRateCard({ data, isLoading }: Props) {
         label="Avg Items per Truck"
         value={value}
         change={data.change_vs_prior_pct}
+        higherIsBetter={false}
         direction={
           data.trend_direction === "up"
             ? "up"

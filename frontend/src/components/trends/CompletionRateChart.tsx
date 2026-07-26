@@ -27,7 +27,7 @@ export default function CompletionRateChart({ data, isLoading, onViewDetails, tr
   return (
     <TrendChartCard
       title="Completion Rate"
-      subtitle="% of scheduled trucks loaded per day"
+      subtitle="% of running trucks that completed loading"
       isLoading={isLoading}
       isEmpty={!isLoading && (!data || data.length === 0)}
       onViewDetails={onViewDetails}

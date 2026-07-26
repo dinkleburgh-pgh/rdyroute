@@ -66,6 +66,7 @@ export default function ShortageKpiSection({ summary, isLoading }: Props) {
           label="Total Qty"
           value={summary.total_qty.toLocaleString()}
           change={summary.change_vs_prior_pct}
+          higherIsBetter={false}
           direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
           status={summary.trend_direction === "down" ? "Improving" : summary.trend_direction === "up" ? "Critical" : "Stable"}
         >
@@ -75,7 +76,7 @@ export default function ShortageKpiSection({ summary, isLoading }: Props) {
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }}>
         <KpiCard
-          label="Avg / Day"
+          label="Avg / Op Day"
           value={summary.avg_per_day.toFixed(1)}
           status="Stable"
         >
