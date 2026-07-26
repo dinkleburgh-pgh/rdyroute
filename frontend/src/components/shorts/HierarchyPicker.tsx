@@ -90,7 +90,7 @@ export function qtyWithUnit(
 export const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
   ...["3x10", "3x5", "4x6"].flatMap((size) =>
     ["Black", "Onyx", "Indigo", "Copper"].map((color) => ({
-      label: color, qty_default: 1, category: size,
+      label: color, qty_default: 1, category: `Mats > ${size}`,
     }))
   ),
   ...["C-PULL", "DRC (AIRLAID)", "BROWN HW", "SIG HW", "SIG Z-FOLD", "SIG DUAL TP", "JRT", "B&V TP", "B&V Z-FOLD"].map((l) => ({

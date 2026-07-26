@@ -6,7 +6,6 @@ Records and retrieves shortage items per truck per run-date.
 V1 mapping:
   st.session_state.shorts          →  Shortage rows (item_category → quantity)
   st.session_state.shorts_initials →  Shortage.initials
-  SHORTS_BUTTON_MAP                →  served via GET /shorts/categories
 """
 
 from datetime import date, timedelta
@@ -31,35 +30,6 @@ from schemas import (
 from ws_manager import manager
 
 router = APIRouter(prefix="/shorts", tags=["shorts"])
-
-# ---------------------------------------------------------------------------
-# Category catalogue  (mirrors SHORTS_BUTTON_MAP from V1)
-# ---------------------------------------------------------------------------
-
-SHORTS_BUTTON_MAP: dict = {
-    "3x10": ["Black", "Onyx", "Copper", "Indigo"],
-    "3x5": ["Black", "Onyx", "Copper", "Indigo"],
-    "4x6": ["Black", "Onyx", "Copper", "Indigo"],
-    "Paper": [
-        "C-PULL", "DRC (AIRLAID)", "BROWN HW", "SIG HW",
-        "SIG Z-FOLD", "SIG DUAL TP", "JRT", "B&V TP", "B&V Z-FOLD",
-    ],
-    "Bulk": {
-        "Dust Mops": ["WET MOP", '24"', '36"', '46"', '60"', "Fender Covers"],
-        "Aprons": ["White", "Black", "Red", "Green", "Blue", "Denim"],
-        "Towels": [
-            "Grid/Terry", "Glass", "Regular", "Premium",
-            "Small Ink", "Large Ink", "Napkins", "Red Shop", "White Shop",
-        ],
-    },
-}
-
-
-@router.get("/categories")
-def get_shortage_categories(_user: User = Depends(get_current_user)):
-    """Return the canonical shortage category/item map for the React shorts form."""
-    return SHORTS_BUTTON_MAP
-
 
 # ---------------------------------------------------------------------------
 # List shortages

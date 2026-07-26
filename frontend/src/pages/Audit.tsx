@@ -9,7 +9,7 @@ import { motion } from "framer-motion";
 import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { colorWordClass, useCategoryPalette } from "../components/shorts/HierarchyPicker";
+import { colorWordClass, itemTileClass, useCategoryPalette, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
 import {
   auditPhotoFileUrl,
   useAuditByRoute,
@@ -155,57 +155,10 @@ function subCatOf(item: TrackedItem): string | null {
   return idx >= 0 ? cat.slice(idx + 1).trim() : null;
 }
 
-const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
-  ...["3x10", "3x5", "4x6"].flatMap((size) =>
-    ["Black", "Onyx", "Indigo", "Copper"].map((color) => ({
-      label: color, qty_default: 1, category: size,
-    }))
-  ),
-  ...["C-PULL", "DRC (AIRLAID)", "BROWN HW", "SIG HW", "SIG Z-FOLD", "SIG DUAL TP", "B&V TP", "B&V Z-FOLD"].map((l) => ({
-    label: l, qty_default: 1, category: "Paper",
-  })),
-  ...[{ label: "JRT", unit_label: "Case", pack_size: 12 }].map((l) => ({
-    label: l.label, qty_default: 1, category: "Paper", unit_label: l.unit_label, pack_size: l.pack_size,
-  })),
-  ...["White", "Black", "Red", "Green", "Blue", "Denim"].map((l) => ({
-    label: l, qty_default: 1, category: "Bulk > Aprons",
-    ...(l === "White" ? { unit_label: "Bag", pack_size: 10 } : {}),
-  })),
-  ...['WET MOP', '24"', '36"', '46"', '60"'].map((l) => ({
-    label: l, qty_default: 1, category: "Bulk > Dust Mops",
-  })),
-  ...[
-    { label: "Grid/Terry", unit_label: "Bag", pack_size: 20 },
-    { label: "Red Shop", unit_label: "Bundle", pack_size: 50 },
-    { label: "White Shop", unit_label: "Bundle", pack_size: 50 },
-    ...["Glass", "Regular", "Premium", "Small Ink", "Large Ink", "Napkins", "Fender Covers"].map((l) => ({ label: l }) as { label: string; unit_label?: string; pack_size?: number }),
-  ].map((l) => ({
-    label: l.label, qty_default: 1, category: "Bulk > Towels",
-    ...(l.unit_label ? { unit_label: l.unit_label, pack_size: l.pack_size! } : {}),
-  })),
-];
-
-// ---------------------------------------------------------------------------
-// Colour palette
-// ---------------------------------------------------------------------------
-
-// Category tiles now come from the shared canonical palette (useCategoryPalette),
-// so the Audit picker's category colours match the shortage grid, PDF, report,
-// and Configure Items. Only the item-by-name MAT/colour tiles stay local.
-const MAT_COLOR_PALETTE: Record<string, string> = {
-  "Black":      "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
-  "Onyx":       "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",
-  "Copper":     "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",
-  "Indigo":     "bg-indigo-700 ring-1 ring-indigo-400/20 hover:bg-indigo-600",
-  "White":      "bg-white ring-1 ring-slate-300 hover:bg-slate-100",
-  "Red":        "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",
-  "Green":      "bg-green-700 ring-1 ring-green-400/20 hover:bg-green-600",
-  "Blue":       "bg-blue-700 ring-1 ring-blue-400/20 hover:bg-blue-600",
-  "Denim":      "bg-[#1a5fa8] ring-1 ring-blue-400/20 hover:bg-[#1e6dbe]",
-  "Red Shop":   "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",
-  "White Shop": "bg-white ring-1 ring-slate-300 hover:bg-slate-100",
-};
-const LIGHT_BG_ITEMS = new Set(["White", "White Shop"]);
+// The empty-catalog fallback (DEFAULT_TRACKED_ITEMS) and per-item tile colour
+// resolution (itemTileClass — MAT palette → per-item colour preset → colour word
+// → category tile) both come from the shared picker module, so Audit's item
+// buttons match the Short Sheet exactly and honour Configure-Items colours.
 
 // ---------------------------------------------------------------------------
 // HierarchyPicker — 1–3 step selection inside ItemLogger
@@ -309,6 +262,7 @@ function HierarchyPicker({
           const disp = MAT_SIZES.has(cat) && item.label.startsWith(cat + " ")
             ? item.label.slice(cat.length + 1)
             : item.label;
+          const { cls, lightBg } = itemTileClass(item, disp, btnClass);
           return (
             <button
               key={item.label}
@@ -317,8 +271,8 @@ function HierarchyPicker({
               onClick={() => selectItem(item.label)}
               className={clsx(
                 "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black shadow-lg transition-all active:scale-95 disabled:opacity-50",
-                LIGHT_BG_ITEMS.has(disp) ? "text-slate-900" : "text-white",
-                MAT_COLOR_PALETTE[disp] ?? btnClass,
+                lightBg ? "text-slate-900" : "text-white",
+                cls,
               )}
             >
               {suffix && colorWordClass(disp) ? `${disp} ${suffix}` : disp}
@@ -346,9 +300,8 @@ function HierarchyPicker({
     });
   }
   if (pendingItem !== null) {
-    const itemPalette =
-      MAT_COLOR_PALETTE[pendingItem] ??
-      (bulkSub ? catPalette.tileClass(bulkSub) : topCat ? catPalette.tileClass(topCat) : "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20");
+    const itemFallback = bulkSub ? catPalette.tileClass(bulkSub) : topCat ? catPalette.tileClass(topCat) : "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20";
+    const itemPalette = itemTileClass(items.find((i) => i.label === pendingItem), pendingItem, itemFallback).cls;
     trailRaw.push({
       label: pendingItem,
       palette: itemPalette,

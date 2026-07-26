@@ -615,14 +615,6 @@ export function useActivityEvents(filters?: {
 // Shorts
 // ---------------------------------------------------------------------------
 
-export function useShortageCategories() {
-  return useQuery({
-    queryKey: ["shorts-categories"],
-    queryFn: async () => (await api.get<Record<string, unknown>>("/shorts/categories")).data,
-    staleTime: 5 * 60 * 1000,
-  });
-}
-
 export function useShortageDates() {
   return useQuery({
     queryKey: ["shortage-dates"],
