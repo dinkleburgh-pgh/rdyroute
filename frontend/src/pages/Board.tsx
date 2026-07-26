@@ -977,7 +977,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     return;
                   }
                   if (filter === "dirty" && !fleetMode && truck.state?.status !== "oos") {
-                    if (batchingDisabled) {
+                    // An "unfinished" truck was already batched/worked — clicking
+                    // it should FINISH the unload (mark unloaded), not send it back
+                    // through batch assignment. (Same as the Unload page's
+                    // "Finish unload" action.)
+                    if (truck.state?.status === "unfinished" || batchingDisabled) {
                       upsert.mutate({
                         truck_number: truck.truck_number,
                         run_date: runDate,
@@ -1245,7 +1249,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   )}
                   {!fleetMode && filter === "dirty" && truck.state?.status !== "oos" && (
                     <span className={clsx("flex w-full items-center justify-center gap-1 rounded px-2 py-1 text-xs font-semibold transition-colors", truck.state?.priority_hold ? "bg-amber-600/20 text-amber-300" : "bg-blue-600/20 text-blue-300")}>
-                      {batchingDisabled ? "Mark Unloaded" : "Assign to Batch →"}
+                      {truck.state?.status === "unfinished" ? "Finish unload" : batchingDisabled ? "Mark Unloaded" : "Assign to Batch →"}
                     </span>
                   )}
                 </div>
