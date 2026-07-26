@@ -329,6 +329,17 @@ export interface RouteSwapLog {
   created_at: string;
 }
 
+/** Append-only history of Dust-truck garment markings (durable across resets). */
+export interface GarmentDayLog {
+  id: number;
+  run_date: string;
+  truck_number: number;
+  has_garment: boolean;
+  source: string;
+  actor_username: string | null;
+  created_at: string;
+}
+
 export interface ActivityEvent {
   id: number;
   occurred_at: string;

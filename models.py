@@ -610,6 +610,38 @@ class RouteSwapLog(Base):
 
 
 # ---------------------------------------------------------------------------
+# Garment Day Log (append-only history — survives the nightly TruckState reset)
+# ---------------------------------------------------------------------------
+
+class GarmentDayLog(Base):
+    """
+    Append-only log of every change to a Dust truck's garment flag
+    (TruckState.has_dust_garment) for a run-date.
+
+    That flag is per-day MUTABLE state — reset to False at day-init and hard-
+    deleted by reset_workday — so it can't serve as a durable record. This log
+    persists which trucks carried dust garments on which days (and who marked
+    them) so future logic (trends, auto-suggest, reports) can build on it.
+    Rows are appended on each transition; the latest row per (run_date,
+    truck_number) reflects that day's final garment state.
+    """
+    __tablename__ = "garment_day_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    truck_number: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # The garment flag's NEW value at this change (True = marked, False = unmarked).
+    has_garment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    # Where the change came from — TruckState.state_source (wizard / workflow / auto).
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="workflow")
+    # Who made the change (the authenticated user, including wizard sets).
+    actor_username: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
+# ---------------------------------------------------------------------------
 # Notices (Run Day banner)
 # ---------------------------------------------------------------------------
 

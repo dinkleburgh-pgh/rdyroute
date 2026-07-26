@@ -21,6 +21,7 @@ import type {
   NotificationStatus,
   NoteType,
   PushSubscriptionRecord,
+  GarmentDayLog,
   ProductionSyncResult,
   RouteSwap,
   RouteSwapLog,
@@ -483,6 +484,17 @@ export function useRouteSwapLog(days = 30) {
     queryKey: ["route-swap-log", days],
     queryFn: async () =>
       (await api.get<RouteSwapLog[]>("/route-swaps/log", { params: { days } })).data,
+    staleTime: 60_000,
+  });
+}
+
+/** Durable, append-only history of Dust-truck garment markings (foundation for
+ * future garment logic; survives the nightly TruckState reset). */
+export function useGarmentDayLog(days = 30) {
+  return useQuery({
+    queryKey: ["garment-day-log", days],
+    queryFn: async () =>
+      (await api.get<GarmentDayLog[]>("/trucks/garment-log", { params: { days } })).data,
     staleTime: 60_000,
   });
 }

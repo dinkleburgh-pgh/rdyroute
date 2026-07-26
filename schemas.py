@@ -826,6 +826,16 @@ class RouteSwapLogOut(_OrmBase):
     created_at: datetime
 
 
+class GarmentDayLogOut(_OrmBase):
+    id: int
+    run_date: date
+    truck_number: int
+    has_garment: bool
+    source: str
+    actor_username: str | None
+    created_at: datetime
+
+
 # ---------------------------------------------------------------------------
 # Notices
 # ---------------------------------------------------------------------------

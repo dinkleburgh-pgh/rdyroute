@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
 from database import get_db, settings as app_settings
-from models import AppSetting, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
+from models import AppSetting, GarmentDayLog, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import (
@@ -42,6 +42,7 @@ from schemas import (
     AnomalyDay,
     CompletionDailyPoint,
     CycleDailyPoint,
+    GarmentDayLogOut,
     TruckStateCreate,
     TruckStateOut,
     TruckStateUpdate,
@@ -379,6 +380,25 @@ def get_prev_operating_day(
     return {"prev_run_date": prev.isoformat() if prev is not None else None}
 
 
+@router.get("/garment-log", response_model=list[GarmentDayLogOut])
+def get_garment_log(
+    days: int = Query(default=30, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Durable, append-only history of Dust-truck garment markings over the past
+    N days. Each row is a change to a truck's has_dust_garment flag (the latest
+    row per (run_date, truck_number) is that day's final state). Survives the
+    nightly TruckState reset — the foundation for future garment logic."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+    rows = db.scalars(
+        select(GarmentDayLog)
+        .where(GarmentDayLog.run_date >= cutoff)
+        .order_by(GarmentDayLog.run_date.desc(), GarmentDayLog.created_at.desc())
+    ).all()
+    return rows
+
+
 @router.get("/board", response_model=list[TruckWithState])
 def get_board(
     run_date: date = Query(..., description="Operational run-date (YYYY-MM-DD)"),
@@ -464,6 +484,30 @@ def get_truck_state(
     return row
 
 
+def _log_garment_change(
+    db: Session,
+    *,
+    before: TruckState | None,
+    after: TruckState,
+    actor_user: User | None,
+) -> None:
+    """Append a durable GarmentDayLog row when a truck's has_dust_garment flag
+    changes. Mirrors RouteSwap -> RouteSwapLog so the garment history survives the
+    nightly TruckState reset. On create (before is None) only a fresh mark (True)
+    is logged; on update both marks and unmarks are logged."""
+    before_val = bool(before.has_dust_garment) if before is not None else False
+    after_val = bool(after.has_dust_garment)
+    if before_val == after_val:
+        return
+    db.add(GarmentDayLog(
+        run_date=after.run_date,
+        truck_number=after.truck_number,
+        has_garment=after_val,
+        source=after.state_source or TruckStateSource.workflow.value,
+        actor_username=actor_user.username if actor_user is not None else None,
+    ))
+
+
 @router.post("/{truck_number}/state", response_model=TruckStateOut, status_code=status.HTTP_201_CREATED)
 def create_truck_state(
     truck_number: int,
@@ -504,6 +548,7 @@ def create_truck_state(
         after_state=row,
         context_json={"source": "direct_write"},
     )
+    _log_garment_change(db, before=None, after=row, actor_user=_user)
     db.commit()
     db.refresh(row)
     if row.priority_hold:
@@ -600,6 +645,7 @@ def update_truck_state(
         after_state=row,
         context_json={"source": "direct_write"},
     )
+    _log_garment_change(db, before=before_state, after=row, actor_user=_user)
     db.commit()
     db.refresh(row)
     if not previous_hold and row.priority_hold:
