@@ -23,6 +23,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useCollapseState } from "../utils/useCollapseState";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
 import CoverageList from "../components/CoverageList";
+import CoverageTag from "../components/CoverageTag";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
@@ -1121,9 +1122,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                             <button
                               type="button"
                               onClick={(e) => { e.stopPropagation(); setDetailNum(cov.num); }}
-                              className="inline-flex items-center gap-1 rounded-full bg-sky-500 px-3 py-1 text-xs font-bold text-white transition-colors hover:bg-sky-400"
+                              className="transition-transform active:scale-95"
+                              title="View covering truck"
                             >
-                              #{truck.truck_number} <ArrowLeftRight className="h-3 w-3" /> #{cov.num}
+                              <CoverageTag route={truck.truck_number} truck={cov.num} />
                             </button>
                             {rawStatus && (
                               <span className={clsx("inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-semibold text-white", rawStatus === "dirty" && "bg-red-600", rawStatus === "unloaded" && "bg-green-600", rawStatus === "loaded" && "bg-blue-600", rawStatus === "in_progress" && "bg-amber-500", rawStatus === "off" && "bg-slate-500", rawStatus === "oos" && "bg-slate-600", rawStatus === "shop" && "bg-purple-600", rawStatus === "spare" && "bg-cyan-700", rawStatus === "unfinished" && "bg-fuchsia-600")}>

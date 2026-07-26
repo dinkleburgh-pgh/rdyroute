@@ -20,10 +20,12 @@ import {
   useSettings,
 } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
+import CoverageList from "../components/CoverageList";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckNote, TruckStatus, TruckWithState } from "../types";
 import {
+  buildCoverageList,
   buildHistoricalCoverageFallback,
   buildOperationalDayContext,
   buildPrevDayCoverage,
@@ -503,19 +505,7 @@ export default function RunDay() {
               </span>
               <span className="text-[10px] text-amber-500/70">({formatRunDate(prevCoverage.date)})</span>
             </div>
-            <div className="flex flex-wrap gap-1.5">
-              {prevCoverage.items.map((c) => (
-                <span
-                  key={`${c.route}-${c.loadOn}`}
-                  className="inline-flex items-center gap-1 rounded-full border border-amber-700/30 bg-slate-900/50 px-2 py-0.5 text-xs"
-                >
-                  <span className={clsx("font-black", c.isSplit ? "text-amber-300" : "text-red-300")}>#{c.route}</span>
-                  {c.isSplit ? <span className="font-bold text-amber-500">+</span> : <ArrowLeftRight className="h-3 w-3 text-slate-600" />}
-                  <span className="font-black text-amber-200">#{c.loadOn}</span>
-                  {c.isSplit && <span className="text-[8px] font-bold uppercase tracking-wider text-amber-500">Split</span>}
-                </span>
-              ))}
-            </div>
+            <CoverageList entries={buildCoverageList({ role: "unload", board: [], prevCoverage })} />
           </div>
         )}
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
