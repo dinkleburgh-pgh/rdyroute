@@ -8,7 +8,7 @@ import {
   type CategoryMetaMap,
   type TrackedItem,
 } from "../../api/hooks";
-import { COLOR_PRESETS, categoryDotClass } from "../shorts/HierarchyPicker";
+import { COLOR_PRESETS, useCategoryPalette } from "../shorts/HierarchyPicker";
 import ConfirmDialog from "../ConfirmDialog";
 import { Plus, Trash2, Save, RotateCcw, Upload, Package, X, AlertTriangle } from "lucide-react";
 
@@ -33,17 +33,6 @@ function subLevelOf(cat: string): string | null {
   return i >= 0 ? cat.slice(i + 1).trim() : null;
 }
 
-// Fixed hues of the built-in palettes (shown on card dots; a chosen preset
-// only takes effect where the hardcoded palettes don't already color things).
-const BUILTIN_DOT: Record<string, string> = {
-  "3x10": "bg-sky-500", "3x5": "bg-violet-500", "4x6": "bg-emerald-500",
-  Paper: "bg-orange-500", Bulk: "bg-rose-500", Hygiene: "bg-cyan-500",
-  Aprons: "bg-violet-500", "Dust Mops": "bg-teal-500", Towels: "bg-amber-500",
-};
-function cardDotClass(cat: string, meta: CategoryMetaMap): string {
-  const sub = subLevelOf(cat);
-  return BUILTIN_DOT[sub ?? cat] ?? categoryDotClass(cat, meta);
-}
 
 function ColorSwatchPicker({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
   return (
@@ -81,6 +70,14 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
   const saveCats = useUpdateTrackedItemCategories();
   const [draft, setDraft] = useState<TrackedItem[]>([]);
   const [catMeta, setCatMeta] = useState<CategoryMetaMap>({});
+  const palette = useCategoryPalette();
+  // Card dot: honour the LOCAL unsaved pin for a live preview while editing;
+  // otherwise fall back to the canonical shared palette (which reads the saved
+  // colours), so the dot matches every other surface.
+  const cardDot = (cat: string) => {
+    const pin = catMeta[cat]?.color;
+    return pin && COLOR_PRESETS[pin] ? COLOR_PRESETS[pin].dot : palette.dotClass(cat);
+  };
   const [activeTab, setActiveTab] = useState<string>("__all__");
   const [importText, setImportText] = useState("");
   const [importOpen, setImportOpen] = useState(false);
@@ -449,7 +446,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                     disabled={disabled}
                     title="Category color — a chosen color applies where the app doesn't already have a fixed color for this name"
                     onClick={() => setColorPickerFor(colorPickerFor === cat ? null : cat)}
-                    className={clsx("h-3.5 w-3.5 shrink-0 rounded-full transition-transform hover:scale-125", cardDotClass(cat, catMeta))}
+                    className={clsx("h-3.5 w-3.5 shrink-0 rounded-full transition-transform hover:scale-125", cardDot(cat))}
                   />
                 )}
                 <span className="truncate">

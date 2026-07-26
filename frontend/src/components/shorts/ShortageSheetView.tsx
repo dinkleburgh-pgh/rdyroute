@@ -9,14 +9,8 @@
 import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import type { Shortage, TruckWithState } from "../../types";
-import { useTrackedItemCategories, useTrackedItems } from "../../api/hooks";
-import {
-  buildCategoryPalette,
-  COLOR_PRESETS,
-  DEFAULT_TRACKED_ITEMS,
-  subCatOf,
-  topCatOf,
-} from "./HierarchyPicker";
+import { useTrackedItems } from "../../api/hooks";
+import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "./HierarchyPicker";
 import { buildShortageMatrix } from "./shortageMatrix";
 
 export default function ShortageSheetView({
@@ -26,7 +20,6 @@ export default function ShortageSheetView({
   shorts: Shortage[];
   board: TruckWithState[];
 }) {
-  const { data: catMeta } = useTrackedItemCategories();
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
   const [layout, setLayout] = useState<"grid" | "paper">("grid");
@@ -41,20 +34,12 @@ export default function ShortageSheetView({
     [board],
   );
 
-  // One distinct colour per category. Seeded from the WHOLE catalog (not just
-  // today's shorted categories) so a category keeps its colour every day.
-  const palette = useMemo(() => {
-    const all = new Set<string>();
-    for (const i of items) {
-      all.add(topCatOf(i));
-      const sub = subCatOf(i);
-      if (sub) all.add(sub);
-    }
-    for (const r of rows) all.add(r.category);
-    return buildCategoryPalette([...all], catMeta);
-  }, [items, rows, catMeta]);
-  const dotOf = (cat: string) => COLOR_PRESETS[palette.get(cat) ?? "stone"]?.dot ?? "bg-stone-400";
-  const chipOf = (cat: string) => COLOR_PRESETS[palette.get(cat) ?? "stone"]?.chip ?? "bg-stone-800/60 text-stone-300";
+  // One canonical colour per category — the shared palette (seeded from the
+  // whole catalog) so a category's dot/chip matches the PDF, audit, Configure
+  // Items, and the entry pickers everywhere.
+  const palette = useCategoryPalette();
+  const dotOf = palette.dotClass;
+  const chipOf = palette.chipClass;
 
   if (shorts.length === 0) {
     return (

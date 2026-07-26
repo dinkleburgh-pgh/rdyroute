@@ -8,35 +8,18 @@
 import { useState, useMemo, useRef, useEffect } from "react";
 import { motion } from "framer-motion";
 import clsx from "clsx";
-import { useTrackedItemCategories, type TrackedItem, type CategoryMetaMap } from "../../api/hooks";
+import { useTrackedItemCategories, useTrackedItems, type TrackedItem, type CategoryMetaMap } from "../../api/hooks";
 
 // ---------------------------------------------------------------------------
 // Colour palette
 // ---------------------------------------------------------------------------
 
-export const TOP_PALETTE: Record<string, string> = {
-  "3x10":  "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",
-  "3x5":   "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
-  "4x6":   "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800",
-  "Paper":    "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
-  "Bulk":     "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
-  "Hygiene":  "bg-gradient-to-b from-cyan-600 to-cyan-900 ring-1 ring-cyan-400/20 hover:from-cyan-500 hover:to-cyan-800",
-};
+// Category gradient tiles + chips are no longer bespoke maps — they derive from
+// COLOR_PRESETS via the canonical palette (useCategoryPalette / the resolver
+// functions below), so a category's tile, chip and dot always share one hue.
+// (The old TOP_PALETTE / CAT_CHIP_COLORS / SUB_PALETTE were byte-identical to
+// COLOR_PRESETS[preset].tile/.chip for the built-ins, so the look is unchanged.)
 
-export const CAT_CHIP_COLORS: Record<string, string> = {
-  "3x10":  "bg-sky-900/40 text-sky-300 hover:bg-sky-800/60",
-  "3x5":   "bg-violet-900/40 text-violet-300 hover:bg-violet-800/60",
-  "4x6":   "bg-emerald-900/40 text-emerald-300 hover:bg-emerald-800/60",
-  "Paper":    "bg-orange-900/40 text-orange-300 hover:bg-orange-800/60",
-  "Bulk":     "bg-rose-900/40 text-rose-300 hover:bg-rose-800/60",
-  "Hygiene":  "bg-cyan-900/40 text-cyan-300 hover:bg-cyan-800/60",
-};
-
-export const SUB_PALETTE: Record<string, string> = {
-  Aprons:      "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
-  "Dust Mops": "bg-gradient-to-b from-teal-600 to-teal-900 ring-1 ring-teal-400/20 hover:from-teal-500 hover:to-teal-800",
-  Towels:      "bg-gradient-to-b from-amber-700 to-amber-950 ring-1 ring-amber-500/20 hover:from-amber-600 hover:to-amber-900",
-};
 export const MAT_COLOR_PALETTE: Record<string, string> = {
   // Mat colors
   "Black":      "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
@@ -151,6 +134,17 @@ export const COLOR_PRESETS: Record<string, { tile: string; chip: string; dot: st
   stone:   { tile: "bg-gradient-to-b from-stone-500 to-stone-800 ring-1 ring-stone-300/20 hover:from-stone-400 hover:to-stone-700",     chip: "bg-stone-800/60 text-stone-300 hover:bg-stone-700/60",   dot: "bg-stone-400",   swatch: "bg-stone-400" },
 };
 
+// The solid hue (Tailwind -500, stone -400) each preset's dot/swatch uses, as a
+// concrete hex — for the server-rendered PDF, which can't use Tailwind classes.
+// Co-located with COLOR_PRESETS so the two stay in lockstep; consumed by
+// useCategoryPalette().hexOf and imported by lib/reportPdf.ts.
+export const PRESET_HEX: Record<string, string> = {
+  sky: "#0ea5e9", violet: "#8b5cf6", emerald: "#10b981", orange: "#f97316",
+  rose: "#f43f5e", cyan: "#06b6d4", teal: "#14b8a6", amber: "#f59e0b",
+  red: "#ef4444", green: "#22c55e", blue: "#3b82f6", indigo: "#6366f1",
+  pink: "#ec4899", fuchsia: "#d946ef", lime: "#84cc16", stone: "#a8a29e",
+};
+
 /**
  * The preset each built-in palette category is really painted with. The
  * hardcoded TOP_PALETTE/SUB_PALETTE/CAT_CHIP_COLORS strings are gradients, so
@@ -167,7 +161,8 @@ export const BUILTIN_PRESET: Record<string, string> = {
   Hygiene: "cyan",
   Towels: "amber",
   "Dust Mops": "teal",
-  Aprons: "violet", // collides with 3x5 — resolved by buildCategoryPalette
+  Aprons: "violet", // collides with 3x5 — resolved by buildCategoryPalette's dedupe
+  General: "stone", // catch-all keeps a stable neutral (was slate in the old TOP_CAT_DOT)
 };
 
 // Assignment order for categories with no built-in/user color. Ordered for
@@ -273,41 +268,39 @@ export function colorWordClass(label: string): { cls: string; lightBg: boolean }
 }
 
 /**
- * Tile class for a category key ("Top" or "Top > Sub" — the meta map is keyed
- * by the full normalized string, SUB_PALETTE by the bare sub name).
+ * The canonical resolution key for a category — the BARE segment (after the
+ * first ">", else the whole string). Surfaces key a category inconsistently
+ * ("Bulk > Towels" vs "Towels" vs a full-path catMeta pin); collapsing to the
+ * bare name gives every surface one identity → one colour.
  */
+export function catKeyOf(cat: string): string {
+  const idx = cat.indexOf(">");
+  return (idx >= 0 ? cat.slice(idx + 1) : cat).trim();
+}
+
+/**
+ * The single preset KEY for a category: user pin (Configure Items) → built-in →
+ * semantic/name-hash guess. Seed-independent (no dedupe) — the source all three
+ * resolvers below share, so a category's tile/chip/dot never disagree. For
+ * dedupe-guaranteed distinctness across the whole catalog, prefer
+ * useCategoryPalette(), which every render site now uses.
+ */
+export function presetForCategory(catKey: string, meta?: CategoryMetaMap): string {
+  const bare = catKeyOf(catKey);
+  const user = meta?.[catKey]?.color ?? meta?.[bare]?.color;
+  if (user && COLOR_PRESETS[user]) return user;
+  return BUILTIN_PRESET[catKey] ?? BUILTIN_PRESET[bare] ?? guessPresetKey(bare);
+}
+
+/** Tile / chip / dot for a category — all from ONE preset so they always agree. */
 export function categoryTileClass(catKey: string, meta?: CategoryMetaMap): string {
-  const idx = catKey.indexOf(">");
-  const subPart = idx >= 0 ? catKey.slice(idx + 1).trim() : null;
-  const userColor = meta?.[catKey]?.color;
-  return (
-    TOP_PALETTE[catKey] ??
-    SUB_PALETTE[subPart ?? catKey] ??
-    (userColor ? COLOR_PRESETS[userColor]?.tile : undefined) ??
-    guessCategoryPreset(catKey).tile
-  );
+  return COLOR_PRESETS[presetForCategory(catKey, meta)].tile;
 }
-
 export function categoryChipClass(catKey: string, meta?: CategoryMetaMap): string {
-  const userColor = meta?.[catKey]?.color;
-  return (
-    CAT_CHIP_COLORS[catKey] ??
-    (userColor ? COLOR_PRESETS[userColor]?.chip : undefined) ??
-    guessCategoryPreset(catKey).chip
-  );
+  return COLOR_PRESETS[presetForCategory(catKey, meta)].chip;
 }
-
 export function categoryDotClass(catKey: string, meta?: CategoryMetaMap): string {
-  const userColor = meta?.[catKey]?.color;
-  const idx = catKey.indexOf(">");
-  const sub = idx >= 0 ? catKey.slice(idx + 1).trim() : catKey;
-  // Built-in palette hue FIRST so a dot always agrees with its own chip/tile.
-  const builtIn = BUILTIN_PRESET[catKey] ?? BUILTIN_PRESET[sub];
-  return (
-    (userColor ? COLOR_PRESETS[userColor]?.dot : undefined) ??
-    (builtIn ? COLOR_PRESETS[builtIn]?.dot : undefined) ??
-    guessCategoryPreset(catKey).dot
-  );
+  return COLOR_PRESETS[presetForCategory(catKey, meta)].dot;
 }
 
 /** Item tile: MAT palette → user item color → color word in label → category class. */
@@ -322,6 +315,57 @@ export function itemTileClass(
   const word = colorWordClass(disp);
   if (word) return word;
   return { cls: fallbackCls, lightBg: false };
+}
+
+// ---------------------------------------------------------------------------
+// Canonical category palette — the single source of truth
+// ---------------------------------------------------------------------------
+
+export interface CategoryPalette {
+  presetOf: (cat: string) => string;
+  dotClass: (cat: string) => string;
+  chipClass: (cat: string) => string;
+  tileClass: (cat: string) => string;
+  hexOf: (cat: string) => string; // concrete hex for the server-rendered PDF
+}
+
+/**
+ * The single source of truth for category colours. Builds ONE dedupe-aware
+ * palette from a STABLE, catalog-wide seed (every top+sub category in the full
+ * tracked-items catalog ∪ all catMeta pins ∪ "General"), so a category resolves
+ * to the same hue everywhere it's shown — shortage grid, PDF, audit rollup,
+ * Configure Items, and the entry pickers — regardless of which categories are on
+ * screen that day. catMeta pins are re-keyed to the bare identity (catKeyOf) so
+ * a pin colours the category everywhere it appears.
+ */
+export function useCategoryPalette(): CategoryPalette {
+  const { data: trackedRaw } = useTrackedItems();
+  const { data: catMeta } = useTrackedItemCategories();
+  return useMemo(() => {
+    const items = trackedRaw && trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
+    const seed = new Set<string>(["General"]);
+    for (const i of items) {
+      seed.add(topCatOf(i));
+      const sub = subCatOf(i);
+      if (sub) seed.add(sub);
+    }
+    const meta: CategoryMetaMap = {};
+    for (const [k, v] of Object.entries(catMeta ?? {})) {
+      const key = catKeyOf(k);
+      seed.add(key);
+      if (v?.color && !meta[key]?.color) meta[key] = v;
+    }
+    const map = buildCategoryPalette([...seed], meta);
+    const presetOf = (cat: string) => map.get(catKeyOf(cat)) ?? guessPresetKey(catKeyOf(cat));
+    const preset = (cat: string) => COLOR_PRESETS[presetOf(cat)] ?? COLOR_PRESETS.stone;
+    return {
+      presetOf,
+      dotClass: (c) => preset(c).dot,
+      chipClass: (c) => preset(c).chip,
+      tileClass: (c) => preset(c).tile,
+      hexOf: (c) => PRESET_HEX[presetOf(c)] ?? PRESET_HEX.stone,
+    };
+  }, [trackedRaw, catMeta]);
 }
 
 // ---------------------------------------------------------------------------
@@ -401,7 +445,7 @@ export default function HierarchyPicker({
   const [pending, setPending]   = useState<{ category: string; detail: string } | null>(null);
   const [qtyInput, setQtyInput] = useState("");
   const qtyRef = useRef<HTMLInputElement>(null);
-  const { data: catMeta } = useTrackedItemCategories();
+  const catPalette = useCategoryPalette();
 
   const topCats = useMemo(() => [...new Set(items.map(topCatOf))], [items]);
 
@@ -492,24 +536,24 @@ export default function HierarchyPicker({
   if (topCat !== null) {
     trailRaw.push({
       label: topCat,
-      palette: categoryTileClass(topCat, catMeta),
+      palette: catPalette.tileClass(topCat),
       onClick: reset,
     });
   }
   if (bulkSub !== null) {
     trailRaw.push({
       label: bulkSub,
-      palette: categoryTileClass(topCat ? `${topCat} > ${bulkSub}` : bulkSub, catMeta),
+      palette: catPalette.tileClass(topCat ? `${topCat} > ${bulkSub}` : bulkSub),
       onClick: resetSub,
     });
   }
   if (pending !== null) {
     const pendingItem = findTrackedItem(items, pending.category, pending.detail);
     const catFallback = bulkSub && topCat
-      ? categoryTileClass(`${topCat} > ${bulkSub}`, catMeta)
+      ? catPalette.tileClass(`${topCat} > ${bulkSub}`)
       : topCat
-        ? categoryTileClass(topCat, catMeta)
-        : guessCategoryPreset(pending.category).tile;
+        ? catPalette.tileClass(topCat)
+        : catPalette.tileClass(pending.category);
     trailRaw.push({
       label: pending.detail,
       palette: itemTileClass(pendingItem, pending.detail, catFallback).cls,
@@ -616,7 +660,7 @@ export default function HierarchyPicker({
                 onClick={() => setTopCat(cat)}
                 className={clsx(
                   "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
-                  categoryTileClass(cat, catMeta),
+                  catPalette.tileClass(cat),
                 )}
                 initial={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -635,7 +679,7 @@ export default function HierarchyPicker({
           <ItemGrid
             gridItems={flatItems}
             cat={topCat}
-            btnClass={categoryTileClass(topCat, catMeta)}
+            btnClass={catPalette.tileClass(topCat)}
             isPending={isPending}
             onSelect={selectItem}
           />
@@ -651,7 +695,7 @@ export default function HierarchyPicker({
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
                   "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg",
-                  categoryTileClass(`${topCat} > ${sub}`, catMeta),
+                  catPalette.tileClass(`${topCat} > ${sub}`),
                 )}
                 initial={{ opacity: 0, scale: 0.94 }}
                 animate={{ opacity: 1, scale: 1 }}
@@ -670,7 +714,7 @@ export default function HierarchyPicker({
           <ItemGrid
             gridItems={subItemsFor(topCat, bulkSub)}
             cat={bulkSub}
-            btnClass={categoryTileClass(`${topCat} > ${bulkSub}`, catMeta)}
+            btnClass={catPalette.tileClass(`${topCat} > ${bulkSub}`)}
             isPending={isPending}
             onSelect={selectItem}
           />

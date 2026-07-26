@@ -19,7 +19,6 @@ import {
   useBulkCreateShortages,
   useDeleteShortage,
   useTrackedItems,
-  useTrackedItemCategories,
 } from "../../api/hooks";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -27,12 +26,11 @@ import { isScheduledOff } from "../../utils/truckStatus";
 import type { Shortage, TruckWithState } from "../../types";
 import AnimateCard from "../AnimateCard";
 import HierarchyPicker, {
-  categoryChipClass,
-  categoryTileClass,
   DEFAULT_TRACKED_ITEMS,
   findTrackedItem,
   itemTileClass,
   qtyWithUnit,
+  useCategoryPalette,
 } from "./HierarchyPicker";
 
 interface SessionBatch {
@@ -63,7 +61,7 @@ export default function ItemFirstEntry({
   const bulk = useBulkCreateShortages();
   const remove = useDeleteShortage();
   const { data: trackedRaw = [] } = useTrackedItems();
-  const { data: catMeta } = useTrackedItemCategories();
+  const palette = useCategoryPalette();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
 
   const [selectedItem, setSelectedItem] = useState<{ category: string; detail: string } | null>(null);
@@ -192,7 +190,7 @@ export default function ItemFirstEntry({
   const dupeSelected = [...qtyByTruck.keys()].filter((n) => alreadyLoggedQty.has(n));
 
   const itemChipTile = selectedItem
-    ? itemTileClass(selTracked, selectedItem.detail, categoryTileClass(selectedItem.category, catMeta))
+    ? itemTileClass(selTracked, selectedItem.detail, palette.tileClass(selectedItem.category))
     : { cls: "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20", lightBg: false };
 
   return (
@@ -211,7 +209,7 @@ export default function ItemFirstEntry({
                     onClick={() => pickItem(item.category, item.detail)}
                     className={clsx(
                       "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
-                      categoryChipClass(item.category, catMeta),
+                      palette.chipClass(item.category),
                     )}
                   >
                     {item.category} {item.detail}

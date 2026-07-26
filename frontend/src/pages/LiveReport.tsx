@@ -21,9 +21,9 @@ import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { buildCategoryPalette, categoryDotClass, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
+import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "../components/shorts/HierarchyPicker";
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
-import { downloadReportPdf, PRESET_HEX, dotClassToHex, type ReportViewModel } from "../lib/reportPdf";
+import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
 import { FileDown } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
@@ -45,7 +45,6 @@ import {
   useHolidayUnload,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
-  useTrackedItemCategories,
   type TrackedItem,
 } from "../api/hooks";
 import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
@@ -88,16 +87,6 @@ function topCatOf(item: TrackedItem | undefined): string {
   const idx = cat.indexOf(">");
   return (idx >= 0 ? cat.slice(0, idx) : cat).trim() || "General";
 }
-
-const TOP_CAT_DOT: Record<string, string> = {
-  "3x10": "bg-sky-500",
-  "3x5": "bg-violet-500",
-  "4x6": "bg-emerald-500",
-  Paper: "bg-orange-500",
-  Bulk: "bg-rose-500",
-  Hygiene: "bg-cyan-500",
-  General: "bg-slate-500",
-};
 
 function clock(epochSec: number | null | undefined): string {
   return epochSec ? formatEasternTime(epochSec) : "—";
@@ -221,7 +210,7 @@ export default function LiveReport() {
   const { data: shorts = [] } = useShortages(runDate);
   const { data: auditEntries = [] } = useAuditEntries(runDate);
   const { data: trackedItems = [] } = useTrackedItems();
-  const { data: trackedCatMeta } = useTrackedItemCategories();
+  const palette = useCategoryPalette();
   const { data: spares = [] } = useSpareAssignments(runDate);
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: pace } = usePaceAverage(30);
@@ -480,8 +469,6 @@ export default function LiveReport() {
     if (sel.shortages) {
       const items = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
       const m = buildShortageMatrix(shorts, items);
-      const palette = buildCategoryPalette(m.rows.map((r) => r.category), trackedCatMeta);
-      const dotHex = (cat: string) => PRESET_HEX[palette.get(cat) ?? "stone"] ?? PRESET_HEX.stone;
       vm.shortages = {
         kpis: [
           { label: "Qty short", value: String(totalPieces), sub: "total units", tone: totalPieces > 0 ? "#f87171" : "#34d399" },
@@ -500,7 +487,7 @@ export default function LiveReport() {
                   detail: r.detail,
                   label: r.label,
                   unit: r.unit,
-                  dot_hex: dotHex(r.category),
+                  dot_hex: palette.hexOf(r.category),
                   cells: m.trucks.map((n) => r.byTruck.get(n) ?? null),
                   total: r.total,
                 })),
@@ -522,7 +509,7 @@ export default function LiveReport() {
         chips: catRollup.map(([cat, qty]) => ({
           category: cat,
           qty,
-          dot_hex: dotClassToHex(TOP_CAT_DOT[cat] ?? categoryDotClass(cat, trackedCatMeta)),
+          dot_hex: palette.hexOf(cat),
         })),
         cards: auditByTruck.map(([truck, entries]) => ({
           truck_number: truck,
@@ -857,7 +844,7 @@ export default function LiveReport() {
             <div className="flex flex-wrap gap-1.5">
               {catRollup.map(([cat, qty]) => (
                 <span key={cat} className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-surface px-2.5 py-1 text-xs">
-                  <span className={clsx("h-2 w-2 rounded-full", TOP_CAT_DOT[cat] ?? categoryDotClass(cat, trackedCatMeta))} />
+                  <span className={clsx("h-2 w-2 rounded-full", palette.dotClass(cat))} />
                   <span className="text-ink-soft">{cat}</span>
                   <span className="font-mono font-semibold tabular-nums text-ink">{qty}</span>
                 </span>

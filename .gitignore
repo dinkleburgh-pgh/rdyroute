@@ -46,3 +46,6 @@ ds-bundle/
 .ds-sync/
 .design-sync/.cache/
 .design-sync/node_modules
+
+# Sideload APK pulled from the NAS build (not source)
+app-debug.apk

@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
 import { useSearchParams, useNavigate } from "react-router-dom";
+import { useCategoryPalette } from "../components/shorts/HierarchyPicker";
 import {
   auditPhotoFileUrl,
   useAuditByRoute,
@@ -188,19 +189,9 @@ const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
 // Colour palette
 // ---------------------------------------------------------------------------
 
-const TOP_PALETTE: Record<string, string> = {
-  "3x10":  "bg-gradient-to-b from-sky-600 to-sky-900 ring-1 ring-sky-400/20 hover:from-sky-500 hover:to-sky-800",
-  "3x5":   "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
-  "4x6":   "bg-gradient-to-b from-emerald-600 to-emerald-900 ring-1 ring-emerald-400/20 hover:from-emerald-500 hover:to-emerald-800",
-  "Paper":    "bg-gradient-to-b from-orange-700 to-orange-950 ring-1 ring-orange-500/20 hover:from-orange-600 hover:to-orange-900",
-  "Bulk":     "bg-gradient-to-b from-rose-600 to-rose-900 ring-1 ring-rose-400/20 hover:from-rose-500 hover:to-rose-800",
-  "Hygiene":  "bg-gradient-to-b from-cyan-600 to-cyan-900 ring-1 ring-cyan-400/20 hover:from-cyan-500 hover:to-cyan-800",
-};
-const SUB_PALETTE: Record<string, string> = {
-  Aprons:      "bg-gradient-to-b from-violet-600 to-violet-900 ring-1 ring-violet-400/20 hover:from-violet-500 hover:to-violet-800",
-  "Dust Mops": "bg-gradient-to-b from-teal-600 to-teal-900 ring-1 ring-teal-400/20 hover:from-teal-500 hover:to-teal-800",
-  Towels:      "bg-gradient-to-b from-amber-700 to-amber-950 ring-1 ring-amber-500/20 hover:from-amber-600 hover:to-amber-900",
-};
+// Category tiles now come from the shared canonical palette (useCategoryPalette),
+// so the Audit picker's category colours match the shortage grid, PDF, report,
+// and Configure Items. Only the item-by-name MAT/colour tiles stay local.
 const MAT_COLOR_PALETTE: Record<string, string> = {
   "Black":      "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",
   "Onyx":       "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",
@@ -238,6 +229,7 @@ function HierarchyPicker({
   const [pendingItem, setPending] = useState<string | null>(null);
   const [qtyInput, setQtyInput]   = useState("");
   const qtyRef = useRef<HTMLInputElement>(null);
+  const catPalette = useCategoryPalette();
 
   const topCats = useMemo(() => [...new Set(items.map(topCatOf))], [items]);
 
@@ -342,23 +334,21 @@ function HierarchyPicker({
   if (topCat !== null) {
     trailRaw.push({
       label: topCat,
-      palette: TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      palette: catPalette.tileClass(topCat),
       onClick: reset,
     });
   }
   if (bulkSub !== null) {
     trailRaw.push({
       label: bulkSub,
-      palette: SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20",
+      palette: catPalette.tileClass(bulkSub),
       onClick: resetSub,
     });
   }
   if (pendingItem !== null) {
     const itemPalette =
       MAT_COLOR_PALETTE[pendingItem] ??
-      (bulkSub ? (SUB_PALETTE[bulkSub] ?? null) : null) ??
-      (topCat  ? (TOP_PALETTE[topCat]  ?? null) : null) ??
-      "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20";
+      (bulkSub ? catPalette.tileClass(bulkSub) : topCat ? catPalette.tileClass(topCat) : "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20");
     trailRaw.push({
       label: pendingItem,
       palette: itemPalette,
@@ -464,7 +454,7 @@ function HierarchyPicker({
                 onClick={() => setTopCat(cat)}
                 className={clsx(
                   "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
-                  TOP_PALETTE[cat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                  catPalette.tileClass(cat),
                 )}
               >
                 {cat}
@@ -478,7 +468,7 @@ function HierarchyPicker({
           <ItemGrid
             gridItems={flatItems}
             cat={topCat}
-            btnClass={TOP_PALETTE[topCat] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            btnClass={catPalette.tileClass(topCat)}
           />
         </div>
       ) : bulkSub === null ? (
@@ -492,7 +482,7 @@ function HierarchyPicker({
                 onClick={() => setBulkSub(sub)}
                 className={clsx(
                   "w-full rounded-2xl px-4 py-4 sm:px-7 sm:py-5 text-base sm:text-lg font-black text-white shadow-lg transition-all active:scale-95",
-                  SUB_PALETTE[sub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700",
+                  catPalette.tileClass(sub),
                 )}
               >
                 {sub}
@@ -506,7 +496,7 @@ function HierarchyPicker({
           <ItemGrid
             gridItems={subItemsFor(topCat, bulkSub)}
             cat={bulkSub}
-            btnClass={SUB_PALETTE[bulkSub] ?? "bg-gradient-to-b from-slate-600 to-slate-800 ring-1 ring-slate-400/20 hover:from-slate-500 hover:to-slate-700"}
+            btnClass={catPalette.tileClass(bulkSub)}
           />
         </div>
       )}

@@ -11,7 +11,6 @@ import clsx from "clsx";
 import {
   useBoard,
   useTrackedItems,
-  useTrackedItemCategories,
   useShortages,
   useShortageDates,
   useCreateShortage,
@@ -27,7 +26,7 @@ import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 import ItemFirstEntry from "../components/shorts/ItemFirstEntry";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
-import HierarchyPicker, { categoryChipClass, DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit } from "../components/shorts/HierarchyPicker";
+import HierarchyPicker, { DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit, useCategoryPalette } from "../components/shorts/HierarchyPicker";
 import type { TrackedItem } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
@@ -270,7 +269,7 @@ export function ShortageLogger({
     setQuickKey((k) => k + 1);
   }
   const { data: trackedRaw = [] } = useTrackedItems();
-  const { data: catMeta } = useTrackedItemCategories();
+  const palette = useCategoryPalette();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
 
   async function logItem(category: string, detail: string, qty: number) {
@@ -307,7 +306,7 @@ export function ShortageLogger({
                   onClick={() => handleQuickTap(item.category, item.detail)}
                   className={clsx(
                     "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
-                    categoryChipClass(item.category, catMeta),
+                    palette.chipClass(item.category),
                   )}
                 >
                   {item.category} {item.detail}
@@ -359,7 +358,7 @@ export function ShortageLogger({
                   onClick={() => handleQuickTap(item.category, item.detail)}
                   className={clsx(
                     "shrink-0 rounded-full px-4 py-2 text-sm font-semibold transition",
-                    categoryChipClass(item.category, catMeta),
+                    palette.chipClass(item.category),
                   )}
                 >
                   {item.category} {item.detail}

@@ -127,41 +127,9 @@ export interface ReportViewModel {
   audit?: AuditSectionVM | null;
 }
 
-/**
- * The colour each palette preset paints its category dot with — the -500 Tailwind
- * hue (stone uses -400), matching COLOR_PRESETS[*].dot in HierarchyPicker. Lets
- * the client resolve a category's palette preset to a concrete hex for the PDF.
- */
-export const PRESET_HEX: Record<string, string> = {
-  sky: "#0ea5e9",
-  violet: "#8b5cf6",
-  emerald: "#10b981",
-  orange: "#f97316",
-  rose: "#f43f5e",
-  cyan: "#06b6d4",
-  teal: "#14b8a6",
-  amber: "#f59e0b",
-  red: "#ef4444",
-  green: "#22c55e",
-  blue: "#3b82f6",
-  indigo: "#6366f1",
-  pink: "#ec4899",
-  fuchsia: "#d946ef",
-  lime: "#84cc16",
-  stone: "#a8a29e",
-};
-
-const DOT_FALLBACK = "#64748b"; // slate-500 (audit "General" fallback)
-
-/**
- * Resolve a Tailwind dot class ("bg-sky-500", "bg-stone-400", "bg-slate-500") —
- * as emitted by TOP_CAT_DOT / categoryDotClass — to a concrete hex for the PDF.
- */
-export function dotClassToHex(cls: string): string {
-  const m = /bg-([a-z]+)-\d{3}/.exec(cls);
-  if (!m) return DOT_FALLBACK;
-  return PRESET_HEX[m[1]] ?? DOT_FALLBACK;
-}
+// Category colours for the PDF now come from the canonical palette
+// (useCategoryPalette().hexOf, backed by PRESET_HEX in HierarchyPicker), so a
+// category matches the screen. This file no longer owns a hue table.
 
 /**
  * Render the report to a selectable PDF on the server and hand the file to the
