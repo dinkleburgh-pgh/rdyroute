@@ -1,6 +1,7 @@
 import axios, { AxiosError, AxiosRequestConfig } from "axios";
 import * as offlineQueue from "./offlineQueue";
 import { logDebug } from "../utils/debugLog";
+import { easternNow } from "../utils/dates";
 
 // All requests go through the Vite dev-server proxy at /api → http://127.0.0.1:8000
 export const api = axios.create({
@@ -161,7 +162,7 @@ api.interceptors.response.use(
 );
 
 export function todayIso(): string {
-  const now = new Date();
+  const now = easternNow(); // Eastern wall-clock, so the run date is the same on any device
   // Before 6am we're still in the previous calendar day's 3rd shift.
   const d = now.getHours() < 6
     ? new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)

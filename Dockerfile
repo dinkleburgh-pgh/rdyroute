@@ -24,8 +24,14 @@ RUN set -eux; \
     apt-get update; \
     apt-get install -y --no-install-recommends postgresql-client-18 \
         libpango-1.0-0 libpangocairo-1.0-0 libcairo2 \
-        libgdk-pixbuf-2.0-0 libffi8 fonts-dejavu-core; \
+        libgdk-pixbuf-2.0-0 libffi8 fonts-dejavu-core \
+        tzdata; \
     rm -rf /var/lib/apt/lists/*
+
+# Run the container in Eastern time by default so naive date.today()/datetime.now()
+# (audit cutoffs, export run-date defaults, backup stamps) reflect wall-clock
+# Eastern, not UTC. Overridable via the TIMEZONE env (applied at startup in main.py).
+ENV TZ=America/New_York
 
 # Install Python deps first for better layer caching. Install from the pinned
 # lock (not requirements.txt) so a rebuild of unchanged code can't silently

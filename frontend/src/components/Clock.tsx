@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { APP_TIMEZONE, easternNow } from "../utils/dates";
 
 export interface ShiftInfo {
   name: "1st" | "2nd" | "3rd";
@@ -6,7 +7,7 @@ export interface ShiftInfo {
   hours: string;
 }
 
-export function currentShift(d = new Date()): ShiftInfo {
+export function currentShift(d = easternNow()): ShiftInfo {
   const h = d.getHours();
   if (h >= 6 && h < 14) return { name: "1st", label: "1st Shift", hours: "6am – 2pm" };
   if (h >= 14 && h < 22) return { name: "2nd", label: "2nd Shift", hours: "2pm – 10pm" };
@@ -19,18 +20,18 @@ export default function Clock({ compact = false, className }: { compact?: boolea
     const id = setInterval(() => setNow(new Date()), 1000);
     return () => clearInterval(id);
   }, []);
-  const shift = currentShift(now);
+  const shift = currentShift(easternNow());
   if (compact) {
     return (
       <span className={className ?? "text-sm font-semibold tabular-nums text-blue-400"}>
-        {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+        {now.toLocaleTimeString("en-US", { timeZone: APP_TIMEZONE, hour: "numeric", minute: "2-digit" })}
       </span>
     );
   }
   return (
     <div className="space-y-0.5">
       <span className="text-2xl font-bold tabular-nums text-blue-400">
-        {now.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" })}
+        {now.toLocaleTimeString("en-US", { timeZone: APP_TIMEZONE, hour: "numeric", minute: "2-digit", second: "2-digit" })}
       </span>
       <p className="text-xs font-semibold text-slate-400">{shift.label} · {shift.hours}</p>
     </div>
@@ -52,7 +53,7 @@ export function todayLong(): string {
  * Friday — the weekend is one continuous run period that only rolls over at
  * 6am Monday (1st shift). Mirrors the run_date logic in todayIso().
  */
-export function shiftRunDate(d = new Date()): Date {
+export function shiftRunDate(d = easternNow()): Date {
   let r = d.getHours() < 6
     ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1)
     : new Date(d.getFullYear(), d.getMonth(), d.getDate());

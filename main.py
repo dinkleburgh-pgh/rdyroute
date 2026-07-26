@@ -12,6 +12,7 @@ Interactive API docs: http://localhost:8000/docs
 from contextlib import asynccontextmanager
 import asyncio
 import logging
+import os
 from pathlib import Path
 import time
 from collections import defaultdict
@@ -21,6 +22,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 
 from database import Base, SessionLocal, engine, settings
+
+# Run the whole process in the configured timezone (America/New_York by default,
+# via the TIMEZONE env → settings.timezone) BEFORE anything computes a date, so
+# naive date.today()/datetime.now() — audit cutoffs, export run-date defaults,
+# backup stamps — reflect Eastern wall-clock instead of the container's UTC.
+# Requires tzdata in the image (see Dockerfile). tzset() is Unix-only, so it's
+# a no-op on a Windows dev box (which follows its own OS clock).
+os.environ["TZ"] = settings.timezone
+if hasattr(time, "tzset"):
+    time.tzset()
 from routers import activity, audit, auth, batches, communications, debug, exports, fleet, load_durations, notes as notes_router, notices, notifications, reports, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, ws as ws_router
 from seed import run_startup_seed
 from backups import backup_loop
