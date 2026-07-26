@@ -341,14 +341,14 @@ export default function LiveReport() {
     }
     return [...m.values()]
       .sort((a, b) => b.total - a.total || b.items.size - a.items.size)
-      .slice(0, 3)
+      .slice(0, 5)
       .map((t) => ({
         truck: t.truck,
         total: t.total,
         items: [...t.items.entries()]
           .map(([label, qty]) => ({ label, qty }))
           .sort((a, b) => b.qty - a.qty)
-          .slice(0, 3),
+          .slice(0, 5),
       }));
   }, [shorts]);
 
@@ -760,7 +760,7 @@ export default function LiveReport() {
               <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
                 Top shorted trucks
               </p>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
                 {topTrucks.map((t, i) => (
                   <div key={t.truck} className="rounded-xl border border-hairline bg-surface p-3">
                     <div className="flex items-baseline justify-between gap-2 border-b border-hairline pb-1.5">
