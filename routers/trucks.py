@@ -363,6 +363,22 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
 # Dashboard — full board for a run-date
 # ---------------------------------------------------------------------------
 
+@router.get("/prev-operating-day")
+def get_prev_operating_day(
+    run_date: date = Query(..., description="Operational run-date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """The previous OPERATING run date — the most recent run_date with any truck
+    state before *run_date* (the exact signal day-init seeds 'dirty' from). Lets
+    the client resolve previous-day coverage across mid-week plant closures that
+    a plain weekday-step would skip, keeping the unload count/banner correct."""
+    prev = db.scalar(
+        select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
+    )
+    return {"prev_run_date": prev.isoformat() if prev is not None else None}
+
+
 @router.get("/board", response_model=list[TruckWithState])
 def get_board(
     run_date: date = Query(..., description="Operational run-date (YYYY-MM-DD)"),

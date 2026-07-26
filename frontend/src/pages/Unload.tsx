@@ -1,16 +1,17 @@
 import { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import {
   buildOperationalDayContext,
   buildPrevDayCoverage,
+  carrierCountsAsUnloaded,
   countLoaded,
   countUnloadedFromContext,
   getCoverageRouteNumber,
   getOperationalTruckType,
-  previousRunDate,
+  resolvePrevRunDate,
 } from "../utils/truckStatus";
 import CoverageTag from "../components/CoverageTag";
 import OverbatchedChip from "../components/OverbatchedChip";
@@ -53,9 +54,22 @@ export default function Unload() {
   // Previous-day coverage: the loads being unloaded today were covered on the
   // prior run day. Resolve who covered which route from the route-swap log so
   // returning trucks are unloaded as the right route. Shared with Day Overview.
-  const prevRunDate = useMemo(() => previousRunDate(runDate), [runDate]);
+  const { data: prevOp } = usePrevOperatingDay(runDate);
+  const prevRunDate = useMemo(() => resolvePrevRunDate(runDate, prevOp), [runDate, prevOp]);
   const { data: prevSwapLog = [] } = useRouteSwapLog(14);
   const prevCoverage = useMemo(() => buildPrevDayCoverage(prevSwapLog, prevRunDate), [prevSwapLog, prevRunDate]);
+  // route → the truck that carried it on the previous load day. Defined here (up
+  // from the progress-bar block) so the dirty/unloaded memos can sync a covered
+  // route's card to its carrier's unload (decision: two synced cards).
+  const prevDayCarriers = usePrevDayCarriers(runDate, data ?? []);
+  // A covered route's freight rode on its carrier — once the carrier is unloaded
+  // the route IS unloaded, so its card flips to done in lock-step with the count
+  // (same predicate the count uses). Two-way routes have no carrier (excluded),
+  // so they never sync — each unloads itself.
+  const carrierDone = (t: TruckWithState): boolean => {
+    const c = prevDayCarriers.get(t.truck_number);
+    return !!c && c.truck_number !== t.truck_number && carrierCountsAsUnloaded(c);
+  };
   // Route this truck carried on the PREVIOUS load day (what it's unloaded as),
   // or null. This — not today's assignment — is the coverage the unload
   // workflow cares about.
@@ -160,10 +174,12 @@ export default function Unload() {
     () =>
       allTrucks.filter((t) => {
         if (recentlyUnloaded.has(t.truck_number)) return true;
+        if (carrierDone(t)) return false; // covered route: its carrier's unload IS its unload
         const s = t.state?.status;
         return s !== "unloaded" && s !== "loaded" && s !== "unfinished";
       }),
-    [allTrucks, recentlyUnloaded],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allTrucks, recentlyUnloaded, prevDayCarriers],
   );
   const dirtyRoute = useMemo(
     () => dirty.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && !isSplitHelper(t) && t.state?.priority_hold !== true),
@@ -192,12 +208,14 @@ export default function Unload() {
   const unloaded = useMemo(
     () =>
       allTrucks.filter((t) => {
+        if (carrierDone(t)) return true; // covered route: shown Unloaded once its carrier is
         const s = t.state?.status;
         if (!(s === "unloaded" || s === "in_progress" || s === "loaded")) return false;
         if (s === "unloaded" && t.state?.state_source === "auto" && t.state?.unloaded_at == null) return false;
         return true;
       }),
-    [allTrucks],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [allTrucks, prevDayCarriers],
   );
   const unloadedSorted = useMemo(() => {
     const arr = [...unloaded];
@@ -242,7 +260,6 @@ export default function Unload() {
   const totalLeftTrucks = useMemo(() => [...stillDirty].sort((a, b) => a.truck_number - b.truck_number), [stillDirty]);
 
   // ── Progress bars — schedule-based, matching the sidebar/Report/Day Overview
-  const prevDayCarriers = usePrevDayCarriers(runDate, data ?? []);
   const unloadTotal = unloadCtx.activeTrucks.length;
   const unloadDone = useMemo(() => countUnloadedFromContext(unloadCtx, prevDayCarriers), [unloadCtx, prevDayCarriers]);
   const unloadPct = unloadTotal > 0 ? Math.round((unloadDone / unloadTotal) * 100) : 0;

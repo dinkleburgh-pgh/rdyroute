@@ -107,6 +107,20 @@ export function isPureUnloadSeed(t: TruckWithState): boolean {
 }
 
 /**
+ * Does a previous-day CARRIER count as having unloaded its covered route's
+ * freight? The covered route rode on the carrier, so the carrier's unload IS
+ * the route's unload. Shared by the count ({@link unloadedTruckNumbersFromContext})
+ * and the Unload page's synced-card display so the two can never disagree.
+ */
+export function carrierCountsAsUnloaded(carrier: TruckWithState): boolean {
+  if (isPureUnloadSeed(carrier)) return false;
+  const raw = (carrier.state?.status ?? "dirty") as TruckStatus;
+  // in_progress also counts: the carrier was unloaded earlier and has already
+  // moved on to loading tonight.
+  return raw === "unloaded" || raw === "in_progress" || raw === "loaded";
+}
+
+/**
  * Count of unloaded trucks from an already-built unload OperationalDayContext.
  * A truck counts as unloaded when its raw status is "unloaded" or "loaded"
  * (loaded means it unloaded previously and already moved to load workflow) —
@@ -133,11 +147,7 @@ export function unloadedTruckNumbersFromContext(
     if (isDone(t)) return true;
     const carrier = carrierByRoute?.get(t.truck_number);
     if (!carrier || carrier.truck_number === t.truck_number) return false;
-    if (isPureUnloadSeed(carrier)) return false;
-    const raw = (carrier.state?.status ?? "dirty") as TruckStatus;
-    // in_progress also counts: the carrier was unloaded earlier and has
-    // already moved on to loading tonight.
-    return raw === "unloaded" || raw === "in_progress" || raw === "loaded";
+    return carrierCountsAsUnloaded(carrier);
   }).map((t) => t.truck_number);
 }
 
@@ -274,6 +284,17 @@ export function previousRunDate(iso: string): string {
 }
 
 /**
+ * The previous OPERATING run date. `previousRunDate` only skips weekends, so a
+ * mid-week plant closure (e.g. Wed load, Thu closed, Fri today) resolves to an
+ * empty Thu and previous-day coverage silently vanishes. The backend seeds the
+ * new day from the ACTUAL last operating day (max run_date < today); pass that
+ * value as `backendPrev` (from usePrevOperatingDay) to keep front/back in sync.
+ */
+export function resolvePrevRunDate(runDate: string, backendPrev?: string | null): string {
+  return backendPrev ?? previousRunDate(runDate);
+}
+
+/**
  * The next OPERATING day (weekends skipped), never past `maxIso` (today by
  * default) — stepping forward through a report shouldn't land on a Saturday
  * with no run, or on a future date with no data.
@@ -306,6 +327,10 @@ export interface PrevDayCoverage {
   /** Trucks that carried a route's split OVERFLOW on the prev day — they ran
    *  and must be unloaded as extra slots today. */
   splitHelpers: Map<number, number>;
+  /** Routes that are one half of a TWO-WAY swap (reciprocal rows R1→R2 & R2→R1).
+   *  Both trucks physically ran, so neither is a carrier for the other — each
+   *  unloads itself. Used to exclude two-way pairs from carrier-credit. */
+  twoWayRoutes: Set<number>;
 }
 
 /**
@@ -329,12 +354,17 @@ export function buildPrevDayCoverage(
   const coverage = onPrevDay.filter((e) => !e.is_split);
   const splits = onPrevDay.filter((e) => e.is_split);
   if (onPrevDay.length === 0) {
-    return { date: null, items: [], byRoute: new Map(), byCover: new Map(), splitHelpers: new Map() };
+    return { date: null, items: [], byRoute: new Map(), byCover: new Map(), splitHelpers: new Map(), twoWayRoutes: new Set() };
   }
   const byRoute = new Map<number, number>();
   // Newest-first log order → first entry seen per route is the most recent.
   for (const e of coverage) {
     if (!byRoute.has(e.route_truck)) byRoute.set(e.route_truck, e.load_on_truck);
+  }
+  // Two-way = reciprocal rows: route R covered by C, and C also covered by R.
+  const twoWayRoutes = new Set<number>();
+  for (const [route, loadOn] of byRoute) {
+    if (byRoute.get(loadOn) === route) twoWayRoutes.add(route);
   }
   // Split rows are NOT coverage — the route ran itself; the helper carried
   // its overflow and needs its own unload slot. Display + extra-slot only.
@@ -348,7 +378,7 @@ export function buildPrevDayCoverage(
   ].sort((a, b) => a.route - b.route);
   const byCover = new Map<number, number>();
   for (const [route, loadOn] of byRoute) byCover.set(loadOn, route);
-  return { date: prevRunDate, items, byRoute, byCover, splitHelpers };
+  return { date: prevRunDate, items, byRoute, byCover, splitHelpers, twoWayRoutes };
 }
 
 export function effectiveOperationalStatus(

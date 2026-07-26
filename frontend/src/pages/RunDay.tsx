@@ -15,6 +15,7 @@ import {
   useOpenSpareAssignments,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
+  usePrevOperatingDay,
   useRouteSwapLog,
   useSettings,
 } from "../api/hooks";
@@ -33,6 +34,7 @@ import {
   getCoverageRouteNumber,
   isScheduledOff,
   previousWorkday,
+  resolvePrevRunDate,
   takenOverRouteNumber,
 } from "../utils/truckStatus";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
@@ -342,18 +344,11 @@ export default function RunDay() {
     return [...covers, ...splits].sort((a, b) => a.routeNum - b.routeNum);
   }, [board, liveCoveringTruckMap, loadDay, holidayLoad]);
 
-  // The previous OPERATING day, stepping over the weekend — Monday's unload is
-  // Friday's load, so the prior run day is the most recent weekday before today.
-  const prevRunDate = useMemo(() => {
-    const d = new Date(`${runDate}T12:00:00`);
-    do {
-      d.setDate(d.getDate() - 1);
-    } while (d.getDay() === 0 || d.getDay() === 6); // skip Sun(0)/Sat(6)
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}`;
-  }, [runDate]);
+  // The previous OPERATING run date — from the server (max run_date < today) so
+  // a mid-week plant closure doesn't blank out coverage; falls back to the
+  // weekday step. Monday's unload is Friday's load.
+  const { data: prevOp } = usePrevOperatingDay(runDate);
+  const prevRunDate = useMemo(() => resolvePrevRunDate(runDate, prevOp), [runDate, prevOp]);
 
   // Previous load-day coverage (shown with the Unload section as a reminder):
   // the trucks being unloaded today were loaded on the prior run day, so surface

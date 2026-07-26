@@ -4,7 +4,7 @@ import type { AxiosProgressEvent } from "axios";
 import { api, todayIso } from "./client";
 import * as offlineQueue from "./offlineQueue";
 import { logDebug } from "../utils/debugLog";
-import { buildPrevDayCoverage, previousRunDate } from "../utils/truckStatus";
+import { buildPrevDayCoverage, resolvePrevRunDate } from "../utils/truckStatus";
 import type {
   AppSetting,
   ActivityEventPage,
@@ -495,19 +495,23 @@ export function useRouteSwapLog(days = 30) {
  */
 export function usePrevDayCarriers(runDate: string, board: TruckWithState[]): Map<number, TruckWithState> {
   const { data: swapLog = [] } = useRouteSwapLog(14);
+  const { data: prevOp } = usePrevOperatingDay(runDate);
   return useMemo(() => {
-    const prev = buildPrevDayCoverage(swapLog, previousRunDate(runDate));
+    const prev = buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp));
     const byNum = new Map(board.map((t) => [t.truck_number, t]));
     const m = new Map<number, TruckWithState>();
     for (const c of prev.items) {
       // Split entries are NOT coverage: the route ran itself, so the helper's
       // unload never substitutes for the route's own.
       if (c.isSplit) continue;
+      // Two-way swap: both trucks physically ran, so neither carries the other —
+      // each unloads itself. Without this, unloading one credited both.
+      if (prev.twoWayRoutes.has(c.route)) continue;
       const carrier = byNum.get(c.loadOn);
       if (carrier) m.set(c.route, carrier);
     }
     return m;
-  }, [swapLog, runDate, board]);
+  }, [swapLog, runDate, board, prevOp]);
 }
 
 /**
@@ -518,10 +522,31 @@ export function usePrevDayCarriers(runDate: string, board: TruckWithState[]): Ma
  */
 export function usePrevDaySplitHelpers(runDate: string): Set<number> {
   const { data: swapLog = [] } = useRouteSwapLog(14);
+  const { data: prevOp } = usePrevOperatingDay(runDate);
   return useMemo(() => {
-    const prev = buildPrevDayCoverage(swapLog, previousRunDate(runDate));
+    const prev = buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp));
     return new Set(prev.splitHelpers.keys());
-  }, [swapLog, runDate]);
+  }, [swapLog, runDate, prevOp]);
+}
+
+/**
+ * The previous OPERATING run date from the server = max(run_date) with any
+ * truck state before today — the exact signal day-init seeds from. Bridges
+ * mid-week plant closures that a plain weekday-step (previousRunDate) skips, so
+ * previous-day coverage doesn't silently vanish. 404/none → null → callers fall
+ * back to the weekday step via resolvePrevRunDate.
+ */
+export function usePrevOperatingDay(runDate: string) {
+  return useQuery({
+    queryKey: ["prev-operating-day", runDate],
+    queryFn: async () =>
+      (
+        await api.get<{ prev_run_date: string | null }>("/trucks/prev-operating-day", {
+          params: { run_date: runDate },
+        })
+      ).data.prev_run_date,
+    staleTime: 60_000,
+  });
 }
 
 export function useActivityEvents(filters?: {
