@@ -376,10 +376,10 @@ def render_report_html(vm: ReportViewModel) -> str:
         bits.append("Generated " + gen.strftime("%b %d, %Y %I:%M %p"))
     body = "".join(
         [
+            _shortages_html(vm.shortages),
             _batches_html(vm.batches),
             _coverage_html(vm.coverage),
             _load_times_html(vm.load_times),
-            _shortages_html(vm.shortages),
             _audit_html(vm.audit),
         ]
     )

@@ -544,10 +544,10 @@ export default function LiveReport() {
 
   // Which sections have content today (drives the picker's muted hints).
   const sectionDefs: { key: SectionKey; label: string; hint?: string }[] = [
+    { key: "shortages", label: "Shortages", hint: shorts.length ? undefined : "empty" },
     { key: "batches", label: "Batches", hint: batchingDisabled ? "off" : batches.length ? undefined : "empty" },
     { key: "coverage", label: "Routes covered", hint: coverageRows.length ? undefined : "empty" },
     { key: "loadTimes", label: "Load times", hint: finished.length ? undefined : "empty" },
-    { key: "shortages", label: "Shortages", hint: shorts.length ? undefined : "empty" },
     { key: "audit", label: "Audit", hint: auditByTruck.length ? undefined : "empty" },
   ];
   const anySelected = Object.values(selected).some(Boolean);
@@ -708,6 +708,36 @@ export default function LiveReport() {
           paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
         }}
       >
+        {/* ===================== LOAD · SHORTAGES (shown first) ===================== */}
+        <Section eyebrow="Load" title="Shortages" downloadName={`Shortages ${runDate}`}>
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
+            <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
+            <Kpi label="Distinct items" value={distinctItems} />
+            <Kpi label="Trucks shorted" value={shortsByTruck.length} />
+            <Kpi
+              label="Most shorted item"
+              value={topItem ? topItem.label : "—"}
+              sub={topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : undefined}
+              tone="text-amber-300"
+            />
+            <Kpi
+              label="Most shorted truck"
+              value={topTruck ? `#${topTruck.truck}` : "—"}
+              sub={topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : undefined}
+              tone="text-amber-300"
+            />
+          </div>
+          {shorts.length === 0 ? (
+            <Empty>No shortages logged for this day.</Empty>
+          ) : (
+            /* The full short sheet — same Grid / Sheet views as the Short Sheet
+               page, so the report shows the crew's actual sheet. */
+            <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
+              <ShortageSheetView shorts={shorts} board={board} />
+            </div>
+          )}
+        </Section>
+
         {/* ===================== UNLOAD ===================== */}
         <Section eyebrow="Unload" title="Batches" downloadName={`Batches ${runDate}`}>
           {batchingDisabled ? (
@@ -798,36 +828,6 @@ export default function LiveReport() {
                   </div>
                 );
               })}
-            </div>
-          )}
-        </Section>
-
-        {/* ===================== LOAD · SHORTAGES ===================== */}
-        <Section eyebrow="Load" title="Shortages" downloadName={`Shortages ${runDate}`}>
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
-            <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
-            <Kpi label="Distinct items" value={distinctItems} />
-            <Kpi label="Trucks shorted" value={shortsByTruck.length} />
-            <Kpi
-              label="Most shorted item"
-              value={topItem ? topItem.label : "—"}
-              sub={topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : undefined}
-              tone="text-amber-300"
-            />
-            <Kpi
-              label="Most shorted truck"
-              value={topTruck ? `#${topTruck.truck}` : "—"}
-              sub={topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : undefined}
-              tone="text-amber-300"
-            />
-          </div>
-          {shorts.length === 0 ? (
-            <Empty>No shortages logged for this day.</Empty>
-          ) : (
-            /* The full short sheet — same Grid / Sheet views as the Short Sheet
-               page, so the report shows the crew's actual sheet. */
-            <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
-              <ShortageSheetView shorts={shorts} board={board} />
             </div>
           )}
         </Section>
