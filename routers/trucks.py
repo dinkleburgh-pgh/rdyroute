@@ -1063,13 +1063,16 @@ def truck_completion_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-    """Per-day completion: trucks that got loaded ÷ the trucks that actually had
-    load work that day (the operational roster). The roster excludes off/oos/shop,
-    idle (non-covering) Spares, AND route trucks scheduled off that day — mirroring
-    the live sidebar's roster (buildOperationalDayContext) instead of the whole
-    fleet. Any truck that DID get loaded is always counted (so pct <= 100). 'Got
-    loaded' uses the persisted load_finish_time (survives the later status change)
-    OR a manual/bulk 'loaded' status, so past days and untimed manual loads count.
+    """Per-day completion: of the trucks that actually had load work that day (the
+    operational roster), how many got loaded. The roster excludes off/oos/shop,
+    idle (non-covering) Spares, AND route trucks scheduled off that day — matching
+    the live sidebar's roster (buildOperationalDayContext / countLoaded) exactly,
+    rather than the whole fleet. A truck outside the roster (scheduled-off, idle
+    spare, off/oos) is excluded from BOTH sides even if it happens to be loaded, so
+    the numerator is always a subset of the denominator (pct <= 100) and the count
+    matches the sidebar's "Load X/Y". 'Got loaded' uses the persisted
+    load_finish_time (survives the later status change) OR a manual/bulk 'loaded'
+    status, so past days and untimed manual loads still count.
 
     Aggregated in Python because the scheduled-off test reads each truck's
     scheduled_off_days JSON list against its stored load_day_num for the day."""
@@ -1101,8 +1104,9 @@ def truck_completion_trend(
             and load_day_num in off_days
         )
         running = status not in RUNNING_STATUS_EXCLUDE
-        in_roster = (running and not idle_spare and not scheduled_off) or loaded
-        if in_roster:
+        # Strict roster: a truck outside it (scheduled-off, idle spare, off/oos) is
+        # excluded from BOTH sides even if loaded, matching the sidebar's roster.
+        if running and not idle_spare and not scheduled_off:
             agg[run_date][0] += 1
             if loaded:
                 agg[run_date][1] += 1
