@@ -16,6 +16,7 @@ Business logic preserved from V1:
 """
 
 import time
+from collections import defaultdict
 from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
@@ -32,6 +33,7 @@ from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import (
     MAX_LOAD_SECONDS,
     MIN_LOAD_SECONDS,
+    RUNNING_STATUS_EXCLUDE,
     completed_load_filter,
     loaded_load_filter,
     operational_running_filter,
@@ -1061,34 +1063,57 @@ def truck_completion_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-    """Per-day completion: trucks that got loaded (a persisted load_finish_time
-    OR a manual/bulk 'loaded' status) ÷ trucks that had load/unload work that day
-    (the operational roster — excludes off/oos/shop AND idle non-covering spares,
-    which are seeded 'unloaded' and would otherwise depress the rate). Uses
-    load_finish_time so a past day still counts (the transient status=='loaded' is
-    shed by end of shift), plus the 'loaded' status so manual loads that were never
-    timed still count."""
+    """Per-day completion: trucks that got loaded ÷ the trucks that actually had
+    load work that day (the operational roster). The roster excludes off/oos/shop,
+    idle (non-covering) Spares, AND route trucks scheduled off that day — mirroring
+    the live sidebar's roster (buildOperationalDayContext) instead of the whole
+    fleet. Any truck that DID get loaded is always counted (so pct <= 100). 'Got
+    loaded' uses the persisted load_finish_time (survives the later status change)
+    OR a manual/bulk 'loaded' status, so past days and untimed manual loads count.
+
+    Aggregated in Python because the scheduled-off test reads each truck's
+    scheduled_off_days JSON list against its stored load_day_num for the day."""
     start, end = window_bounds(days_back)
-    ran = operational_running_filter() | loaded_load_filter()  # had work OR got loaded
     rows = db.execute(
         select(
             TruckState.run_date,
-            func.sum(case((ran, 1), else_=0)).label("total"),
-            func.sum(case((loaded_load_filter(), 1), else_=0)).label("loaded"),
+            TruckState.status,
+            TruckState.load_finish_time,
+            TruckState.load_day_num,
+            TruckState.oos_spare_route,
+            Truck.truck_type,
+            Truck.scheduled_off_days,
         )
         .join(Truck, Truck.truck_number == TruckState.truck_number)
         .where(TruckState.run_date >= start, TruckState.run_date <= end)
-        .group_by(TruckState.run_date)
-        .order_by(TruckState.run_date)
     ).all()
+
+    # run_date -> [roster_total, loaded]
+    agg: dict[date, list[int]] = defaultdict(lambda: [0, 0])
+    for run_date, status, load_finish_time, load_day_num, oos_spare_route, truck_type, off_days in rows:
+        loaded = (load_finish_time is not None) or (status == "loaded")
+        is_spare = str(getattr(truck_type, "value", truck_type)) == "Spare"
+        idle_spare = is_spare and oos_spare_route is None
+        scheduled_off = (
+            not is_spare
+            and bool(off_days)
+            and load_day_num is not None
+            and load_day_num in off_days
+        )
+        running = status not in RUNNING_STATUS_EXCLUDE
+        in_roster = (running and not idle_spare and not scheduled_off) or loaded
+        if in_roster:
+            agg[run_date][0] += 1
+            if loaded:
+                agg[run_date][1] += 1
     return [
         CompletionDailyPoint(
-            run_date=r[0],
-            total_trucks=r[1] or 0,
-            loaded_trucks=r[2] or 0,
-            pct=round((r[2] or 0) / r[1] * 100, 1) if r[1] else 0,
+            run_date=d,
+            total_trucks=t,
+            loaded_trucks=l,
+            pct=round(l / t * 100, 1) if t else 0,
         )
-        for r in rows
+        for d, (t, l) in sorted(agg.items())
     ]
 
 
