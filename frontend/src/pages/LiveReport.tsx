@@ -21,9 +21,9 @@ import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { categoryDotClass, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
-import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
-import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
+import { categoryDotClass } from "../components/shorts/HierarchyPicker";
+import { downloadReportPdf } from "../lib/reportPdf";
+import { captureNodeToPngBase64 } from "../lib/captureImage";
 import { FileDown } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
@@ -109,7 +109,9 @@ function Section({
 }) {
   const captureRef = useRef<HTMLElement>(null);
   return (
-    <section ref={captureRef} className="space-y-3">
+    // data-report-capture marks this section so the page-level "PDF" button can
+    // snapshot every section in order and wrap them into one landscape PDF.
+    <section ref={captureRef} data-report-capture={title} className="space-y-3">
       <div>
         <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</p>
         <h2 className="text-lg font-bold text-ink">{title}</h2>
@@ -348,75 +350,29 @@ export default function LiveReport() {
   }, [auditEntries, itemByLabel]);
 
   // ---- PDF export ----
-  // Assemble the exact numbers/rows the page shows into the server's view-model
-  // (server renders them to a PDF, so the file matches the screen). KPI value/
-  // sub strings use the SAME expressions as the on-screen JSX below.
+  // Snapshot every report section (the same styled html-to-image capture the
+  // per-section "Download image" uses) and POST the images; the server wraps
+  // them one-per-landscape-page into a single PDF. Capturing the real UI is what
+  // makes the PDF match the screen — colour, progress bars, chips and all.
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfErr, setPdfErr] = useState(false);
-
-  function buildViewModel(): ReportViewModel {
-    const items = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
-    const m = buildShortageMatrix(shorts, items);
-    const matrix =
-      shorts.length > 0
-        ? {
-            trucks: m.trucks,
-            rows: m.rows.map((r) => ({
-              group: r.group,
-              category: r.category,
-              detail: r.detail,
-              label: r.label,
-              unit: r.unit,
-              cells: m.trucks.map((n) => r.byTruck.get(n) ?? null),
-              total: r.total,
-            })),
-            truck_totals: m.trucks.map((n) => m.truckTotals.get(n) ?? 0),
-            grand_total: m.grandTotal,
-          }
-        : null;
-    return {
-      run_date: runDate,
-      generated_at: new Date().toISOString(),
-      load_day: loadDay,
-      unload_day: unloadsDay,
-      title: "Run Report",
-      batches: {
-        disabled: batchingDisabled,
-        kpis: batchingDisabled
-          ? []
-          : [
-              { label: "Trucks batched", value: String(trucksBatched) },
-              { label: "Total wearers", value: totalWearers.toLocaleString(), sub: `cap ${noCap ? "∞" : cap.toLocaleString()}/batch` },
-              { label: "Batches used", value: `${batchesUsed} / 6` },
-              { label: "Unloaded", value: `${unloadedCount} / ${unloadRosterSize}`, sub: "trucks this shift" },
-            ],
-        cap,
-        no_cap: noCap,
-        cards: batches.map((b) => ({
-          batch_number: b.batch_number,
-          total_wearers: b.total_wearers,
-          trucks: b.trucks.map((t) => ({ truck_number: t.truck_number, wearers: t.wearers })),
-        })),
-      },
-      shortages: {
-        kpis: [
-          { label: "Qty short", value: String(totalPieces), sub: "total units" },
-          { label: "Distinct items", value: String(distinctItems) },
-          { label: "Trucks shorted", value: String(shortsByTruck.length) },
-          { label: "Most shorted item", value: topItem ? topItem.label : "—", sub: topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : null },
-          { label: "Most shorted truck", value: topTruck ? `#${topTruck.truck}` : "—", sub: topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : null },
-        ],
-        matrix,
-      },
-    };
-  }
 
   async function handleDownloadPdf() {
     if (pdfBusy) return;
     setPdfBusy(true);
     setPdfErr(false);
     try {
-      await downloadReportPdf(buildViewModel());
+      const nodes = Array.from(document.querySelectorAll<HTMLElement>("[data-report-capture]"));
+      if (nodes.length === 0) throw new Error("no report sections to capture");
+      const images: string[] = [];
+      for (const node of nodes) images.push(await captureNodeToPngBase64(node));
+      const generated = format(new Date(), "MMM d, yyyy · h:mm a");
+      await downloadReportPdf({
+        run_date: runDate,
+        title: "Run Report",
+        subtitle: `${formatRunDate(runDate)} · Load Day ${loadDay} · Unload Day ${unloadsDay} · Generated ${generated}`,
+        images,
+      });
     } catch (e) {
       console.error("report pdf failed", e);
       setPdfErr(true);

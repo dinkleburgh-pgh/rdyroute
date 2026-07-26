@@ -4,29 +4,29 @@ Router: /reports
 Server-side rendering of the run report to a downloadable PDF.
 
 The report is composed entirely in the browser (LiveReport.tsx) with a lot of
-business logic, so rather than re-derive it in Python, the client POSTs its
-already-computed view-model (the exact numbers/rows it shows) and this endpoint
-turns that into a landscape PDF via WeasyPrint. Read-only, and guest-readable
-(the /report page is public) — it renders only values the caller can already
-see. Every interpolated value is HTML-escaped, and WeasyPrint's resource
-fetcher is disabled, so a crafted string can't inject markup or fetch a
-resource.
+business logic and heavy styling (colour, progress bars, chips). Rather than
+re-derive and re-style it in Python — which never matched the screen — the
+client captures each report section as a PNG (the same html-to-image capture
+the "Download image" button uses) and POSTs the images here. This endpoint wraps
+them, one per landscape page, into a single PDF via WeasyPrint. So the PDF *is*
+the on-screen report.
+
+Read-only and guest-readable (the /report page is public). Each image is decoded
+and verified to be a real PNG before it goes anywhere near the HTML, so a crafted
+string can't inject markup, and WeasyPrint's resource fetcher is disabled so it
+can't fetch a network/file resource.
 """
 
+import base64
 import html
 import time
 from collections import defaultdict, deque
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
-from database import get_db  # noqa: F401  (kept for parity/future use)
 from models import User
 from routers.auth import get_current_user
-from schemas import (
-    BatchesSectionVM,
-    ReportViewModel,
-    ShortagesSectionVM,
-)
+from schemas import ReportImagesRequest
 
 router = APIRouter(prefix="/reports", tags=["reports"])
 
@@ -62,31 +62,57 @@ def _rate_limit(request: Request) -> None:
     dq.append(now)
 
 
+_PNG_MAGIC = b"\x89PNG\r\n\x1a\n"
+
+
+def _clean_png_b64(raw: str) -> str:
+    """Validate one client image and return safe-to-inline base64.
+
+    Strips an optional `data:` prefix, requires the remainder to be strict
+    base64 (validate=True rejects anything outside the base64 alphabet — so no
+    quotes/brackets can survive into the data URI), and requires the decoded
+    bytes to start with the PNG signature. Returns the cleaned base64 string.
+    """
+    s = raw.split(",", 1)[-1].strip() if raw.startswith("data:") else raw.strip()
+    try:
+        decoded = base64.b64decode(s, validate=True)
+    except Exception:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "invalid image encoding")
+    if decoded[:8] != _PNG_MAGIC:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "each image must be a PNG")
+    return s
+
+
 # ---------------------------------------------------------------------------
 # Endpoint
 # ---------------------------------------------------------------------------
 
 @router.post("/pdf")
 def report_pdf(
-    vm: ReportViewModel,
+    req: ReportImagesRequest,
     request: Request,
     current_user: User = Depends(get_current_user),  # any valid session incl. guest
 ) -> Response:
     _rate_limit(request)
+
+    images = [_clean_png_b64(img) for img in req.images]
 
     # Import WeasyPrint lazily so the rest of the app (and tests) don't require
     # its native libs just to import this router.
     from weasyprint import HTML, default_url_fetcher
 
     def _no_network_fetcher(url: str, *args, **kwargs):
-        # The template references no external assets; allow only inline data:
-        # URIs and refuse network/file access outright.
+        # The template references no external assets — only inline data: URIs
+        # (the report images). Refuse network/file access outright.
         if url.startswith("data:"):
             return default_url_fetcher(url, *args, **kwargs)
         raise ValueError(f"external resource blocked: {url[:64]}")
 
-    pdf_bytes = HTML(string=render_report_html(vm), url_fetcher=_no_network_fetcher).write_pdf()
-    filename = f"ReadyRoute-Report-{vm.run_date.isoformat()}.pdf"
+    pdf_bytes = HTML(
+        string=render_report_html(req.title, req.subtitle, images),
+        url_fetcher=_no_network_fetcher,
+    ).write_pdf()
+    filename = f"ReadyRoute-Report-{req.run_date.isoformat()}.pdf"
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
@@ -95,128 +121,39 @@ def report_pdf(
 
 
 # ---------------------------------------------------------------------------
-# HTML template (plain Python — no jinja2 in this codebase). WeasyPrint uses its
-# own CSS engine, so styling is self-contained; a light theme prints cleanly.
+# HTML template (plain Python — no jinja2 in this codebase). Each section image
+# fills its own landscape page; a slim title band sits atop the first page.
 # ---------------------------------------------------------------------------
 
 _e = html.escape
 
-
-def _css() -> str:
-    return """
-    @page { size: A4 landscape; margin: 12mm; }
-    * { box-sizing: border-box; }
-    body { font-family: "DejaVu Sans", sans-serif; font-size: 10px; color: #111; }
-    h1 { font-size: 18px; margin: 0 0 2px; }
-    .sub { color: #555; font-size: 11px; margin: 0 0 14px; }
-    h2 { font-size: 13px; margin: 18px 0 6px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
-    .kpis { display: flex; flex-wrap: wrap; gap: 8px; margin: 6px 0 10px; }
-    .kpi { border: 1px solid #ddd; border-radius: 6px; padding: 6px 10px; min-width: 130px; }
-    .kpi .label { font-size: 8px; text-transform: uppercase; letter-spacing: .08em; color: #777; }
-    .kpi .value { font-size: 16px; font-weight: 700; }
-    .kpi .sub { font-size: 9px; color: #666; }
-    table { border-collapse: collapse; width: 100%; }
-    th, td { border: 1px solid #ddd; padding: 2px 4px; text-align: center; font-variant-numeric: tabular-nums; }
-    th.item, td.item { text-align: left; white-space: nowrap; }
-    thead { display: table-header-group; }
-    tr.group td { background: #eee; font-weight: 700; text-align: left; text-transform: uppercase; letter-spacing: .1em; font-size: 8px; }
-    td.tot, th.tot, tr.trucktot td { font-weight: 700; background: #fafafa; }
-    .empty { color: #888; font-style: italic; padding: 6px 0; }
-    .batches { display: flex; flex-wrap: wrap; gap: 8px; }
-    .batch { border: 1px solid #ddd; border-radius: 6px; padding: 6px 8px; min-width: 150px; }
-    .batch .bh { font-weight: 700; display: flex; justify-content: space-between; gap: 8px; }
-    .batch .chips { margin-top: 3px; font-size: 9px; color: #333; line-height: 1.4; }
-    """
+_CSS = """
+@page { size: A4 landscape; margin: 8mm; }
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+body { font-family: "DejaVu Sans", sans-serif; background: #ffffff; }
+.head { margin: 0 0 4mm; }
+.head h1 { font-size: 15px; margin: 0; color: #0b1220; }
+.head .sub { font-size: 10px; color: #556; margin: 1px 0 0; }
+.pg { page-break-after: always; text-align: center; }
+.pg:last-child { page-break-after: auto; }
+/* Fit each capture within one landscape page (usable height ≈ 210 − 2·8 mm),
+   leaving room on page 1 for the title band. Wide captures are width-bound. */
+.pg img { max-width: 100%; max-height: 178mm; }
+"""
 
 
-def _kpis_html(kpis) -> str:
-    if not kpis:
-        return ""
-    cells = []
-    for k in kpis:
-        sub = f'<div class="sub">{_e(k.sub)}</div>' if k.sub else ""
-        cells.append(
-            f'<div class="kpi"><div class="label">{_e(k.label)}</div>'
-            f'<div class="value">{_e(k.value)}</div>{sub}</div>'
-        )
-    return f'<div class="kpis">{"".join(cells)}</div>'
-
-
-def _batches_html(b: BatchesSectionVM | None) -> str:
-    if b is None:
-        return ""
-    out = ["<h2>Batches</h2>"]
-    if b.disabled:
-        out.append('<p class="empty">Batching is turned off for this day.</p>')
-        return "".join(out)
-    out.append(_kpis_html(b.kpis))
-    cap_txt = "∞" if b.no_cap else str(b.cap)
-    cards = []
-    for c in b.cards:
-        chips = ", ".join(f"#{t.truck_number} ({t.wearers})" for t in c.trucks) or "Empty"
-        cards.append(
-            f'<div class="batch"><div class="bh"><span>Batch {int(c.batch_number)}</span>'
-            f'<span>{int(c.total_wearers)} / {_e(cap_txt)}</span></div>'
-            f'<div class="chips">{_e(chips)}</div></div>'
-        )
-    out.append(f'<div class="batches">{"".join(cards)}</div>' if cards else '<p class="empty">No batches.</p>')
-    return "".join(out)
-
-
-def _shortages_html(s: ShortagesSectionVM | None) -> str:
-    if s is None:
-        return ""
-    out = ["<h2>Shortages</h2>", _kpis_html(s.kpis)]
-    m = s.matrix
-    if m is None or not m.rows:
-        out.append('<p class="empty">No shortages logged for this day.</p>')
-        return "".join(out)
-
-    header = ['<th class="item">Item</th>']
-    header += [f"<th>{int(t)}</th>" for t in m.trucks]
-    header.append('<th class="tot">Tot</th>')
-
-    body = []
-    prev_group = None
-    span = len(m.trucks) + 2
-    for row in m.rows:
-        if row.group != prev_group:
-            body.append(f'<tr class="group"><td colspan="{span}">{_e(row.group)}</td></tr>')
-            prev_group = row.group
-        label = _e(row.label) + (f" <span style='color:#888'>{_e(row.unit)}s</span>" if row.unit else "")
-        cells = "".join(f"<td>{'' if v is None else int(v)}</td>" for v in row.cells)
-        body.append(f'<tr><td class="item">{label}</td>{cells}<td class="tot">{int(row.total)}</td></tr>')
-
-    totals = "".join(f"<td>{int(v)}</td>" for v in m.truck_totals)
-    foot = (
-        f'<tr class="trucktot"><td class="item">Truck total</td>{totals}'
-        f'<td class="tot">{int(m.grand_total)}</td></tr>'
+def render_report_html(title: str, subtitle: str | None, images: list[str]) -> str:
+    head = [f"<h1>{_e(title)}</h1>"]
+    if subtitle:
+        head.append(f'<p class="sub">{_e(subtitle)}</p>')
+    pages = "".join(
+        f'<div class="pg"><img src="data:image/png;base64,{b64}"></div>' for b64 in images
     )
-
-    out.append(
-        f'<table><thead><tr>{"".join(header)}</tr></thead>'
-        f'<tbody>{"".join(body)}{foot}</tbody></table>'
+    return (
+        "<!doctype html><html><head><meta charset='utf-8'>"
+        f"<style>{_CSS}</style></head><body>"
+        f'<div class="head">{"".join(head)}</div>'
+        f"{pages}"
+        "</body></html>"
     )
-    return "".join(out)
-
-
-def render_report_html(vm: ReportViewModel) -> str:
-    sub_bits = [vm.run_date.strftime("%A, %B %d, %Y")]
-    if vm.load_day is not None:
-        sub_bits.append(f"Load Day {int(vm.load_day)}")
-    if vm.unload_day is not None:
-        sub_bits.append(f"Unload Day {int(vm.unload_day)}")
-    if vm.shift_label:
-        sub_bits.append(vm.shift_label)
-    if vm.generated_at is not None:
-        sub_bits.append("Generated " + vm.generated_at.strftime("%b %d, %Y %I:%M %p"))
-    parts = [
-        "<!doctype html><html><head><meta charset='utf-8'>",
-        f"<style>{_css()}</style></head><body>",
-        f"<h1>{_e(vm.title)}</h1>",
-        f'<p class="sub">{_e(" · ".join(sub_bits))}</p>',
-        _batches_html(vm.batches),
-        _shortages_html(vm.shortages),
-        "</body></html>",
-    ]
-    return "".join(parts)
