@@ -93,8 +93,17 @@ def half_split_change(points, days_back: int) -> float | None:
 def completed_load_filter():
     """SQLAlchemy predicate for 'this truck completed loading that day' — the
     persisted ``load_finish_time``, which survives the truck later moving to
-    unloaded/dirty (unlike the transient ``status == 'loaded'``)."""
+    unloaded/dirty (unlike the transient ``status == 'loaded'``). Backs the
+    timed metrics (cycle, wearers, quality)."""
     return TruckState.load_finish_time.isnot(None)
+
+
+def loaded_load_filter():
+    """'This truck got loaded that day' for the completion RATE — timed loads
+    (persisted ``load_finish_time``) OR a truck marked ``loaded`` manually / in
+    bulk (which doesn't stamp a finish time). Broader than
+    ``completed_load_filter`` so a manual load still counts toward completion."""
+    return TruckState.load_finish_time.isnot(None) | (TruckState.status == "loaded")
 
 
 def is_running_filter():

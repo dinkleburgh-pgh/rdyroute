@@ -34,6 +34,7 @@ from routers.trends_common import (
     MIN_LOAD_SECONDS,
     completed_load_filter,
     is_running_filter,
+    loaded_load_filter,
     operational_today,
     window_bounds,
 )
@@ -998,17 +999,18 @@ def truck_completion_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
 ):
-    """Per-day completion: trucks that completed loading (persisted
-    load_finish_time) ÷ trucks that ran (the running roster — excludes
-    off/oos/shop/spare). Keys off load_finish_time, not the transient
-    status=='loaded' which a truck sheds by end of shift."""
+    """Per-day completion: trucks that got loaded (a persisted load_finish_time
+    OR a manual/bulk 'loaded' status) ÷ trucks that ran (the running roster —
+    excludes off/oos/shop/spare). Uses load_finish_time so a past day still
+    counts (the transient status=='loaded' is shed by end of shift), plus the
+    'loaded' status so manual loads that were never timed still count."""
     start, end = window_bounds(days_back)
-    ran = is_running_filter() | completed_load_filter()  # ran a route OR completed a load
+    ran = is_running_filter() | loaded_load_filter()  # expected to run OR got loaded
     rows = db.execute(
         select(
             TruckState.run_date,
             func.sum(case((ran, 1), else_=0)).label("total"),
-            func.sum(case((completed_load_filter(), 1), else_=0)).label("loaded"),
+            func.sum(case((loaded_load_filter(), 1), else_=0)).label("loaded"),
         )
         .where(TruckState.run_date >= start, TruckState.run_date <= end)
         .group_by(TruckState.run_date)
@@ -1103,8 +1105,9 @@ def truck_anomalies(
     from statistics import mean, stdev
 
     start, end = window_bounds(days_back)
-    ran = is_running_filter() | completed_load_filter()
-    done = completed_load_filter()
+    ran = is_running_filter() | loaded_load_filter()
+    got_loaded = loaded_load_filter()  # completion basis (timed OR manual loaded)
+    timed = completed_load_filter()    # pace/wearers basis (timed only)
     in_band = (TruckState.load_duration_seconds >= MIN_LOAD_SECONDS) & (
         TruckState.load_duration_seconds <= MAX_LOAD_SECONDS
     )
@@ -1112,9 +1115,9 @@ def truck_anomalies(
         select(
             TruckState.run_date,
             func.sum(case((ran, 1), else_=0)).label("tot"),
-            func.sum(case((done, 1), else_=0)).label("lod"),
-            func.avg(case((done & in_band, TruckState.load_duration_seconds), else_=None)).label("pac"),
-            func.avg(case((done & (TruckState.wearers > 0), TruckState.wearers), else_=None)).label("wav"),
+            func.sum(case((got_loaded, 1), else_=0)).label("lod"),
+            func.avg(case((timed & in_band, TruckState.load_duration_seconds), else_=None)).label("pac"),
+            func.avg(case((timed & (TruckState.wearers > 0), TruckState.wearers), else_=None)).label("wav"),
         )
         .where(TruckState.run_date >= start, TruckState.run_date <= end)
         .group_by(TruckState.run_date)
