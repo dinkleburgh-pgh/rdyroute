@@ -94,7 +94,7 @@ export default function ShortageSheetView({
                 {trucks.map((n) => (
                   <th
                     key={n}
-                    className="sticky top-0 z-20 w-10 border-b border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-slate-100"
+                    className="sticky top-0 z-20 w-10 border-b border-r border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-slate-100"
                     title={truckTypeByNum.get(n) ?? undefined}
                   >
                     {n}
@@ -145,11 +145,11 @@ export default function ShortageSheetView({
                           <td
                             key={n}
                             className={clsx(
-                              "border-b border-slate-800/50 px-0.5 py-0.5 text-center font-mono tabular-nums",
-                              q != null ? "text-sm font-black text-amber-300" : "text-slate-800",
+                              "border-b border-r border-slate-800/50 px-0.5 py-0.5 text-center font-mono tabular-nums",
+                              q != null ? "text-sm font-black text-amber-300" : "text-slate-600",
                             )}
                           >
-                            {q ?? ""}
+                            {q ?? "-"}
                           </td>
                         );
                       })}
@@ -167,7 +167,7 @@ export default function ShortageSheetView({
                 {trucks.map((n) => (
                   <td
                     key={n}
-                    className="sticky bottom-0 z-20 border-t border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-amber-300"
+                    className="sticky bottom-0 z-20 border-t border-r border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-amber-300"
                   >
                     {truckTotals.get(n) ?? 0}
                   </td>

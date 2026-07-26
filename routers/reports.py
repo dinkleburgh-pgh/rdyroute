@@ -328,7 +328,7 @@ def _shortages_html(s: ShortagesSectionVM | None) -> str:
         unit = f' <span class="dim unit">{_e(row.unit)}s</span>' if row.unit else ""
         label = f'<span class="dot" style="background:{row.dot_hex}"></span>{_e(row.label)}{unit}'
         cells = "".join(
-            (f'<td class="qty">{int(v)}</td>' if v is not None else '<td class="z">·</td>')
+            (f'<td class="qty">{int(v)}</td>' if v is not None else '<td class="z">-</td>')
             for v in row.cells
         )
         body.append(f'<tr{tr_cls}><td class="item">{label}</td>{cells}<td class="tot">{int(row.total)}</td></tr>')
