@@ -6,6 +6,7 @@
  * panel is the supervisor's sweep at the end of the day.
  */
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import clsx from "clsx";
 import {
   useAssignBatch,
@@ -37,6 +38,7 @@ function capacityText(total: number, _noCap: boolean, cap: number) {
 
 export default function BatchingPanel() {
   const toast = useToast();
+  const navigate = useNavigate();
   const [runDate, setRunDate] = useState(todayIso());
   const [showAll, setShowAll] = useState(false);
   const [sortByBatch, setSortByBatch] = useState(false);
@@ -146,13 +148,22 @@ export default function BatchingPanel() {
   return (
     <div className="space-y-4">
       <div className="card space-y-4">
-        <div>
-          <h3 className="text-sm font-semibold text-slate-300">End-of-Day Batching</h3>
-          <p className="mt-1 text-xs text-slate-500">
-            Assign each returning truck to a batch for the run date. Tap a batch number on a truck's row;
-            tap it again (or ✕) to unassign. Wearer totals update live against the Operations wearer cap.
-            Every change saves instantly — there is no separate save or apply step.
-          </p>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-300">End-of-Day Batching</h3>
+            <p className="mt-1 text-xs text-slate-500">
+              Assign each returning truck to a batch for the run date. Tap a batch number on a truck's row;
+              tap it again (or ✕) to unassign. Wearer totals update live against the Operations wearer cap.
+              Every change saves instantly — there is no separate save or apply step.
+            </p>
+          </div>
+          <button
+            className="btn-ghost shrink-0 whitespace-nowrap text-xs"
+            onClick={() => navigate(`/batching?run_date=${runDate}`)}
+            title="Guided batch-by-batch entry (great for transcribing the paper sheet)"
+          >
+            Batching Wizard →
+          </button>
         </div>
 
         <FieldRow label="Run date">

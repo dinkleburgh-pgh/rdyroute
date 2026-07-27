@@ -22,6 +22,7 @@ import Load from "./pages/Load";
 // core board don't ship chart.js, the OCR review UI, and ~20 admin panels up
 // front. Each lands in its own chunk, fetched on first navigation.
 const Batches = lazy(() => import("./pages/Batches"));
+const BatchingWizard = lazy(() => import("./pages/BatchingWizard"));
 const Shorts = lazy(() => import("./pages/Shorts"));
 const Audit = lazy(() => import("./pages/Audit"));
 const Trends = lazy(() => import("./pages/Trends"));
@@ -62,6 +63,7 @@ const router = createBrowserRouter([
       { path: "unload", element: <Unload /> },
       { path: "load", element: <Load /> },
       { path: "batches", element: lazyRoute(<Batches />) },
+      { path: "batching", element: lazyRoute(<BatchingWizard />) },
       { path: "fleet", element: <Board fleetMode /> },
       { path: "shorts", element: lazyRoute(<Shorts />) },
       { path: "audit", element: lazyRoute(<Audit />) },
