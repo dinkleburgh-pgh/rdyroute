@@ -13,7 +13,7 @@
  * which is idempotent: a cell = the canonical total for (truck, item, day), so
  * re-editing never piles up duplicate rows. useShortages is the source of truth.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 import { useTrackedItems, useUpsertShortageCells } from "../../api/hooks";
@@ -418,13 +418,47 @@ function GridMode({
   grandTotal: number;
   dotClass: (category: string) => string;
 }) {
+  const topRef = useRef<HTMLDivElement>(null);
+  const gridRef = useRef<HTMLDivElement>(null);
+  const [scrollW, setScrollW] = useState(0);
+  const syncing = useRef(false);
+
+  // Keep the mirrored top scrollbar's width in step with the grid's content.
+  useLayoutEffect(() => {
+    const el = gridRef.current;
+    if (!el) return;
+    const update = () => setScrollW(el.scrollWidth);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [columns.length, rows.length]);
+
+  // Mirror horizontal scroll between the top bar and the grid (guard the loop).
+  const syncScroll = (from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (!from || !to || syncing.current) return;
+    syncing.current = true;
+    to.scrollLeft = from.scrollLeft;
+    requestAnimationFrame(() => { syncing.current = false; });
+  };
+
   const focusCell = (r: number, c: number) => {
     const el = document.getElementById(`ssc-${r}-${c}`) as HTMLInputElement | null;
     if (el) { el.focus(); el.select(); }
   };
   let lastGroup = "";
   return (
-    <div className="overflow-auto rounded-lg border border-slate-800">
+    <div>
+      {/* Mirrored top scrollbar — scroll across trucks without dragging to the
+          bottom of a tall grid. Synced both ways with the grid below. */}
+      <div
+        ref={topRef}
+        onScroll={() => syncScroll(topRef.current, gridRef.current)}
+        className="overflow-x-auto overflow-y-hidden rounded-t-lg border border-b-0 border-slate-800"
+      >
+        <div style={{ width: scrollW || 1, height: 1 }} />
+      </div>
+      <div ref={gridRef} onScroll={() => syncScroll(gridRef.current, topRef.current)} className="overflow-auto rounded-b-lg border border-slate-800">
       <table className="border-separate border-spacing-0 text-sm">
         <thead>
           <tr>
@@ -497,6 +531,7 @@ function GridMode({
           </tr>
         </tbody>
       </table>
+      </div>
     </div>
   );
 }
