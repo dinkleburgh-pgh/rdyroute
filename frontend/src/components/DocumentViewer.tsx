@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Download, ExternalLink } from "lucide-react";
 import { documentFileUrl, documentPreviewUrl, type DocumentItem } from "../api/hooks";
+import ZoomableImage from "./ZoomableImage";
 
 /**
  * Full-screen inline viewer for a document. Images render as <img>, PDFs in an
@@ -57,12 +58,10 @@ export default function DocumentViewer({ doc, onClose }: { doc: DocumentItem | n
       {/* Body — clicking the padding closes; the content itself does not */}
       <div className="flex min-h-0 flex-1 items-center justify-center">
         {isImage && imgStage < 2 ? (
-          <img
+          <ZoomableImage
             src={imgStage === 0 ? url : documentPreviewUrl(doc.id)}
             alt={doc.title}
-            onClick={stop}
             onError={() => setImgStage((s) => (s + 1) as 0 | 1 | 2)}
-            className="max-h-full max-w-full rounded object-contain shadow-2xl"
           />
         ) : isPdf ? (
           <iframe src={url} title={doc.title} onClick={stop} className="h-full w-full rounded bg-white" />
