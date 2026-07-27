@@ -225,19 +225,20 @@ export default function BatchingWizard() {
         {BATCH_NUMBERS.map((n) => {
           const { trucks, total } = batchInfo(n);
           const cap = capacityColor(total, noCap, wearerCap);
+          const over = total > wearerCap;
           return (
             <button
               key={n}
               onClick={() => setStep(n)}
+              title={over ? "Overbatched" : undefined}
               className={clsx(
-                "flex min-w-[76px] flex-1 flex-col items-center rounded-lg border px-2 py-1.5 transition-colors sm:flex-none",
+                "relative flex min-w-[76px] flex-1 flex-col items-center rounded-lg border px-2 py-1.5 transition-colors sm:flex-none",
                 step === n ? "border-blue-500 bg-blue-950/40" : "border-slate-700 bg-slate-900/60 hover:border-slate-600",
+                over && "ring-1 ring-red-500/70",
               )}
             >
-              <span className="flex items-center gap-1 text-xs font-bold text-slate-200">
-                Batch {n}
-                <OverbatchedChip show={total > wearerCap} />
-              </span>
+              {over && <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-red-500" />}
+              <span className="text-xs font-bold text-slate-200">Batch {n}</span>
               <span className="text-[10px] text-slate-500">
                 {trucks.length} truck{trucks.length !== 1 ? "s" : ""} ·{" "}
                 <span className={clsx("font-semibold tabular-nums", cap.text)}>{total}</span>
