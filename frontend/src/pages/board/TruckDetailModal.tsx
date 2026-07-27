@@ -6,6 +6,7 @@ import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
 import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
+import TruckDocuments from "../../components/TruckDocuments";
 import Stat from "./Stat";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import StatusEditor from "./StatusEditor";
@@ -163,6 +164,8 @@ export default function TruckDetailModal({
               </ul>
             )}
           </section>
+
+          <TruckDocuments truckNumber={truck.truck_number} />
 
           <TruckActivityTimeline truckNumber={truck.truck_number} />
         </div>

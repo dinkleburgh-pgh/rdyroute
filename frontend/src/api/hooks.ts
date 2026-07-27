@@ -1855,7 +1855,7 @@ export interface DocumentItem {
   links: DocumentLink[];
 }
 
-export function useDocuments(filters?: { q?: string; category?: string; tag?: string; targetType?: string; targetKey?: string }) {
+export function useDocuments(filters?: { q?: string; category?: string; tag?: string; targetType?: string; targetKey?: string; enabled?: boolean }) {
   const params: Record<string, unknown> = {};
   if (filters?.q) params.q = filters.q;
   if (filters?.category) params.category = filters.category;
@@ -1866,6 +1866,7 @@ export function useDocuments(filters?: { q?: string; category?: string; tag?: st
     queryKey: ["documents", params],
     queryFn: async () => (await api.get<DocumentItem[]>("/documents", { params })).data,
     staleTime: 30_000,
+    enabled: filters?.enabled ?? true,
   });
 }
 

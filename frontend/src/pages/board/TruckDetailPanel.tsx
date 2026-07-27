@@ -6,6 +6,7 @@ import type { ReactNode } from "react";
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
 import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
+import TruckDocuments from "../../components/TruckDocuments";
 import { STATUS_LABELS } from "./constants";
 
 import { format } from "date-fns";
@@ -149,6 +150,8 @@ export default function TruckDetailPanel({
             </ul>
           </div>
         )}
+
+        <TruckDocuments truckNumber={truck.truck_number} />
 
         <TruckActivityTimeline truckNumber={truck.truck_number} />
       </div>
