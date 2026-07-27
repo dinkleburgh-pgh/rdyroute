@@ -53,9 +53,20 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
   if (!inProgress) {
     return (
       <div className="p-4 sm:p-[22px_26px_40px]">
-        <div className="card flex flex-col items-center justify-center py-10 text-center">
-          <p className="text-lg font-semibold text-st-loaded">No truck currently in progress.</p>
-          <p className="mt-1 text-sm text-ink-muted">Set a next-up truck and start it to begin loading.</p>
+        <div className="mx-auto max-w-lg space-y-4">
+          <div className="card flex flex-col items-center justify-center py-8 text-center">
+            <p className="text-lg font-semibold text-st-loaded">No truck currently in progress.</p>
+            <p className="mt-1 text-sm text-ink-muted">
+              {nextUp != null ? (
+                <>Next up: <span className="font-mono font-bold text-sky-300">#{nextUp}</span> — start it from the Load page.</>
+              ) : (
+                "Pick a next-up truck below, then start it from the Load page."
+              )}
+            </p>
+          </div>
+          {/* The queue picker used to be unreachable here — the hero (with its
+              Set Next Up button) only renders while a truck IS in progress. */}
+          <NextUpPanel runDate={runDate} nextUp={nextUp ?? null} unloaded={unloaded} anyInProgress={false} />
         </div>
       </div>
     );
@@ -637,7 +648,7 @@ function QueueRow({
   );
 }
 
-function NextUpPanel({
+export function NextUpPanel({
   runDate,
   nextUp,
   unloaded,

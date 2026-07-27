@@ -15,6 +15,7 @@ import {
   useSettings,
   useUpsertTruckState,
   useLoadSequenceSuggestions,
+  useNextUp,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
 } from "../api/hooks";
@@ -35,7 +36,7 @@ import {
   unloadedTruckNumbersFromContext,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
-import { PaceBar, useElapsed } from "../components/LiveInProgress";
+import { NextUpPanel, PaceBar, useElapsed } from "../components/LiveInProgress";
 import { ChevronDown } from "lucide-react";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
@@ -113,6 +114,14 @@ export default function Load() {
   const heldReady = useMemo(
     () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold === true),
     [loadDisplayTrucks],
+  );
+  // Manually-set Next Up (shared with the In Progress page). When set and the
+  // truck is still ready it wins; otherwise fall back to the first ready truck.
+  const { data: storedNextUp } = useNextUp(runDate);
+  const [nextUpOpen, setNextUpOpen] = useState(false);
+  const nextUpTruck = useMemo(
+    () => ready.find((t) => t.truck_number === storedNextUp) ?? ready[0],
+    [ready, storedNextUp],
   );
   // Historical load-order suggestions ("usually loads ~3rd"), filtered to
   // trucks that are actually ready tonight — top 3 by average position.
@@ -407,7 +416,7 @@ export default function Load() {
             paceAvgSeconds={pace?.avg_seconds ?? null}
             busy={busy === inProgress.truck_number}
             loadDay={loadDay}
-            nextUp={ready[0]}
+            nextUp={nextUpTruck}
             onFinish={() => {
               if (inProgress.state?.has_dust_garment) setConfirmGarmentTruck(inProgress);
               else void finishLoad(inProgress);
@@ -511,9 +520,18 @@ export default function Load() {
 
       {/* Ready to load */}
       <section>
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-st-unloaded">
-          Ready to load ({ready.length})
-        </h3>
+        <div className="mb-2 flex items-center justify-between gap-2">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-st-unloaded">
+            Ready to load ({ready.length})
+          </h3>
+          <button
+            type="button"
+            onClick={() => setNextUpOpen(true)}
+            className="rounded-lg border border-sky-700/40 bg-sky-950/50 px-3 py-1 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-900/50"
+          >
+            {storedNextUp != null ? `Next Up: #${storedNextUp} · Change` : "Set Next Up"}
+          </button>
+        </div>
         {/* What usually loads next — historical average load position over the
             last 14 days, intersected with tonight's ready trucks. */}
         {suggestedNext.length > 0 && (
@@ -561,7 +579,18 @@ export default function Load() {
                   accent="text-st-unloaded"
                   statusLabel="Unloaded"
                   statusClassName="bg-[#16a34a] text-white"
-                  footer={t.state?.wearers ? <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span> : null}
+                  footer={
+                    t.truck_number === storedNextUp || t.state?.wearers ? (
+                      <span className="flex items-center gap-1.5">
+                        {t.truck_number === storedNextUp && (
+                          <span className="rounded-pill bg-sky-900/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
+                            Next
+                          </span>
+                        )}
+                        {t.state?.wearers ? <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span> : null}
+                      </span>
+                    ) : null
+                  }
                   interactive={!disabled}
                   ringClassName="hover:ring-st-unloaded"
                 />
@@ -694,6 +723,41 @@ export default function Load() {
         }}
         onCancel={() => setConfirmGarmentTruck(null)}
       />
+      {/* Next Up picker — same panel the In Progress page uses */}
+      {nextUpOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setNextUpOpen(false)}
+        >
+          <div
+            className="flex w-full max-w-lg flex-col rounded-xl border border-hairline bg-surface shadow-card"
+            style={{ maxHeight: "90vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
+              <h3 className="text-base font-bold tracking-wide">Set Next Up</h3>
+              <button
+                onClick={() => setNextUpOpen(false)}
+                className="rounded-md p-1 text-ink-muted hover:bg-surface-2 hover:text-ink"
+              >
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <NextUpPanel
+                runDate={runDate}
+                nextUp={storedNextUp ?? null}
+                unloaded={ready}
+                anyInProgress={anyInProgress}
+                onPick={() => setNextUpOpen(false)}
+              />
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
     </motion.div>
     </>
   );
