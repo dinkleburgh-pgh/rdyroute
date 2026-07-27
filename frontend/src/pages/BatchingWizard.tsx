@@ -360,7 +360,7 @@ function BatchStep({
                   disabled={busy}
                   onClick={() => onToggleTruck(t)}
                   className={clsx(
-                    "relative flex flex-col items-center rounded-lg border px-2 py-2 text-sm font-bold transition-colors",
+                    "flex h-14 flex-col items-center justify-center gap-0.5 rounded-lg border px-2 text-sm font-bold transition-colors",
                     inThis
                       ? "border-blue-500 bg-blue-900/50 text-blue-100"
                       : inOther
@@ -369,12 +369,9 @@ function BatchStep({
                     busy && "opacity-50",
                   )}
                 >
-                  <span className="flex items-center gap-1 tabular-nums">
-                    #{t.truck_number}
-                    {isDust(t) && <DustGarmentIcon className="h-3.5 w-3.5 text-amber-400" />}
-                  </span>
+                  <span className="tabular-nums">#{t.truck_number}</span>
                   {inOther && (
-                    <span className="mt-0.5 rounded-full bg-slate-700/70 px-1.5 text-[9px] font-semibold text-slate-300">
+                    <span className="rounded-full bg-slate-700/70 px-1.5 text-[9px] font-semibold text-slate-300">
                       in B{current}
                     </span>
                   )}
