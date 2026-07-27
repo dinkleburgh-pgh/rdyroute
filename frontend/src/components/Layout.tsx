@@ -61,12 +61,12 @@ const SIDEBAR_PRIMARY_NAV = [
 
 const SIDEBAR_SECONDARY_NAV = [
   { to: "/report", label: "Report" },
+  { to: "/fleet-schedule", label: "Fleet Schedule" },
   { to: "/shorts", label: "Short sheet" },
+  { to: "/audit", label: "Audit" },
   { to: "/notes", label: "Notes" },
   { to: "/documents", label: "Documents" },
   { to: "/trends", label: "Trends" },
-  { to: "/audit", label: "Audit" },
-  { to: "/fleet-schedule", label: "Fleet Schedule" },
   { to: "/verify-short-sheet", label: "Verify Shorts" },
   { to: "/management", label: "Management" },
 ];
