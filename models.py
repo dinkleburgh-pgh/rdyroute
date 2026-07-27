@@ -641,6 +641,41 @@ class GarmentDayLog(Base):
     )
 
 
+class RouteDriver(Base):
+    """
+    Reference mapping of a route (= truck number) to its assigned SSR driver,
+    captured from the printed "Truck Demand by Day" board.
+
+    Stored durably so future logic (driver-aware reports, assignment hints,
+    accountability) can build on it. Intentionally NOT exposed by any API,
+    schema, or UI yet — this is a capture table, not a display surface.
+
+    ``route_number`` mirrors ``trucks.truck_number`` but is deliberately NOT a
+    hard FK: the capture should stay faithful to the board even if a matching
+    truck row is absent, and non-numeric routes (the shuttle) store NULL here
+    with the raw cell text kept in ``route_label``.
+    """
+    __tablename__ = "route_drivers"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Numeric route/truck this driver runs; NULL for non-numeric routes (shuttle).
+    route_number: Mapped[int | None] = mapped_column(Integer, nullable=True, unique=True)
+    # Raw "Route #" cell as printed (e.g. "4", "Shuttle").
+    route_label: Mapped[str] = mapped_column(String(20), nullable=False, default="")
+    driver_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    is_active: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # Provenance of the capture (which board / date).
+    source: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+
 # ---------------------------------------------------------------------------
 # Notices (Run Day banner)
 # ---------------------------------------------------------------------------
