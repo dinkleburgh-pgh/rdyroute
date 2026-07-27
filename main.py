@@ -32,7 +32,7 @@ from database import Base, SessionLocal, engine, settings
 os.environ["TZ"] = settings.timezone
 if hasattr(time, "tzset"):
     time.tzset()
-from routers import activity, audit, auth, batches, communications, debug, exports, fleet, load_durations, notes as notes_router, notices, notifications, reports, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, ws as ws_router
+from routers import activity, audit, auth, batches, communications, debug, documents, exports, fleet, load_durations, notes as notes_router, notices, notifications, reports, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, ws as ws_router
 from seed import run_startup_seed
 from backups import backup_loop
 

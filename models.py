@@ -760,3 +760,65 @@ class LoginAttempt(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     ip_address: Mapped[str] = mapped_column(String(45), nullable=False, index=True)
     attempted_at: Mapped[float] = mapped_column(Float, nullable=False)  # unix timestamp
+
+
+# ---------------------------------------------------------------------------
+# Documents — shared file/photo library (any type), browsable + linkable
+# ---------------------------------------------------------------------------
+
+class Document(Base):
+    """
+    A stored file or photo of a document in the shared Documents library.
+    Any MIME type is accepted; the bytes live on disk under /app/.data/documents
+    (the persistent backend_data volume) — only metadata is kept in the DB. Docs
+    are browsable (title / category / tags) and can be pinned to other records via
+    DocumentLink so they're referenced in context.
+    """
+    __tablename__ = "documents"
+
+    id: Mapped[str] = mapped_column(String(64), primary_key=True)  # uuid hex
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    category: Mapped[str] = mapped_column(String(120), nullable=False, default="", index=True)
+    tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
+    file_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    stored_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    mime_type: Mapped[str] = mapped_column(String(120), nullable=False, default="application/octet-stream")
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    uploaded_by: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
+    )
+
+    links: Mapped[list["DocumentLink"]] = relationship(
+        "DocumentLink", cascade="all, delete-orphan", back_populates="document"
+    )
+
+
+class DocumentLink(Base):
+    """
+    Polymorphic link pinning a Document to another record so it's referenced in
+    context. ``target_type`` + ``target_key`` identify the target — e.g.
+    ("truck", "60") or ("run_date", "2026-07-24"). Extensible to note/shortage
+    later with no schema change.
+    """
+    __tablename__ = "document_links"
+    __table_args__ = (
+        UniqueConstraint("document_id", "target_type", "target_key", name="uq_document_link"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    document_id: Mapped[str] = mapped_column(
+        String(64), ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    target_type: Mapped[str] = mapped_column(String(20), nullable=False, index=True)  # "truck" | "run_date"
+    target_key: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    created_by: Mapped[str] = mapped_column(String(80), nullable=False, default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    document: Mapped["Document"] = relationship("Document", back_populates="links")

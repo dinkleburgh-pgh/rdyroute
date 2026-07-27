@@ -451,6 +451,46 @@ class AuditPhotoOut(_OrmBase):
 
 
 # ---------------------------------------------------------------------------
+# Documents — shared file/photo library
+# ---------------------------------------------------------------------------
+
+class DocumentLinkOut(_OrmBase):
+    id: int
+    document_id: str
+    target_type: str
+    target_key: str
+    created_by: str
+    created_at: datetime
+
+
+class DocumentOut(_OrmBase):
+    id: str
+    title: str
+    description: str
+    category: str
+    tags: list[str]
+    file_name: str
+    mime_type: str
+    size_bytes: int
+    uploaded_by: str
+    created_at: datetime
+    updated_at: datetime
+    links: list[DocumentLinkOut] = []
+
+
+class DocumentUpdate(BaseModel):
+    title: str | None = Field(default=None, max_length=200)
+    description: str | None = Field(default=None, max_length=5000)
+    category: str | None = Field(default=None, max_length=120)
+    tags: list[str] | None = None
+
+
+class DocumentLinkCreate(BaseModel):
+    target_type: str = Field(..., max_length=20)
+    target_key: str = Field(..., max_length=64)
+
+
+# ---------------------------------------------------------------------------
 # Batches
 # ---------------------------------------------------------------------------
 

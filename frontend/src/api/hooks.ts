@@ -1827,6 +1827,121 @@ export function auditPhotoFileUrl(id: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Documents (shared file/photo library — leads + admins)
+// ---------------------------------------------------------------------------
+
+export interface DocumentLink {
+  id: number;
+  document_id: string;
+  target_type: string; // "truck" | "run_date"
+  target_key: string;
+  created_by: string;
+  created_at: string;
+}
+
+// Named DocumentItem (not Document) to avoid shadowing the DOM `Document` global.
+export interface DocumentItem {
+  id: string;
+  title: string;
+  description: string;
+  category: string;
+  tags: string[];
+  file_name: string;
+  mime_type: string;
+  size_bytes: number;
+  uploaded_by: string;
+  created_at: string;
+  updated_at: string;
+  links: DocumentLink[];
+}
+
+export function useDocuments(filters?: { q?: string; category?: string; tag?: string; targetType?: string; targetKey?: string }) {
+  const params: Record<string, unknown> = {};
+  if (filters?.q) params.q = filters.q;
+  if (filters?.category) params.category = filters.category;
+  if (filters?.tag) params.tag = filters.tag;
+  if (filters?.targetType) params.target_type = filters.targetType;
+  if (filters?.targetKey) params.target_key = filters.targetKey;
+  return useQuery({
+    queryKey: ["documents", params],
+    queryFn: async () => (await api.get<DocumentItem[]>("/documents", { params })).data,
+    staleTime: 30_000,
+  });
+}
+
+export function useUploadDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      file: File;
+      title?: string;
+      description?: string;
+      category?: string;
+      tags?: string[];
+      onProgress?: (pct: number) => void;
+    }) => {
+      const form = new FormData();
+      form.append("title", args.title ?? "");
+      form.append("description", args.description ?? "");
+      form.append("category", args.category ?? "");
+      form.append("tags", (args.tags ?? []).join(","));
+      form.append("file", args.file);
+      const { data } = await api.post<DocumentItem>("/documents", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+        onUploadProgress: (e) => {
+          if (args.onProgress && e.total) args.onProgress(Math.round((e.loaded / e.total) * 100));
+        },
+      });
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+export function useUpdateDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...patch }: { id: string; title?: string; description?: string; category?: string; tags?: string[] }) =>
+      (await api.patch<DocumentItem>(`/documents/${id}`, patch)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+export function useDeleteDocument() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (id: string) => api.delete(`/documents/${id}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+export function useAddDocumentLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { documentId: string; targetType: string; targetKey: string }) =>
+      (await api.post<DocumentLink>(`/documents/${args.documentId}/links`, {
+        target_type: args.targetType,
+        target_key: args.targetKey,
+      })).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+export function useRemoveDocumentLink() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { documentId: string; linkId: number }) =>
+      api.delete(`/documents/${args.documentId}/links/${args.linkId}`),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["documents"] }),
+  });
+}
+
+export function documentFileUrl(id: string): string {
+  const base = api.defaults.baseURL ?? "";
+  return `${base}/documents/${id}/file`;
+}
+
+// ---------------------------------------------------------------------------
 // Censor words (admin)
 // ---------------------------------------------------------------------------
 
