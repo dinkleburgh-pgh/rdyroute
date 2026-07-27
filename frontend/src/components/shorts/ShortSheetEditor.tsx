@@ -58,6 +58,7 @@ export default function ShortSheetEditor({
   const palette = useCategoryPalette();
 
   const [mode, setMode] = useState<Mode>("grid");
+  const [hideEmpty, setHideEmpty] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [guidedIdx, setGuidedIdx] = useState(0);
   const [confirmClear, setConfirmClear] = useState<SheetRow | null>(null);
@@ -258,11 +259,19 @@ export default function ShortSheetEditor({
             </button>
           ))}
         </div>
-        {mode !== "review" && (
-          <span className="text-xs text-slate-500">
-            {columns.length} trucks · <span className="font-semibold text-slate-300 tabular-nums">{grandTotal.toLocaleString()}</span> pieces
-          </span>
-        )}
+        <div className="flex items-center gap-3">
+          {mode === "grid" && (
+            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+              <input type="checkbox" checked={hideEmpty} onChange={(e) => setHideEmpty(e.target.checked)} />
+              Hide empty
+            </label>
+          )}
+          {mode !== "review" && (
+            <span className="text-xs text-slate-500">
+              {columns.length} trucks · <span className="font-semibold text-slate-300 tabular-nums">{grandTotal.toLocaleString()}</span> pieces
+            </span>
+          )}
+        </div>
       </div>
 
       {columns.length === 0 && mode !== "review" ? (
@@ -271,7 +280,7 @@ export default function ShortSheetEditor({
         </p>
       ) : mode === "grid" ? (
         <GridMode
-          rows={rows}
+          rows={hideEmpty ? rows.filter((r) => rowTotal(r) > 0) : rows}
           columns={columns}
           cellDisplay={cellDisplay}
           setDraft={setDraft}
@@ -574,7 +583,54 @@ function GuidedMode({
 
   return (
     <div className="space-y-3">
-      {/* Item jump list */}
+      {/* Sticky nav — item name + Prev/Next stay visible while filling trucks below */}
+      <div className="sticky top-0 z-20 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 shadow-lg">
+        <button className="btn-ghost shrink-0 px-3" disabled={guidedIdx === 0} onClick={() => setGuidedIdx(guidedIdx - 1)}>
+          ←
+        </button>
+        <div className="min-w-0 flex-1 text-center">
+          <div className="flex items-center justify-center gap-2 text-sm font-bold text-slate-100">
+            <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", dotClass(row.category))} />
+            <span className="truncate">{row.label}</span>
+          </div>
+          <div className="text-[10px] text-slate-500">
+            Item {guidedIdx + 1} / {rows.length} · <span className="tabular-nums">{rt}</span> total
+          </div>
+        </div>
+        <button className="btn-primary shrink-0 px-3" disabled={guidedIdx >= rows.length - 1} onClick={() => setGuidedIdx(guidedIdx + 1)}>
+          Next →
+        </button>
+      </div>
+
+      {/* Truck inputs for the current item */}
+      <div className="card space-y-3">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
+          {columns.map((t) => (
+            <label key={t} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-2 py-1.5">
+              <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums text-white">#{t}</span>
+              <input
+                className="w-full rounded bg-slate-800/60 px-2 py-1 text-center text-sm tabular-nums text-white outline-none focus:bg-slate-700 focus:ring-1 focus:ring-blue-500"
+                type="text"
+                inputMode="numeric"
+                value={cellDisplay(row, t)}
+                onFocus={(e) => e.currentTarget.select()}
+                onChange={(e) => setDraft(row, t, e.target.value)}
+                onBlur={() => saveCell(row, t)}
+              />
+            </label>
+          ))}
+        </div>
+
+        {rt > 0 && (
+          <div className="flex justify-end">
+            <button className="text-[11px] text-slate-500 hover:text-red-400" onClick={() => onClearRow(row)}>
+              clear item
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Jump list — tap any item to go straight to it */}
       <div className="flex flex-wrap gap-1.5">
         {rows.map((r, i) => {
           const filled = filledRowKeys.has(`${r.category}||${r.detail}`);
@@ -595,50 +651,6 @@ function GuidedMode({
             </button>
           );
         })}
-      </div>
-
-      {/* Current item */}
-      <div className="card space-y-3">
-        <div className="flex items-center justify-between gap-2">
-          <span className="flex items-center gap-2 text-base font-bold text-slate-100">
-            <span className={clsx("h-2.5 w-2.5 rounded-full", dotClass(row.category))} />
-            {row.label}
-          </span>
-          <span className="text-xs text-slate-500">
-            Item {guidedIdx + 1} / {rows.length} · <span className="font-semibold text-slate-300 tabular-nums">{rt}</span> total
-          </span>
-        </div>
-
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
-          {columns.map((t) => (
-            <label key={t} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-2 py-1.5">
-              <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums text-white">#{t}</span>
-              <input
-                className="w-full rounded bg-slate-800/60 px-2 py-1 text-center text-sm tabular-nums text-white outline-none focus:bg-slate-700 focus:ring-1 focus:ring-blue-500"
-                type="text"
-                inputMode="numeric"
-                value={cellDisplay(row, t)}
-                onFocus={(e) => e.currentTarget.select()}
-                onChange={(e) => setDraft(row, t, e.target.value)}
-                onBlur={() => saveCell(row, t)}
-              />
-            </label>
-          ))}
-        </div>
-
-        <div className="flex items-center justify-between gap-2 pt-1">
-          <button className="btn-ghost" disabled={guidedIdx === 0} onClick={() => setGuidedIdx(guidedIdx - 1)}>
-            ← Prev
-          </button>
-          {rt > 0 && (
-            <button className="text-[11px] text-slate-500 hover:text-red-400" onClick={() => onClearRow(row)}>
-              clear item
-            </button>
-          )}
-          <button className="btn-primary" disabled={guidedIdx >= rows.length - 1} onClick={() => setGuidedIdx(guidedIdx + 1)}>
-            Next →
-          </button>
-        </div>
       </div>
     </div>
   );
