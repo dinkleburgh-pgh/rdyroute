@@ -50,6 +50,7 @@ export default function BatchingWizard() {
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
   const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const [confirmMove, setConfirmMove] = useState<{ truck: number; from: number } | null>(null);
+  const [confirmRemove, setConfirmRemove] = useState<{ truck: number; from: number } | null>(null);
 
   const { data: board = [] } = useBoard(runDate);
   const { data: batches = [] } = useBatchSummary(runDate);
@@ -138,10 +139,11 @@ export default function BatchingWizard() {
   }
 
   // Tap in the grid: add to / remove from / move into the current batch.
-  // Moving a truck that's already in ANOTHER batch is confirmed first.
+  // Removing (tap a truck already in this batch) and moving (tap a truck in
+  // ANOTHER batch) are both confirmed first, so a stray tap can't undo work.
   function toggleTruck(t: TruckWithState) {
     const current = batchByTruck.get(t.truck_number);
-    if (current === step) void unassignTruck(t.truck_number, step);
+    if (current === step) setConfirmRemove({ truck: t.truck_number, from: step });
     else if (current != null) setConfirmMove({ truck: t.truck_number, from: current });
     else void assignTruck(t.truck_number, step);
   }
@@ -239,7 +241,7 @@ export default function BatchingWizard() {
           setWearerDrafts={setWearerDrafts}
           onToggleTruck={toggleTruck}
           onAssignTruck={assignTruck}
-          onUnassignTruck={unassignTruck}
+          onRequestRemove={(truck, batch) => setConfirmRemove({ truck, from: batch })}
           onClearBatch={() => setConfirmClear(step)}
           isDust={isDust}
         />
@@ -296,6 +298,20 @@ export default function BatchingWizard() {
         }}
         onCancel={() => setConfirmMove(null)}
       />
+
+      <ConfirmDialog
+        open={confirmRemove != null}
+        variant="danger"
+        title={`Remove truck ${confirmRemove?.truck} from Batch ${confirmRemove?.from}?`}
+        description={`Truck ${confirmRemove?.truck} will no longer be assigned to a batch.`}
+        confirmLabel="Remove"
+        onConfirm={() => {
+          const m = confirmRemove;
+          setConfirmRemove(null);
+          if (m) void unassignTruck(m.truck, m.from);
+        }}
+        onCancel={() => setConfirmRemove(null)}
+      />
     </div>
   );
 }
@@ -317,7 +333,7 @@ function BatchStep({
   setWearerDrafts,
   onToggleTruck,
   onAssignTruck,
-  onUnassignTruck,
+  onRequestRemove,
   onClearBatch,
   isDust,
 }: {
@@ -335,7 +351,7 @@ function BatchStep({
   setWearerDrafts: React.Dispatch<React.SetStateAction<Record<number, string>>>;
   onToggleTruck: (t: TruckWithState) => void;
   onAssignTruck: (truckNumber: number, batchNumber: number) => void;
-  onUnassignTruck: (truckNumber: number, batchNumber: number) => void;
+  onRequestRemove: (truckNumber: number, batchNumber: number) => void;
   onClearBatch: () => void;
   isDust: (t: TruckWithState | undefined) => boolean;
 }) {
@@ -465,7 +481,7 @@ function BatchStep({
                     disabled={busy}
                     className="ml-auto h-7 w-7 rounded-md bg-slate-800 text-xs text-slate-500 hover:bg-red-900/60 hover:text-red-300"
                     title="Remove from batch"
-                    onClick={() => onUnassignTruck(num, step)}
+                    onClick={() => onRequestRemove(num, step)}
                   >
                     ✕
                   </button>
