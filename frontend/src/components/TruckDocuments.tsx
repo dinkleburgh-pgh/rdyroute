@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
-import { useDocuments, useRemoveDocumentLink, documentFileUrl } from "../api/hooks";
+import { useDocuments, useRemoveDocumentLink, type DocumentItem } from "../api/hooks";
+import DocumentViewer from "./DocumentViewer";
 
 // Documents feature is leads + admins only; don't even query for other roles.
 const LEADERSHIP = new Set(["admin", "fleet", "atl", "supervisor", "lead"]);
@@ -20,6 +22,7 @@ export default function TruckDocuments({ truckNumber }: { truckNumber: number })
     enabled: canSee,
   });
   const removeLink = useRemoveDocumentLink();
+  const [viewerDoc, setViewerDoc] = useState<DocumentItem | null>(null);
 
   if (!canSee || docs.length === 0) return null;
 
@@ -33,15 +36,14 @@ export default function TruckDocuments({ truckNumber }: { truckNumber: number })
           const link = d.links.find((l) => l.target_type === "truck" && l.target_key === String(truckNumber));
           return (
             <li key={d.id} className="flex items-center gap-2 py-1.5">
-              <a
-                href={documentFileUrl(d.id)}
-                target="_blank"
-                rel="noreferrer"
-                className="min-w-0 flex-1 truncate font-medium text-blue-300 hover:underline"
+              <button
+                type="button"
+                onClick={() => setViewerDoc(d)}
+                className="min-w-0 flex-1 truncate text-left font-medium text-blue-300 hover:underline"
                 title={d.title}
               >
                 {d.title}
-              </a>
+              </button>
               {d.category && (
                 <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{d.category}</span>
               )}
@@ -58,6 +60,8 @@ export default function TruckDocuments({ truckNumber }: { truckNumber: number })
           );
         })}
       </ul>
+
+      <DocumentViewer doc={viewerDoc} onClose={() => setViewerDoc(null)} />
     </div>
   );
 }

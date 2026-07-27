@@ -13,6 +13,7 @@ import {
 } from "../api/hooks";
 import PageHeader from "../components/PageHeader";
 import ConfirmDialog from "../components/ConfirmDialog";
+import DocumentViewer from "../components/DocumentViewer";
 
 function fmtSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -115,7 +116,7 @@ function UploadPanel({ categories }: { categories: string[] }) {
 // ---------------------------------------------------------------------------
 // Preview thumbnail
 // ---------------------------------------------------------------------------
-function Thumb({ doc }: { doc: DocumentItem }) {
+function Thumb({ doc, onOpen }: { doc: DocumentItem; onOpen: (d: DocumentItem) => void }) {
   const url = documentFileUrl(doc.id);
   // HEIC (and other formats a given browser can't decode) fail in <img> — fall
   // back to an icon so the card shows cleanly instead of a broken image.
@@ -126,28 +127,28 @@ function Thumb({ doc }: { doc: DocumentItem }) {
 
   if (image && !imgErr) {
     return (
-      <a href={url} target="_blank" rel="noreferrer" className="block">
+      <button type="button" onClick={() => onOpen(doc)} className="block" title="View">
         <img src={url} alt={doc.title} loading="lazy" onError={() => setImgErr(true)}
           className="h-32 w-full rounded-lg object-cover ring-1 ring-slate-700 transition hover:ring-blue-500" />
-      </a>
+      </button>
     );
   }
   const Icon = pdf ? FileText : image ? ImageIcon : FileIcon;
   return (
-    <a href={url} target="_blank" rel="noreferrer"
+    <button type="button" onClick={() => onOpen(doc)} title="View"
       className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg bg-slate-800/60 ring-1 ring-slate-700 transition hover:ring-blue-500">
       <Icon className={clsx("h-10 w-10", pdf ? "text-red-400" : image ? "text-blue-400" : "text-slate-400")} />
       <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
         {pdf ? "PDF" : ext}
       </span>
-    </a>
+    </button>
   );
 }
 
 // ---------------------------------------------------------------------------
 // Document card
 // ---------------------------------------------------------------------------
-function DocCard({ doc, categories }: { doc: DocumentItem; categories: string[] }) {
+function DocCard({ doc, onOpen }: { doc: DocumentItem; onOpen: (d: DocumentItem) => void }) {
   const update = useUpdateDocument();
   const del = useDeleteDocument();
   const addLink = useAddDocumentLink();
@@ -171,7 +172,7 @@ function DocCard({ doc, categories }: { doc: DocumentItem; categories: string[] 
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900 p-3">
-      <Thumb doc={doc} />
+      <Thumb doc={doc} onOpen={onOpen} />
 
       {editing ? (
         <div className="space-y-2">
@@ -186,7 +187,7 @@ function DocCard({ doc, categories }: { doc: DocumentItem; categories: string[] 
       ) : (
         <>
           <div className="flex items-start justify-between gap-2">
-            <p className="min-w-0 flex-1 truncate text-sm font-semibold text-slate-200" title={doc.title}>{doc.title}</p>
+            <button type="button" onClick={() => onOpen(doc)} className="min-w-0 flex-1 truncate text-left text-sm font-semibold text-slate-200 hover:text-blue-300" title={doc.title}>{doc.title}</button>
             <div className="flex shrink-0 gap-1">
               <button className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200" title="Edit" onClick={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /></button>
               <a className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-200" title="Download" href={documentFileUrl(doc.id)} download={doc.file_name}><Download className="h-3.5 w-3.5" /></a>
@@ -242,6 +243,7 @@ export default function Documents() {
   const [q, setQ] = useState("");
   const [category, setCategory] = useState("");
   const [tag, setTag] = useState("");
+  const [viewerDoc, setViewerDoc] = useState<DocumentItem | null>(null);
   const { data: docs = [], isLoading } = useDocuments({ q: q || undefined, category: category || undefined, tag: tag || undefined });
   // Fetch the full set (unfiltered) once for building filter option lists.
   const { data: allDocs = [] } = useDocuments();
@@ -285,9 +287,11 @@ export default function Documents() {
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-          {docs.map((doc) => <DocCard key={doc.id} doc={doc} categories={categories} />)}
+          {docs.map((doc) => <DocCard key={doc.id} doc={doc} onOpen={setViewerDoc} />)}
         </div>
       )}
+
+      <DocumentViewer doc={viewerDoc} onClose={() => setViewerDoc(null)} />
     </div>
   );
 }
