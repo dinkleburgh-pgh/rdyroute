@@ -534,6 +534,41 @@ export function ShortsWorkspace() {
         }
       />
 
+      {/* Mobile: the date + mode toggle above live in PageHeader's actions, which
+          are hidden below md — surface them here so every entry option is reachable. */}
+      <div className="flex flex-col gap-2 border-b border-hairline bg-slate-950/40 p-3 md:hidden">
+        <select
+          className="input w-full py-1.5 text-sm"
+          value={runDate}
+          onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
+        >
+          <option value={todayIso()}>Today</option>
+          {shortDates.map((d) => (
+            <option key={d} value={d}>{d}</option>
+          ))}
+        </select>
+        <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-900/70 p-1">
+          {([
+            { id: "byItem", label: "By item" },
+            { id: "log", label: "By truck" },
+            { id: "sheet", label: "Sheet" },
+            { id: "imports", label: "Import sheets" },
+          ] as { id: typeof viewMode; label: string }[]).map((m) => (
+            <button
+              key={m.id}
+              type="button"
+              onClick={() => setViewMode(m.id)}
+              className={clsx(
+                "rounded-md px-3 py-2 text-sm font-medium transition",
+                viewMode === m.id ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
+              )}
+            >
+              {m.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {viewMode === "imports" ? (
         <div className="p-3 md:p-6">
           <ShortageImportPanel defaultRunDate={runDate} lockedRunDate />
