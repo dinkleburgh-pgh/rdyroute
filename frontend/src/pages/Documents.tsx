@@ -9,6 +9,7 @@ import {
   useAddDocumentLink,
   useRemoveDocumentLink,
   documentFileUrl,
+  documentPreviewUrl,
   type DocumentItem,
 } from "../api/hooks";
 import PageHeader from "../components/PageHeader";
@@ -117,18 +118,18 @@ function UploadPanel({ categories }: { categories: string[] }) {
 // Preview thumbnail
 // ---------------------------------------------------------------------------
 function Thumb({ doc, onOpen }: { doc: DocumentItem; onOpen: (d: DocumentItem) => void }) {
-  const url = documentFileUrl(doc.id);
-  // HEIC (and other formats a given browser can't decode) fail in <img> — fall
-  // back to an icon so the card shows cleanly instead of a broken image.
+  // Server renders a JPEG preview for images (incl. HEIC) and PDFs (first page);
+  // if it isn't previewable / generation failed, fall back to a type icon.
   const [imgErr, setImgErr] = useState(false);
   const image = isImage(doc.mime_type);
   const pdf = isPdf(doc.mime_type);
+  const previewable = image || pdf;
   const ext = (doc.file_name.split(".").pop() || "file").toLowerCase();
 
-  if (image && !imgErr) {
+  if (previewable && !imgErr) {
     return (
       <button type="button" onClick={() => onOpen(doc)} className="block" title="View">
-        <img src={url} alt={doc.title} loading="lazy" onError={() => setImgErr(true)}
+        <img src={documentPreviewUrl(doc.id)} alt={doc.title} loading="lazy" onError={() => setImgErr(true)}
           className="h-32 w-full rounded-lg object-cover ring-1 ring-slate-700 transition hover:ring-blue-500" />
       </button>
     );

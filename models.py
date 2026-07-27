@@ -783,6 +783,9 @@ class Document(Base):
     tags: Mapped[list] = mapped_column(JSON, nullable=False, default=list)
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     stored_path: Mapped[str] = mapped_column(String(500), nullable=False)
+    # Path to a generated JPEG preview (HEIC/image downscale, or PDF first page).
+    # Null when the type isn't previewable or generation hasn't run yet.
+    preview_path: Mapped[str | None] = mapped_column(String(500), nullable=True)
     mime_type: Mapped[str] = mapped_column(String(120), nullable=False, default="application/octet-stream")
     size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     uploaded_by: Mapped[str] = mapped_column(String(80), nullable=False, default="")

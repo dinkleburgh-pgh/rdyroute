@@ -1942,6 +1942,12 @@ export function documentFileUrl(id: string): string {
   return `${base}/documents/${id}/file`;
 }
 
+/** JPEG preview (HEIC/image downscale or PDF first page); generated on demand. */
+export function documentPreviewUrl(id: string): string {
+  const base = api.defaults.baseURL ?? "";
+  return `${base}/documents/${id}/preview`;
+}
+
 // ---------------------------------------------------------------------------
 // Censor words (admin)
 // ---------------------------------------------------------------------------

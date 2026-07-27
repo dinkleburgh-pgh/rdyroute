@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Download, ExternalLink } from "lucide-react";
-import { documentFileUrl, type DocumentItem } from "../api/hooks";
+import { documentFileUrl, documentPreviewUrl, type DocumentItem } from "../api/hooks";
 
 /**
  * Full-screen inline viewer for a document. Images render as <img>, PDFs in an
@@ -10,10 +10,12 @@ import { documentFileUrl, type DocumentItem } from "../api/hooks";
  * or Escape. Header keeps Open-in-new-tab + Download.
  */
 export default function DocumentViewer({ doc, onClose }: { doc: DocumentItem | null; onClose: () => void }) {
-  const [imgErr, setImgErr] = useState(false);
+  // Image source escalation: 0 = original, 1 = server JPEG preview (renders HEIC
+  // that the browser can't decode), 2 = both failed -> download fallback.
+  const [imgStage, setImgStage] = useState<0 | 1 | 2>(0);
 
-  // Reset the image-error state whenever the viewed doc changes.
-  useEffect(() => { setImgErr(false); }, [doc?.id]);
+  // Reset whenever the viewed doc changes.
+  useEffect(() => { setImgStage(0); }, [doc?.id]);
 
   // Escape to close + lock background scroll while open.
   useEffect(() => {
@@ -54,12 +56,12 @@ export default function DocumentViewer({ doc, onClose }: { doc: DocumentItem | n
 
       {/* Body — clicking the padding closes; the content itself does not */}
       <div className="flex min-h-0 flex-1 items-center justify-center">
-        {isImage && !imgErr ? (
+        {isImage && imgStage < 2 ? (
           <img
-            src={url}
+            src={imgStage === 0 ? url : documentPreviewUrl(doc.id)}
             alt={doc.title}
             onClick={stop}
-            onError={() => setImgErr(true)}
+            onError={() => setImgStage((s) => (s + 1) as 0 | 1 | 2)}
             className="max-h-full max-w-full rounded object-contain shadow-2xl"
           />
         ) : isPdf ? (

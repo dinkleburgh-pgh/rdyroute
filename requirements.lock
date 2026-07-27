@@ -52,6 +52,7 @@ pydantic==2.13.4
 pydantic_core==2.46.4
 pydyf==0.12.1
 PyJWT==2.13.0
+pymupdf==1.28.0
 pyphen==0.17.2
 python-dotenv==1.2.2
 python-multipart==0.0.32

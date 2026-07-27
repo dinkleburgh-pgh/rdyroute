@@ -11,11 +11,15 @@ Mirrors the audit-photo storage pattern (routers/audit.py) but is standalone
 buffering the whole upload in RAM, and derives uploaded_by from the auth'd user.
 """
 
+import logging
 import mimetypes
 import os
 import uuid
 from pathlib import Path
 
+import pymupdf
+from PIL import Image, ImageOps
+from pillow_heif import register_heif_opener
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Query, UploadFile, status
 from fastapi.responses import FileResponse
 from sqlalchemy import or_, select
@@ -27,6 +31,11 @@ from routers.auth import require_management_access
 from models import Document, DocumentLink, User
 from schemas import DocumentLinkCreate, DocumentLinkOut, DocumentOut, DocumentUpdate
 
+# Let Pillow decode HEIC/HEIF (iPhone photos) so we can render a JPEG preview —
+# browsers can't display HEIC in <img>, so a converted preview is required.
+register_heif_opener()
+
+log = logging.getLogger(__name__)
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 # Files live on the persistent backend data volume (/app/.data) in production,
@@ -37,6 +46,8 @@ _DOC_ROOT = Path(
         "/app/.data/documents" if Path("/app/.data").exists() else "./documents",
     )
 ).resolve()
+_PREVIEW_ROOT = _DOC_ROOT / "previews"
+_PREVIEW_MAX = 1600  # longest edge, px
 _MAX_DOCUMENT_BYTES = 25 * 1024 * 1024  # 25 MB
 _CHUNK = 1024 * 1024  # 1 MB streaming chunks
 
@@ -49,6 +60,36 @@ def _parse_tags(raw: str) -> list[str]:
         if t and t not in seen:
             seen.append(t)
     return seen
+
+
+def _generate_preview(src_path: Path, mime: str, doc_id: str) -> str | None:
+    """Render a JPEG preview for a document — images (incl. HEIC) downscaled to
+    _PREVIEW_MAX, PDFs rendered from their first page. Returns the preview path,
+    or None if the type isn't previewable or generation fails (never raises, so a
+    bad file can't break upload/serve)."""
+    try:
+        if mime.startswith("image/"):
+            _PREVIEW_ROOT.mkdir(parents=True, exist_ok=True)
+            dest = _PREVIEW_ROOT / f"{doc_id}.jpg"
+            with Image.open(src_path) as im:
+                im = ImageOps.exif_transpose(im)  # respect iPhone rotation
+                im = im.convert("RGB")
+                im.thumbnail((_PREVIEW_MAX, _PREVIEW_MAX))
+                im.save(dest, "JPEG", quality=82)
+            return str(dest)
+        if mime == "application/pdf":
+            _PREVIEW_ROOT.mkdir(parents=True, exist_ok=True)
+            dest = _PREVIEW_ROOT / f"{doc_id}.jpg"
+            with pymupdf.open(src_path) as pdf:
+                if pdf.page_count == 0:
+                    return None
+                pix = pdf.load_page(0).get_pixmap(dpi=150)
+                dest.write_bytes(pix.tobytes(output="jpg", jpg_quality=82))
+            return str(dest)
+    except Exception as exc:  # noqa: BLE001 — preview is best-effort
+        log.warning("Document preview failed for %s (%s): %s", doc_id, mime, exc)
+        return None
+    return None
 
 
 @router.get("", response_model=list[DocumentOut])
@@ -132,6 +173,7 @@ async def upload_document(
         tags=_parse_tags(tags),
         file_name=file.filename or f"{doc_id}{ext}",
         stored_path=str(dest),
+        preview_path=_generate_preview(dest, mime, doc_id),
         mime_type=mime,
         size_bytes=size,
         uploaded_by=user.username,
@@ -159,6 +201,25 @@ def download_document(document_id: str, _user: User = Depends(require_management
     if not path.is_file():
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Stored file missing")
     return FileResponse(path, media_type=row.mime_type, filename=row.file_name)
+
+
+@router.get("/{document_id}/preview")
+def document_preview(document_id: str, _user: User = Depends(require_management_access), db: Session = Depends(get_db)):
+    """A JPEG preview (HEIC/image downscale or PDF first page). Generated lazily
+    if missing, which backfills documents uploaded before previews existed."""
+    row = db.get(Document, document_id)
+    if row is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
+    path = Path(row.preview_path) if row.preview_path else None
+    if path is None or not path.is_file():
+        src = Path(row.stored_path)
+        generated = _generate_preview(src, row.mime_type, row.id) if src.is_file() else None
+        if generated is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No preview available")
+        row.preview_path = generated
+        db.commit()
+        path = Path(generated)
+    return FileResponse(path, media_type="image/jpeg")
 
 
 @router.patch("/{document_id}", response_model=DocumentOut)
@@ -193,10 +254,12 @@ def delete_document(document_id: str, _user: User = Depends(require_management_a
     row = db.get(Document, document_id)
     if row is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found")
-    try:
-        Path(row.stored_path).unlink(missing_ok=True)
-    except OSError:
-        pass
+    for p in (row.stored_path, row.preview_path):
+        if p:
+            try:
+                Path(p).unlink(missing_ok=True)
+            except OSError:
+                pass
     db.delete(row)  # cascade removes DocumentLink rows
     db.commit()
 
