@@ -45,7 +45,7 @@ export default function BatchingWizard() {
   const [runDate, setRunDate] = useState(params.get("run_date") || todayIso());
   const [step, setStep] = useState(1); // 1..6 = a batch each; 7 = Review
   const [showAll, setShowAll] = useState(false);
-  const [showUnbatched, setShowUnbatched] = useState(false);
+  const [hideBatched, setHideBatched] = useState(false);
   const [filter, setFilter] = useState("");
   const [wearerDrafts, setWearerDrafts] = useState<Record<number, string>>({});
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
@@ -99,7 +99,7 @@ export default function BatchingWizard() {
     let list = rosterTrucks;
     const f = filter.trim();
     if (f) list = list.filter((t) => String(t.truck_number).includes(f));
-    if (showUnbatched) {
+    if (hideBatched) {
       // Hide the noise of already-batched trucks, but keep the ones in THIS
       // batch so the current step's picks stay visible and removable.
       list = list.filter((t) => {
@@ -108,7 +108,7 @@ export default function BatchingWizard() {
       });
     }
     return list;
-  }, [rosterTrucks, filter, showUnbatched, batchByTruck, step]);
+  }, [rosterTrucks, filter, hideBatched, batchByTruck, step]);
 
   function batchInfo(n: number) {
     const b = batches.find((x) => x.batch_number === n);
@@ -197,8 +197,8 @@ export default function BatchingWizard() {
           Show entire fleet
         </label>
         <label className="flex items-center gap-1.5 text-xs text-slate-400">
-          <input type="checkbox" checked={showUnbatched} onChange={(e) => setShowUnbatched(e.target.checked)} />
-          Show unbatched
+          <input type="checkbox" checked={hideBatched} onChange={(e) => setHideBatched(e.target.checked)} />
+          Hide batched
         </label>
       </div>
 
@@ -392,7 +392,7 @@ function BatchStep({
         {gridTrucks.length === 0 ? (
           <p className="text-sm text-slate-500">
             No trucks match. Clear the filter, or adjust <span className="font-semibold">Show entire fleet</span> /{" "}
-            <span className="font-semibold">Show unbatched</span> above.
+            <span className="font-semibold">Hide batched</span> above.
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
