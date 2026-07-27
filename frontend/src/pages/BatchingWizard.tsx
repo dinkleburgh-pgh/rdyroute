@@ -45,6 +45,7 @@ export default function BatchingWizard() {
   const [runDate, setRunDate] = useState(params.get("run_date") || todayIso());
   const [step, setStep] = useState(1); // 1..6 = a batch each; 7 = Review
   const [showAll, setShowAll] = useState(false);
+  const [showUnbatched, setShowUnbatched] = useState(false);
   const [filter, setFilter] = useState("");
   const [wearerDrafts, setWearerDrafts] = useState<Record<number, string>>({});
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
@@ -95,10 +96,19 @@ export default function BatchingWizard() {
   }, [board, showAll, unloadsDay, holidayUnload, batchByTruck]);
 
   const gridTrucks = useMemo(() => {
+    let list = rosterTrucks;
     const f = filter.trim();
-    if (!f) return rosterTrucks;
-    return rosterTrucks.filter((t) => String(t.truck_number).includes(f));
-  }, [rosterTrucks, filter]);
+    if (f) list = list.filter((t) => String(t.truck_number).includes(f));
+    if (showUnbatched) {
+      // Hide the noise of already-batched trucks, but keep the ones in THIS
+      // batch so the current step's picks stay visible and removable.
+      list = list.filter((t) => {
+        const b = batchByTruck.get(t.truck_number);
+        return b == null || b === step;
+      });
+    }
+    return list;
+  }, [rosterTrucks, filter, showUnbatched, batchByTruck, step]);
 
   function batchInfo(n: number) {
     const b = batches.find((x) => x.batch_number === n);
@@ -185,6 +195,10 @@ export default function BatchingWizard() {
         <label className="flex items-center gap-1.5 text-xs text-slate-400">
           <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
           Show entire fleet
+        </label>
+        <label className="flex items-center gap-1.5 text-xs text-slate-400">
+          <input type="checkbox" checked={showUnbatched} onChange={(e) => setShowUnbatched(e.target.checked)} />
+          Show unbatched
         </label>
       </div>
 
@@ -377,7 +391,8 @@ function BatchStep({
         </div>
         {gridTrucks.length === 0 ? (
           <p className="text-sm text-slate-500">
-            No trucks match. Turn on <span className="font-semibold">Show entire fleet</span> or clear the filter.
+            No trucks match. Clear the filter, or adjust <span className="font-semibold">Show entire fleet</span> /{" "}
+            <span className="font-semibold">Show unbatched</span> above.
           </p>
         ) : (
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
