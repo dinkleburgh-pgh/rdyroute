@@ -55,7 +55,11 @@ export function useOfflineSync(opts: UseOfflineSyncOptions = {}): OfflineSyncSta
 
       for (const item of items) {
         try {
-          await api.request({ method: item.method, url: item.endpoint, data: item.payload });
+          // Per-request timeout: the shared axios client has none (uploads need
+          // to run long), but a queued write is small JSON — without this, one
+          // hung request (e.g. mid tunnel-flap) wedged the flush forever and the
+          // "Syncing…" banner never cleared (2026-07-27).
+          await api.request({ method: item.method, url: item.endpoint, data: item.payload, timeout: 20_000 });
           await offlineQueue.remove(item.id);
           anyFlushed = true;
         } catch (err: unknown) {
@@ -114,6 +118,17 @@ export function useOfflineSync(opts: UseOfflineSyncOptions = {}): OfflineSyncSta
     const id = window.setInterval(refreshCount, 5_000);
     return () => window.clearInterval(id);
   }, [refreshCount]);
+
+  // Periodic flush retry: a flush that broke mid-queue (network blip, 5xx)
+  // used to strand items until the NEXT browser "online" event or a full
+  // reload — "N items pending sync" never cleared on its own (2026-07-27).
+  // flush() is a cheap no-op when the queue is empty or already flushing.
+  useEffect(() => {
+    const id = window.setInterval(() => {
+      if (navigator.onLine) void flush();
+    }, 60_000);
+    return () => window.clearInterval(id);
+  }, [flush]);
 
   return { isOnline, pendingCount, isFlushing };
 }
