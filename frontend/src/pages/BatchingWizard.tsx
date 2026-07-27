@@ -192,14 +192,32 @@ export default function BatchingWizard() {
             onChange={(e) => setRunDate(e.target.value)}
           />
         </label>
-        <label className="flex items-center gap-1.5 text-xs text-slate-400">
-          <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
-          Show entire fleet
-        </label>
-        <label className="flex items-center gap-1.5 text-xs text-slate-400">
-          <input type="checkbox" checked={hideBatched} onChange={(e) => setHideBatched(e.target.checked)} />
-          Hide batched
-        </label>
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className={clsx(
+              "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+              showAll
+                ? "border-blue-500 bg-blue-900/50 text-blue-100"
+                : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500",
+            )}
+          >
+            Show entire fleet
+          </button>
+          <button
+            type="button"
+            onClick={() => setHideBatched((v) => !v)}
+            className={clsx(
+              "rounded-lg border px-3 py-1.5 text-xs font-semibold transition-colors",
+              hideBatched
+                ? "border-blue-500 bg-blue-900/50 text-blue-100"
+                : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500",
+            )}
+          >
+            Hide batched
+          </button>
+        </div>
       </div>
 
       {/* Progress pills — Batch 1-6 + Review, click to jump */}
