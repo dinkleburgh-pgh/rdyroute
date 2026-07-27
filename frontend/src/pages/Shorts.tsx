@@ -25,7 +25,8 @@ import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 import ItemFirstEntry from "../components/shorts/ItemFirstEntry";
-import ShortageSheetView from "../components/shorts/ShortageSheetView";
+import ShortSheetEditor from "../components/shorts/ShortSheetEditor";
+import ConfirmDialog from "../components/ConfirmDialog";
 import HierarchyPicker, { DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit, useCategoryPalette } from "../components/shorts/HierarchyPicker";
 import type { TrackedItem } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
@@ -155,6 +156,7 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
   const remove = useDeleteShortage();
   const [editId, setEditId]     = useState<number | null>(null);
   const [editQty, setEditQty]   = useState("");
+  const [confirmDel, setConfirmDel] = useState<Shortage | null>(null);
 
   function startEdit(s: Shortage) {
     setEditId(s.id);
@@ -229,7 +231,7 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
                 </button>
                 <button
                   type="button"
-                  onClick={() => remove.mutate(s.id)}
+                  onClick={() => setConfirmDel(s)}
                   disabled={remove.isPending}
                   className="rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition disabled:opacity-50"
                 >
@@ -240,6 +242,25 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
           );
         })}
       </div>
+
+      <ConfirmDialog
+        open={confirmDel != null}
+        variant="danger"
+        title="Delete this shortage?"
+        description={
+          confirmDel
+            ? `Removes ${qtyWithUnit(items, confirmDel.item_category, confirmDel.item_detail, confirmDel.quantity)} × ${confirmDel.item_detail ? `${confirmDel.item_category} ${confirmDel.item_detail}` : confirmDel.item_category} from truck #${confirmDel.truck_number}.`
+            : undefined
+        }
+        confirmLabel="Delete"
+        busy={remove.isPending}
+        onConfirm={() => {
+          const s = confirmDel;
+          setConfirmDel(null);
+          if (s) remove.mutate(s.id);
+        }}
+        onCancel={() => setConfirmDel(null)}
+      />
     </section>
   );
 }
@@ -518,7 +539,7 @@ export function ShortsWorkspace() {
           <ShortageImportPanel defaultRunDate={runDate} lockedRunDate />
         </div>
       ) : viewMode === "sheet" ? (
-        <ShortageSheetView shorts={shorts} board={board} />
+        <ShortSheetEditor shorts={shorts} board={board} runDate={runDate} loadDay={loadDay} holiday={holiday} />
       ) : viewMode === "byItem" ? (
         <ItemFirstEntry
           runDate={runDate}

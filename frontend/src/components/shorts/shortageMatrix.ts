@@ -44,6 +44,61 @@ export interface ShortageMatrix {
   byTruckItems: Map<number, { row: SheetRow; qty: number }[]>;
 }
 
+/**
+ * The canonical (item_category, item_detail) a catalog item is logged under —
+ * matching HierarchyPicker's onLog: category is the SUBcategory (Towels, or a
+ * mat size like 3x10) else the TOP category (Paper); detail is the item label
+ * with a mat-size prefix stripped. Every current entry path (By item / By
+ * truck) produces this same shape, so cells reconcile exactly.
+ */
+export function catalogItemKey(item: TrackedItem): { category: string; detail: string } {
+  const sub = subCatOf(item);
+  const category = sub ?? topCatOf(item);
+  const detail =
+    sub && MAT_SIZES_S.has(category) && item.label.startsWith(category + " ")
+      ? item.label.slice(category.length + 1)
+      : item.label;
+  return { category, detail };
+}
+
+/**
+ * Every catalog item as an (empty) SheetRow in sheet order (family → category →
+ * label) — the row set for the EDITABLE short sheet, where most cells start
+ * blank. Deduped by (category, detail). `byTruck`/`total` are placeholders the
+ * editor fills from live shortages.
+ */
+export function buildCatalogRows(items: TrackedItem[]): SheetRow[] {
+  const seen = new Set<string>();
+  const rows: SheetRow[] = [];
+  for (const item of items) {
+    const { category, detail } = catalogItemKey(item);
+    const key = `${category}||${detail}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    rows.push({
+      group: superGroupOf(category, items),
+      category,
+      detail,
+      label: detail ? `${category} ${detail}` : category,
+      unit: item.unit_label ?? null,
+      byTruck: new Map(),
+      total: 0,
+    });
+  }
+  const groupRank = (g: string) => {
+    const i = GROUP_ORDER.indexOf(g);
+    return i === -1 ? GROUP_ORDER.length : i;
+  };
+  rows.sort(
+    (a, b) =>
+      groupRank(a.group) - groupRank(b.group) ||
+      a.group.localeCompare(b.group) ||
+      a.category.localeCompare(b.category) ||
+      a.label.localeCompare(b.label),
+  );
+  return rows;
+}
+
 export function buildShortageMatrix(shorts: Shortage[], items: TrackedItem[]): ShortageMatrix {
   const truckSet = new Set<number>();
   const rowMap = new Map<string, SheetRow>();

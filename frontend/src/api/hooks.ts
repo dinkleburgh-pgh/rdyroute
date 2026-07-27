@@ -720,6 +720,26 @@ export function useUpdateShortage() {
   });
 }
 
+/**
+ * Idempotent cell upsert for the editable Short Sheet (PUT /shorts/cells).
+ * Each entry sets a (truck, item) cell to its canonical total; qty 0 clears it.
+ *
+ * NOTE: deliberately NOT offline-queued. The queue coalesces PUTs to the same
+ * endpoint, which would collapse distinct cell saves and lose edits — so a
+ * failed save rethrows and the caller keeps the local draft to retry.
+ */
+export function useUpsertShortageCells() {
+  return useMutation({
+    mutationFn: async (payload: {
+      run_date: string;
+      initials?: string;
+      initials_ts?: number | null;
+      entries: { truck_number: number; item_category: string; item_detail?: string; quantity: number }[];
+    }): Promise<Shortage[]> => (await api.put<Shortage[]>("/shorts/cells", payload)).data,
+    onSuccess: () => { /* WebSocket handles invalidation; 30s staleTime on useShortages is fallback. */ },
+  });
+}
+
 export function useDeleteShortage() {
   const qc = useQueryClient();
   return useMutation({

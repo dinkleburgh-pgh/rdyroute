@@ -219,6 +219,25 @@ class ShortageBulkCreate(BaseModel):
     entries: list[ShortageBulkEntry] = Field(..., min_length=1, max_length=200)
 
 
+class ShortageCellEntry(BaseModel):
+    """One (truck, item) CELL of the editable short sheet."""
+
+    truck_number: int = Field(..., ge=1, le=999)
+    item_category: str = Field(..., min_length=1, max_length=120)
+    item_detail: str = Field(default="", max_length=120)
+    quantity: int = Field(..., ge=0)  # 0 = clear the cell
+
+
+class ShortageCellUpsert(BaseModel):
+    """Idempotent cell upsert for the editable Short Sheet — sets each cell to
+    its canonical total for the run-date (see PUT /shorts/cells)."""
+
+    run_date: date
+    initials: str = Field(default="", max_length=20)
+    initials_ts: float | None = None
+    entries: list[ShortageCellEntry] = Field(..., min_length=1, max_length=400)
+
+
 class ShortageUpdate(BaseModel):
     item_category: str | None = Field(default=None, max_length=120)
     item_detail: str | None = Field(default=None, max_length=120)

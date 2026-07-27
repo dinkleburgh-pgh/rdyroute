@@ -21,6 +21,7 @@ from models import Shortage, User
 from schemas import (
     ShortageBulkCreate,
     ShortageCategoryPoint,
+    ShortageCellUpsert,
     ShortageCreate,
     ShortageDailyPoint,
     ShortageItemPoint,
@@ -99,6 +100,71 @@ def create_shortages_bulk(
         {"type": "shortage_updated", "run_date": str(payload.run_date)},
     )
     return rows
+
+
+@router.put("/cells", response_model=list[ShortageOut])
+def upsert_shortage_cells(
+    payload: ShortageCellUpsert,
+    background_tasks: BackgroundTasks,
+    _user: User = Depends(require_non_guest),
+    db: Session = Depends(get_db),
+):
+    """Idempotent cell upsert for the editable Short Sheet.
+
+    Each entry is a (truck, item) CELL: set its quantity to the canonical total
+    for the run-date. quantity > 0 keeps exactly ONE Shortage row for the cell
+    (patched in place) and deletes any duplicates; quantity == 0 clears the cell
+    (deletes every matching row). Unlike POST /shorts/bulk (insert-only), this is
+    safe to call repeatedly — the grid / guided sheet re-saves the same cell
+    without piling up duplicate rows. Matching is exact on
+    (run_date, truck_number, item_category, item_detail).
+    """
+    result_rows: list[Shortage] = []
+    for entry in payload.entries:
+        existing = list(
+            db.scalars(
+                select(Shortage)
+                .where(
+                    Shortage.run_date == payload.run_date,
+                    Shortage.truck_number == entry.truck_number,
+                    Shortage.item_category == entry.item_category,
+                    Shortage.item_detail == entry.item_detail,
+                )
+                .order_by(Shortage.recorded_at)
+            ).all()
+        )
+        if entry.quantity <= 0:
+            for row in existing:
+                db.delete(row)
+            continue
+        if existing:
+            keep = existing[0]
+            keep.quantity = entry.quantity
+            keep.initials = payload.initials
+            keep.initials_ts = payload.initials_ts
+            for extra in existing[1:]:  # collapse duplicates to one canonical row
+                db.delete(extra)
+            result_rows.append(keep)
+        else:
+            row = Shortage(
+                truck_number=entry.truck_number,
+                run_date=payload.run_date,
+                item_category=entry.item_category,
+                item_detail=entry.item_detail,
+                quantity=entry.quantity,
+                initials=payload.initials,
+                initials_ts=payload.initials_ts,
+            )
+            db.add(row)
+            result_rows.append(row)
+    db.commit()
+    for row in result_rows:
+        db.refresh(row)
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "shortage_updated", "run_date": str(payload.run_date)},
+    )
+    return result_rows
 
 
 @router.patch("/{shortage_id}", response_model=ShortageOut)
