@@ -10,6 +10,15 @@ const RANGES = [
   { label: "90d", value: 90 },
 ];
 
+// Mobile-only range filter. PageHeader hides its `actions` (the desktop range
+// selector) below the md breakpoint, so mobile gets its own control. Kept to
+// the three ranges that fit a phone: 7 days / 14 days / 1 month.
+const MOBILE_RANGES = [
+  { label: "7 days", value: 7 },
+  { label: "14 days", value: 14 },
+  { label: "1 month", value: 30 },
+];
+
 interface Props {
   days: number;
   onChangeDays: (d: number) => void;
@@ -39,6 +48,7 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
   };
 
   return (
+    <>
     <PageHeader
       eyebrow="Analytics"
       title="Trends"
@@ -80,5 +90,25 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
         </>
       }
     />
+
+      {/* Mobile-only range filter — the desktop selector above lives in
+          PageHeader's actions, which are hidden below md. */}
+      <div className="flex gap-1 rounded-lg bg-slate-900 p-1 ring-1 ring-slate-700/50 md:hidden">
+        {MOBILE_RANGES.map((r) => (
+          <button
+            key={r.value}
+            onClick={() => onChangeDays(r.value)}
+            className={
+              "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all " +
+              (days === r.value
+                ? "bg-blue-600 text-white shadow"
+                : "text-slate-400 hover:text-slate-200")
+            }
+          >
+            {r.label}
+          </button>
+        ))}
+      </div>
+    </>
   );
 }
