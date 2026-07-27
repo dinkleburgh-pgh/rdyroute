@@ -117,21 +117,28 @@ function UploadPanel({ categories }: { categories: string[] }) {
 // ---------------------------------------------------------------------------
 function Thumb({ doc }: { doc: DocumentItem }) {
   const url = documentFileUrl(doc.id);
-  if (isImage(doc.mime_type)) {
+  // HEIC (and other formats a given browser can't decode) fail in <img> — fall
+  // back to an icon so the card shows cleanly instead of a broken image.
+  const [imgErr, setImgErr] = useState(false);
+  const image = isImage(doc.mime_type);
+  const pdf = isPdf(doc.mime_type);
+  const ext = (doc.file_name.split(".").pop() || "file").toLowerCase();
+
+  if (image && !imgErr) {
     return (
       <a href={url} target="_blank" rel="noreferrer" className="block">
-        <img src={url} alt={doc.title} loading="lazy"
+        <img src={url} alt={doc.title} loading="lazy" onError={() => setImgErr(true)}
           className="h-32 w-full rounded-lg object-cover ring-1 ring-slate-700 transition hover:ring-blue-500" />
       </a>
     );
   }
-  const Icon = isPdf(doc.mime_type) ? FileText : FileIcon;
+  const Icon = pdf ? FileText : image ? ImageIcon : FileIcon;
   return (
     <a href={url} target="_blank" rel="noreferrer"
       className="flex h-32 w-full flex-col items-center justify-center gap-2 rounded-lg bg-slate-800/60 ring-1 ring-slate-700 transition hover:ring-blue-500">
-      <Icon className={clsx("h-10 w-10", isPdf(doc.mime_type) ? "text-red-400" : "text-slate-400")} />
+      <Icon className={clsx("h-10 w-10", pdf ? "text-red-400" : image ? "text-blue-400" : "text-slate-400")} />
       <span className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">
-        {isPdf(doc.mime_type) ? "PDF" : (doc.file_name.split(".").pop() || "file")}
+        {pdf ? "PDF" : ext}
       </span>
     </a>
   );
