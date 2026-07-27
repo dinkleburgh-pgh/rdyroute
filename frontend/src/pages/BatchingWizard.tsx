@@ -49,6 +49,7 @@ export default function BatchingWizard() {
   const [wearerDrafts, setWearerDrafts] = useState<Record<number, string>>({});
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
   const [confirmClear, setConfirmClear] = useState<number | null>(null);
+  const [confirmMove, setConfirmMove] = useState<{ truck: number; from: number } | null>(null);
 
   const { data: board = [] } = useBoard(runDate);
   const { data: batches = [] } = useBatchSummary(runDate);
@@ -137,10 +138,12 @@ export default function BatchingWizard() {
   }
 
   // Tap in the grid: add to / remove from / move into the current batch.
+  // Moving a truck that's already in ANOTHER batch is confirmed first.
   function toggleTruck(t: TruckWithState) {
     const current = batchByTruck.get(t.truck_number);
     if (current === step) void unassignTruck(t.truck_number, step);
-    else void assignTruck(t.truck_number, step); // assign auto-moves out of any other batch
+    else if (current != null) setConfirmMove({ truck: t.truck_number, from: current });
+    else void assignTruck(t.truck_number, step);
   }
 
   async function clearBatch(batchNumber: number) {
@@ -279,6 +282,19 @@ export default function BatchingWizard() {
           if (n != null) void clearBatch(n);
         }}
         onCancel={() => setConfirmClear(null)}
+      />
+
+      <ConfirmDialog
+        open={confirmMove != null}
+        title={`Move truck ${confirmMove?.truck} to Batch ${step}?`}
+        description={`Truck ${confirmMove?.truck} is currently in Batch ${confirmMove?.from}. Moving it here removes it from Batch ${confirmMove?.from}.`}
+        confirmLabel={`Move to Batch ${step}`}
+        onConfirm={() => {
+          const m = confirmMove;
+          setConfirmMove(null);
+          if (m) void assignTruck(m.truck, step);
+        }}
+        onCancel={() => setConfirmMove(null)}
       />
     </div>
   );
