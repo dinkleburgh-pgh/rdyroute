@@ -617,6 +617,11 @@ export default function LiveReport() {
   const [kioskIdx, setKioskIdx] = useState(0);
   const [kioskPaused, setKioskPaused] = useState(false);
   const [kioskSecs, setKioskSecs] = useState(20);
+  // Kiosk is read from across the room, so the dense sections (short sheet,
+  // load times, batch/wearer numbers) get scaled up. `zoom` is used rather
+  // than transform:scale because it reflows — the grid keeps its own
+  // horizontal scroll instead of being squashed.
+  const [kioskZoom, setKioskZoom] = useState(1.3);
   const [kioskTick, setKioskTick] = useState(0); // drives the progress bar
 
   // Only rotate through sections the user picked that actually have something
@@ -655,50 +660,77 @@ export default function LiveReport() {
     return () => window.clearInterval(id);
   }, [kiosk, kioskPaused, kioskSecs, kioskIdx, kioskNext]);
 
-  // Auto-scroll a slide that doesn't fit. Speed is derived, not fixed: the
-  // travel is spread across the middle of the slide's own duration, so a long
-  // sheet on a 60s slide crawls and the same sheet on a 10s slide moves
-  // briskly. Holds at the top and bottom so the first and last rows are
-  // actually readable.
+  // Auto-scroll a slide that doesn't fit, as one slow constant crawl:
+  //   hold at top -> glide to the bottom -> sit at the bottom -> back to the
+  //   top and repeat, for as long as the slide is on screen.
+  // The pace is a fixed comfortable reading speed, so a longer timer means MORE
+  // dwell (and another pass) rather than an ever-slower crawl. If the slide is
+  // too short for a full pass at that pace, the travel compresses to fit.
   //
   // NOTE: this deliberately runs even under prefers-reduced-motion. Paging in
   // discrete jumps to honour that setting read as erratic on a wall display,
   // and skipping the scroll entirely left the bottom of a long slide
   // unreachable — a slow, constant crawl is the calmest option of the three.
   const kioskScrollRef = useRef<HTMLDivElement>(null);
-  const KIOSK_HOLD = 0.15; // fraction of the slide spent parked at each end
+  const KIOSK_PACE = 38;        // px per second — measured comfortable crawl
+  const KIOSK_TOP_HOLD = 1500;  // ms parked at the top before setting off
+  const KIOSK_BOTTOM_HOLD = 3500; // ms parked at the bottom before looping
 
-  // Back to the top whenever the slide changes (not when merely pausing).
+  // Someone touched it: stop auto-scrolling this slide so they can read at
+  // their own pace. Clears automatically when the slide changes.
+  const [kioskManual, setKioskManual] = useState(false);
   useEffect(() => {
+    setKioskManual(false);
     if (kioskScrollRef.current) kioskScrollRef.current.scrollTop = 0;
   }, [kioskKey, kioskIdx]);
 
   useEffect(() => {
     const el = kioskScrollRef.current;
-    if (!kiosk || !el || kioskPaused) return;
+    if (!kiosk || !el) return;
+    // Only real user intent — NOT the "scroll" event, which our own animation
+    // fires every frame.
+    const stop = () => setKioskManual(true);
+    const opts = { passive: true } as AddEventListenerOptions;
+    el.addEventListener("wheel", stop, opts);
+    el.addEventListener("touchstart", stop, opts);
+    el.addEventListener("pointerdown", stop, opts);
+    el.addEventListener("keydown", stop, opts);
+    return () => {
+      el.removeEventListener("wheel", stop);
+      el.removeEventListener("touchstart", stop);
+      el.removeEventListener("pointerdown", stop);
+      el.removeEventListener("keydown", stop);
+    };
+  }, [kiosk, kioskKey]);
+
+  useEffect(() => {
+    const el = kioskScrollRef.current;
+    if (!kiosk || !el || kioskPaused || kioskManual) return;
 
     const total = kioskSecs * 1000;
-    const travelMs = total * (1 - 2 * KIOSK_HOLD);
-    // Resume from wherever we are rather than snapping back.
-    const max0 = el.scrollHeight - el.clientHeight;
-    const done = max0 > 0 ? el.scrollTop / max0 : 0;
-    const start = performance.now() - total * KIOSK_HOLD - done * travelMs;
-
+    const start = performance.now();
     let raf = 0;
     const step = (now: number) => {
       // Re-measure every frame: the section animates in and data can refetch
       // underneath, both of which change the height.
       const max = el.scrollHeight - el.clientHeight;
       if (max > 8) {
-        const elapsed = now - start;
-        const t = Math.min(1, Math.max(0, (elapsed - total * KIOSK_HOLD) / travelMs));
-        el.scrollTop = max * t;
+        const usable = Math.max(600, total - KIOSK_TOP_HOLD - KIOSK_BOTTOM_HOLD);
+        const travel = Math.min((max / KIOSK_PACE) * 1000, usable);
+        const cycle = KIOSK_TOP_HOLD + travel + KIOSK_BOTTOM_HOLD;
+        const t = (now - start) % cycle;   // wraps -> back to the top for another pass
+        el.scrollTop =
+          t < KIOSK_TOP_HOLD
+            ? 0
+            : t < KIOSK_TOP_HOLD + travel
+              ? max * ((t - KIOSK_TOP_HOLD) / travel)
+              : max;
       }
       raf = requestAnimationFrame(step);
     };
     raf = requestAnimationFrame(step);
     return () => cancelAnimationFrame(raf);
-  }, [kiosk, kioskPaused, kioskKey, kioskIdx, kioskSecs]);
+  }, [kiosk, kioskPaused, kioskManual, kioskKey, kioskIdx, kioskSecs]);
 
   // Keyboard: Esc exits, Space pauses, arrows step.
   useEffect(() => {
@@ -1186,6 +1218,16 @@ export default function LiveReport() {
             <option key={n} value={n}>{n}s</option>
           ))}
         </select>
+        <select
+          value={kioskZoom}
+          onChange={(e) => setKioskZoom(Number(e.target.value))}
+          title="Text size"
+          className="input w-20 px-2 py-1 text-xs"
+        >
+          {[1, 1.15, 1.3, 1.5, 1.75, 2].map((z) => (
+            <option key={z} value={z}>{Math.round(z * 100)}%</option>
+          ))}
+        </select>
         <button onClick={toggleFullscreen} title="Toggle full screen" className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink">
           <Maximize2 className="h-5 w-5" />
         </button>
@@ -1222,6 +1264,7 @@ export default function LiveReport() {
                 exit={{ opacity: 0, y: -24, scale: 0.99 }}
                 transition={{ duration: 0.35, ease: "easeOut" }}
                 className="px-6 py-5"
+                style={{ zoom: kioskZoom }}
               >
                 {reportBody}
               </motion.div>
