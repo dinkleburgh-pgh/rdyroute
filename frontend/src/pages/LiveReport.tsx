@@ -350,14 +350,26 @@ export default function LiveReport() {
   // Top 5 shorted ITEMS (qty across every truck) — the item-side companion to
   // topTrucks. Same derivation the PDF uses, so the two always agree.
   const topItems = useMemo(() => {
-    const m = new Map<string, { label: string; category: string; qty: number }>();
+    const m = new Map<string, { label: string; category: string; qty: number; trucks: Map<number, number> }>();
     for (const s of shorts) {
       const label = shortLabel(s);
-      const e = m.get(label) ?? { label, category: s.item_category, qty: 0 };
+      const e = m.get(label) ?? { label, category: s.item_category, qty: 0, trucks: new Map<number, number>() };
       e.qty += s.quantity;
+      e.trucks.set(s.truck_number, (e.trucks.get(s.truck_number) ?? 0) + s.quantity);
       m.set(label, e);
     }
-    return [...m.values()].sort((a, b) => b.qty - a.qty).slice(0, 5);
+    return [...m.values()]
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 5)
+      .map((it) => ({
+        label: it.label,
+        category: it.category,
+        qty: it.qty,
+        // Which trucks made up this item's total, biggest contributor first.
+        trucks: [...it.trucks.entries()]
+          .map(([truck, qty]) => ({ truck, qty }))
+          .sort((a, b) => b.qty - a.qty),
+      }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [shorts]);
 
@@ -819,6 +831,23 @@ export default function LiveReport() {
                       <span className={clsx("h-2 w-2 shrink-0 rounded-full", palette.dotClass(it.category))} />
                       {it.label}
                     </p>
+                    {/* Which trucks this item was short on — the mirror of the
+                        per-truck cards above, which list items. */}
+                    <ul className="mt-1.5 space-y-0.5 border-t border-hairline pt-1.5">
+                      {it.trucks.slice(0, 6).map((t) => (
+                        <li key={t.truck} className="flex items-baseline justify-between gap-2 text-xs">
+                          <span className="font-mono font-semibold tabular-nums text-ink-soft">#{t.truck}</span>
+                          <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">
+                            {t.qty.toLocaleString()}
+                          </span>
+                        </li>
+                      ))}
+                      {it.trucks.length > 6 && (
+                        <li className="text-center text-[10px] text-ink-faint">
+                          +{it.trucks.length - 6} more truck{it.trucks.length - 6 === 1 ? "" : "s"}
+                        </li>
+                      )}
+                    </ul>
                   </div>
                 ))}
               </div>

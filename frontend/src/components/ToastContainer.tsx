@@ -2,6 +2,9 @@
  * Renders the stack of active toasts in the bottom-right corner.
  * Two shapes:
  *   • plain — one-line feedback (save confirmations, errors)
+ * Positioned clear of the mobile bottom nav (45px tall + the device safe area);
+ * on desktop there is no nav bar so it sits at the usual bottom-4.
+ *
  *   • card  — a rich, app-styled card (title eyebrow + chip + body), used for
  *     actionable events like "New Driver Note". If onClick is set the whole
  *     card is tappable; the ✕ still dismisses without firing it.
@@ -82,7 +85,7 @@ export default function ToastContainer() {
   if (toasts.length === 0) return null;
 
   return (
-    <div className="pointer-events-none fixed bottom-4 right-4 z-[100] flex max-h-[80svh] w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 overflow-y-auto overscroll-contain">
+    <div className="pointer-events-none fixed right-4 z-[100] flex max-h-[70svh] w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 overflow-y-auto overscroll-contain bottom-[calc(3.75rem+env(safe-area-inset-bottom))] md:bottom-4">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div

@@ -394,13 +394,28 @@ def _top_items_html(m) -> str:
     ranked = sorted(m.rows, key=lambda r: int(r.total), reverse=True)[:5]
     cards = []
     for i, r in enumerate(ranked, 1):
+        # Which trucks made up this item's total, biggest first — the mirror of
+        # the per-truck cards above, which list items.
+        hits = sorted(
+            ((int(m.trucks[idx]), int(q)) for idx, q in enumerate(r.cells) if q),
+            key=lambda kv: kv[1],
+            reverse=True,
+        )
+        rows_html = "".join(
+            f'<li><span class="il mono">#{tn}</span>'
+            f'<span class="mono" style="color:#fcd34d">{q}</span></li>'
+            for tn, q in hits[:6]
+        )
+        if len(hits) > 6:
+            rows_html += f'<li><span class="dim">+{len(hits) - 6} more</span><span></span></li>'
         cards.append(
             f'<div class="tcard">'
             f'<div class="ah"><span class="rank">#{i}</span>'
             f'<span class="mono" style="color:#fcd34d">{int(r.total)} <span class="dim">qty</span></span></div>'
             f'<div class="inum"><span class="dot" style="background:{r.dot_hex}"></span>'
             f"{_e(r.label)}</div>"
-            f'<div class="igroup">{_e(r.group)}</div></div>'
+            f'<div class="igroup">{_e(r.group)}</div>'
+            f'<ul class="alist">{rows_html}</ul></div>'
         )
     return (
         '<div class="subhead">Top shorted items</div>'
