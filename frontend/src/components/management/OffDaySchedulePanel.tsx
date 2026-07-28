@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Pencil } from "lucide-react";
-import { useFleet, useHolidayLoad, useHolidayUnload, useUpdateTruck } from "../../api/hooks";
+import { useFleet, useHolidayLoad, useHolidayUnload, useRouteDrivers, useUpdateTruck } from "../../api/hooks";
 import { isScheduledOff, previousWorkday } from "../../utils/truckStatus";
 import { workdayNumbers } from "../Clock";
 import { todayIso } from "../../api/client";
@@ -44,6 +44,18 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
       .filter((t) => t.truck_type !== "Spare")
       .sort((a, b) => a.truck_number - b.truck_number);
   }, [fleet]);
+
+  // SSR names from the captured dock board, keyed by route number. 403s for
+  // guests, so an empty map just means "render without the name column".
+  const { data: routeDrivers } = useRouteDrivers();
+  const driverByRoute = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const d of routeDrivers ?? []) {
+      if (d.route_number != null) m.set(d.route_number, d.driver_name);
+    }
+    return m;
+  }, [routeDrivers]);
+  const hasDrivers = driverByRoute.size > 0;
 
   const { loadDay, unloadsDay } = workdayNumbers();
   const runDate = todayIso();
@@ -129,7 +141,19 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-800 text-left text-xs uppercase tracking-widest text-slate-400">
-              <th className="sticky left-0 z-10 border border-slate-700/50 bg-slate-800 px-1 py-1.5 text-center">Route</th>
+              {hasDrivers && (
+                <th className="sticky left-0 z-10 hidden w-36 border border-slate-700/50 bg-slate-800 px-2 py-1.5 text-left sm:table-cell">
+                  SSR
+                </th>
+              )}
+              <th
+                className={clsx(
+                  "sticky left-0 z-10 border border-slate-700/50 bg-slate-800 px-1 py-1.5 text-center",
+                  hasDrivers && "sm:left-36",
+                )}
+              >
+                Route
+              </th>
               {[1, 2, 3, 4, 5].map((day) => (
                 <th
                   key={day}
@@ -157,7 +181,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={6} className="border border-slate-700/50 px-1 py-10 text-center text-xs text-slate-500">
+                <td colSpan={hasDrivers ? 7 : 6} className="border border-slate-700/50 px-1 py-10 text-center text-xs text-slate-500">
                   No active route trucks found.
                 </td>
               </tr>
@@ -167,9 +191,24 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                   key={t.truck_number}
                   className={clsx("transition-colors", i % 2 === 1 && "bg-slate-800/20")}
                 >
+                  {hasDrivers && (
+                    <td
+                      className={clsx(
+                        "sticky left-0 z-10 hidden w-36 truncate border border-slate-700/50 bg-slate-900 px-2 py-1.5 text-left text-xs text-slate-300 transition-colors sm:table-cell",
+                        activeRow === t.truck_number && "!bg-blue-900/40 text-slate-100",
+                      )}
+                      onMouseEnter={() => setHoveredRow(t.truck_number)}
+                      onMouseLeave={() => setHoveredRow(null)}
+                      onClick={() => togglePinRow(t.truck_number)}
+                      title={driverByRoute.get(t.truck_number) ?? undefined}
+                    >
+                      {driverByRoute.get(t.truck_number) ?? <span className="text-slate-600">—</span>}
+                    </td>
+                  )}
                   <td
                     className={clsx(
                       "sticky left-0 z-10 border border-slate-700/50 bg-blue-900/30 px-1 py-1.5 text-center font-bold text-slate-200 transition-colors cursor-pointer select-none",
+                      hasDrivers && "sm:left-36",
                       activeRow === t.truck_number && "!bg-blue-800/40",
                     )}
                     onMouseEnter={() => setHoveredRow(t.truck_number)}
@@ -215,7 +254,15 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
           {rows.length > 0 && (
             <tfoot>
               <tr className="bg-slate-800/60 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                <td className="sticky left-0 z-10 border border-slate-700/50 bg-slate-800/80 px-1 py-1.5 text-center text-[10px] text-slate-500">
+                {hasDrivers && (
+                  <td className="sticky left-0 z-10 hidden w-36 border border-slate-700/50 bg-slate-800/80 px-2 py-1.5 sm:table-cell" />
+                )}
+                <td
+                  className={clsx(
+                    "sticky left-0 z-10 border border-slate-700/50 bg-slate-800/80 px-1 py-1.5 text-center text-[10px] text-slate-500",
+                    hasDrivers && "sm:left-36",
+                  )}
+                >
                   Total
                 </td>
                 {perDayCount.map((count, i) => {

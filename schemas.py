@@ -1169,3 +1169,13 @@ class AnomalyDay(BaseModel):
     mean: float
     sigma: float
     z_score: float
+
+
+# ---- Route drivers (SSR board) -------------------------------------------
+class RouteDriverOut(_OrmBase):
+    """A route's assigned SSR, as captured from the dock board."""
+
+    route_number: int | None
+    route_label: str
+    driver_name: str
+    is_active: bool

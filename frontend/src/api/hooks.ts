@@ -728,6 +728,28 @@ export function useUpdateShortage() {
  * endpoint, which would collapse distinct cell saves and lose edits — so a
  * failed save rethrows and the caller keeps the local draft to retry.
  */
+export interface RouteDriver {
+  route_number: number | null;
+  route_label: string;
+  driver_name: string;
+  is_active: boolean;
+}
+
+/**
+ * SSR (driver) assigned to each route, captured from the printed dock board.
+ * Read-only and non-guest gated, so this 403s for guests — callers should
+ * treat an empty map as "no names available" and render without them.
+ */
+export function useRouteDrivers(enabled = true) {
+  return useQuery({
+    queryKey: ["route-drivers"],
+    queryFn: async () => (await api.get<RouteDriver[]>("/route-drivers")).data,
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: false,
+  });
+}
+
 export function useUpsertShortageCells() {
   return useMutation({
     mutationFn: async (payload: {
