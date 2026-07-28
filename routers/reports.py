@@ -204,6 +204,30 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
         line-height: 1.1; padding-bottom: 3px; margin-bottom: 3px;
         border-bottom: 1px solid rgba(255,255,255,0.06); }
 
+.inum { text-align: center; font-size: 12px; font-weight: 700; line-height: 1.2;
+        padding-bottom: 3px; margin-bottom: 2px; border-bottom: 1px solid rgba(255,255,255,0.06); }
+.igroup { text-align: center; font-size: 7px; text-transform: uppercase;
+          letter-spacing: .14em; color: #7a8698; }
+
+/* Per-truck "Sheet" cards, on their own page. The section must be allowed to
+   break across pages (the global page-break-inside:avoid would be dropped
+   anyway once it outgrows a page) — instead each ROW is kept intact. */
+.sheetpage { page-break-before: always; page-break-inside: auto; }
+.sc-row { display: flex; gap: 6px; page-break-inside: avoid; }
+.sc-row + .sc-row { margin-top: 6px; }
+.sc { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+      border-radius: 10px; padding: 6px 8px; }
+.sc.spacer { border-color: transparent; background: transparent; }
+.sch { display: flex; justify-content: space-between; align-items: baseline;
+       border-bottom: 1px solid rgba(255,255,255,0.06); padding-bottom: 3px; margin-bottom: 3px; }
+.scnum { font-size: 15px; font-weight: 700; }
+.scttl { font-size: 9px; color: #fcd34d; }
+.scgroup { font-size: 6.5px; text-transform: uppercase; letter-spacing: .14em;
+           color: #7a8698; margin: 3px 0 1px; }
+.scrow { display: flex; justify-content: space-between; gap: 6px; font-size: 8.5px; padding: 0.5px 0; }
+.scitem { color: #cdd6e2; }
+.scqty { color: #fcd34d; font-weight: 700; }
+
 /* Coverage renders as big paired ROUTE -> TRUCK cards (the app's canonical
    coverage read) rather than a dense list. */
 .cov-row { display: flex; gap: 8px; }
@@ -361,6 +385,71 @@ def _top_trucks_html(top) -> str:
     )
 
 
+def _top_items_html(m) -> str:
+    """Top 5 shorted items. Derived from the matrix rows (whose `total` is the
+    item's qty across every truck) so it can never disagree with the sheet
+    printed right below it."""
+    if m is None or not m.rows:
+        return ""
+    ranked = sorted(m.rows, key=lambda r: int(r.total), reverse=True)[:5]
+    cards = []
+    for i, r in enumerate(ranked, 1):
+        cards.append(
+            f'<div class="tcard">'
+            f'<div class="ah"><span class="rank">#{i}</span>'
+            f'<span class="mono" style="color:#fcd34d">{int(r.total)} <span class="dim">qty</span></span></div>'
+            f'<div class="inum"><span class="dot" style="background:{r.dot_hex}"></span>'
+            f"{_e(r.label)}</div>"
+            f'<div class="igroup">{_e(r.group)}</div></div>'
+        )
+    return (
+        '<div class="subhead">Top shorted items</div>'
+        f'<div class="tcards">{"".join(cards)}</div>'
+    )
+
+
+def _sheet_cards_html(s: ShortagesSectionVM | None) -> str:
+    """The per-truck "Sheet" cards — one card per shorted truck listing its
+    items grouped by family — on their own page after the main report."""
+    if s is None or s.matrix is None or not s.matrix.rows:
+        return ""
+    m = s.matrix
+    cards = []
+    for idx, truck in enumerate(m.trucks):
+        hits = [r for r in m.rows if r.cells[idx]]
+        if not hits:
+            continue
+        body, prev_group = [], None
+        for r in hits:
+            if r.group != prev_group:
+                body.append(f'<div class="scgroup">{_e(r.group)}</div>')
+                prev_group = r.group
+            body.append(
+                f'<div class="scrow"><span class="scitem">'
+                f'<span class="dot" style="background:{r.dot_hex}"></span>{_e(r.label)}</span>'
+                f'<span class="mono scqty">{int(r.cells[idx])}</span></div>'
+            )
+        cards.append(
+            f'<div class="sc"><div class="sch">'
+            f'<span class="mono scnum">{int(truck)}</span>'
+            f'<span class="mono scttl">{int(m.truck_totals[idx])} <span class="dim">qty</span></span>'
+            f'</div>{"".join(body)}</div>'
+        )
+    if not cards:
+        return ""
+    rows = []
+    for i in range(0, len(cards), 4):
+        chunk = cards[i : i + 4]
+        chunk += ['<div class="sc spacer"></div>'] * (4 - len(chunk))
+        rows.append(f'<div class="sc-row">{"".join(chunk)}</div>')
+    return (
+        '<section class="sheetpage">'
+        + _section_head("Load", "Short sheet by truck")
+        + "".join(rows)
+        + "</section>"
+    )
+
+
 def _shortages_html(s: ShortagesSectionVM | None) -> str:
     if s is None:
         return ""
@@ -369,6 +458,7 @@ def _shortages_html(s: ShortagesSectionVM | None) -> str:
         _section_head("Load", "Shortages"),
         _kpis_html(s.kpis),
         _top_trucks_html(s.top_trucks),
+        _top_items_html(s.matrix),
     ]
     m = s.matrix
     if m is None or not m.rows:
@@ -471,6 +561,8 @@ def render_report_html(vm: ReportViewModel) -> str:
             _coverage_html(vm.coverage),
             _load_times_html(vm.load_times),
             _audit_html(vm.audit),
+            # Per-truck sheet cards last — they start their own page.
+            _sheet_cards_html(vm.shortages),
         ]
     )
     return (
