@@ -336,6 +336,50 @@ export default function Load() {
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
+      {/* Dust Garments — read-only, always open */}
+      <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
+        <div className="flex w-full items-center gap-2 px-3 py-2.5">
+          <DustGarmentIcon className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
+          <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
+            {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
+          </span>
+        </div>
+        <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
+            {dustGarmentTrucks.length === 0 ? (
+              <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
+            ) : (
+              <div className="flex flex-wrap gap-1.5">
+                {dustGarmentTrucks.map((t) => {
+                  const garment = t.state?.has_dust_garment === true;
+                  // Garments already out the door read blue/cyan (done); still
+                  // pending ones stay amber (needs action); no garment is muted.
+                  const done = garment && t.state?.status === "loaded";
+                  const color = done ? GARMENT_LOADED_HEX : garment ? GARMENT_PENDING_HEX : "#6f7c8e";
+                  return (
+                    <span
+                      key={t.truck_number}
+                      title={done ? "Loaded with garments" : garment ? "Garments to load" : "No garments"}
+                      className={clsx(
+                        "inline-flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-base font-bold",
+                        done
+                          ? "border-sky-500/60 bg-sky-950/50"
+                          : garment
+                            ? "border-amber-600/60 bg-amber-950/50"
+                            : "border-hairline bg-surface-3",
+                      )}
+                      style={{ color }}
+                    >
+                      #{t.truck_number}
+                      {garment && <DustGarmentIcon className="h-5 w-5" style={{ color }} />}
+                    </span>
+                  );
+                })}
+              </div>
+            )}
+        </div>
+      </div>
+
       {/* Coverage today — always open; big ROUTE -> TRUCK cards, same read as
           the report's coverage section. */}
       {loadCoverage.length > 0 && (
@@ -384,50 +428,6 @@ export default function Load() {
           </div>
         </div>
       )}
-
-      {/* Dust Garments — read-only, always open */}
-      <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
-        <div className="flex w-full items-center gap-2 px-3 py-2.5">
-          <DustGarmentIcon className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
-          <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
-            {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
-          </span>
-        </div>
-        <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
-            {dustGarmentTrucks.length === 0 ? (
-              <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {dustGarmentTrucks.map((t) => {
-                  const garment = t.state?.has_dust_garment === true;
-                  // Garments already out the door read blue/cyan (done); still
-                  // pending ones stay amber (needs action); no garment is muted.
-                  const done = garment && t.state?.status === "loaded";
-                  const color = done ? GARMENT_LOADED_HEX : garment ? GARMENT_PENDING_HEX : "#6f7c8e";
-                  return (
-                    <span
-                      key={t.truck_number}
-                      title={done ? "Loaded with garments" : garment ? "Garments to load" : "No garments"}
-                      className={clsx(
-                        "inline-flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-base font-bold",
-                        done
-                          ? "border-sky-500/60 bg-sky-950/50"
-                          : garment
-                            ? "border-amber-600/60 bg-amber-950/50"
-                            : "border-hairline bg-surface-3",
-                      )}
-                      style={{ color }}
-                    >
-                      #{t.truck_number}
-                      {garment && <DustGarmentIcon className="h-5 w-5" style={{ color }} />}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-        </div>
-      </div>
 
       {/* In-progress truck — top of page */}
       {inProgress && (
