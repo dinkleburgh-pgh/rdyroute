@@ -276,6 +276,8 @@ export default function BatchingWizard() {
           onAssignTruck={assignTruck}
           onRequestRemove={(truck, batch) => setConfirmRemove({ truck, from: batch })}
           onClearBatch={() => setConfirmClear(step)}
+          onPrev={() => setStep((n) => Math.max(1, n - 1))}
+          onNext={() => setStep((n) => n + 1)}
           isDust={isDust}
         />
       ) : (
@@ -368,6 +370,8 @@ function BatchStep({
   onAssignTruck,
   onRequestRemove,
   onClearBatch,
+  onPrev,
+  onNext,
   isDust,
 }: {
   step: number;
@@ -386,6 +390,8 @@ function BatchStep({
   onAssignTruck: (truckNumber: number, batchNumber: number) => void;
   onRequestRemove: (truckNumber: number, batchNumber: number) => void;
   onClearBatch: () => void;
+  onPrev: () => void;
+  onNext: () => void;
   isDust: (t: TruckWithState | undefined) => boolean;
 }) {
   const { total } = info;
@@ -446,6 +452,18 @@ function BatchStep({
             })}
           </div>
         )}
+
+        {/* Mobile only: the page footer's Back/Next sits below the whole wearers
+            list, which is a long scroll away on a phone. Repeat it here so you
+            can move on right after picking this batch's trucks. */}
+        <div className="flex items-center justify-between gap-2 border-t border-slate-800 pt-3 md:hidden">
+          <button className="btn-ghost flex-1" disabled={step <= 1} onClick={onPrev}>
+            ← {step > 1 ? `Batch ${step - 1}` : "Back"}
+          </button>
+          <button className="btn-primary flex-1" onClick={onNext}>
+            {step >= 6 ? "Review" : `Batch ${step + 1}`} →
+          </button>
+        </div>
       </div>
 
       {/* Zone B — wearers for the selected trucks */}
