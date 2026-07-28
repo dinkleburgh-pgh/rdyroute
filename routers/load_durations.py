@@ -87,14 +87,15 @@ def pace_average(
 
 @router.delete("/purge-abnormal", status_code=status.HTTP_200_OK)
 def purge_abnormal(
-    min_seconds: int = Query(default=120, ge=1),
-    max_seconds: int = Query(default=1800, le=86400),
+    min_seconds: int = Query(default=MIN_LOAD_SECONDS, ge=1),
+    max_seconds: int = Query(default=MAX_LOAD_SECONDS, le=86400),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    Remove load duration records outside the valid range.
-    Mirrors remove_abnormal_loadtimes from V1.
+    Remove load duration records outside the valid range. Defaults to the SAME
+    30–7200s band every trend metric treats as valid (trends_common), so the
+    default purge never deletes records the charts are counting.
     """
     from sqlalchemy import delete
 

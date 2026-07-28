@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAuditAnomalies,
@@ -11,17 +11,20 @@ import {
   useQualityRate,
   useRouteSwapLog,
   useShortageByItem,
+  useShortageByTruck,
   useShortageDailyTrend,
   useShortageSummary,
   useTrendComparison,
   useTrendSummary,
   useTruckAnomalies,
+  useUnloadTrend,
   useWearersTrend,
 } from "../api/hooks";
 import "../components/trends/chartSetup";
 import TrendsHeader from "../components/trends/TrendsHeader";
 import TrendTabBar from "../components/trends/TrendTabBar";
 import KpiSection from "../components/trends/KpiSection";
+import KpiCard from "../components/trends/KpiCard";
 import DailyVolumeChart from "../components/trends/DailyVolumeChart";
 import ComparisonChart from "../components/trends/ComparisonChart";
 import TopNCard from "../components/trends/TopNCard";
@@ -31,38 +34,61 @@ import LoadPaceChart from "../components/trends/LoadPaceChart";
 import CompletionRateChart from "../components/trends/CompletionRateChart";
 import WearersChart from "../components/trends/WearersChart";
 import CycleTimeChart from "../components/trends/CycleTimeChart";
+import UnloadChart from "../components/trends/UnloadChart";
 import ShortageVolumeChart from "../components/trends/ShortageVolumeChart";
 import ShortageKpiSection from "../components/trends/ShortageKpiSection";
 import QualityRateCard from "../components/trends/QualityRateCard";
 import AnomalyPanel from "../components/trends/AnomalyPanel";
 
+function fmtPace(s: number | null): string {
+  if (s == null) return "—";
+  const m = Math.floor(s / 60);
+  const sec = Math.round(s % 60);
+  return `${m}:${sec.toString().padStart(2, "0")}`;
+}
+
+function fmtDwell(s: number | null): string {
+  if (s == null) return "—";
+  const h = Math.floor(s / 3600);
+  const m = Math.round((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
 export default function Trends() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
   const tab = params.get("tab") || "overview";
-  const [days, setDays] = useState(14);
-  const [swapDays, setSwapDays] = useState(30);
+  const daysParam = Number(params.get("days"));
+  const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 14;
+  // The coverage log follows the SAME window as every other metric — it used to
+  // ratchet up to 30/90 days and silently stay there after narrowing the filter.
+  const swapDays = days;
 
   const { data: summary, isLoading: summaryLoading } = useTrendSummary(days, days);
   const { data: comparison, isLoading: comparisonLoading } = useTrendComparison(days);
   const { data: daily, isLoading: dailyLoading } = useAuditDailyTrend(days);
-  const { data: byTruck } = useAuditByTruck(days);
-  const { data: byRoute } = useAuditByRoute(days);
+  const { data: byTruck, isLoading: byTruckLoading } = useAuditByTruck(days);
+  const { data: byRoute, isLoading: byRouteLoading } = useAuditByRoute(days);
   const { data: swapLog = [], isLoading: swapLoading } = useRouteSwapLog(swapDays);
   const { data: paceData, isLoading: paceLoading } = useLoadPaceTrend(days);
   const { data: completionData, isLoading: completionLoading } = useCompletionTrend(days);
+  const { data: unloadData, isLoading: unloadLoading } = useUnloadTrend(days);
   const { data: wearersData, isLoading: wearersLoading } = useWearersTrend(days);
   const { data: cycleData, isLoading: cycleLoading } = useCycleTimeTrend(days);
   const { data: shortageDaily, isLoading: shortageDailyLoading } = useShortageDailyTrend(days);
-  const { data: shortageByItem } = useShortageByItem(days);
+  const { data: shortageByItem, isLoading: shortageByItemLoading } = useShortageByItem(days);
+  const { data: shortageByTruck, isLoading: shortageByTruckLoading } = useShortageByTruck(days);
   const { data: shortageSummary, isLoading: shortageSummaryLoading } = useShortageSummary(days, days);
   const { data: qualityRate, isLoading: qualityRateLoading } = useQualityRate(days, days);
-  const { data: truckAnomalies } = useTruckAnomalies(90);
-  const { data: auditAnomalies } = useAuditAnomalies(90);
+  const { data: truckAnomalies, isLoading: truckAnomaliesLoading } = useTruckAnomalies(90);
+  const { data: auditAnomalies, isLoading: auditAnomaliesLoading } = useAuditAnomalies(90);
 
-  useEffect(() => {
-    if (swapDays < days) setSwapDays(days);
-  }, [days, swapDays]);
+  function setDays(d: number) {
+    const next = new URLSearchParams(params);
+    if (d === 14) next.delete("days");
+    else next.set("days", String(d));
+    setParams(next, { replace: true });
+  }
 
   const topTrucks = useMemo(() => {
     const totals = new Map<number, number>();
@@ -103,10 +129,42 @@ export default function Trends() {
   const topShortageItems = useMemo(() => {
     return (shortageByItem ?? [])
       .map((r) => ({ label: r.label, value: r.total_qty }))
-      .sort((a, b) => b.value - a.value);
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
   }, [shortageByItem]);
 
-    function computeTrend(values: number[] | undefined): "up" | "down" | "stable" | null {
+  const topShortageTrucks = useMemo(() => {
+    return (shortageByTruck ?? [])
+      .slice(0, 10)
+      .map((r) => ({
+        label: `#${r.truck_number}`,
+        value: r.total_qty,
+        subtitle: `${r.entry_count} ${r.entry_count === 1 ? "item" : "items"} shorted`,
+      }));
+  }, [shortageByTruck]);
+
+  // Window-wide roll-ups for the Load & Unload KPI row (weighted by day counts,
+  // matching how TrendDetail computes its averages).
+  const loadOps = useMemo(() => {
+    const paceRows = paceData ?? [];
+    const timedLoads = paceRows.reduce((s, r) => s + r.load_count, 0);
+    const paceAvg = timedLoads
+      ? paceRows.reduce((s, r) => s + r.avg_seconds * r.load_count, 0) / timedLoads
+      : null;
+    const compRows = completionData ?? [];
+    const rosterTotal = compRows.reduce((s, r) => s + r.total_trucks, 0);
+    const rosterLoaded = compRows.reduce((s, r) => s + r.loaded_trucks, 0);
+    const completionPct = rosterTotal ? (rosterLoaded / rosterTotal) * 100 : null;
+    const unloadRows = unloadData ?? [];
+    const unloads = unloadRows.reduce((s, r) => s + r.unloaded_trucks, 0);
+    const dwellRows = unloadRows.filter((r) => r.avg_dwell_seconds != null);
+    const dwellAvg = dwellRows.length
+      ? dwellRows.reduce((s, r) => s + (r.avg_dwell_seconds as number), 0) / dwellRows.length
+      : null;
+    return { paceAvg, timedLoads, completionPct, rosterLoaded, rosterTotal, unloads, dwellAvg };
+  }, [paceData, completionData, unloadData]);
+
+  function computeTrend(values: number[] | undefined): "up" | "down" | "stable" | null {
     if (!values || values.length < 4) return null;
     // Equal halves — for an odd count drop the middle point so neither half is
     // longer (a longer second half biased every trend toward "up").
@@ -149,7 +207,12 @@ export default function Trends() {
 
       {tab === "overview" && (
         <>
-          <KpiSection summary={summary} isLoading={summaryLoading} />
+          <KpiSection
+            summary={summary}
+            isLoading={summaryLoading}
+            swapCount={swapLog.length}
+            days={days}
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <QualityRateCard data={qualityRate} isLoading={qualityRateLoading} />
@@ -176,35 +239,60 @@ export default function Trends() {
               title="Top Trucks"
               subtitle="Highest total quantity removed"
               rows={topTrucks}
+              isLoading={byTruckLoading}
             />
             <TopNCard
               title="Top Items"
               subtitle="Most frequently removed items"
               rows={topItems}
               accentColor="bg-violet-500"
+              isLoading={byTruckLoading}
             />
             <TopNCard
               title="Top Routes"
               subtitle="Routes with highest volume"
               rows={topRoutes}
               accentColor="bg-emerald-500"
+              isLoading={byRouteLoading}
             />
           </div>
 
-          <RouteCoverageTable data={swapLog} isLoading={swapLoading} />
+          <RouteCoverageTable data={swapLog} isLoading={swapLoading} days={swapDays} />
         </>
       )}
 
       {tab === "load-ops" && (
         <>
+          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            <KpiCard label="Avg Load Pace" value={fmtPace(loadOps.paceAvg)}>
+              <span className="text-xs text-ink-faint">{loadOps.timedLoads.toLocaleString()} timed loads</span>
+            </KpiCard>
+            <KpiCard
+              label="Completion"
+              value={loadOps.completionPct != null ? `${loadOps.completionPct.toFixed(1)}%` : "—"}
+            >
+              <span className="text-xs text-ink-faint">
+                {loadOps.rosterLoaded.toLocaleString()} of {loadOps.rosterTotal.toLocaleString()} roster loads
+              </span>
+            </KpiCard>
+            <KpiCard label="Trucks Unloaded" value={loadOps.unloads.toLocaleString()}>
+              <span className="text-xs text-ink-faint">across the window</span>
+            </KpiCard>
+            <KpiCard label="Avg Yard Dwell" value={fmtDwell(loadOps.dwellAvg)}>
+              <span className="text-xs text-ink-faint">arrival tap → unloaded</span>
+            </KpiCard>
+          </div>
+
           <ComparisonChart data={comparison} isLoading={comparisonLoading} onViewDetails={() => viewDetails("volume")} />
 
           <LoadPaceChart data={paceData} isLoading={paceLoading} onViewDetails={() => viewDetails("pace")} trend={paceTrend} trendLabel={paceTrend === "up" ? "Slowing" : paceTrend === "down" ? "Faster" : undefined} />
 
           <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-            <CompletionRateChart data={completionData} isLoading={completionLoading} onViewDetails={() => viewDetails("completion")} trend={completionTrend} trendLabel={completionTrend === "up" ? "Improving" : completionTrend === "down" ? "Declining" : undefined} />
+            <CompletionRateChart data={completionData} isLoading={completionLoading} onViewDetails={() => viewDetails("completion")} trend={completionTrend} trendLabel={completionTrend === "up" ? "Improving" : completionTrend === "down" ? "Declining" : undefined} higherIsBetter />
             <CycleTimeChart data={cycleData} isLoading={cycleLoading} onViewDetails={() => viewDetails("cycle")} trend={cycleTrend} trendLabel={cycleTrend === "up" ? "Slowing" : cycleTrend === "down" ? "Faster" : undefined} />
           </div>
+
+          <UnloadChart data={unloadData} isLoading={unloadLoading} />
         </>
       )}
 
@@ -221,6 +309,17 @@ export default function Trends() {
               subtitle="Most shorted items"
               rows={topShortageItems}
               accentColor="bg-amber-500"
+              isLoading={shortageByItemLoading}
+            />
+          </div>
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <TopNCard
+              title="Top Shorted Trucks"
+              subtitle="Trucks that keep going out short"
+              rows={topShortageTrucks}
+              accentColor="bg-red-500"
+              isLoading={shortageByTruckLoading}
             />
           </div>
         </>
@@ -233,7 +332,7 @@ export default function Trends() {
           <AnomalyPanel
             truckAnomalies={truckAnomalies}
             auditAnomalies={auditAnomalies}
-            isLoading={false}
+            isLoading={truckAnomaliesLoading || auditAnomaliesLoading}
           />
         </>
       )}

@@ -7,9 +7,10 @@ import { format, parseISO } from "date-fns";
 interface Props {
   data: RouteSwapLog[];
   isLoading: boolean;
+  days?: number;
 }
 
-export default function RouteCoverageTable({ data, isLoading }: Props) {
+export default function RouteCoverageTable({ data, isLoading, days }: Props) {
   const columns: ColumnDef<RouteSwapLog>[] = [
     {
       header: "Date",
@@ -46,13 +47,27 @@ export default function RouteCoverageTable({ data, isLoading }: Props) {
         );
       },
     },
+    {
+      header: "Split",
+      accessorKey: "is_split",
+      cell: ({ getValue }) =>
+        getValue<boolean>() ? (
+          <span className="inline-flex items-center rounded-full bg-amber-900/40 px-2 py-0.5 text-xs font-medium text-amber-300">
+            Split load
+          </span>
+        ) : (
+          <span className="text-xs text-slate-600">—</span>
+        ),
+    },
   ];
 
   return (
     <motion.div className="card" initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
       <div className="mb-3">
         <h3 className="text-sm font-semibold text-slate-200">Route Coverage / Swap History</h3>
-        <p className="text-xs text-slate-500">Route swaps and coverage assignments</p>
+        <p className="text-xs text-slate-500">
+          Route swaps and coverage assignments{days ? ` — last ${days} days` : ""}
+        </p>
       </div>
 
       {isLoading && (

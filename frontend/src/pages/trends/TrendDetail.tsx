@@ -4,7 +4,6 @@ import { motion } from "framer-motion";
 import {
   useAuditByTruck,
   useAuditByRoute,
-  useAuditDailyTrend,
   useLoadPaceTrend,
   useCompletionTrend,
   useWearersTrend,
@@ -41,7 +40,6 @@ export default function TrendDetail() {
   const { data: summary } = useTrendSummary(days, days);
   const { data: byTruck } = useAuditByTruck(days);
   const { data: byRoute } = useAuditByRoute(days);
-  const { data: daily } = useAuditDailyTrend(days);
   const { data: pace } = useLoadPaceTrend(days);
   const { data: completion } = useCompletionTrend(days);
   const { data: wearers } = useWearersTrend(days);
@@ -74,7 +72,7 @@ export default function TrendDetail() {
         </h2>
       </div>
 
-      {metric === "volume" && <VolumeTable data={byTruck} daily={daily} summary={summary} />}
+      {metric === "volume" && <VolumeTable data={byTruck} summary={summary} />}
       {metric === "pace" && <PaceTable data={pace} />}
       {metric === "completion" && <CompletionTable data={completion} />}
       {metric === "wearers" && <WearersTable data={wearers} />}
@@ -87,7 +85,7 @@ export default function TrendDetail() {
 
 function Table({ children }: { children: React.ReactNode }) {
   return (
-    <div className="overflow-x-auto rounded-lg border border-slate-800">
+    <div className="card overflow-x-auto p-0">
       <table className="w-full text-left text-sm">{children}</table>
     </div>
   );
@@ -101,15 +99,15 @@ function Td({ children, className }: { children: React.ReactNode; className?: st
   return <td className={clsx("border-b border-slate-800/50 px-3 py-2 text-slate-200", className)}>{children}</td>;
 }
 
-function VolumeTable({ data, daily, summary }: { data: { truck_number: number; item_label: string; total_qty: number }[] | undefined; daily: { run_date: string; total_qty: number; entry_count: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
+function VolumeTable({ data, summary }: { data: { truck_number: number; item_label: string; total_qty: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
   const s = summary ?? { total_qty: 0, avg_per_day: 0, peak_qty: 0, entry_count: 0, days_with_data: 0 };
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Total Qty" value={s.total_qty.toLocaleString()} status="Stable" />
-        <KpiCard label="Avg / Day" value={s.avg_per_day.toFixed(1)} status="Stable" />
-        <KpiCard label="Days" value={s.days_with_data} status="Stable" />
-        <KpiCard label="Total Entries" value={s.entry_count.toLocaleString()} status="Stable" />
+        <KpiCard label="Total Qty" value={s.total_qty.toLocaleString()} />
+        <KpiCard label="Avg / Day" value={s.avg_per_day.toFixed(1)} />
+        <KpiCard label="Days" value={s.days_with_data} />
+        <KpiCard label="Total Entries" value={s.entry_count.toLocaleString()} />
       </div>
       <Table>
         <thead>
@@ -132,6 +130,9 @@ function VolumeTable({ data, daily, summary }: { data: { truck_number: number; i
           ))}
         </tbody>
       </Table>
+      {(data ?? []).length > 100 && (
+        <p className="text-xs text-slate-500">Showing the top 100 of {(data ?? []).length} truck × item rows.</p>
+      )}
     </div>
   );
 }
@@ -143,9 +144,9 @@ function PaceTable({ data }: { data: { run_date: string; avg_seconds: number; lo
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiCard label="Avg Pace" value={avg > 0 ? `${Math.floor(avg / 60)}m ${Math.round(avg % 60)}s` : "—"} status="Stable" />
-        <KpiCard label="Total Loads" value={totalLoads.toLocaleString()} status="Stable" />
-        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+        <KpiCard label="Avg Pace" value={avg > 0 ? `${Math.floor(avg / 60)}m ${Math.round(avg % 60)}s` : "—"} />
+        <KpiCard label="Total Loads" value={totalLoads.toLocaleString()} />
+        <KpiCard label="Days" value={data?.length ?? 0} />
       </div>
     <Table>
       <thead>
@@ -181,8 +182,8 @@ function CompletionTable({ data }: { data: { run_date: string; total_trucks: num
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         <KpiCard label="Avg Completion" value={`${avgPct.toFixed(1)}%`} status={avgPct >= 90 ? "Stable" : avgPct >= 70 ? "Watch" : "Critical"} />
-        <KpiCard label="Total Loaded" value={totalLoaded.toLocaleString()} status="Stable" />
-        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+        <KpiCard label="Total Loaded" value={totalLoaded.toLocaleString()} />
+        <KpiCard label="Days" value={data?.length ?? 0} />
       </div>
     <Table>
       <thead>
@@ -214,9 +215,9 @@ function WearersTable({ data }: { data: { run_date: string; avg_wearers: number;
   const avgW = totalWTrucks > 0 ? (data ?? []).reduce((s, d) => s + d.avg_wearers * d.truck_count, 0) / totalWTrucks : 0;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiCard label="Avg Wearers" value={avgW.toFixed(1)} status="Stable" />
-        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+        <KpiCard label="Avg Wearers" value={avgW.toFixed(1)} />
+        <KpiCard label="Days" value={data?.length ?? 0} />
       </div>
     <Table>
       <thead>
@@ -248,9 +249,9 @@ function CycleTable({ data }: { data: { run_date: string; avg_seconds: number; t
   const avgCycle = totalCTrucks > 0 ? (data ?? []).reduce((s, d) => s + d.avg_seconds * d.truck_count, 0) / totalCTrucks : 0;
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-        <KpiCard label="Avg Cycle" value={avgCycle > 0 ? `${Math.floor(avgCycle / 60)}m ${Math.round(avgCycle % 60)}s` : "—"} status="Stable" />
-        <KpiCard label="Days" value={data?.length ?? 0} status="Stable" />
+      <div className="grid grid-cols-2 gap-3 sm:grid-cols-2">
+        <KpiCard label="Avg Cycle" value={avgCycle > 0 ? `${Math.floor(avgCycle / 60)}m ${Math.round(avgCycle % 60)}s` : "—"} />
+        <KpiCard label="Days" value={data?.length ?? 0} />
       </div>
     <Table>
       <thead>
@@ -282,10 +283,10 @@ function ShortageTable({ data, byItem, summary }: { data: { run_date: string; to
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <KpiCard label="Total Shortages" value={s.total_qty.toLocaleString()} status="Stable" />
-        <KpiCard label="Avg / Day" value={s.avg_per_day.toFixed(1)} status="Stable" />
-        <KpiCard label="Days" value={s.days_with_data} status="Stable" />
-        <KpiCard label="Entries" value={s.entry_count.toLocaleString()} status="Stable" />
+        <KpiCard label="Total Shortages" value={s.total_qty.toLocaleString()} />
+        <KpiCard label="Avg / Day" value={s.avg_per_day.toFixed(1)} />
+        <KpiCard label="Days" value={s.days_with_data} />
+        <KpiCard label="Entries" value={s.entry_count.toLocaleString()} />
       </div>
       <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">By Item</h3>
       <Table>

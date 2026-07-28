@@ -1,7 +1,7 @@
 import { motion } from "framer-motion";
 import type { AnomalyDay } from "../../api/hooks";
 import { format, parseISO } from "date-fns";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, ShieldCheck } from "lucide-react";
 
 interface Props {
   truckAnomalies: AnomalyDay[] | undefined;
@@ -19,8 +19,39 @@ const METRIC_LABELS: Record<string, string> = {
 export default function AnomalyPanel({ truckAnomalies, auditAnomalies, isLoading }: Props) {
   const allAnomalies = [...(truckAnomalies ?? []), ...(auditAnomalies ?? [])];
 
-  if (isLoading) return null;
-  if (allAnomalies.length === 0) return null;
+  if (isLoading) {
+    return (
+      <div className="card">
+        <h3 className="mb-3 text-sm font-semibold text-slate-200">Anomaly Scan</h3>
+        <div className="space-y-2">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-7 animate-pulse rounded bg-slate-800" />
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  // Positive confirmation instead of silently vanishing — "no news" IS the news.
+  if (allAnomalies.length === 0) {
+    return (
+      <motion.div
+        className="card border border-emerald-800/40 bg-emerald-950/10"
+        initial={{ opacity: 0, y: 12 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ duration: 0.4 }}
+      >
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="h-4 w-4 text-emerald-400" />
+          <h3 className="text-sm font-semibold text-emerald-300">No Anomalies</h3>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Completion, load pace, wearers, and audit volume all stayed within 2
+          standard deviations of their means over the last 90 days.
+        </p>
+      </motion.div>
+    );
+  }
 
   return (
     <motion.div
@@ -37,7 +68,8 @@ export default function AnomalyPanel({ truckAnomalies, auditAnomalies, isLoading
         </span>
       </div>
       <p className="mb-3 text-xs text-slate-500">
-        Days where metrics exceeded 2 standard deviations from the mean.
+        Days where a metric strayed more than 2 standard deviations from its mean —
+        always scanned over the last 90 days, independent of the range filter.
       </p>
       <div className="space-y-1.5">
         {allAnomalies.map((a, i) => {

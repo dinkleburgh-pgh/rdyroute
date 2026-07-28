@@ -35,8 +35,6 @@ from routers.trends_common import (
     MIN_LOAD_SECONDS,
     RUNNING_STATUS_EXCLUDE,
     completed_load_filter,
-    loaded_load_filter,
-    operational_running_filter,
     operational_today,
     window_bounds,
 )
@@ -49,6 +47,7 @@ from schemas import (
     TruckStateOut,
     TruckStateUpdate,
     TruckWithState,
+    UnloadDailyPoint,
     WearersDailyPoint,
 )
 from ws_manager import manager
@@ -951,25 +950,21 @@ def _assert_spare_has_coverage(truck: Truck, run_date, db: Session) -> None:
 # Trend aggregation endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/trends/completion", response_model=list[CompletionDailyPoint])
-def truck_completion_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
-    db: Session = Depends(get_db),
-):
-    """Per-day completion: of the trucks that actually had load work that day (the
-    operational roster), how many got loaded. The roster excludes off/oos/shop,
-    idle (non-covering) Spares, AND route trucks scheduled off that day — matching
-    the live sidebar's roster (buildOperationalDayContext / countLoaded) exactly,
-    rather than the whole fleet. A truck outside the roster (scheduled-off, idle
-    spare, off/oos) is excluded from BOTH sides even if it happens to be loaded, so
-    the numerator is always a subset of the denominator (pct <= 100) and the count
-    matches the sidebar's "Load X/Y". 'Got loaded' uses the persisted
-    load_finish_time (survives the later status change) OR a manual/bulk 'loaded'
-    status, so past days and untimed manual loads still count.
+def _completion_roster_agg(db: Session, start: date, end: date) -> dict[date, list[int]]:
+    """run_date -> [roster_total, loaded] for the operational roster.
+
+    The roster excludes off/oos/shop, idle (non-covering) Spares, AND route
+    trucks scheduled off that day — matching the live sidebar's roster
+    (buildOperationalDayContext / countLoaded) exactly, rather than the whole
+    fleet. A truck outside the roster is excluded from BOTH sides even if it
+    happens to be loaded, so the numerator is always a subset of the denominator
+    (pct <= 100). 'Got loaded' uses the persisted load_finish_time (survives the
+    later status change) OR a manual/bulk 'loaded' status.
 
     Aggregated in Python because the scheduled-off test reads each truck's
-    scheduled_off_days JSON list against its stored load_day_num for the day."""
-    start, end = window_bounds(days_back)
+    scheduled_off_days JSON list against its stored load_day_num for the day.
+    Shared by the completion trend AND the anomaly detector so both always
+    score the same roster."""
     rows = db.execute(
         select(
             TruckState.run_date,
@@ -984,7 +979,6 @@ def truck_completion_trend(
         .where(TruckState.run_date >= start, TruckState.run_date <= end)
     ).all()
 
-    # run_date -> [roster_total, loaded]
     agg: dict[date, list[int]] = defaultdict(lambda: [0, 0])
     for run_date, status, load_finish_time, load_day_num, oos_spare_route, truck_type, off_days in rows:
         loaded = (load_finish_time is not None) or (status == "loaded")
@@ -997,12 +991,23 @@ def truck_completion_trend(
             and load_day_num in off_days
         )
         running = status not in RUNNING_STATUS_EXCLUDE
-        # Strict roster: a truck outside it (scheduled-off, idle spare, off/oos) is
-        # excluded from BOTH sides even if loaded, matching the sidebar's roster.
         if running and not idle_spare and not scheduled_off:
             agg[run_date][0] += 1
             if loaded:
                 agg[run_date][1] += 1
+    return agg
+
+
+@router.get("/trends/completion", response_model=list[CompletionDailyPoint])
+def truck_completion_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Per-day completion: of the trucks that actually had load work that day
+    (the operational roster — see _completion_roster_agg), how many got loaded."""
+    start, end = window_bounds(days_back)
+    agg = _completion_roster_agg(db, start, end)
     return [
         CompletionDailyPoint(
             run_date=d,
@@ -1018,13 +1023,17 @@ def truck_completion_trend(
 def truck_wearers_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
-    """Per-day average wearer count for trucks that ran (completed loading)."""
+    """Per-day average AND total wearer count for trucks that ran (completed
+    loading). The average is the per-truck staffing signal; the total is the
+    day's service volume."""
     start, end = window_bounds(days_back)
     rows = db.execute(
         select(
             TruckState.run_date,
             func.avg(TruckState.wearers).label("avg_w"),
+            func.sum(TruckState.wearers).label("sum_w"),
             func.count(TruckState.id).label("tc"),
         )
         .where(
@@ -1040,7 +1049,8 @@ def truck_wearers_trend(
         WearersDailyPoint(
             run_date=r[0],
             avg_wearers=round(r[1], 1) if r[1] else 0,
-            truck_count=r[2],
+            total_wearers=int(r[2] or 0),
+            truck_count=r[3],
         )
         for r in rows
     ]
@@ -1050,6 +1060,7 @@ def truck_wearers_trend(
 def truck_cycle_trend(
     days_back: int = Query(default=14, ge=1, le=365),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """Per-day average load duration (from TruckState.load_duration_seconds),
     over completed loads within the shared valid-duration band."""
@@ -1080,20 +1091,69 @@ def truck_cycle_trend(
     ]
 
 
+@router.get("/trends/unload", response_model=list[UnloadDailyPoint])
+def truck_unload_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Per-day unload throughput: trucks that arrived (manual arrival tap), trucks
+    that finished unloading, and the average arrival→unload dwell where both
+    stamps exist. 'Unloaded' mirrors loaded_load_filter's persisted-or-transient
+    logic — the durable unloaded_at stamp (survives later status changes) OR a
+    current 'unloaded' status (loaded→unloaded transitions don't stamp).
+    Aggregated in Python to stay dialect-portable (timestamp math differs
+    between SQLite dev and Postgres prod)."""
+    start, end = window_bounds(days_back)
+    rows = db.execute(
+        select(
+            TruckState.run_date,
+            TruckState.status,
+            TruckState.arrived_at,
+            TruckState.unloaded_at,
+        ).where(TruckState.run_date >= start, TruckState.run_date <= end)
+    ).all()
+
+    # run_date -> [arrived, unloaded, dwell_sum, dwell_count]
+    agg: dict[date, list[float]] = defaultdict(lambda: [0, 0, 0.0, 0])
+    for run_date, status, arrived_at, unloaded_at in rows:
+        a = agg[run_date]
+        if arrived_at is not None:
+            a[0] += 1
+        if unloaded_at is not None or status == "unloaded":
+            a[1] += 1
+        if arrived_at is not None and unloaded_at is not None:
+            dwell = (unloaded_at - arrived_at).total_seconds()
+            # same spirit as the load band: drop nonsense (negative / >12h)
+            if 0 < dwell <= 43200:
+                a[2] += dwell
+                a[3] += 1
+    return [
+        UnloadDailyPoint(
+            run_date=d,
+            arrived_trucks=int(a[0]),
+            unloaded_trucks=int(a[1]),
+            avg_dwell_seconds=round(a[2] / a[3], 1) if a[3] else None,
+        )
+        for d, a in sorted(agg.items())
+    ]
+
+
 @router.get("/trends/anomalies", response_model=list[AnomalyDay])
 def truck_anomalies(
     days_back: int = Query(default=90, ge=14, le=365),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """Days where completion rate, pace, or wearers diverge >2σ from the rest of
-    the window. Metrics use the same persisted-load basis as the other trends,
-    and each day's z-score is LEAVE-ONE-OUT (the day is excluded from its own
+    the window. Completion is computed from the SAME roster aggregation as the
+    completion trend chart (_completion_roster_agg — scheduled-off aware), so an
+    anomaly is always flagged against a percentage the chart actually showed.
+    Each day's z-score is LEAVE-ONE-OUT (the day is excluded from its own
     mean/σ) so an extreme day doesn't damp its own signal."""
     from statistics import mean, stdev
 
     start, end = window_bounds(days_back)
-    ran = operational_running_filter() | loaded_load_filter()
-    got_loaded = loaded_load_filter()  # completion basis (timed OR manual loaded)
     timed = completed_load_filter()    # pace/wearers basis (timed only)
     in_band = (TruckState.load_duration_seconds >= MIN_LOAD_SECONDS) & (
         TruckState.load_duration_seconds <= MAX_LOAD_SECONDS
@@ -1101,12 +1161,9 @@ def truck_anomalies(
     daily = db.execute(
         select(
             TruckState.run_date,
-            func.sum(case((ran, 1), else_=0)).label("tot"),
-            func.sum(case((got_loaded, 1), else_=0)).label("lod"),
             func.avg(case((timed & in_band, TruckState.load_duration_seconds), else_=None)).label("pac"),
             func.avg(case((timed & (TruckState.wearers > 0), TruckState.wearers), else_=None)).label("wav"),
         )
-        .join(Truck, Truck.truck_number == TruckState.truck_number)
         .where(TruckState.run_date >= start, TruckState.run_date <= end)
         .group_by(TruckState.run_date)
         .order_by(TruckState.run_date)
@@ -1116,9 +1173,12 @@ def truck_anomalies(
     if len(daily) < 7:
         return anomalies
 
-    comp_series = [(d[0], (d[2] / d[1] * 100) if d[1] else 0.0) for d in daily]
-    pace_series = [(d[0], float(d[3])) for d in daily if d[3] is not None]
-    wear_series = [(d[0], float(d[4])) for d in daily if d[4] is not None and d[4] > 0]
+    comp_agg = _completion_roster_agg(db, start, end)
+    comp_series = [
+        (d, (l / t * 100) if t else 0.0) for d, (t, l) in sorted(comp_agg.items())
+    ]
+    pace_series = [(d[0], float(d[1])) for d in daily if d[1] is not None]
+    wear_series = [(d[0], float(d[2])) for d in daily if d[2] is not None and d[2] > 0]
 
     def flag(series: list[tuple], metric: str) -> None:
         if len(series) < 7:

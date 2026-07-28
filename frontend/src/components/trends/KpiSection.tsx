@@ -6,6 +6,9 @@ import type { TrendSummary } from "../../api/hooks";
 interface Props {
   summary: TrendSummary | undefined;
   isLoading: boolean;
+  /** Route-coverage events in the same window (from the swap log). */
+  swapCount: number;
+  days: number;
 }
 
 function MiniSparkline({ data }: { data: number[] }) {
@@ -40,7 +43,7 @@ function MiniSparkline({ data }: { data: number[] }) {
   );
 }
 
-export default function KpiSection({ summary, isLoading }: Props) {
+export default function KpiSection({ summary, isLoading, swapCount, days }: Props) {
   if (isLoading) {
     return (
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
@@ -62,8 +65,8 @@ export default function KpiSection({ summary, isLoading }: Props) {
 
   return (
     <div className="space-y-2">
-      <p className="text-[11px] text-slate-500">
-        Piece totals across all item types — open the <span className="font-medium text-slate-300">Snapshot</span> tab for per-category units (cases / bags / bundles).
+      <p className="text-[11px] text-ink-faint">
+        Piece totals across all item types removed at audit. Fewer removals = more delivered.
       </p>
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0 * 0.05 }}>
@@ -81,14 +84,10 @@ export default function KpiSection({ summary, isLoading }: Props) {
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1 * 0.05 }}>
         <KpiCard
-          label="Avg / Op Day"
+          label="Avg / Active Day"
           value={summary.avg_per_day >= 1000 ? summary.avg_per_day.toLocaleString(undefined, { maximumFractionDigits: 0 }) : summary.avg_per_day.toFixed(1)}
-          change={summary.change_vs_prior_pct}
-          higherIsBetter={false}
-          direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
-          status="Stable"
         >
-          <MiniSparkline data={dailyTotals} />
+          <span className="text-xs text-ink-faint">across {summary.days_with_data} days with audits</span>
         </KpiCard>
       </motion.div>
 
@@ -96,10 +95,9 @@ export default function KpiSection({ summary, isLoading }: Props) {
         <KpiCard
           label="Peak Day"
           value={summary.peak_day ?? "—"}
-          status="Watch"
         >
           {summary.peak_qty > 0 && (
-            <span className="text-xs text-slate-500">{summary.peak_qty.toLocaleString()} pieces</span>
+            <span className="text-xs text-ink-faint">{summary.peak_qty.toLocaleString()} pieces</span>
           )}
         </KpiCard>
       </motion.div>
@@ -108,29 +106,27 @@ export default function KpiSection({ summary, isLoading }: Props) {
         <KpiCard
           label="Data Days"
           value={summary.days_with_data}
-          status="Stable"
         >
-          <span className="text-xs text-slate-500">{summary.entry_count} entries</span>
+          <span className="text-xs text-ink-faint">days with audit activity</span>
         </KpiCard>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 4 * 0.05 }}>
         <KpiCard
-          label="Trend"
-          value={summary.trend_direction === "up" ? "↑ Up" : summary.trend_direction === "down" ? "↓ Down" : "→ Stable"}
-          change={summary.change_vs_prior_pct}
-          higherIsBetter={false}
-          direction={summary.trend_direction === "up" ? "up" : summary.trend_direction === "down" ? "down" : "stable"}
-          status={summary.trend_direction === "down" ? "Improving" : summary.trend_direction === "up" ? "Critical" : "Stable"}
-        />
+          label="Total Entries"
+          value={summary.entry_count.toLocaleString()}
+        >
+          <span className="text-xs text-ink-faint">individual removals logged</span>
+        </KpiCard>
       </motion.div>
 
       <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 5 * 0.05 }}>
         <KpiCard
-          label="Total Entries"
-          value={summary.entry_count.toLocaleString()}
-          status="Stable"
-        />
+          label="Routes Covered"
+          value={swapCount.toLocaleString()}
+        >
+          <span className="text-xs text-ink-faint">coverage events in {days} days</span>
+        </KpiCard>
       </motion.div>
       </div>
     </div>

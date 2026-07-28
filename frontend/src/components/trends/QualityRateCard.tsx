@@ -86,6 +86,13 @@ export default function QualityRateCard({ data, isLoading }: Props) {
         <span className="mt-1 block text-[10px] text-slate-500">
           Lower = better delivery quality
         </span>
+        <span className="mt-0.5 block text-[10px] text-slate-500">
+          {data.avg_discrepancy_rate != null
+            ? `${data.avg_discrepancy_rate.toFixed(2)} audit entries per loaded truck`
+            : "No audit entries in range"}
+          {" · "}
+          {data.days_with_data} days
+        </span>
       </KpiCard>
     </motion.div>
   );

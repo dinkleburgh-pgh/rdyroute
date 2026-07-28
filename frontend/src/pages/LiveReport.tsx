@@ -1165,79 +1165,82 @@ export default function LiveReport() {
   );
 
   const kioskBar = (
-    <div className="flex items-center gap-3 border-b border-hairline bg-surface/80 px-6 py-3 backdrop-blur">
-      <div className="min-w-0">
+    <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-hairline bg-surface/80 px-3 py-2.5 backdrop-blur sm:gap-x-3 sm:px-6 sm:py-3">
+      <div className="min-w-0 flex-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
           Run Report · {formatRunDate(runDate)}
         </p>
-        <h2 className="truncate text-2xl font-black leading-tight text-ink">
+        <h2 className="truncate text-lg font-black leading-tight text-ink sm:text-2xl">
           {sectionDefs.find((d) => d.key === kioskKey)?.label ?? ""}
         </h2>
       </div>
       {isToday && (
-        <span className="ml-2 inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
+        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
           <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-st-inprogress" />
           Live
         </span>
       )}
-      {/* which slide we're on */}
-      <div className="ml-auto flex shrink-0 items-center gap-1.5">
-        {kioskSlides.map((k, i) => (
+      {/* Exit stays on the title row so a narrow screen can never push it off */}
+      <button
+        onClick={() => { setKiosk(false); if (document.fullscreenElement) void document.exitFullscreen(); }}
+        title="Exit kiosk (Esc)"
+        className="shrink-0 rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink sm:order-last"
+      >
+        <X className="h-5 w-5" />
+      </button>
+      {/* dots + transport: second (wrapping) row on phones, inline on desktop */}
+      <div className="flex w-full flex-wrap items-center gap-x-1 gap-y-1.5 sm:ml-auto sm:w-auto sm:flex-nowrap">
+        <div className="flex shrink-0 items-center gap-1.5">
+          {kioskSlides.map((k, i) => (
+            <button
+              key={k}
+              onClick={() => setKioskIdx(i)}
+              title={sectionDefs.find((d) => d.key === k)?.label}
+              className={clsx(
+                "h-1.5 rounded-full transition-all",
+                i === kioskIdx ? "w-8 bg-sky-400" : "w-3 bg-slate-600 hover:bg-slate-500",
+              )}
+            />
+          ))}
+        </div>
+        <div className="ml-auto flex shrink-0 items-center gap-0.5 sm:ml-2 sm:gap-1">
+          <button onClick={kioskPrev} title="Previous (←)" className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-2 hover:text-ink sm:p-2">
+            <ChevronLeft className="h-5 w-5" />
+          </button>
           <button
-            key={k}
-            onClick={() => setKioskIdx(i)}
-            title={sectionDefs.find((d) => d.key === k)?.label}
-            className={clsx(
-              "h-1.5 rounded-full transition-all",
-              i === kioskIdx ? "w-8 bg-sky-400" : "w-3 bg-slate-600 hover:bg-slate-500",
-            )}
-          />
-        ))}
-      </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <button onClick={kioskPrev} title="Previous (←)" className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink">
-          <ChevronLeft className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => setKioskPaused((v) => !v)}
-          title={kioskPaused ? "Resume (space)" : "Pause (space)"}
-          className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink"
-        >
-          {kioskPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
-        </button>
-        <button onClick={kioskNext} title="Next (→)" className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink">
-          <ChevronRight className="h-5 w-5" />
-        </button>
-        <select
-          value={kioskSecs}
-          onChange={(e) => setKioskSecs(Number(e.target.value))}
-          title="Seconds per section"
-          className="input ml-1 w-20 px-2 py-1 text-xs"
-        >
-          {[10, 15, 20, 30, 45, 60].map((n) => (
-            <option key={n} value={n}>{n}s</option>
-          ))}
-        </select>
-        <select
-          value={kioskZoom}
-          onChange={(e) => setKioskZoom(Number(e.target.value))}
-          title="Text size"
-          className="input w-20 px-2 py-1 text-xs"
-        >
-          {[1, 1.15, 1.3, 1.5, 1.75, 2].map((z) => (
-            <option key={z} value={z}>{Math.round(z * 100)}%</option>
-          ))}
-        </select>
-        <button onClick={toggleFullscreen} title="Toggle full screen" className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink">
-          <Maximize2 className="h-5 w-5" />
-        </button>
-        <button
-          onClick={() => { setKiosk(false); if (document.fullscreenElement) void document.exitFullscreen(); }}
-          title="Exit kiosk (Esc)"
-          className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink"
-        >
-          <X className="h-5 w-5" />
-        </button>
+            onClick={() => setKioskPaused((v) => !v)}
+            title={kioskPaused ? "Resume (space)" : "Pause (space)"}
+            className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-2 hover:text-ink sm:p-2"
+          >
+            {kioskPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+          </button>
+          <button onClick={kioskNext} title="Next (→)" className="rounded-lg p-1.5 text-ink-muted hover:bg-surface-2 hover:text-ink sm:p-2">
+            <ChevronRight className="h-5 w-5" />
+          </button>
+          <select
+            value={kioskSecs}
+            onChange={(e) => setKioskSecs(Number(e.target.value))}
+            title="Seconds per section"
+            className="input ml-1 w-[3.75rem] px-1.5 py-1 text-xs sm:w-20 sm:px-2"
+          >
+            {[10, 15, 20, 30, 45, 60].map((n) => (
+              <option key={n} value={n}>{n}s</option>
+            ))}
+          </select>
+          <select
+            value={kioskZoom}
+            onChange={(e) => setKioskZoom(Number(e.target.value))}
+            title="Text size"
+            className="input w-[4.25rem] px-1.5 py-1 text-xs sm:w-20 sm:px-2"
+          >
+            {[1, 1.15, 1.3, 1.5, 1.75, 2].map((z) => (
+              <option key={z} value={z}>{Math.round(z * 100)}%</option>
+            ))}
+          </select>
+          <button onClick={toggleFullscreen} title="Toggle full screen" className="hidden rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink sm:block">
+            <Maximize2 className="h-5 w-5" />
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -1246,7 +1249,7 @@ export default function LiveReport() {
     <>
       {sectionPicker}
       {kiosk && (
-        <div className="fixed inset-0 z-[95] flex flex-col overflow-hidden bg-app">
+        <div className="fixed inset-0 z-[95] flex flex-col overflow-hidden bg-app pt-[env(safe-area-inset-top)]">
           {kioskBar}
           {/* progress through the current slide */}
           <div className="h-0.5 w-full bg-slate-800">

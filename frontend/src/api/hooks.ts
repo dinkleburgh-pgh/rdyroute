@@ -1381,16 +1381,6 @@ export interface TrendSummary {
   daily_series: TrendDailyPoint[];
 }
 
-export interface TrendTruckPoint {
-  run_date: string;
-  total_qty: number;
-}
-
-export interface TrendRoutePoint {
-  run_date: string;
-  total_qty: number;
-}
-
 export interface TrendComparison {
   current: TrendDailyPoint[];
   prior: TrendDailyPoint[];
@@ -1412,7 +1402,21 @@ export interface CompletionDailyPoint {
 export interface WearersDailyPoint {
   run_date: string;
   avg_wearers: number;
+  total_wearers: number;
   truck_count: number;
+}
+
+export interface UnloadDailyPoint {
+  run_date: string;
+  arrived_trucks: number;
+  unloaded_trucks: number;
+  avg_dwell_seconds: number | null;
+}
+
+export interface ShortageTruckPoint {
+  truck_number: number;
+  total_qty: number;
+  entry_count: number;
 }
 
 export interface CycleDailyPoint {
@@ -1425,11 +1429,6 @@ export interface ShortageDailyPoint {
   run_date: string;
   total_qty: number;
   entry_count: number;
-}
-
-export interface ShortageCategoryPoint {
-  category: string;
-  total_qty: number;
 }
 
 export interface ShortageItemPoint {
@@ -1485,32 +1484,6 @@ export function useTrendSummary(daysBack = 14, compareDaysBack?: number) {
       (
         await api.get<TrendSummary>("/audit/trends/summary", {
           params: { days_back: daysBack, compare_days_back: compareDaysBack },
-        })
-      ).data,
-    staleTime: 60_000,
-  });
-}
-
-export function useTruckTrend(truckNumber: number, daysBack = 30) {
-  return useQuery({
-    queryKey: ["trend-truck", truckNumber, daysBack],
-    queryFn: async () =>
-      (
-        await api.get<TrendTruckPoint[]>(`/audit/trends/by-truck/${truckNumber}`, {
-          params: { days_back: daysBack },
-        })
-      ).data,
-    staleTime: 60_000,
-  });
-}
-
-export function useRouteTrend(routeNumber: number, daysBack = 30) {
-  return useQuery({
-    queryKey: ["trend-route", routeNumber, daysBack],
-    queryFn: async () =>
-      (
-        await api.get<TrendRoutePoint[]>(`/audit/trends/by-route/${routeNumber}`, {
-          params: { days_back: daysBack },
         })
       ).data,
     staleTime: 60_000,
@@ -1603,6 +1576,24 @@ export function useCycleTimeTrend(daysBack = 14) {
   });
 }
 
+export function useUnloadTrend(daysBack = 14) {
+  return useQuery({
+    queryKey: ["unload-trend", daysBack],
+    queryFn: async () =>
+      (await api.get<UnloadDailyPoint[]>("/trucks/trends/unload", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
+export function useShortageByTruck(daysBack = 14) {
+  return useQuery({
+    queryKey: ["shortage-trend-truck", daysBack],
+    queryFn: async () =>
+      (await api.get<ShortageTruckPoint[]>("/shorts/trends/by-truck", { params: { days_back: daysBack } })).data,
+    staleTime: 60_000,
+  });
+}
+
 export function useShortageDailyTrend(daysBack = 14) {
   return useQuery({
     queryKey: ["shortage-trend-daily", daysBack],
@@ -1634,15 +1625,6 @@ export function useQualityRate(daysBack = 14, compareDaysBack?: number) {
           params: { days_back: daysBack, compare_days_back: compareDaysBack },
         })
       ).data,
-    staleTime: 60_000,
-  });
-}
-
-export function useShortageByCategory(daysBack = 14) {
-  return useQuery({
-    queryKey: ["shortage-trend-cat", daysBack],
-    queryFn: async () =>
-      (await api.get<ShortageCategoryPoint[]>("/shorts/trends/by-category", { params: { days_back: daysBack } })).data,
     staleTime: 60_000,
   });
 }
@@ -2021,16 +2003,6 @@ export interface LoadDurationRecord {
   duration_seconds: number;
   load_day_num: number | null;
   recorded_at: string;
-}
-
-export function useLoadDurations(opts?: { runDate?: string; truckNumber?: number; daysBack?: number }) {
-  const params: Record<string, unknown> = { days_back: opts?.daysBack ?? 30 };
-  if (opts?.runDate) params.run_date = opts.runDate;
-  if (opts?.truckNumber != null) params.truck_number = opts.truckNumber;
-  return useQuery({
-    queryKey: ["load-durations", params],
-    queryFn: async () => (await api.get<LoadDurationRecord[]>("/load-durations", { params })).data,
-  });
 }
 
 export function useRecordLoadDuration() {

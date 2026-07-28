@@ -21,9 +21,10 @@ interface Props {
   onViewDetails?: () => void;
   trend?: "up" | "down" | "stable" | null;
   trendLabel?: string;
+  higherIsBetter?: boolean;
 }
 
-export default function CompletionRateChart({ data, isLoading, onViewDetails, trend, trendLabel }: Props) {
+export default function CompletionRateChart({ data, isLoading, onViewDetails, trend, trendLabel, higherIsBetter }: Props) {
   return (
     <TrendChartCard
       title="Completion Rate"
@@ -33,6 +34,7 @@ export default function CompletionRateChart({ data, isLoading, onViewDetails, tr
       onViewDetails={onViewDetails}
       trend={trend}
       trendLabel={trendLabel}
+      higherIsBetter={higherIsBetter}
     >
       {data && data.length > 0 && (
         <motion.div className="h-64" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>

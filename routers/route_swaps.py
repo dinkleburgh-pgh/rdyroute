@@ -459,12 +459,15 @@ def get_swap_log(
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Return the route swap history log for the past N days."""
-    from datetime import datetime, timezone
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+    """Return the route swap history log for the past N days. Uses the shared
+    operational-date window (06:00 rollover, weekend→Friday) so the range lines
+    up with every other Trends metric instead of UTC calendar days."""
+    from routers.trends_common import window_bounds
+
+    start, end = window_bounds(days)
     rows = db.scalars(
         select(RouteSwapLog)
-        .where(RouteSwapLog.run_date >= cutoff)
+        .where(RouteSwapLog.run_date >= start, RouteSwapLog.run_date <= end)
         .order_by(RouteSwapLog.run_date.desc(), RouteSwapLog.created_at.desc())
     ).all()
     return rows

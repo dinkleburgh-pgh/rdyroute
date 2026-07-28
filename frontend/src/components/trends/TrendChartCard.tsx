@@ -11,13 +11,14 @@ interface Props {
   onViewDetails?: () => void;
   trend?: "up" | "down" | "stable" | null;
   trendLabel?: string;
+  /** false (default) → a RISING metric is bad (discrepancies, pace, shortages):
+   *  up = red. true → rising is good (completion): up = green. */
+  higherIsBetter?: boolean;
 }
 
-const TREND_STYLES: Record<string, string> = {
-  up: "bg-red-900/40 text-red-400 border-red-700/40",
-  down: "bg-emerald-900/40 text-emerald-400 border-emerald-700/40",
-  stable: "bg-slate-800 text-slate-400 border-slate-700/40",
-};
+const BAD = "bg-red-900/40 text-red-400 border-red-700/40";
+const GOOD = "bg-emerald-900/40 text-emerald-400 border-emerald-700/40";
+const NEUTRAL = "bg-slate-800 text-slate-400 border-slate-700/40";
 
 export default function TrendChartCard({
   title,
@@ -29,7 +30,14 @@ export default function TrendChartCard({
   onViewDetails,
   trend,
   trendLabel,
+  higherIsBetter = false,
 }: Props) {
+  const trendStyle =
+    trend === "stable" || !trend
+      ? NEUTRAL
+      : (trend === "up") === higherIsBetter
+        ? GOOD
+        : BAD;
   return (
     <motion.div className={`card ${className}`} whileHover={{ scale: 1.01 }}>
       <div className="mb-3 flex items-center justify-between">
@@ -39,7 +47,7 @@ export default function TrendChartCard({
             {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
           </div>
           {trend && (
-            <span className={"shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide " + (TREND_STYLES[trend] ?? TREND_STYLES.stable)}>
+            <span className={"shrink-0 inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide " + trendStyle}>
               {trend === "up" ? "↑ " : trend === "down" ? "↓ " : "→ "}{trendLabel ?? (trend === "up" ? "Rising" : trend === "down" ? "Falling" : "Stable")}
             </span>
           )}

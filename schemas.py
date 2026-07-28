@@ -1069,16 +1069,6 @@ class TrendRoutePoint(BaseModel):
     total_qty: int
 
 
-class TrendTruckPoint(BaseModel):
-    run_date: date
-    total_qty: int
-
-
-class TrendRoutePoint(BaseModel):
-    run_date: date
-    total_qty: int
-
-
 class TrendComparison(BaseModel):
     current: list[TrendDailyPoint]
     prior: list[TrendDailyPoint]
@@ -1103,7 +1093,21 @@ class CompletionDailyPoint(BaseModel):
 class WearersDailyPoint(BaseModel):
     run_date: date
     avg_wearers: float
+    total_wearers: int = 0
     truck_count: int
+
+
+class UnloadDailyPoint(BaseModel):
+    run_date: date
+    arrived_trucks: int
+    unloaded_trucks: int
+    avg_dwell_seconds: float | None  # arrival→unload, only where both stamps exist
+
+
+class ShortageTruckPoint(BaseModel):
+    truck_number: int
+    total_qty: int
+    entry_count: int
 
 
 class CycleDailyPoint(BaseModel):

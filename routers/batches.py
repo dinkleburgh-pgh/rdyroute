@@ -75,6 +75,37 @@ def get_batch_summary(
 
 
 # ---------------------------------------------------------------------------
+# Batch history (append-only)
+# ---------------------------------------------------------------------------
+# MUST be registered before GET /{batch_number}: FastAPI matches in declaration
+# order, and the int path param would otherwise swallow the literal "history".
+
+@router.get("/history", response_model=list[BatchHistoryOut])
+def get_batch_history(
+    run_date: date | None = Query(default=None),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    q = select(BatchHistory).order_by(BatchHistory.recorded_at.desc())
+    if run_date:
+        q = q.where(BatchHistory.run_date == run_date)
+    return db.scalars(q).all()
+
+
+@router.post("/history", response_model=BatchHistoryOut, status_code=status.HTTP_201_CREATED)
+def append_batch_history(
+    payload: BatchHistoryCreate,
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    row = BatchHistory(**payload.model_dump())
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+# ---------------------------------------------------------------------------
 # Individual batch
 # ---------------------------------------------------------------------------
 
@@ -334,30 +365,6 @@ def clear_batch(
             manager.broadcast,
             {"type": "truck_state_updated", "run_date": str(run_date)},
         )
-
-
-# ---------------------------------------------------------------------------
-# Batch history (append-only; used by trends screen)
-# ---------------------------------------------------------------------------
-
-@router.get("/history", response_model=list[BatchHistoryOut])
-def get_batch_history(
-    run_date: date | None = Query(default=None),
-    db: Session = Depends(get_db),
-):
-    q = select(BatchHistory).order_by(BatchHistory.recorded_at.desc())
-    if run_date:
-        q = q.where(BatchHistory.run_date == run_date)
-    return db.scalars(q).all()
-
-
-@router.post("/history", response_model=BatchHistoryOut, status_code=status.HTTP_201_CREATED)
-def append_batch_history(payload: BatchHistoryCreate, db: Session = Depends(get_db)):
-    row = BatchHistory(**payload.model_dump())
-    db.add(row)
-    db.commit()
-    db.refresh(row)
-    return row
 
 
 # ---------------------------------------------------------------------------

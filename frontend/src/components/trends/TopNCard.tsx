@@ -11,10 +11,30 @@ interface Props {
   subtitle?: string;
   rows: Row[];
   accentColor?: string;
+  isLoading?: boolean;
 }
 
-export default function TopNCard({ title, subtitle, rows, accentColor = "bg-blue-500" }: Props) {
+export default function TopNCard({ title, subtitle, rows, accentColor = "bg-blue-500", isLoading = false }: Props) {
   const max = Math.max(1, ...rows.map((r) => r.value));
+
+  if (isLoading) {
+    return (
+      <div className="card">
+        <div className="mb-3">
+          <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
+          {subtitle && <p className="text-xs text-slate-500">{subtitle}</p>}
+        </div>
+        <div className="space-y-3">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i} className="animate-pulse space-y-1">
+              <div className="h-3 w-2/3 rounded bg-slate-800" />
+              <div className="h-1.5 w-full rounded-full bg-slate-800" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="card">

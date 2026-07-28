@@ -8,45 +8,47 @@ import {
   Filler,
 } from "chart.js";
 import { Bar } from "react-chartjs-2";
-import type { WearersDailyPoint } from "../../api/hooks";
+import type { UnloadDailyPoint } from "../../api/hooks";
 import TrendChartCard from "./TrendChartCard";
 import { format, parseISO } from "date-fns";
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip, Filler);
 
 interface Props {
-  data: WearersDailyPoint[] | undefined;
+  data: UnloadDailyPoint[] | undefined;
   isLoading: boolean;
-  onViewDetails?: () => void;
   trend?: "up" | "down" | "stable" | null;
   trendLabel?: string;
 }
 
-export default function WearersChart({ data, isLoading, onViewDetails, trend, trendLabel }: Props) {
+function fmtDwell(s: number): string {
+  const h = Math.floor(s / 3600);
+  const m = Math.round((s % 3600) / 60);
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+export default function UnloadChart({ data, isLoading, trend, trendLabel }: Props) {
+  const hasAny = !!data && data.some((d) => d.unloaded_trucks > 0 || d.arrived_trucks > 0);
   return (
     <TrendChartCard
-      title="Average Wearers"
-      subtitle="Avg wearers per truck (loaded only) per day"
+      title="Unload Throughput"
+      subtitle="Trucks unloaded per day — hover for arrivals and arrival→unload dwell"
       isLoading={isLoading}
-      isEmpty={!isLoading && (!data || data.length === 0)}
-      onViewDetails={onViewDetails}
+      isEmpty={!isLoading && !hasAny}
       trend={trend}
       trendLabel={trendLabel}
     >
-      {data && data.length > 0 && (
+      {data && hasAny && (
         <motion.div className="h-64" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <Bar
             data={{
-              labels: data.map((d) => {
-                const dt = parseISO(d.run_date);
-                return format(dt, "MMM d");
-              }),
+              labels: data.map((d) => format(parseISO(d.run_date), "MMM d")),
               datasets: [
                 {
-                  label: "Avg wearers",
-                  data: data.map((d) => d.avg_wearers),
-                  backgroundColor: "rgba(139, 92, 246, 0.5)",
-                  borderColor: "#8b5cf6",
+                  label: "Trucks unloaded",
+                  data: data.map((d) => d.unloaded_trucks),
+                  backgroundColor: "rgba(34, 197, 94, 0.5)",
+                  borderColor: "#22c55e",
                   borderWidth: 1,
                   borderRadius: 3,
                 },
@@ -65,12 +67,15 @@ export default function WearersChart({ data, isLoading, onViewDetails, trend, tr
                   borderWidth: 1,
                   padding: 10,
                   callbacks: {
-                    label: (ctx) => `${(ctx.parsed.y ?? 0).toFixed(1)} avg wearers / truck`,
+                    label: (ctx) => `${ctx.parsed.y ?? 0} unloaded`,
                     afterLabel: (ctx) => {
                       const pt = data[ctx.dataIndex];
                       if (!pt) return "";
-                      const total = pt.total_wearers ? `${pt.total_wearers.toLocaleString()} total wearers · ` : "";
-                      return `${total}${pt.truck_count} trucks`;
+                      const lines = [`${pt.arrived_trucks} arrivals tapped`];
+                      if (pt.avg_dwell_seconds != null) {
+                        lines.push(`avg dwell ${fmtDwell(pt.avg_dwell_seconds)}`);
+                      }
+                      return lines.join("\n");
                     },
                   },
                 },
@@ -83,7 +88,7 @@ export default function WearersChart({ data, isLoading, onViewDetails, trend, tr
                 y: {
                   beginAtZero: true,
                   grid: { color: "rgba(148,163,184,0.08)" },
-                  ticks: { color: "#64748b", font: { size: 11 } },
+                  ticks: { color: "#64748b", font: { size: 11 }, precision: 0 },
                 },
               },
             }}

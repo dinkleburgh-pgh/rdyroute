@@ -4,19 +4,10 @@ import { DownloadIcon } from "../icons";
 import PageHeader from "../PageHeader";
 
 const RANGES = [
-  { label: "7d", value: 7 },
-  { label: "14d", value: 14 },
-  { label: "30d", value: 30 },
-  { label: "90d", value: 90 },
-];
-
-// Mobile-only range filter. PageHeader hides its `actions` (the desktop range
-// selector) below the md breakpoint, so mobile gets its own control. Kept to
-// the three ranges that fit a phone: 7 days / 14 days / 1 month.
-const MOBILE_RANGES = [
-  { label: "7 days", value: 7 },
-  { label: "14 days", value: 14 },
-  { label: "1 month", value: 30 },
+  { label: "7d", mobileLabel: "7 days", value: 7 },
+  { label: "14d", mobileLabel: "14 days", value: 14 },
+  { label: "30d", mobileLabel: "1 month", value: 30 },
+  { label: "90d", mobileLabel: "3 months", value: 90 },
 ];
 
 interface Props {
@@ -56,13 +47,13 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
       actions={
         <>
           {isLoading && (
-            <span className="flex items-center justify-center gap-1.5 text-xs text-slate-500 md:justify-end">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-blue-500" />
+            <span className="flex items-center justify-center gap-1.5 text-xs text-ink-faint md:justify-end">
+              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
               Loading...
             </span>
           )}
 
-          <div className="flex gap-1 rounded-lg bg-slate-900 p-0.5 ring-1 ring-slate-700/50">
+          <div className="flex gap-1 rounded-lg border border-hairline bg-surface-2/60 p-0.5">
             {RANGES.map((r) => (
               <button
                 key={r.value}
@@ -70,8 +61,8 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
                 className={
                   "rounded-md px-3 py-1.5 text-sm font-medium transition-all " +
                   (days === r.value
-                    ? "bg-blue-600 text-white shadow"
-                    : "text-slate-400 hover:text-slate-200")
+                    ? "bg-accent text-white shadow"
+                    : "text-ink-muted hover:text-ink")
                 }
               >
                 {r.label}
@@ -92,20 +83,21 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
     />
 
       {/* Mobile-only range filter — the desktop selector above lives in
-          PageHeader's actions, which are hidden below md. */}
-      <div className="flex gap-1 rounded-lg bg-slate-900 p-1 ring-1 ring-slate-700/50 md:hidden">
-        {MOBILE_RANGES.map((r) => (
+          PageHeader's actions, which are hidden below md. Same four ranges as
+          desktop so switching viewports never strands the selection. */}
+      <div className="flex gap-1 rounded-lg border border-hairline bg-surface-2/60 p-1 md:hidden">
+        {RANGES.map((r) => (
           <button
             key={r.value}
             onClick={() => onChangeDays(r.value)}
             className={
-              "flex-1 rounded-md px-3 py-2 text-sm font-medium transition-all " +
+              "flex-1 rounded-md px-1 py-2 text-xs font-medium transition-all " +
               (days === r.value
-                ? "bg-blue-600 text-white shadow"
-                : "text-slate-400 hover:text-slate-200")
+                ? "bg-accent text-white shadow"
+                : "text-ink-muted hover:text-ink")
             }
           >
-            {r.label}
+            {r.mobileLabel}
           </button>
         ))}
       </div>

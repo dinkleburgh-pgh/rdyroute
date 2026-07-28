@@ -25,6 +25,7 @@ from schemas import (
     ShortageCreate,
     ShortageDailyPoint,
     ShortageItemPoint,
+    ShortageTruckPoint,
     ShortageOut,
     ShortageSummary,
     ShortageUpdate,
@@ -299,6 +300,31 @@ def shortage_by_item_trend(
             label=f"{r[0]} {r[1]}" if r[1] else r[0],
             total_qty=r[2] or 0,
         )
+        for r in rows
+    ]
+
+
+@router.get("/trends/by-truck", response_model=list[ShortageTruckPoint])
+def shortage_by_truck_trend(
+    days_back: int = Query(default=14, ge=1, le=365),
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Shortage quantities grouped by truck, sorted descending — which trucks
+    keep going out short."""
+    start, end = window_bounds(days_back)
+    rows = db.execute(
+        select(
+            Shortage.truck_number,
+            func.sum(Shortage.quantity).label("total_qty"),
+            func.count(Shortage.id).label("entry_count"),
+        )
+        .where(Shortage.run_date >= start, Shortage.run_date <= end)
+        .group_by(Shortage.truck_number)
+        .order_by(func.sum(Shortage.quantity).desc())
+    ).all()
+    return [
+        ShortageTruckPoint(truck_number=r[0], total_qty=r[1] or 0, entry_count=r[2])
         for r in rows
     ]
 

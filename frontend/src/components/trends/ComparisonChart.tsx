@@ -25,42 +25,38 @@ export default function ComparisonChart({ data, isLoading, onViewDetails }: Prop
   const current = data?.current ?? [];
   const prior = data?.prior ?? [];
 
-  const labels = Array.from(
-    new Set([...prior, ...current].map((d) => d.run_date)),
-  ).sort();
+  // Pair the halves BY POSITION (1st day of prior half vs 1st day of current
+  // half, etc.) so the two bars at each x actually compare. Charting both on a
+  // shared date axis just read as one long timeline in two colours.
+  const n = Math.max(current.length, prior.length);
+  const idx = Array.from({ length: n }, (_, i) => i);
+  const fmt = (d?: string) => (d ? format(parseISO(d), "MMM d") : null);
 
   return (
     <TrendChartCard
       title="Period Comparison"
-      subtitle="Current vs prior period — daily discrepancy volume"
+      subtitle="First half vs second half of the window, paired day-by-day"
       isLoading={isLoading}
       isEmpty={!isLoading && current.length === 0 && prior.length === 0}
       onViewDetails={onViewDetails}
     >
-      {labels.length > 0 && (
+      {n > 0 && (
         <motion.div className="h-56" initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5 }}>
           <Bar
             data={{
-              labels: labels.map((d) => {
-                const dt = parseISO(d);
-                return format(dt, "MMM d");
-              }),
+              labels: idx.map((i) => `Day ${i + 1}`),
               datasets: [
                 {
-                  label: "Prior period",
-                  data: labels.map(
-                    (l) => prior.find((p) => p.run_date === l)?.total_qty ?? 0,
-                  ),
+                  label: "Prior half",
+                  data: idx.map((i) => prior[i]?.total_qty ?? null),
                   backgroundColor: "rgba(100, 116, 139, 0.4)",
                   borderColor: "#64748b",
                   borderWidth: 1,
                   borderRadius: 3,
                 },
                 {
-                  label: "Current period",
-                  data: labels.map(
-                    (l) => current.find((c) => c.run_date === l)?.total_qty ?? 0,
-                  ),
+                  label: "Current half",
+                  data: idx.map((i) => current[i]?.total_qty ?? null),
                   backgroundColor: "rgba(59, 130, 246, 0.6)",
                   borderColor: "#3b82f6",
                   borderWidth: 1,
@@ -83,6 +79,15 @@ export default function ComparisonChart({ data, isLoading, onViewDetails }: Prop
                   borderColor: "#334155",
                   borderWidth: 1,
                   padding: 10,
+                  callbacks: {
+                    // Each bar shows the real calendar date it represents.
+                    label: (ctx) => {
+                      const src = ctx.datasetIndex === 0 ? prior : current;
+                      const d = fmt(src[ctx.dataIndex]?.run_date);
+                      const qty = ctx.parsed.y ?? 0;
+                      return d ? `${ctx.dataset.label}: ${qty} (${d})` : `${ctx.dataset.label}: ${qty}`;
+                    },
+                  },
                 },
               },
               scales: {
