@@ -6,7 +6,8 @@
  *   workday   — shown only when workday_num matches the current load or unload day.
  *   one_off   — shown until expires_on, then auto-archived.
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { QRCodeSVG } from "qrcode.react";
@@ -433,7 +434,7 @@ function TruckNotePanel({
   );
 
   return (
-    <AnimateCard className="card space-y-3" delay={index * 0.03}>
+    <AnimateCard id={`note-truck-${truck.truck_number}`} className="card space-y-3" delay={index * 0.03}>
       {/* Truck header — tap to open/close */}
       <div className="flex items-center gap-2">
         <button
@@ -541,6 +542,23 @@ export default function NotesBoard() {
   const [showArchived,  setShowArchived] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
   const [openTruck,     setOpenTruck]    = useState<number | null>(null);
+
+  // Deep link from the "New Driver Note" toast (/notes?truck=57): open that
+  // truck's notes and scroll it into view once the board has rendered.
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const raw = searchParams.get("truck");
+    if (!raw) return;
+    const num = parseInt(raw, 10);
+    if (!Number.isFinite(num)) return;
+    setOpenTruck(num);
+    const id = window.setTimeout(() => {
+      document
+        .getElementById(`note-truck-${num}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 250);
+    return () => window.clearTimeout(id);
+  }, [searchParams]);
 
   // Trucks sorted by number, spares excluded.
   const trucks = [...board]

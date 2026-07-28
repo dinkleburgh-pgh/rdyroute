@@ -3,6 +3,8 @@ import { motion, useReducedMotion } from "framer-motion";
 interface Props {
   children: React.ReactNode;
   className?: string;
+  /** DOM id — lets callers scroll/anchor to a specific card. */
+  id?: string;
   delay?: number;
   hoverScale?: number;
   onClick?: React.MouseEventHandler<HTMLDivElement>;
@@ -14,12 +16,12 @@ interface Props {
 // doesn't feel laggy. Honors the OS "reduce motion" setting.
 const MAX_STAGGER = 0.08;
 
-export default function AnimateCard({ children, className, delay = 0, hoverScale = 1.02, onClick }: Props) {
+export default function AnimateCard({ children, className, id, delay = 0, hoverScale = 1.02, onClick }: Props) {
   const reduceMotion = useReducedMotion();
 
   if (reduceMotion) {
     return (
-      <div className={className} onClick={onClick}>
+      <div id={id} className={className} onClick={onClick}>
         {children}
       </div>
     );
@@ -27,6 +29,7 @@ export default function AnimateCard({ children, className, delay = 0, hoverScale
 
   return (
     <motion.div
+      id={id}
       initial={{ opacity: 0, y: 4 }}
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.14, delay: Math.min(delay, MAX_STAGGER), ease: "easeOut" }}

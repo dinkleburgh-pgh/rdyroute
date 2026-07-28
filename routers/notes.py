@@ -11,7 +11,7 @@ Three varieties:
 
 from datetime import date, datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.orm import Session
@@ -20,6 +20,7 @@ from database import get_db
 from models import NoteType, Truck, TruckNote, User
 from routers.auth import get_current_user, require_admin, require_non_guest
 from schemas import NoteCreate, NoteOut, NoteUpdate
+from ws_manager import manager
 
 router = APIRouter(prefix="/notes", tags=["notes"])
 
@@ -135,6 +136,7 @@ class DriverNoteCreate(BaseModel):
 def driver_create_note(
     token: str,
     payload: DriverNoteCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
 ):
     """
@@ -153,6 +155,17 @@ def driver_create_note(
     db.add(note)
     db.commit()
     db.refresh(note)
+    # Push it to every open app session so the Notes board updates live and the
+    # crew gets a "New Driver Note" toast without refreshing.
+    background_tasks.add_task(
+        manager.broadcast,
+        {
+            "type": "driver_note_created",
+            "truck_number": int(truck.truck_number),
+            "note_id": int(note.id),
+            "body": note.body[:120],
+        },
+    )
     return note
 
 

@@ -42,7 +42,17 @@ export default function ToastContainer() {
             )}
           >
             <VariantIcon variant={t.variant} />
-            <p className="flex-1 text-sm text-slate-200">{t.message}</p>
+            {t.onClick ? (
+              <button
+                type="button"
+                onClick={() => { t.onClick?.(); dismiss(t.id); }}
+                className="flex-1 text-left text-sm text-slate-200 underline decoration-slate-600 underline-offset-2 transition-colors hover:text-white hover:decoration-slate-300"
+              >
+                {t.message}
+              </button>
+            ) : (
+              <p className="flex-1 text-sm text-slate-200">{t.message}</p>
+            )}
             <button
               onClick={() => dismiss(t.id)}
               className="shrink-0 text-slate-500 transition-colors hover:text-slate-300"

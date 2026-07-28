@@ -20,19 +20,27 @@ import {
 
 export type ToastVariant = "success" | "error" | "info";
 
+export interface ToastOptions {
+  /** Makes the toast clickable — fires, then dismisses. */
+  onClick?: () => void;
+  /** Override the auto-dismiss delay (ms). Actionable toasts want longer. */
+  durationMs?: number;
+}
+
 export interface Toast {
   id: number;
   message: string;
   variant: ToastVariant;
+  onClick?: () => void;
 }
 
 interface ToastContextValue {
   toasts: Toast[];
-  push: (message: string, variant: ToastVariant) => void;
+  push: (message: string, variant: ToastVariant, opts?: ToastOptions) => void;
   dismiss: (id: number) => void;
   success: (message: string) => void;
   error: (message: string) => void;
-  info: (message: string) => void;
+  info: (message: string, opts?: ToastOptions) => void;
 }
 
 const ToastContext = createContext<ToastContextValue | null>(null);
@@ -48,10 +56,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const push = useCallback(
-    (message: string, variant: ToastVariant) => {
+    (message: string, variant: ToastVariant, opts?: ToastOptions) => {
       const id = _nextId++;
-      setToasts((prev) => [...prev, { id, message, variant }]);
-      setTimeout(() => dismiss(id), AUTO_DISMISS_MS);
+      setToasts((prev) => [...prev, { id, message, variant, onClick: opts?.onClick }]);
+      setTimeout(() => dismiss(id), opts?.durationMs ?? AUTO_DISMISS_MS);
     },
     [dismiss],
   );
@@ -63,7 +71,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       dismiss,
       success: (m) => push(m, "success"),
       error: (m) => push(m, "error"),
-      info: (m) => push(m, "info"),
+      info: (m, o) => push(m, "info", o),
     }),
     [toasts, push, dismiss],
   );

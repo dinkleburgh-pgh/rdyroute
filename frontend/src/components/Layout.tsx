@@ -198,6 +198,26 @@ export default function Layout() {
       ),
   });
 
+  // A driver added a note from their QR page: the notes query is already
+  // refreshed by useRealtimeSync — surface a clickable toast that jumps to the
+  // truck on the Notes board. Longer dwell than a normal toast since it's an
+  // action, not just feedback.
+  useEffect(() => {
+    const onDriverNote = (e: Event) => {
+      const d = (e as CustomEvent<{ truck_number?: number; body?: string }>).detail ?? {};
+      const truck = d.truck_number;
+      toast.info(
+        truck != null ? `New Driver Note — #${truck}` : "New Driver Note",
+        {
+          durationMs: 12_000,
+          onClick: () => nav(truck != null ? `/notes?truck=${truck}` : "/notes"),
+        },
+      );
+    };
+    window.addEventListener("readyroute:driver-note", onDriverNote);
+    return () => window.removeEventListener("readyroute:driver-note", onDriverNote);
+  }, [toast, nav]);
+
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {
     setSidebarOpen(false);
