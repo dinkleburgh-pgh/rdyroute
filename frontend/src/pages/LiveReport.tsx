@@ -11,7 +11,7 @@
  * (board 5s, batches 10s, spares/route-swaps 10s, shortages via WS). The audit
  * query has no live channel of its own, so we poke it on an interval here.
  */
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
@@ -94,6 +94,11 @@ function Kpi({ label, value, sub, tone }: { label: string; value: ReactNode; sub
   );
 }
 
+/** True inside a kiosk slide. The kiosk toolbar already names the section (and
+ *  its Load/Unload phase), so Section drops its own header there — repeating it
+ *  cost vertical space and pushed slides into needless scrolling. */
+const KioskSlideContext = createContext(false);
+
 function Section({
   eyebrow,
   title,
@@ -108,12 +113,15 @@ function Section({
   downloadName?: string;
 }) {
   const captureRef = useRef<HTMLElement>(null);
+  const inKioskSlide = useContext(KioskSlideContext);
   return (
     <section ref={captureRef} className="space-y-3">
-      <div>
-        <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</p>
-        <h2 className="text-lg font-bold text-ink">{title}</h2>
-      </div>
+      {!inKioskSlide && (
+        <div>
+          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</p>
+          <h2 className="text-lg font-bold text-ink">{title}</h2>
+        </div>
+      )}
       {children}
       {downloadName && (
         <DownloadImageButton targetRef={captureRef} filename={downloadName} className="pt-1" />
@@ -597,13 +605,15 @@ export default function LiveReport() {
   }
 
   // Which sections have content today (drives the picker's muted hints).
-  const sectionDefs: { key: SectionKey; label: string; hint?: string }[] = [
-    { key: "shortages", label: "Shortages", hint: shorts.length ? undefined : "empty" },
-    { key: "shortSheet", label: "Short sheet", hint: shorts.length ? undefined : "empty" },
-    { key: "batches", label: "Batches", hint: batchingDisabled ? "off" : batches.length ? undefined : "empty" },
-    { key: "coverage", label: "Routes covered", hint: coverageRows.length ? undefined : "empty" },
-    { key: "loadTimes", label: "Load times", hint: finished.length ? undefined : "empty" },
-    { key: "audit", label: "Audit", hint: auditByTruck.length ? undefined : "empty" },
+  // `phase` mirrors each Section's eyebrow so kiosk mode can show it in the
+  // toolbar instead of inside the slide.
+  const sectionDefs: { key: SectionKey; label: string; phase: "Load" | "Unload"; hint?: string }[] = [
+    { key: "shortages", label: "Shortages", phase: "Load", hint: shorts.length ? undefined : "empty" },
+    { key: "shortSheet", label: "Short sheet", phase: "Load", hint: shorts.length ? undefined : "empty" },
+    { key: "batches", label: "Batches", phase: "Unload", hint: batchingDisabled ? "off" : batches.length ? undefined : "empty" },
+    { key: "coverage", label: "Routes covered", phase: "Load", hint: coverageRows.length ? undefined : "empty" },
+    { key: "loadTimes", label: "Load times", phase: "Load", hint: finished.length ? undefined : "empty" },
+    { key: "audit", label: "Audit", phase: "Load", hint: auditByTruck.length ? undefined : "empty" },
   ];
   const anySelected = Object.values(selected).some(Boolean);
 
@@ -1169,14 +1179,18 @@ export default function LiveReport() {
       </motion.div>
   );
 
+  const kioskDef = sectionDefs.find((d) => d.key === kioskKey);
+
   const kioskBar = (
     <div className="flex flex-wrap items-center gap-x-2 gap-y-1.5 border-b border-hairline bg-surface/80 px-3 py-2.5 backdrop-blur sm:gap-x-3 sm:px-6 sm:py-3">
       <div className="min-w-0 flex-1">
+        {/* Carries the section's Load/Unload phase, which used to live in the
+            slide's own header. */}
         <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
-          Run Report · {formatRunDate(runDate)}
+          {formatRunDate(runDate)} · {kioskDef?.phase ?? "Run Report"}
         </p>
         <h2 className="truncate text-lg font-black leading-tight text-ink sm:text-2xl">
-          {sectionDefs.find((d) => d.key === kioskKey)?.label ?? ""}
+          {kioskDef?.label ?? ""}
         </h2>
       </div>
       {isToday && (
@@ -1274,7 +1288,7 @@ export default function LiveReport() {
                 className="px-6 py-5"
                 style={{ zoom: kioskZoom }}
               >
-                {reportBody}
+                <KioskSlideContext.Provider value>{reportBody}</KioskSlideContext.Provider>
               </motion.div>
             </AnimatePresence>
           </div>
