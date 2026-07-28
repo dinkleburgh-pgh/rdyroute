@@ -655,6 +655,47 @@ export default function LiveReport() {
     return () => window.clearInterval(id);
   }, [kiosk, kioskPaused, kioskSecs, kioskIdx, kioskNext]);
 
+  // Auto-scroll a slide that doesn't fit. Speed is derived, not fixed: the
+  // travel is spread across the middle of the slide's own duration, so a long
+  // sheet on a 60s slide crawls and the same sheet on a 10s slide moves
+  // briskly. Holds at the top and bottom so the first and last rows are
+  // actually readable. Honours prefers-reduced-motion.
+  const kioskScrollRef = useRef<HTMLDivElement>(null);
+  const KIOSK_HOLD = 0.15; // fraction of the slide spent parked at each end
+
+  // Back to the top whenever the slide changes (not when merely pausing).
+  useEffect(() => {
+    if (kioskScrollRef.current) kioskScrollRef.current.scrollTop = 0;
+  }, [kioskKey, kioskIdx]);
+
+  useEffect(() => {
+    const el = kioskScrollRef.current;
+    if (!kiosk || !el || kioskPaused) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+
+    const total = kioskSecs * 1000;
+    const travelMs = total * (1 - 2 * KIOSK_HOLD);
+    // Resume from wherever we are rather than snapping back.
+    const max0 = el.scrollHeight - el.clientHeight;
+    const done = max0 > 0 ? el.scrollTop / max0 : 0;
+    const start = performance.now() - total * KIOSK_HOLD - done * travelMs;
+
+    let raf = 0;
+    const step = (now: number) => {
+      // Re-measure every frame: the section animates in and data can refetch
+      // underneath, both of which change the height.
+      const max = el.scrollHeight - el.clientHeight;
+      if (max > 8) {
+        const elapsed = now - start;
+        const t = Math.min(1, Math.max(0, (elapsed - total * KIOSK_HOLD) / travelMs));
+        el.scrollTop = max * t;
+      }
+      raf = requestAnimationFrame(step);
+    };
+    raf = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(raf);
+  }, [kiosk, kioskPaused, kioskKey, kioskIdx, kioskSecs]);
+
   // Keyboard: Esc exits, Space pauses, arrows step.
   useEffect(() => {
     if (!kiosk) return;
@@ -1168,7 +1209,7 @@ export default function LiveReport() {
               style={{ width: `${Math.round(kioskTick * 100)}%`, transition: "width 0.1s linear" }}
             />
           </div>
-          <div className="min-h-0 flex-1 overflow-auto">
+          <div ref={kioskScrollRef} className="min-h-0 flex-1 overflow-auto">
             <AnimatePresence mode="wait">
               <motion.div
                 key={kioskKey}
