@@ -207,7 +207,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                   )}
                   <td
                     className={clsx(
-                      "sticky left-0 z-10 border border-slate-700/50 bg-blue-900/30 px-1 py-1.5 text-center font-bold text-slate-200 transition-colors cursor-pointer select-none",
+                      "sticky left-0 z-10 border border-slate-700/50 bg-blue-900/30 px-1 py-1.5 text-center font-bold leading-5 text-slate-200 transition-colors cursor-pointer select-none",
                       hasDrivers && "sm:left-36",
                       activeRow === t.truck_number && "!bg-blue-800/40",
                     )}
@@ -215,7 +215,18 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                     onMouseLeave={() => setHoveredRow(null)}
                     onClick={() => togglePinRow(t.truck_number)}
                   >
-                    #{t.truck_number} {TYPE_SHORT[t.truck_type] ?? ""}
+                    {/* Bigger number, same row height. A flex box locked to the
+                        cell's existing 20px line-height contains the text, so the
+                        20px glyphs can't grow the row (inline layout would add
+                        ~4px from baseline alignment). Type suffix stays small. */}
+                    <span className="flex h-5 items-center justify-center gap-0.5 leading-5">
+                      <span className="text-xl leading-5 tabular-nums">#{t.truck_number}</span>
+                      {TYPE_SHORT[t.truck_type] && (
+                        <span className="text-[10px] font-semibold text-slate-400">
+                          {TYPE_SHORT[t.truck_type]}
+                        </span>
+                      )}
+                    </span>
                   </td>
                   {[1, 2, 3, 4, 5].map((day) => {
                     const off = isScheduledOff(t, day);
