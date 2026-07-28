@@ -252,6 +252,18 @@ export default function Layout() {
           durationMs: 15_000,
           onClick: () => nav("/"),
         });
+      } else if (d.type === "truck_unloaded") {
+        // Unloads happen ~30x a shift, so this one is scoped to the two pages
+        // that actually care: Fleet and Load (a freshly unloaded truck is the
+        // next thing to load). Everywhere else it would just be noise.
+        const onFleetOrLoad = location.pathname === "/fleet" || location.pathname === "/load";
+        if (!onFleetOrLoad || truck == null || !once(`unloaded-${truck}`)) return;
+        toast.info("Unloaded — ready to load.", {
+          title: "Truck unloaded",
+          chip: `#${truck}`,
+          durationMs: 10_000,
+          onClick: () => nav(`/fleet?truck=${truck}`),
+        });
       } else if (d.type === "truck_arrived") {
         if (truck == null || !once(`arrived-${truck}`)) return;
         toast.info("Parked in the yard — ready to unload.", {
@@ -287,7 +299,7 @@ export default function Layout() {
       window.removeEventListener("readyroute:app-event", onAppEvent);
       window.removeEventListener("readyroute:notification", onNotification);
     };
-  }, [toast, nav, user?.username]);
+  }, [toast, nav, user?.username, location.pathname]);
 
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {

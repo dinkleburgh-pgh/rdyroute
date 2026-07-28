@@ -664,6 +664,19 @@ def update_truck_state(
             truck_oos_notification(truck_number=truck_number, run_date=run_date),
             actor=_user.username,
         )
+    # Truck finished unloading. unloaded_at is stamped only by this per-truck
+    # workflow (bulk/admin writes never stamp it), so this None -> set edge is a
+    # genuine unload — the signal the load crew waits on.
+    if before_state.unloaded_at is None and row.unloaded_at is not None:
+        background_tasks.add_task(
+            manager.broadcast,
+            {
+                "type": "truck_unloaded",
+                "truck_number": truck_number,
+                "run_date": str(run_date),
+                "actor": _user.username,
+            },
+        )
     # Truck parked in the yard. arrived_at is set ONLY by the explicit "Arrived"
     # tap (never auto-stamped), so this None -> set edge is exactly that tap —
     # worth pushing so unload leads see the truck land without watching the board.

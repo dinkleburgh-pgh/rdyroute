@@ -75,6 +75,9 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
         } else if (event.type === "notice_created") {
           qc.invalidateQueries({ queryKey: ["notices"] });
           window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
+        } else if (event.type === "truck_unloaded") {
+          if (event.run_date) qc.invalidateQueries({ queryKey: ["board", event.run_date] });
+          window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
         } else if (event.type === "truck_arrived") {
           if (event.run_date) qc.invalidateQueries({ queryKey: ["board", event.run_date] });
           window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
