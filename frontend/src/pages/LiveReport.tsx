@@ -758,14 +758,18 @@ export default function LiveReport() {
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
                 {topTrucks.map((t, i) => (
                   <div key={t.truck} className="rounded-xl border border-hairline bg-surface p-3">
-                    <div className="flex items-baseline justify-between gap-2 border-b border-hairline pb-1.5">
-                      <span className="flex items-baseline gap-1.5">
-                        <span className="text-[10px] font-bold text-ink-faint">#{i + 1}</span>
-                        <span className="font-mono text-lg font-black tabular-nums text-ink">#{t.truck}</span>
-                      </span>
-                      <span className="font-mono text-sm font-bold tabular-nums text-amber-300">
-                        {t.total.toLocaleString()} <span className="text-[10px] font-normal text-ink-faint">qty</span>
-                      </span>
+                    {/* Place + qty flank the truck number so the number itself
+                        stays centred as the card's focal point. */}
+                    <div className="border-b border-hairline pb-1.5">
+                      <div className="flex items-baseline justify-between gap-2">
+                        <span className="text-xs font-bold text-ink-faint">#{i + 1}</span>
+                        <span className="font-mono text-sm font-bold tabular-nums text-amber-300">
+                          {t.total.toLocaleString()} <span className="text-[10px] font-normal text-ink-faint">qty</span>
+                        </span>
+                      </div>
+                      <p className="text-center font-mono text-2xl font-black leading-tight tabular-nums text-ink">
+                        #{t.truck}
+                      </p>
                     </div>
                     <ul className="mt-1.5 space-y-0.5">
                       {t.items.map((it) => (
@@ -819,26 +823,42 @@ export default function LiveReport() {
           {coverageRows.length === 0 ? (
             <Empty>No route coverage recorded for this day.</Empty>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-hairline">
-              {coverageRows.map((r, i) => {
+            /* Full coverage cards — the canonical big ROUTE → TRUCK paired
+               numbers (same read as a fleet coverage card), not a dense list. */
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {coverageRows.map((r) => {
                 const st = boardByNum.get(r.loadOnTruck)?.state;
                 const done = st?.status === "loaded";
                 return (
                   <div
                     key={`${r.routeTruck}-${r.loadOnTruck}`}
-                    className={clsx("flex flex-wrap items-center gap-x-3 gap-y-1 px-3 py-2 text-sm", i > 0 && "border-t border-hairline")}
+                    className="rounded-xl border border-hairline bg-surface p-4"
                   >
-                    <span className="font-mono font-bold tabular-nums text-sky-300">#{r.routeTruck}</span>
-                    <span className="text-xs text-ink-muted">loads on</span>
-                    <span className="font-mono font-bold tabular-nums text-ink">#{r.loadOnTruck}</span>
-                    <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">{r.type}</span>
-                    {isRecurring(r.routeTruck, r.loadOnTruck) && (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
-                    )}
-                    {r.returned && (
-                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">returned</span>
-                    )}
-                    <span className="ml-auto text-right text-xs">
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="text-center">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Route</p>
+                        <p className="font-mono text-3xl font-black leading-none tabular-nums text-sky-300">
+                          #{r.routeTruck}
+                        </p>
+                      </div>
+                      <span className="text-2xl font-black leading-none text-ink-faint">→</span>
+                      <div className="text-center">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Loads on</p>
+                        <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">
+                          #{r.loadOnTruck}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">{r.type}</span>
+                      {isRecurring(r.routeTruck, r.loadOnTruck) && (
+                        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
+                      )}
+                      {r.returned && (
+                        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">returned</span>
+                      )}
+                    </div>
+                    <p className="mt-2.5 border-t border-hairline pt-2 text-center text-xs">
                       {done ? (
                         <span className="text-st-loaded">
                           Loaded
@@ -848,7 +868,7 @@ export default function LiveReport() {
                       ) : (
                         <span className="text-ink-faint">{st?.status === "in_progress" ? "Loading…" : "Not loaded"}</span>
                       )}
-                    </span>
+                    </p>
                   </div>
                 );
               })}

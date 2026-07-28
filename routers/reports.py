@@ -199,8 +199,24 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
 .tcards { display: flex; gap: 6px; margin: 0 0 12px; }
 .tcard { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
          border-radius: 12px; padding: 7px 9px; }
-.rank { font-size: 8px; color: #7a8698; }
-.tnum { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
+.rank { font-size: 10px; font-weight: 700; color: #7a8698; }
+.tnum { text-align: center; font-size: 19px; font-weight: 700; letter-spacing: -.01em;
+        line-height: 1.1; padding-bottom: 3px; margin-bottom: 3px;
+        border-bottom: 1px solid rgba(255,255,255,0.06); }
+
+/* Coverage renders as big paired ROUTE -> TRUCK cards (the app's canonical
+   coverage read) rather than a dense list. */
+.cov-row { display: flex; gap: 8px; }
+.cov-row + .cov-row { margin-top: 8px; }
+.cov { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+       border-radius: 12px; padding: 9px 10px; text-align: center; }
+.cov.spacer { border-color: transparent; background: transparent; }
+.covpair { display: flex; align-items: center; justify-content: center; gap: 10px; }
+.covlab { font-size: 7px; text-transform: uppercase; letter-spacing: .14em; color: #7a8698; }
+.covnum { font-size: 23px; font-weight: 700; line-height: 1.05; }
+.covarrow { font-size: 16px; color: #7a8698; }
+.covchips { margin-top: 5px; }
+.covstat { margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 4px; font-size: 9px; }
 .ah { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
 .alist { list-style: none; margin: 0; padding: 0; }
 .alist li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 9.5px; }
@@ -279,17 +295,27 @@ def _coverage_html(c: CoverageSectionVM | None) -> str:
     if not c.rows:
         out.append('<div class="empty">No route coverage recorded for this day.</div></section>')
         return "".join(out)
-    rows = []
+    cards = []
     for r in c.rows:
         rec = '<span class="pill rec">recurring</span>' if r.recurring else ""
         ret = '<span class="pill">returned</span>' if r.returned else ""
-        rows.append(
-            f'<div class="row"><span class="mono route">#{int(r.route_truck)}</span>'
-            f'<span class="dim">loads on</span><span class="mono">#{int(r.load_on_truck)}</span>'
-            f'<span class="chip">{_e(r.type)}</span>{rec}{ret}'
-            f'<span class="status" style="color:{r.status_hex}">{_e(r.status_label)}</span></div>'
+        cards.append(
+            f'<div class="cov"><div class="covpair">'
+            f'<div><div class="covlab">Route</div>'
+            f'<div class="covnum mono route">#{int(r.route_truck)}</div></div>'
+            f'<div class="covarrow">&#8594;</div>'
+            f'<div><div class="covlab">Loads on</div>'
+            f'<div class="covnum mono">#{int(r.load_on_truck)}</div></div></div>'
+            f'<div class="covchips"><span class="chip">{_e(r.type)}</span>{rec}{ret}</div>'
+            f'<div class="covstat" style="color:{r.status_hex}">{_e(r.status_label)}</div></div>'
         )
-    out.append(f'<div class="list">{"".join(rows)}</div></section>')
+    # Rows of three, spacers keeping widths even (same shape as the batch grid).
+    rows = []
+    for i in range(0, len(cards), 3):
+        chunk = cards[i : i + 3]
+        chunk += ['<div class="cov spacer"></div>'] * (3 - len(chunk))
+        rows.append(f'<div class="cov-row">{"".join(chunk)}</div>')
+    out.append(f'{"".join(rows)}</section>')
     return "".join(out)
 
 
@@ -321,11 +347,12 @@ def _top_trucks_html(top) -> str:
             f'<span class="mono" style="color:#fcd34d">{int(it.qty)}</span></li>'
             for it in t.items
         )
+        # Place + qty flank the row above so the truck number stays centred.
         cards.append(
-            f'<div class="tcard"><div class="ah">'
-            f'<span><span class="rank">#{i}</span> '
-            f'<span class="mono tnum">#{int(t.truck_number)}</span></span>'
+            f'<div class="tcard">'
+            f'<div class="ah"><span class="rank">#{i}</span>'
             f'<span class="mono" style="color:#fcd34d">{int(t.total)} <span class="dim">qty</span></span></div>'
+            f'<div class="tnum mono">#{int(t.truck_number)}</div>'
             f'<ul class="alist">{items}</ul></div>'
         )
     return (

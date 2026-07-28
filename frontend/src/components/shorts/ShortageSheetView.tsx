@@ -88,19 +88,19 @@ export default function ShortageSheetView({
                     every browser, which made the header drift while scrolling. */}
                 {/* w-px + nowrap makes this column shrink to its content (the
                     longest item name) so more truck columns fit on mobile. */}
-                <th className="sticky left-0 top-0 z-30 w-px whitespace-nowrap border-b border-r border-slate-700 bg-slate-900 px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
+                <th className="sticky left-0 top-0 z-20 w-px whitespace-nowrap border-b border-r border-slate-700 bg-slate-900 px-2 py-1 text-left text-[9px] font-bold uppercase tracking-wider text-slate-400">
                   Item
                 </th>
                 {trucks.map((n) => (
                   <th
                     key={n}
-                    className="sticky top-0 z-20 w-10 border-b border-r border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-slate-100"
+                    className="sticky top-0 z-[15] w-10 border-b border-r border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-slate-100"
                     title={truckTypeByNum.get(n) ?? undefined}
                   >
                     {n}
                   </th>
                 ))}
-                <th className="sticky right-0 top-0 z-30 w-12 border-b border-l border-slate-700 bg-slate-900 px-1 py-1 text-center text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                <th className="sticky right-0 top-0 z-20 w-12 border-b border-l border-slate-700 bg-slate-900 px-1 py-1 text-center text-[9px] font-bold uppercase tracking-wider text-amber-400">
                   Tot
                 </th>
               </tr>
@@ -161,18 +161,18 @@ export default function ShortageSheetView({
                 );
               })}
               <tr>
-                <td className="sticky bottom-0 left-0 z-30 w-px whitespace-nowrap border-r border-t border-slate-700 bg-slate-900 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-400">
+                <td className="sticky bottom-0 left-0 z-20 w-px whitespace-nowrap border-r border-t border-slate-700 bg-slate-900 px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-amber-400">
                   Truck total
                 </td>
                 {trucks.map((n) => (
                   <td
                     key={n}
-                    className="sticky bottom-0 z-20 border-t border-r border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-amber-300"
+                    className="sticky bottom-0 z-[15] border-t border-r border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-amber-300"
                   >
                     {truckTotals.get(n) ?? 0}
                   </td>
                 ))}
-                <td className="sticky bottom-0 right-0 z-30 border-l border-t border-slate-700 bg-slate-900 px-1 py-1 text-center font-mono text-sm font-black tabular-nums text-amber-300">
+                <td className="sticky bottom-0 right-0 z-20 border-l border-t border-slate-700 bg-slate-900 px-1 py-1 text-center font-mono text-sm font-black tabular-nums text-amber-300">
                   {grandTotal}
                 </td>
               </tr>
