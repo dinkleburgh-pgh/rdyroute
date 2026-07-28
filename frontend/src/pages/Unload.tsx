@@ -576,7 +576,9 @@ export default function Unload() {
         {/* Batches */}
         <section>
           <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-muted">Batches</h3>
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
+          {/* Three per row so the six batches read 1-2-3 over 4-5-6, like the
+              paper batch sheet and the report. */}
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
             {(batches ?? Array.from({ length: 6 }, (_, i) => ({ batch_number: i + 1, trucks: [], total_wearers: 0 }))).map((b, index) => {
               const { bar, text } = capacityColor(b.total_wearers, false, wearerCap);
               const pct = capacityPct(b.total_wearers, wearerCap);

@@ -19,7 +19,6 @@ import {
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
 } from "../api/hooks";
-import CoverageList from "../components/CoverageList";
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
@@ -39,7 +38,6 @@ import {
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
 import { NextUpPanel, PaceBar, useElapsed } from "../components/LiveInProgress";
-import { ChevronDown } from "lucide-react";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
@@ -70,8 +68,6 @@ export default function Load() {
   // Dust-garment finish confirmation — asks "Did you load garments?" before
   // finishing a truck flagged with dust garments.
   const [confirmGarmentTruck, setConfirmGarmentTruck] = useState<TruckWithState | null>(null);
-  const [dustCollapsed, setDustCollapsed] = useState(() => localStorage.getItem("load:dustCollapsed") === "1");
-  const [coverageCollapsed, setCoverageCollapsed] = useState(() => localStorage.getItem("load:coverageCollapsed") === "1");
 
   const board = data ?? [];
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
@@ -340,51 +336,65 @@ export default function Load() {
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
-      {/* Coverage notice — which route's freight loads on which truck today */}
+      {/* Coverage today — always open; big ROUTE -> TRUCK cards, same read as
+          the report's coverage section. */}
       {loadCoverage.length > 0 && (
         <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
-          <button
-            type="button"
-            className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-            onClick={() => setCoverageCollapsed((c) => { const next = !c; localStorage.setItem("load:coverageCollapsed", next ? "1" : "0"); return next; })}
-          >
+          <div className="flex w-full items-center gap-2 px-3 py-2.5">
             <span className="text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage today</span>
-            <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
-              <span className="font-mono tabular-nums">{loadCoverage.length} route{loadCoverage.length === 1 ? "" : "s"}</span>
-              <ChevronDown className={clsx("h-3.5 w-3.5 text-sky-400/60 transition-transform", coverageCollapsed && "-rotate-90")} />
+            <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
+              {loadCoverage.length} route{loadCoverage.length === 1 ? "" : "s"}
             </span>
-          </button>
-          {!coverageCollapsed && (
-            <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-              <CoverageList
-                entries={loadCoverage}
-                isRecurring={(e) => isRecurringCoverage(e.route, e.cover)}
-              />
+          </div>
+          <div className="border-t px-3 pb-3 pt-3" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
+            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
+              {loadCoverage.map((e) => (
+                <div
+                  key={`${e.route}-${e.cover}-${e.prev ? "p" : "t"}`}
+                  className="rounded-xl border border-hairline bg-surface p-3"
+                >
+                  <div className="flex items-center justify-center gap-4">
+                    <div className="text-center">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Route</p>
+                      <p className="font-mono text-3xl font-black leading-none tabular-nums text-sky-300">#{e.route}</p>
+                    </div>
+                    <span className="text-2xl font-black leading-none text-ink-faint">{e.kind === "split" ? "+" : "→"}</span>
+                    <div className="text-center">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Loads on</p>
+                      <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">#{e.cover}</p>
+                    </div>
+                  </div>
+                  <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+                    {e.kind === "split" && (
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">split</span>
+                    )}
+                    {e.kind === "swap-twoway" && (
+                      <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">2-way</span>
+                    )}
+                    {isRecurringCoverage(e.route, e.cover) && (
+                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
+                    )}
+                    {e.prev && (
+                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">prev day</span>
+                    )}
+                  </div>
+                </div>
+              ))}
             </div>
-          )}
+          </div>
         </div>
       )}
 
-      {/* Dust Garments — read-only, collapsible */}
+      {/* Dust Garments — read-only, always open */}
       <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 px-3 py-2.5 text-left"
-          onClick={() => setDustCollapsed((c) => { const next = !c; localStorage.setItem("load:dustCollapsed", next ? "1" : "0"); return next; })}
-        >
+        <div className="flex w-full items-center gap-2 px-3 py-2.5">
           <DustGarmentIcon className="h-3.5 w-3.5 shrink-0 text-amber-400" />
           <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
-          <span className="ml-auto flex items-center gap-2 text-xs text-ink-muted">
-            {dustCollapsed && (
-              <span className="font-mono tabular-nums">
-                {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
-              </span>
-            )}
-            <ChevronDown className={clsx("h-3.5 w-3.5 text-amber-400/60 transition-transform", dustCollapsed && "-rotate-90")} />
+          <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
+            {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
           </span>
-        </button>
-        {!dustCollapsed && (
-          <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
+        </div>
+        <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
             {dustGarmentTrucks.length === 0 ? (
               <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
             ) : (
@@ -416,8 +426,7 @@ export default function Load() {
                 })}
               </div>
             )}
-          </div>
-        )}
+        </div>
       </div>
 
       {/* In-progress truck — top of page */}

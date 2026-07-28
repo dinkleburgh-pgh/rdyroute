@@ -1198,7 +1198,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         )
                       )}
                       {fleetMode && arrivedTrackingEnabled && truck.state?.arrived_at && (
-                        <span className="inline-flex items-center rounded-full border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300 md:hidden">
+                        <span className="inline-flex max-w-full items-center rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300 md:hidden">
                           📍 Arrived {formatArrivedAt(truck.state.arrived_at)}
                         </span>
                       )}
@@ -1450,7 +1450,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     )}
                     {arrivedTrackingEnabled && truck.state?.arrived_at && (
                       <div
-                        className="inline-flex items-center gap-1 self-start rounded-full border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5"
+                        // max-w-full + wrap: the pill used to run past the card's
+                        // edge and over the neighbouring card on narrow columns.
+                        className="flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 self-start rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5"
                         onClick={(e) => e.stopPropagation()}
                       >
                         <span className="whitespace-nowrap text-[10px] font-bold text-emerald-300">
