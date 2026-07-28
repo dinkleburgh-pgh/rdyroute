@@ -8,6 +8,17 @@ export default function Login() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  // Set by the API layer when a session was rejected mid-use, so an unexpected
+  // bounce to this screen is explained rather than silent. Read once.
+  const [expired] = useState(() => {
+    try {
+      const v = sessionStorage.getItem("readyroutev2_session_expired") === "1";
+      if (v) sessionStorage.removeItem("readyroutev2_session_expired");
+      return v;
+    } catch {
+      return false;
+    }
+  });
   const login = useLogin();
   const guestLogin = useGuestLogin();
   const { setSession } = useAuth();
@@ -47,6 +58,11 @@ export default function Login() {
       >
       <form onSubmit={onSubmit} className="card w-80 space-y-4">
         <h1 className="text-xl font-semibold">ReadyRoute V2 — Sign in</h1>
+        {expired && (
+          <p className="rounded-lg border border-amber-700/50 bg-amber-950/40 px-3 py-2 text-sm text-amber-200">
+            Your session expired, so your last change may not have saved. Sign in and try it again.
+          </p>
+        )}
         <div>
           <label className="label">Username</label>
           <input

@@ -35,11 +35,12 @@ api.interceptors.request.use((config) => {
       _rrts: Date.now(),
     };
   }
-  const token = localStorage.getItem("readyroutev2_token");
-  if (token && !config.headers?.Authorization) {
-    config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${token}`;
-  }
+  // NOTE: we deliberately do NOT attach the legacy Bearer token. The backend
+  // prefers the Authorization header over the httpOnly cookie, so a stale
+  // localStorage token made otherwise-valid requests 401 — and each of those
+  // 401s ran a refresh that ROTATES (deletes) the server-side session. If that
+  // refresh then failed for any reason the user was silently logged out and
+  // their write was lost. The cookie is the source of truth.
   return config;
 });
 
@@ -47,7 +48,8 @@ api.interceptors.request.use((config) => {
 // Only wipe the cached user and bounce to /login if that refresh also fails.
 type RetryConfig = AxiosRequestConfig & { _retried?: boolean };
 
-let refreshInflight: Promise<boolean> | null = null;
+type RefreshResult = "ok" | "rejected" | "network";
+let refreshInflight: Promise<RefreshResult> | null = null;
 
 function clearSession() {
   // The JWT lives in an httpOnly cookie — the backend clears it on /auth/logout.
@@ -55,9 +57,12 @@ function clearSession() {
   localStorage.removeItem("readyroutev2_user");
   // Also clear any legacy token from before the httpOnly cookie migration.
   localStorage.removeItem("readyroutev2_token");
+  // Leave a breadcrumb so the login screen can explain WHY they landed there
+  // instead of bouncing them out silently.
+  try { sessionStorage.setItem("readyroutev2_session_expired", "1"); } catch { /* private mode */ }
 }
 
-async function tryRefresh(): Promise<boolean> {
+async function tryRefresh(): Promise<RefreshResult> {
   if (refreshInflight) return refreshInflight;
   refreshInflight = (async () => {
     try {
@@ -72,13 +77,15 @@ async function tryRefresh(): Promise<boolean> {
         ? { username: res.data.username, role: res.data.role }
         : null;
       if (user) localStorage.setItem("readyroutev2_user", JSON.stringify(user));
-      // Keep legacy token in localStorage for any old Bearer-header fallback.
-      if (res.data?.access_token) {
-        localStorage.setItem("readyroutev2_token", res.data.access_token);
-      }
-      return true;
-    } catch {
-      return false;
+      // Legacy token intentionally NOT stored — see the request interceptor.
+      localStorage.removeItem("readyroutev2_token");
+      return "ok";
+    } catch (err) {
+      // Distinguish "the server rejected us" from "we couldn't reach the
+      // server". Only a real rejection means the session is gone; a network
+      // blip must not log the user out mid-shift.
+      const st = (err as AxiosError)?.response?.status;
+      return st == null ? "network" : "rejected";
     } finally {
       refreshInflight = null;
     }
@@ -102,13 +109,15 @@ api.interceptors.response.use(
     if (status === 401 && cfg && !cfg._retried && !isAuthEndpoint) {
       cfg._retried = true;
       const refreshed = await tryRefresh();
-      if (refreshed) {
+      if (refreshed === "ok") {
         // Retry without the old Bearer header so the httpOnly cookie takes over.
         const retryCfg = { ...cfg };
         if (retryCfg.headers) delete (retryCfg.headers as Record<string, unknown>).Authorization;
         return api.request(retryCfg);
       }
-      clearSession();
+      // "network" = we never reached the server; keep the session and let the
+      // request fail (mutations fall through to the offline queue below).
+      if (refreshed === "rejected") clearSession();
     } else if (status === 401) {
       clearSession();
     }
