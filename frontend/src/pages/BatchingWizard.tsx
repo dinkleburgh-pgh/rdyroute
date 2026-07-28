@@ -45,7 +45,9 @@ export default function BatchingWizard() {
   const [runDate, setRunDate] = useState(params.get("run_date") || todayIso());
   const [step, setStep] = useState(1); // 1..6 = a batch each; 7 = Review
   const [showAll, setShowAll] = useState(false);
-  const [hideBatched, setHideBatched] = useState(false);
+  // Default ON: while filling a batch you only care about trucks that still
+  // need one (plus this batch's own picks, which the filter keeps).
+  const [hideBatched, setHideBatched] = useState(true);
   const [filter, setFilter] = useState("");
   const [wearerDrafts, setWearerDrafts] = useState<Record<number, string>>({});
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
@@ -501,7 +503,8 @@ function BatchStep({
           <p className="text-sm text-slate-500">Pick trucks on the left, then enter each truck's wearers here.</p>
         ) : (
           <div className="space-y-1.5">
-            {selectedNums.map((num) => {
+            {selectedNums.map((num, idx) => {
+              const isLast = idx === selectedNums.length - 1;
               const t = boardByNum.get(num);
               const busy = busyTruck === num;
               const saved = info.trucks.find((x) => x.truck_number === num)?.wearers ?? 0;
@@ -515,12 +518,27 @@ function BatchStep({
                     {isDust(t) && <DustGarmentIcon className="h-3.5 w-3.5 text-amber-400" />}
                   </span>
                   <input
+                    id={`wearers-${step}-${num}`}
                     className="input w-24 px-2 py-1 text-sm"
                     type="text"
                     inputMode="numeric"
                     pattern="[0-9]*"
+                    enterKeyHint={isLast ? "go" : "next"}
                     title="Wearers on this truck"
                     disabled={busy}
+                    onKeyDown={(e) => {
+                      if (e.key !== "Enter") return;
+                      e.preventDefault();
+                      if (!isLast) {
+                        // Focusing the next field blurs this one, which saves it.
+                        const nextNum = selectedNums[idx + 1];
+                        const el = document.getElementById(`wearers-${step}-${nextNum}`) as HTMLInputElement | null;
+                        if (el) { el.focus(); el.select(); return; }
+                      }
+                      // Last field: commit it, then move on to the next batch.
+                      e.currentTarget.blur();
+                      onNext();
+                    }}
                     value={draftWearers(num)}
                     onChange={(e) => setWearerDrafts((d) => ({ ...d, [num]: e.target.value.replace(/\D/g, "") }))}
                     onBlur={() => {
