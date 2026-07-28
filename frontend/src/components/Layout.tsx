@@ -234,7 +234,12 @@ export default function Layout() {
 
     const onAppEvent = (e: Event) => {
       const d = (e as CustomEvent<Record<string, unknown>>).detail ?? {};
-      if (typeof d.actor === "string" && me && d.actor === me) return; // don't toast yourself
+      // Normally we don't toast you for your own action. "truck unloaded" is the
+      // exception: it's a workflow confirmation for the Fleet/Load screens, and
+      // on a small crew the same person often unloads AND loads — suppressing it
+      // meant whoever did the work never saw it.
+      const selfActionOk = d.type === "truck_unloaded";
+      if (!selfActionOk && typeof d.actor === "string" && me && d.actor === me) return;
       const truck = typeof d.truck_number === "number" ? d.truck_number : null;
 
       if (d.type === "chat_message") {

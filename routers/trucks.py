@@ -664,10 +664,12 @@ def update_truck_state(
             truck_oos_notification(truck_number=truck_number, run_date=run_date),
             actor=_user.username,
         )
-    # Truck finished unloading. unloaded_at is stamped only by this per-truck
-    # workflow (bulk/admin writes never stamp it), so this None -> set edge is a
-    # genuine unload — the signal the load crew waits on.
-    if before_state.unloaded_at is None and row.unloaded_at is not None:
+    # Truck finished unloading — the signal the load crew waits on.
+    # Keyed on the STATUS transition, not the unloaded_at stamp: unloaded_at is
+    # only stamped coming from dirty/in_progress/unfinished (it exists for
+    # unload-timing analysis), so a Fleet-page change from e.g. loaded or spare
+    # to unloaded is a real unload that would otherwise never announce itself.
+    if previous_status != TruckStatus.unloaded and row.status == TruckStatus.unloaded:
         background_tasks.add_task(
             manager.broadcast,
             {
