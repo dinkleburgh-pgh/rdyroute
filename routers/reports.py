@@ -120,12 +120,18 @@ body { font-family: "DejaVu Sans", sans-serif; background: #07090d; color: #f2f6
        font-size: 10px; print-color-adjust: exact; -weasy-print-color-adjust: exact; }
 .mono { font-family: "DejaVu Sans Mono", monospace; }
 .dim { color: #7a8698; }
-.head { margin: 0 0 10px; }
-.head h1 { font-size: 17px; margin: 0; }
-.head .sub { font-size: 10px; color: #8a96a8; margin: 2px 0 0; }
-section { margin: 0 0 12px; page-break-inside: avoid; }
+.head { margin: 0 0 12px; text-align: center; }
+.head h1 { font-size: 26px; font-weight: 700; letter-spacing: .01em; margin: 0; }
+.head .sub { font-size: 10px; color: #8a96a8; margin: 3px 0 0; }
+section { margin: 0 0 14px; page-break-inside: avoid; }
+/* Section headers are centred and large so each block reads as its own titled
+   sheet (e.g. "Unload / Batches"). */
+.shead { text-align: center; margin: 0 0 8px; }
 .eyebrow { font-size: 8px; text-transform: uppercase; letter-spacing: .14em; color: #7a8698; }
+.shead h2 { font-size: 20px; font-weight: 700; margin: 1px 0 0; }
 h2 { font-size: 14px; font-weight: 700; margin: 1px 0 6px; }
+.subhead { text-align: center; font-size: 12px; font-weight: 700; letter-spacing: .04em;
+           text-transform: uppercase; color: #cdd6e2; margin: 2px 0 6px; }
 .empty { border: 1px dashed rgba(255,255,255,0.10); background: rgba(22,29,43,0.5);
          color: #8a96a8; text-align: center; padding: 10px; border-radius: 8px; }
 
@@ -137,8 +143,13 @@ h2 { font-size: 14px; font-weight: 700; margin: 1px 0 6px; }
 .ksub { font-size: 9px; color: #8a96a8; margin-top: 1px; }
 
 .cards { display: flex; flex-wrap: wrap; gap: 8px; }
-.batch { flex: 1 1 200px; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+/* Batches render as fixed rows of three (1-2-3 over 4-5-6) to mirror the paper
+   batch sheet; spacers keep the widths equal when a row is short. */
+.cards-row { display: flex; gap: 8px; }
+.cards-row + .cards-row { margin-top: 8px; }
+.batch { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
          border-radius: 12px; padding: 9px 10px; }
+.batch.spacer { border-color: transparent; background: transparent; }
 .bh { display: flex; justify-content: space-between; align-items: baseline; }
 .bname { font-weight: 700; font-size: 11px; }
 .cnt { font-size: 11px; }
@@ -182,6 +193,14 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
 .acards { display: flex; flex-wrap: wrap; gap: 8px; }
 .acard { flex: 1 1 220px; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
          border-radius: 12px; padding: 8px 10px; }
+/* Top-shorted trucks: one equal-width card per truck on a single row. With
+   flex-basis 220px the 5th card wrapped and stretched to the full width, and
+   sat flush against the shortage table below. */
+.tcards { display: flex; gap: 6px; margin: 0 0 12px; }
+.tcard { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+         border-radius: 12px; padding: 7px 9px; }
+.rank { font-size: 8px; color: #7a8698; }
+.tnum { font-size: 15px; font-weight: 700; letter-spacing: -.01em; }
 .ah { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
 .alist { list-style: none; margin: 0; padding: 0; }
 .alist li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 9.5px; }
@@ -190,6 +209,14 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
         font-weight: 700; text-transform: uppercase; background: rgba(245,158,11,0.20); color: #fcd34d; }
 .warn.done { background: #334155; color: #cbd5e1; }
 """
+
+
+def _section_head(eyebrow: str, title: str) -> str:
+    """Centred two-line section header — small eyebrow over a large title."""
+    return (
+        f'<div class="shead"><div class="eyebrow">{_e(eyebrow)}</div>'
+        f"<h2>{_e(title)}</h2></div>"
+    )
 
 
 def _kpis_html(kpis) -> str:
@@ -209,7 +236,7 @@ def _kpis_html(kpis) -> str:
 def _batches_html(b: BatchesSectionVM | None) -> str:
     if b is None:
         return ""
-    out = ['<section><div class="eyebrow">Unload</div><h2>Batches</h2>']
+    out = ["<section>", _section_head("Unload", "Batches")]
     if b.disabled:
         out.append('<div class="empty">Batching is turned off for this day.</div></section>')
         return "".join(out)
@@ -218,7 +245,7 @@ def _batches_html(b: BatchesSectionVM | None) -> str:
         out.append('<div class="empty">No batches.</div>')
     else:
         cards = []
-        for c in b.cards:
+        for c in sorted(b.cards, key=lambda x: int(x.batch_number)):
             over = '<span class="pill over">over</span>' if c.overbatched else ""
             chips = "".join(
                 f'<span class="chip"><span class="mono">#{int(t.truck_number)}</span> '
@@ -232,7 +259,15 @@ def _batches_html(b: BatchesSectionVM | None) -> str:
                 f'<div class="bar-track"><div class="bar-fill" style="width:{int(c.pct)}%;background:{c.bar_hex}"></div></div>'
                 f'<div class="chips">{chips}</div></div>'
             )
-        out.append(f'<div class="cards">{"".join(cards)}</div>')
+        # Fixed rows of three so the sheet always reads 1-2-3 over 4-5-6, like
+        # the paper batch sheet. Short rows get invisible spacers so every card
+        # keeps the same width.
+        rows = []
+        for i in range(0, len(cards), 3):
+            chunk = cards[i : i + 3]
+            chunk += ['<div class="batch spacer"></div>'] * (3 - len(chunk))
+            rows.append(f'<div class="cards-row">{"".join(chunk)}</div>')
+        out.append("".join(rows))
     out.append("</section>")
     return "".join(out)
 
@@ -240,7 +275,7 @@ def _batches_html(b: BatchesSectionVM | None) -> str:
 def _coverage_html(c: CoverageSectionVM | None) -> str:
     if c is None:
         return ""
-    out = ['<section><div class="eyebrow">Load</div><h2>Routes covered</h2>']
+    out = ["<section>", _section_head("Load", "Routes covered")]
     if not c.rows:
         out.append('<div class="empty">No route coverage recorded for this day.</div></section>')
         return "".join(out)
@@ -261,7 +296,7 @@ def _coverage_html(c: CoverageSectionVM | None) -> str:
 def _load_times_html(lt: LoadTimesSectionVM | None) -> str:
     if lt is None:
         return ""
-    out = ['<section><div class="eyebrow">Load</div><h2>Load times</h2>', _kpis_html(lt.kpis)]
+    out = ["<section>", _section_head("Load", "Load times"), _kpis_html(lt.kpis)]
     if not lt.rows:
         out.append('<div class="empty">No trucks have finished loading yet.</div></section>')
         return "".join(out)
@@ -287,14 +322,15 @@ def _top_trucks_html(top) -> str:
             for it in t.items
         )
         cards.append(
-            f'<div class="acard"><div class="ah">'
-            f'<span><span class="dim">#{i}</span> <span class="mono">#{int(t.truck_number)}</span></span>'
+            f'<div class="tcard"><div class="ah">'
+            f'<span><span class="rank">#{i}</span> '
+            f'<span class="mono tnum">#{int(t.truck_number)}</span></span>'
             f'<span class="mono" style="color:#fcd34d">{int(t.total)} <span class="dim">qty</span></span></div>'
             f'<ul class="alist">{items}</ul></div>'
         )
     return (
-        '<div class="eyebrow" style="margin:2px 0 4px">Top shorted trucks</div>'
-        f'<div class="acards">{"".join(cards)}</div>'
+        '<div class="subhead">Top shorted trucks</div>'
+        f'<div class="tcards">{"".join(cards)}</div>'
     )
 
 
@@ -302,7 +338,8 @@ def _shortages_html(s: ShortagesSectionVM | None) -> str:
     if s is None:
         return ""
     out = [
-        '<section><div class="eyebrow">Load</div><h2>Shortages</h2>',
+        "<section>",
+        _section_head("Load", "Shortages"),
         _kpis_html(s.kpis),
         _top_trucks_html(s.top_trucks),
     ]
@@ -348,7 +385,7 @@ def _shortages_html(s: ShortagesSectionVM | None) -> str:
 def _audit_html(a: AuditSectionVM | None) -> str:
     if a is None:
         return ""
-    out = ['<section><div class="eyebrow">Load</div><h2>Audit</h2>', _kpis_html(a.kpis)]
+    out = ["<section>", _section_head("Load", "Audit"), _kpis_html(a.kpis)]
     if a.chips:
         chips = "".join(
             f'<span class="achip"><span class="dot" style="background:{c.dot_hex}"></span>'
