@@ -11,6 +11,7 @@ import {
   STATUS_LABELS,
   type FleetFilterValue,
 } from "./constants";
+import { truckTypeLabel } from "../../utils/truckType";
 
 interface FleetUtilityBarProps {
   runDate: string;
@@ -45,7 +46,7 @@ function formatFilterSummary(
   ];
   if (active.length === 1) {
     const key = active[0];
-    const label = (STATUS_LABELS as Record<string, string>)[key] ?? key;
+    const label = (STATUS_LABELS as Record<string, string>)[key] ?? truckTypeLabel(key);
     return `${label} · ${counts[key] ?? 0}`;
   }
   return `${active.length} filters · ${filteredCount}`;
@@ -203,7 +204,7 @@ export default function FleetUtilityBar({
                   >
                     <span className="flex min-w-0 items-center gap-2 font-medium">
                       <span className={clsx("h-2 w-2 shrink-0 rounded-full", FLEET_TYPE_FILTER_BG[typeKey])} />
-                      <span className="truncate">{typeKey}</span>
+                      <span className="truncate">{truckTypeLabel(typeKey)}</span>
                     </span>
                     <span className="tabular-nums text-slate-400">{counts[typeKey] ?? 0}</span>
                   </button>

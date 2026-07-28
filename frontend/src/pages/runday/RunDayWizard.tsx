@@ -1,7 +1,7 @@
 /**
  * Run Day Wizard (5-step Setup Day modal). Extracted from RunDay.tsx.
  *
- * Steps: Run Mode → Dust Garments → Route Swaps → Trucks Not Here → Daily Notes.
+ * Steps: Run Mode → F.S. Garments → Route Swaps → Trucks Not Here → Daily Notes.
  */
 import { useState, useMemo } from "react";
 import clsx from "clsx";
@@ -247,7 +247,7 @@ export default function RunDayWizard({
   const STEP_TITLES = [
     "",
     "Step 1 of 5 — Run Mode",
-    "Step 2 of 5 — Dust Garments",
+    "Step 2 of 5 — F.S. Garments",
     "Step 3 of 5 — Route Swaps",
     "Step 4 of 5 — Trucks Not Here",
     "Step 5 of 5 — Daily Notes",
@@ -401,9 +401,9 @@ export default function RunDayWizard({
           {step === 2 && (
             <div className="space-y-4">
               <DustGarmentIcon className="mx-auto h-16 w-16 text-amber-300" style={{ color: "#fcd34d" }} />
-              <p className="text-center text-xl font-extrabold text-slate-100">Select dust trucks with garments</p>
+              <p className="text-center text-xl font-extrabold text-slate-100">Select F.S. trucks with garments</p>
               {editableDustTrucks.length === 0 ? (
-                <p className="text-center text-sm text-slate-500">No dust trucks in fleet.</p>
+                <p className="text-center text-sm text-slate-500">No F.S. trucks in fleet.</p>
               ) : (
                 <div className="grid grid-cols-3 gap-2">
                   {editableDustTrucks.map((t) => (

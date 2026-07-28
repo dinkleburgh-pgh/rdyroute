@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 import type { TruckWithState } from "../types";
 import { garmentHex, garmentIsLoaded, getCoverageRouteNumber } from "../utils/truckStatus";
 import { DustGarmentIcon } from "./icons";
+import { truckTypeLabel } from "../utils/truckType";
 
 /**
  * WorkflowCard — the standard truck card used across the Load and Unload
@@ -80,7 +81,7 @@ export default function WorkflowCard({
                       ? "border-sky-500/60 bg-sky-500/10"
                       : "border-st-inprogress/60 bg-st-inprogress/10",
                   )}
-                  title={garmentIsLoaded(truck) ? "Loaded with garments" : "Dust garment"}
+                  title={garmentIsLoaded(truck) ? "Loaded with garments" : "F.S. garment"}
                 >
                   <DustGarmentIcon className="h-3.5 w-3.5" style={{ color: garmentHex(truck) }} />
                 </span>
@@ -134,7 +135,7 @@ export default function WorkflowCard({
         })()}
         <div className="text-[10px] text-ink-muted space-y-0.5 md:text-xs">
           <div>
-            {truck.truck_type}
+            {truckTypeLabel(truck.truck_type)}
             {truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
           </div>
         </div>

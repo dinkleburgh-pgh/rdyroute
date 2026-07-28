@@ -340,14 +340,14 @@ export default function Load() {
       <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
         <div className="flex w-full items-center gap-2 px-3 py-2.5">
           <DustGarmentIcon className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Dust Garments</span>
+          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">F.S. Garments</span>
           <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
             {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
           </span>
         </div>
         <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
             {dustGarmentTrucks.length === 0 ? (
-              <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
+              <p className="text-xs text-ink-faint">No F.S. trucks scheduled.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
                 {dustGarmentTrucks.map((t) => {
@@ -450,7 +450,7 @@ export default function Load() {
 
       {/* Stats grid */}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="Dusts Left" value={dustsLeft} accent="#ef4444" active={statFilter === "dust"} onClick={() => setStatFilter(statFilter === "dust" ? null : "dust")} />
+        <StatCard label="F.S. Left" value={dustsLeft} accent="#ef4444" active={statFilter === "dust"} onClick={() => setStatFilter(statFilter === "dust" ? null : "dust")} />
         <StatCard label="Uniforms Left" value={uniformsLeft} accent="#6366f1" active={statFilter === "uniform"} onClick={() => setStatFilter(statFilter === "uniform" ? null : "uniform")} />
         <StatCard label="Spares Left" value={sparesLeft} accent="#22c55e" active={statFilter === "spare"} onClick={() => setStatFilter(statFilter === "spare" ? null : "spare")} />
         <StatCard label="Total Left" value={totalLeft} accent="#dbe3ee" active={statFilter === "total"} onClick={() => setStatFilter(statFilter === "total" ? null : "total")} />
@@ -469,7 +469,7 @@ export default function Load() {
         return (
           <div className="card animate-slide-down space-y-2">
             <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              {statFilter === "dust" ? "Dusts" : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
+              {statFilter === "dust" ? "F.S." : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
             </p>
             <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
               {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
@@ -734,7 +734,7 @@ export default function Load() {
       <ConfirmDialog
         open={confirmGarmentTruck !== null}
         title="Did you load garments?"
-        description={`Truck #${confirmGarmentTruck?.truck_number ?? ""} is flagged with dust garments — confirm the garments were loaded before finishing.`}
+        description={`Truck #${confirmGarmentTruck?.truck_number ?? ""} is flagged with F.S. garments — confirm the garments were loaded before finishing.`}
         confirmLabel="Yes, finish loading"
         cancelLabel="Not yet"
         onConfirm={() => {
@@ -938,7 +938,7 @@ function InProgressPanel({
             {truck.state?.has_dust_garment && (
               <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-st-inprogress">
                 <DustGarmentIcon className="h-5 w-5" />
-                Dust garment
+                F.S. garment
               </div>
             )}
             {truck.state?.wearers ? (

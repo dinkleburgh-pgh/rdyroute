@@ -33,7 +33,7 @@ Weekends freeze the "current" run date to Friday.
 | Type | Description |
 |---|---|
 | Uniform | Standard daily-load route truck |
-| Dust | Dust-run route truck |
+| Dust | Facility Services route truck. Shown throughout the app as **F.S.** — `Dust` is only the stored value (see `utils/truckType.ts`). |
 | Spare | On-call, no fixed route; covers for OOS/swapped trucks |
 
 ### Truck lifecycle (status)
@@ -114,7 +114,7 @@ crew knows which spare to actually unload.
 Opened from the sidebar button; auto-detects if it's already been run today.
 
 1. **Run Mode** — Normal vs. Holiday, independently for Load and Unload.
-2. **Dust Garments** — mark which Dust trucks have garments assigned.
+2. **F.S. Garments** — mark which F.S. trucks have garments assigned.
 3. **Route Swaps** — set/review active coverages; shows a "Needs Assignment"
    list of uncovered OOS routes.
 4. **Trucks Not Here** — mark absent returning/spare trucks; they get

@@ -21,6 +21,7 @@ import { todayIso } from "../api/client";
 import { workdayNumbers } from "./Clock";
 import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
 import type { TruckNote, TruckWithState } from "../types";
+import { truckTypeLabel } from "../utils/truckType";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
   const { data: board } = useBoard(runDate);
@@ -616,7 +617,7 @@ function QueueRow({
 }) {
   const coverRoute = getCoverageRouteNumber(truck);
   const spareNeedsRoute = truck.truck_type === "Spare" && coverRoute == null;
-  const parts: string[] = [truck.truck_type];
+  const parts: string[] = [truckTypeLabel(truck.truck_type)];
   if (truck.state?.batch_id != null) parts.push(`Batch ${truck.state.batch_id}`);
   const meta = parts.join(" · ");
   return (

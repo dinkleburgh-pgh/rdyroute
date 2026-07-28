@@ -2,12 +2,13 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Pencil } from "lucide-react";
 import { useFleet, useHolidayLoad, useHolidayUnload, useRouteDrivers, useUpdateTruck } from "../../api/hooks";
 import { isScheduledOff, previousWorkday } from "../../utils/truckStatus";
+import { TRUCK_TYPE_SHORT_LABEL } from "../../utils/truckType";
 import { workdayNumbers } from "../Clock";
 import { todayIso } from "../../api/client";
 import clsx from "clsx";
 
 const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
-const TYPE_SHORT: Record<string, string> = { Dust: "(D)", Uniform: "(U)" };
+const TYPE_SHORT: Record<string, string> = TRUCK_TYPE_SHORT_LABEL;
 
 export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) {
   const { data: fleet } = useFleet(false);

@@ -31,6 +31,7 @@ import HierarchyPicker, { DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit, u
 import type { TrackedItem } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
+import { truckTypeLabel } from "../utils/truckType";
 
 
 // ---------------------------------------------------------------------------
@@ -105,7 +106,7 @@ function TruckPicker({
               >
                 <span className="text-2xl font-black leading-none">{t.truck_number}</span>
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                  {t.truck_type}
+                  {truckTypeLabel(t.truck_type)}
                 </span>
               </motion.button>
             ))}

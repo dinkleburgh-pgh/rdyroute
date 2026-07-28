@@ -98,7 +98,7 @@ Spare trucks are managed separately and never enter the off-day pooling logic.
 | Type | Description |
 |---|---|
 | Uniform | Standard daily-load truck |
-| Dust | Dust-run truck |
+| Dust | Facility Services truck — displayed as **F.S.** (the `Dust` value is storage-only) |
 | Spare | On-call spare, bypasses off-day scheduling |
 
 ### Day numbering

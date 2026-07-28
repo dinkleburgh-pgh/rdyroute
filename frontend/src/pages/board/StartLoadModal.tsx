@@ -5,6 +5,7 @@
 import clsx from "clsx";
 import { createPortal } from "react-dom";
 import type { TruckWithState } from "../../types";
+import { truckTypeLabel } from "../../utils/truckType";
 
 export default function StartLoadModal({
   truck,
@@ -43,7 +44,7 @@ export default function StartLoadModal({
           <h2 className="mt-1 text-2xl font-bold text-slate-100">
             Truck #{truck.truck_number}
           </h2>
-          <p className="mt-0.5 text-sm text-slate-400">{truck.truck_type}</p>
+          <p className="mt-0.5 text-sm text-slate-400">{truckTypeLabel(truck.truck_type)}</p>
         </div>
 
         <div className="px-6 py-5 space-y-4">

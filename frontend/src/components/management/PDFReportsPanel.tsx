@@ -4,6 +4,7 @@
 import { format } from "date-fns";
 import { useAuditEntries, useBoard } from "../../api/hooks";
 import { todayIso } from "../../api/client";
+import { truckTypeLabel } from "../../utils/truckType";
 
 export default function PDFReportsPanel() {
   const { data: board }   = useBoard(todayIso());
@@ -19,7 +20,7 @@ export default function PDFReportsPanel() {
         const duration = t.state?.load_duration_seconds
           ? `${Math.floor(t.state.load_duration_seconds / 60)}m ${(t.state.load_duration_seconds % 60).toString().padStart(2, "0")}s`
           : "—";
-        return `<tr><td>${t.truck_number}</td><td>${t.truck_type ?? ""}</td><td>${label}</td><td>${t.state?.wearers ?? 0}</td><td>${duration}</td></tr>`;
+        return `<tr><td>${t.truck_number}</td><td>${truckTypeLabel(t.truck_type)}</td><td>${label}</td><td>${t.state?.wearers ?? 0}</td><td>${duration}</td></tr>`;
       }).join("");
 
     const auditRows = (entries ?? [])

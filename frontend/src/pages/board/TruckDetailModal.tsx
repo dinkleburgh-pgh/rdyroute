@@ -12,6 +12,7 @@ import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import StatusEditor from "./StatusEditor";
 import FleetTruckEditor from "./FleetTruckEditor";
 import { format } from "date-fns";
+import { truckTypeLabel } from "../../utils/truckType";
 
 export default function TruckDetailModal({
   truck,
@@ -48,7 +49,7 @@ export default function TruckDetailModal({
           <div className="text-center">
             <h3 className="text-5xl font-black tracking-tight text-white">#{truck.truck_number}</h3>
             <p className="text-xs text-slate-400">
-              {truck.truck_type}
+              {truckTypeLabel(truck.truck_type)}
               {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
               {" · "}{truck.is_active ? "Active" : "Inactive"}
               {truck.is_persistent_spare ? " · Persistent spare" : ""}

@@ -32,6 +32,7 @@ import HierarchyPicker, {
   qtyWithUnit,
   useCategoryPalette,
 } from "./HierarchyPicker";
+import { truckTypeLabel } from "../../utils/truckType";
 
 interface SessionBatch {
   /** `${category}||${detail}` — one box per ITEM, merged across submits. */
@@ -288,7 +289,7 @@ export default function ItemFirstEntry({
                       </span>
                     ) : (
                       <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                        {t.truck_type}
+                        {truckTypeLabel(t.truck_type)}
                       </span>
                     )}
                   </motion.button>

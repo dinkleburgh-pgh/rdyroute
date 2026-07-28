@@ -24,6 +24,7 @@ import { motion } from "framer-motion";
 import { ArrowLeftRight } from "lucide-react";
 import { format } from "date-fns";
 import clsx from "clsx";
+import { truckTypeLabel } from "../utils/truckType";
 
 /**
  * Unload workflow (V1 parity):
@@ -656,7 +657,7 @@ export default function Unload() {
                   <div>
                     <h3 className="text-xl font-semibold">Truck #{t.truck_number}</h3>
                     <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
-                      {t.truck_type}
+                      {truckTypeLabel(t.truck_type)}
                       {isUnfin ? " · Unfinished" : ""}
                       {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
                     </p>

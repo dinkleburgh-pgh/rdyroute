@@ -10,9 +10,10 @@ import { useFleet, useHolidayLoad } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
+import { TRUCK_TYPE_LABEL } from "../utils/truckType";
 
 const TYPE_LABEL: Record<string, string> = {
-  Dust: "Dust",
+  Dust: TRUCK_TYPE_LABEL.Dust,
   Uniform: "Uniform",
   Spare: "Spare",
 };

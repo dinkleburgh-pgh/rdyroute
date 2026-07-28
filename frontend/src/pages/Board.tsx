@@ -52,6 +52,7 @@ import FleetUtilityBar from "./board/FleetUtilityBar";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, CalendarDays, X } from "lucide-react";
+import { truckTypeLabel } from "../utils/truckType";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -1181,7 +1182,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   {fleetMode && (
                     <div className="text-[10px] text-slate-400 space-y-0.5 md:text-xs">
                       <div>
-                        {truck.truck_type}
+                        {truckTypeLabel(truck.truck_type)}
                         {truck.truck_type === "Uniform" && truck.uniform_size != null && ` · ${truck.uniform_size}ft`}
                         {truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
                       </div>
@@ -1256,13 +1257,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 </div>
                 {!fleetMode && filter === "unloaded" && (
                   <div className="text-xs text-slate-400">
-                    {truck.truck_type}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
+                    {truckTypeLabel(truck.truck_type)}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
                   </div>
                 )}
                 {filter === "loaded" ? (
                   <>
                     <div className="text-xs text-slate-400">
-                      {truck.truck_type}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
+                      {truckTypeLabel(truck.truck_type)}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
                     </div>
                     {truck.state?.load_finish_time && (
                       <div className="mt-auto pt-1 text-xs text-slate-500">

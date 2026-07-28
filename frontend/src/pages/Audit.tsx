@@ -28,6 +28,7 @@ import { todayIso } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type { AuditEntry, TruckWithState } from "../types";
 import PageHeader from "../components/PageHeader";
+import { truckTypeLabel } from "../utils/truckType";
 
 // ---------------------------------------------------------------------------
 // TruckPicker
@@ -100,7 +101,7 @@ function TruckPicker({
                   {t.truck_number}
                 </span>
                 <span className={clsx("mt-0.5 text-[10px] font-medium", isAudited ? "font-semibold text-emerald-400" : "uppercase tracking-wider text-slate-400")}>
-                  {isAudited ? `${count} item${count !== 1 ? "s" : ""}` : t.truck_type}
+                  {isAudited ? `${count} item${count !== 1 ? "s" : ""}` : truckTypeLabel(t.truck_type)}
                 </span>
               </motion.button>
             );

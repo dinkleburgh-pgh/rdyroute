@@ -73,7 +73,7 @@ export default function FleetManagementPanel() {
               onChange={(e) => update.mutate({ truck_number: selected.truck_number, truck_type: e.target.value as TruckType })}
             >
               <option value="Uniform">Uniform</option>
-              <option value="Dust">Dust</option>
+              <option value="Dust">F.S. (Facility Services)</option>
               <option value="Spare">Spare</option>
             </select>
           </FieldRow>
@@ -129,7 +129,7 @@ export default function FleetManagementPanel() {
           />
           <select className="input flex-1" value={newType} onChange={(e) => setNewType(e.target.value as TruckType)}>
             <option value="Uniform">Uniform</option>
-            <option value="Dust">Dust</option>
+            <option value="Dust">F.S. (Facility Services)</option>
             <option value="Spare">Spare</option>
           </select>
           <button className="btn-primary" disabled={!newNum || add.isPending} onClick={handleAdd}>

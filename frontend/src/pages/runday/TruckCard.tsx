@@ -14,6 +14,7 @@ import type { TruckNote, TruckStatus, TruckWithState } from "../../types";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./constants";
 import AnimateCard from "../../components/AnimateCard";
 import CoverageTag from "../../components/CoverageTag";
+import { truckTypeLabel } from "../../utils/truckType";
 
 export default function TruckCard({
   t,
@@ -201,7 +202,7 @@ export default function TruckCard({
       {statusBadge}
       {offChip}
       <span className="text-xs text-slate-500">
-        {t.truck_type}
+        {truckTypeLabel(t.truck_type)}
       </span>
       {coverageBadge}
       {dayChip}

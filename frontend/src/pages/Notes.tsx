@@ -24,6 +24,7 @@ import { todayIso, publicBase } from "../api/client";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
+import { truckTypeLabel } from "../utils/truckType";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -443,7 +444,7 @@ function TruckNotePanel({
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
           <span className="text-xl font-black text-slate-100">#{truck.truck_number}</span>
-          <span className="text-xs text-slate-500">{truck.truck_type}</span>
+          <span className="text-xs text-slate-500">{truckTypeLabel(truck.truck_type)}</span>
           {visible.length > 0 && (
             <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
               {visible.length}

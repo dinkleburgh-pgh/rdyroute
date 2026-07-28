@@ -6,6 +6,7 @@ import { fmtCountdown } from "./useOutsideTimer";
 import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS } from "./constants";
 import CoverageTag from "../../components/CoverageTag";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
+import { truckTypeLabel } from "../../utils/truckType";
 
 const STATUS_ACTIONS: TruckStatus[] = [
   "dirty",
@@ -80,7 +81,7 @@ export default function FleetMobileActionSheet({
               return cr != null ? <CoverageTag route={cr} truck={truck.truck_number} className="shrink-0" /> : null;
             })()}
             <span className="text-sm text-slate-400">
-              {truck.truck_type}
+              {truckTypeLabel(truck.truck_type)}
               {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
             </span>
           </div>

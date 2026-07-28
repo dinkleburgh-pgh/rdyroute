@@ -10,6 +10,7 @@ import TruckDocuments from "../../components/TruckDocuments";
 import { STATUS_LABELS } from "./constants";
 
 import { format } from "date-fns";
+import { truckTypeLabel } from "../../utils/truckType";
 
 export default function TruckDetailPanel({
   truck,
@@ -44,7 +45,7 @@ export default function TruckDetailPanel({
     { label: "Route", value: `Route #${truck.truck_number}` },
     { label: "Batch", value: truck.state?.batch_id ?? "—" },
     { label: "Wearers", value: truck.state?.wearers ?? 0 },
-    { label: "Type", value: truck.truck_type },
+    { label: "Type", value: truckTypeLabel(truck.truck_type) },
     { label: "Duration", value: fmtDuration(truck.state?.load_duration_seconds) },
     { label: "Started", value: fmtTime(truck.state?.load_start_time) },
     { label: "Finished", value: fmtTime(truck.state?.load_finish_time) },
@@ -59,7 +60,7 @@ export default function TruckDetailPanel({
       <div className="relative flex items-center justify-center px-6 py-6 border-b border-slate-800">
         <div className="text-center">
           <p className="text-xs font-semibold uppercase tracking-widest text-slate-500">
-            {truck.truck_type}
+            {truckTypeLabel(truck.truck_type)}
             {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
             {" · "}{truck.is_active ? "Active" : "Inactive"}
             {truck.is_persistent_spare ? " · Persistent spare" : ""}
