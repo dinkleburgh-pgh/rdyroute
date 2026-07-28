@@ -23,7 +23,9 @@ export type ToastVariant = "success" | "error" | "info";
 export interface ToastOptions {
   /** Makes the toast clickable — fires, then dismisses. */
   onClick?: () => void;
-  /** Override the auto-dismiss delay (ms). Actionable toasts want longer. */
+  /** Override the auto-dismiss delay (ms). Actionable toasts want longer.
+   *  Pass 0 (or negative) to make the toast STICKY — it stays until the user
+   *  dismisses it with the X. Used for alerts that must be acknowledged. */
   durationMs?: number;
   /** Renders the toast as a rich card: this eyebrow title over the message. */
   title?: string;
@@ -68,7 +70,8 @@ export function ToastProvider({ children }: { children: ReactNode }) {
         ...prev,
         { id, message, variant, onClick: opts?.onClick, title: opts?.title, chip: opts?.chip },
       ]);
-      setTimeout(() => dismiss(id), opts?.durationMs ?? AUTO_DISMISS_MS);
+      const ttl = opts?.durationMs ?? AUTO_DISMISS_MS;
+      if (ttl > 0) setTimeout(() => dismiss(id), ttl);
     },
     [dismiss],
   );

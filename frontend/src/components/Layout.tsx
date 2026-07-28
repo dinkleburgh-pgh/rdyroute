@@ -261,7 +261,9 @@ export default function Layout() {
         toast.info("Unloaded — ready to load.", {
           title: "Truck unloaded",
           chip: `#${truck}`,
-          durationMs: 10_000,
+          // Long dwell (7 min): whoever walks up to Load should still see the
+          // trucks that came ready while they were away from the screen.
+          durationMs: 7 * 60_000,
           onClick: () => nav(`/fleet?truck=${truck}`),
         });
       } else if (d.type === "truck_arrived") {
@@ -285,10 +287,14 @@ export default function Layout() {
       if (n.actor && me && n.actor === me) return;
       if (!once(`notif-${n.tag}`)) return;
       const chipTruck = n.truck_number ?? n.route_truck ?? null;
-      toast.info(n.body, {
+      // Hold and OOS are exceptions: they must be acknowledged, so they never
+      // time out — only the X (or opening them) clears them. Coverage changes
+      // are informational and still auto-dismiss.
+      const mustAcknowledge = n.type === "truck_hold" || n.type === "truck_oos";
+      toast.push(n.body, mustAcknowledge ? "error" : "info", {
         title: n.title,
         chip: chipTruck != null ? `#${chipTruck}` : undefined,
-        durationMs: 12_000,
+        durationMs: mustAcknowledge ? 0 : 12_000,
         onClick: () => nav(n.url || "/fleet"),
       });
     };
