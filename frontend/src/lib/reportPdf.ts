@@ -45,6 +45,8 @@ export interface CoverageRowVM {
   type: string;
   recurring: boolean;
   returned: boolean;
+  /** Carrier has finished loading — drives "Loaded on" vs "Loads on". */
+  loaded: boolean;
   status_label: string;
   status_hex: string;
 }

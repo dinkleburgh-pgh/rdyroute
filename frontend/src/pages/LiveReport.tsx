@@ -452,6 +452,7 @@ export default function LiveReport() {
             type: r.type,
             recurring: isRecurring(r.routeTruck, r.loadOnTruck),
             returned: r.returned,
+            loaded: done,
             status_label,
             status_hex: done ? "#3b82f6" : "#7a8698",
           };
@@ -843,7 +844,10 @@ export default function LiveReport() {
                       </div>
                       <span className="text-2xl font-black leading-none text-ink-faint">→</span>
                       <div className="text-center">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Loaded on</p>
+                        {/* Past tense only once the carrier has actually loaded. */}
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+                          {done ? "Loaded on" : "Loads on"}
+                        </p>
                         <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">
                           #{r.loadOnTruck}
                         </p>

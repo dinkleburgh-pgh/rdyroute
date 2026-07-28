@@ -600,6 +600,10 @@ class CoverageRowVM(BaseModel):
     type: str = Field(max_length=24)             # "Route swap" / "Spare cover"
     recurring: bool = False
     returned: bool = False
+    # Has the carrier actually loaded yet? Drives the card's tense
+    # ("Loaded on" vs "Loads on"). Defaults False so an older client that
+    # doesn't send it renders the present tense rather than claiming done.
+    loaded: bool = False
     status_label: str = Field(max_length=64)     # "Loaded · 7:12 AM · 08:40" / "Not loaded"
     status_hex: HexColor
 
