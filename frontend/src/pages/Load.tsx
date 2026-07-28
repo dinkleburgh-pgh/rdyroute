@@ -387,21 +387,31 @@ export default function Load() {
               <p className="text-xs text-ink-faint">No dust trucks scheduled.</p>
             ) : (
               <div className="flex flex-wrap gap-1.5">
-                {dustGarmentTrucks.map((t) => (
-                  <span
-                    key={t.truck_number}
-                    className={clsx(
-                      "inline-flex items-center gap-1 rounded-md border px-2 py-0.5 text-xs font-semibold",
-                      t.state?.has_dust_garment
-                        ? "border-amber-600/60 bg-amber-950/50"
-                        : "border-hairline bg-surface-3",
-                    )}
-                    style={t.state?.has_dust_garment ? { color: "#fcd34d" } : { color: "#6f7c8e" }}
-                  >
-                    #{t.truck_number}
-                    {t.state?.has_dust_garment && <DustGarmentIcon className="h-3 w-3" style={{ color: "#fcd34d" }} />}
-                  </span>
-                ))}
+                {dustGarmentTrucks.map((t) => {
+                  const garment = t.state?.has_dust_garment === true;
+                  // Garments already out the door read blue/cyan (done); still
+                  // pending ones stay amber (needs action); no garment is muted.
+                  const done = garment && t.state?.status === "loaded";
+                  const color = done ? "#7dd3fc" : garment ? "#fcd34d" : "#6f7c8e";
+                  return (
+                    <span
+                      key={t.truck_number}
+                      title={done ? "Loaded with garments" : garment ? "Garments to load" : "No garments"}
+                      className={clsx(
+                        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-semibold",
+                        done
+                          ? "border-sky-500/60 bg-sky-950/50"
+                          : garment
+                            ? "border-amber-600/60 bg-amber-950/50"
+                            : "border-hairline bg-surface-3",
+                      )}
+                      style={{ color }}
+                    >
+                      #{t.truck_number}
+                      {garment && <DustGarmentIcon className="h-4 w-4" style={{ color }} />}
+                    </span>
+                  );
+                })}
               </div>
             )}
           </div>
