@@ -476,7 +476,12 @@ def _shortages_html(s: ShortagesSectionVM | None) -> str:
         _top_items_html(s.matrix),
     ]
     m = s.matrix
-    if m is None or not m.rows:
+    if m is None:
+        # The short-sheet grid is its own selectable section — a null matrix
+        # means it wasn't included, which is not the same as "no shortages".
+        out.append("</section>")
+        return "".join(out)
+    if not m.rows:
         out.append('<div class="empty">No shortages logged for this day.</div></section>')
         return "".join(out)
 

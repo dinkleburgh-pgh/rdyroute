@@ -70,7 +70,7 @@ const TONE_HEX: Record<string, string> = {
 };
 
 // The report sections the PDF picker offers, in on-screen order.
-type SectionKey = "batches" | "coverage" | "loadTimes" | "shortages" | "audit";
+type SectionKey = "batches" | "coverage" | "loadTimes" | "shortages" | "shortSheet" | "audit";
 
 // Top-level audit category = text before the first ">" in the "Top > Sub"
 // category string (mirrors Audit.tsx topCatOf).
@@ -408,7 +408,7 @@ export default function LiveReport() {
   const [pdfErr, setPdfErr] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [selected, setSelected] = useState<Record<SectionKey, boolean>>({
-    batches: true, coverage: true, loadTimes: true, shortages: true, audit: true,
+    batches: true, coverage: true, loadTimes: true, shortages: true, shortSheet: true, audit: true,
   });
 
   useEffect(() => {
@@ -511,24 +511,28 @@ export default function LiveReport() {
       };
     }
 
-    if (sel.shortages) {
+    if (sel.shortages || sel.shortSheet) {
       const items = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
       const m = buildShortageMatrix(shorts, items);
+      // The summary (KPIs + top strips) and the sheet grid are separate picks,
+      // so a report can carry either, both, or just the grid.
       vm.shortages = {
-        kpis: [
+        kpis: !sel.shortages ? [] : [
           { label: "Qty short", value: String(totalPieces), sub: "total units", tone: totalPieces > 0 ? "#f87171" : "#34d399" },
           { label: "Most shorted item", value: topItem ? topItem.label : "—", sub: topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
           { label: "Most shorted truck", value: topTruck ? `#${topTruck.truck}` : "—", sub: topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
           { label: "Distinct items", value: String(distinctItems) },
           { label: "Trucks shorted", value: String(shortsByTruck.length) },
         ],
-        top_trucks: topTrucks.map((t) => ({
-          truck_number: t.truck,
-          total: t.total,
-          items: t.items.map((it) => ({ label: it.label, qty: it.qty })),
-        })),
+        top_trucks: !sel.shortages
+          ? []
+          : topTrucks.map((t) => ({
+              truck_number: t.truck,
+              total: t.total,
+              items: t.items.map((it) => ({ label: it.label, qty: it.qty })),
+            })),
         matrix:
-          shorts.length > 0
+          sel.shortSheet
             ? {
                 trucks: m.trucks,
                 rows: m.rows.map((r) => ({
@@ -595,6 +599,7 @@ export default function LiveReport() {
   // Which sections have content today (drives the picker's muted hints).
   const sectionDefs: { key: SectionKey; label: string; hint?: string }[] = [
     { key: "shortages", label: "Shortages", hint: shorts.length ? undefined : "empty" },
+    { key: "shortSheet", label: "Short sheet", hint: shorts.length ? undefined : "empty" },
     { key: "batches", label: "Batches", hint: batchingDisabled ? "off" : batches.length ? undefined : "empty" },
     { key: "coverage", label: "Routes covered", hint: coverageRows.length ? undefined : "empty" },
     { key: "loadTimes", label: "Load times", hint: finished.length ? undefined : "empty" },
@@ -619,6 +624,7 @@ export default function LiveReport() {
   const kioskSlides = useMemo(() => {
     const has: Record<SectionKey, boolean> = {
       shortages: shorts.length > 0,
+      shortSheet: shorts.length > 0,
       batches: (batches?.length ?? 0) > 0,
       coverage: coverageRows.length > 0,
       loadTimes: finished.length > 0,
@@ -872,11 +878,20 @@ export default function LiveReport() {
               </div>
             </div>
           )}
+          {shorts.length === 0 && <Empty>No shortages logged for this day.</Empty>}
+        </Section>
+        )}
+
+        {/* ===================== LOAD · SHORT SHEET ===================== */}
+        {/* The grid is its own section so it can be picked, exported and shown
+            in kiosk mode independently of the shortage summary above. */}
+        {showSection("shortSheet") && (
+        <Section eyebrow="Load" title="Short sheet" downloadName={`Short sheet ${runDate}`}>
           {shorts.length === 0 ? (
             <Empty>No shortages logged for this day.</Empty>
           ) : (
-            /* The full short sheet — same Grid / Sheet views as the Short Sheet
-               page, so the report shows the crew's actual sheet. */
+            /* Same Grid / Sheet views as the Short Sheet page, so the report
+               shows the crew's actual sheet. */
             <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
               <ShortageSheetView shorts={shorts} board={board} />
             </div>
