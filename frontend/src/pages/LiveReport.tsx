@@ -347,6 +347,20 @@ export default function LiveReport() {
       }));
   }, [shorts]);
 
+  // Top 5 shorted ITEMS (qty across every truck) — the item-side companion to
+  // topTrucks. Same derivation the PDF uses, so the two always agree.
+  const topItems = useMemo(() => {
+    const m = new Map<string, { label: string; category: string; qty: number }>();
+    for (const s of shorts) {
+      const label = shortLabel(s);
+      const e = m.get(label) ?? { label, category: s.item_category, qty: 0 };
+      e.qty += s.quantity;
+      m.set(label, e);
+    }
+    return [...m.values()].sort((a, b) => b.qty - a.qty).slice(0, 5);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shorts]);
+
   // ---- Audit ----
   const itemByLabel = useMemo(() => new Map(trackedItems.map((i) => [i.label, i])), [trackedItems]);
   const auditByTruck = useMemo(() => {
@@ -782,6 +796,29 @@ export default function LiveReport() {
                         </li>
                       ))}
                     </ul>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {topItems.length > 0 && (
+            <div>
+              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+                Top shorted items
+              </p>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
+                {topItems.map((it, i) => (
+                  <div key={it.label} className="rounded-xl border border-hairline bg-surface p-3">
+                    <div className="flex items-baseline justify-between gap-2">
+                      <span className="text-xs font-bold text-ink-faint">#{i + 1}</span>
+                      <span className="font-mono text-sm font-bold tabular-nums text-amber-300">
+                        {it.qty.toLocaleString()} <span className="text-[10px] font-normal text-ink-faint">qty</span>
+                      </span>
+                    </div>
+                    <p className="mt-1 flex items-center justify-center gap-1.5 border-t border-hairline pt-1.5 text-center text-sm font-bold leading-tight text-ink">
+                      <span className={clsx("h-2 w-2 shrink-0 rounded-full", palette.dotClass(it.category))} />
+                      {it.label}
+                    </p>
                   </div>
                 ))}
               </div>
