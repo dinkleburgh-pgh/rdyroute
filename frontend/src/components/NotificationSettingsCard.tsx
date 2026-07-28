@@ -81,22 +81,9 @@ export default function NotificationSettingsCard() {
     };
   }, [localState.supported]);
 
-  useEffect(() => {
-    if (!localState.endpoint) return;
-    const onNotification = (rawEvent: Event) => {
-      const event = rawEvent as CustomEvent<NotificationEvent>;
-      const notification = event.detail;
-      const seenAt = seenTagsRef.current.get(notification.tag);
-      const now = Date.now();
-      if (seenAt && now - seenAt < 10_000) return;
-      seenTagsRef.current.set(notification.tag, now);
-      toast.info(`${notification.title}: ${notification.body}`);
-    };
-    window.addEventListener("readyroute:notification", onNotification as EventListener);
-    return () => {
-      window.removeEventListener("readyroute:notification", onNotification as EventListener);
-    };
-  }, [localState.endpoint, toast]);
+  // NOTE: the in-app toast for these notifications now lives in Layout.tsx —
+  // it renders a rich clickable card for EVERY session, not just devices with
+  // web push enabled. Toasting here too would double up.
 
   const statusLabel = useMemo(() => {
     if (!localState.supported) return "Unsupported";

@@ -321,6 +321,7 @@ def create_swap(
                 covering_truck=row.load_on_truck,
                 changed_from_truck=previous_load_on_by_route.get(row.route_truck),
             ),
+            actor=current_user.username,
         )
 
     return created
@@ -404,7 +405,7 @@ def delete_swap(
     db.delete(row)
     db.commit()
     for event in removed_notifications:
-        background_tasks.add_task(dispatch_notification, event)
+        background_tasks.add_task(dispatch_notification, event, actor=current_user.username)
 
 
 @router.delete("", status_code=status.HTTP_204_NO_CONTENT)
@@ -448,6 +449,7 @@ def clear_all_swaps(
                 route_truck=row.route_truck,
                 covering_truck=row.load_on_truck,
             ),
+            actor=current_user.username,
         )
 
 

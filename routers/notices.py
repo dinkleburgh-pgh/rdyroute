@@ -7,7 +7,7 @@ Admins (fleet/atl) create/update/delete; everyone can read active notices.
 
 from datetime import datetime, timezone
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
@@ -15,6 +15,7 @@ from database import get_db
 from models import Notice, User
 from routers.auth import get_current_user, require_admin
 from schemas import NoticeCreate, NoticeOut, NoticeUpdate
+from ws_manager import manager
 
 router = APIRouter(prefix="/notices", tags=["notices"])
 
@@ -42,6 +43,7 @@ def list_notices(
 @router.post("", response_model=NoticeOut, status_code=status.HTTP_201_CREATED)
 def create_notice(
     payload: NoticeCreate,
+    background_tasks: BackgroundTasks,
     current_user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
@@ -49,6 +51,19 @@ def create_notice(
     db.add(notice)
     db.commit()
     db.refresh(notice)
+    # A new banner notice used to appear only on the next poll — push it so
+    # every open board surfaces it immediately.
+    background_tasks.add_task(
+        manager.broadcast,
+        {
+            "type": "notice_created",
+            "notice_id": int(notice.id),
+            "title": notice.title,
+            "body": (notice.body or "")[:120],
+            "severity": notice.severity,
+            "actor": current_user.username,
+        },
+    )
     return notice
 
 

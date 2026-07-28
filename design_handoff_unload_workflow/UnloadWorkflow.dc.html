@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<!-- @template name="Unload workflow" description="Unload page: Dirty (route trucks / coverage trucks / priority holds), single-click Mark Unloaded with Undo, and a sortable Unloaded Today tally." -->
+<helmet><script src="./ds-base.js"></script></helmet>
+<div style="min-height: 100vh; background: var(--rr-app); color: var(--rr-ink); font-family: var(--rr-font-sans); display: flex; justify-content: center; padding: 24px 16px;" data-screen-label="Unload workflow">
+  <div style="width: 100%; max-width: 560px; display: flex; flex-direction: column; gap: 16px;">
+
+    <header style="display: flex; align-items: flex-end; justify-content: space-between; gap: 12px;">
+      <div>
+        <div style="font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--rr-ink-muted); margin-bottom: 4px;">ReadyRoute · Unload</div>
+        <h1 style="margin: 0; font-size: 22px; font-weight: 800; letter-spacing: -0.01em;">Unload — Fri&rsquo;s ship</h1>
+      </div>
+      <span class="badge" style="background: var(--rr-st-dirty); color: #fff;">{{ dirtyCount }} to go</span>
+    </header>
+
+    <!-- Priority holds -->
+    <sc-if value="{{ hasHolds }}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="label" style="color: var(--rr-st-inprogress);">Requested — priority hold</div>
+        <sc-for list="{{ holds }}" as="t" hint-placeholder-count="1">
+          <div class="card" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-left: 3px solid var(--rr-st-inprogress);">
+            <span style="font-family: var(--rr-font-mono); font-size: 22px; font-weight: 800;">{{ t.id }}</span>
+            <span style="flex: 1; font-size: 12px; color: var(--rr-ink-muted);">{{ t.detail }}</span>
+            <button class="btn-primary" onClick="{{ t.onUnload }}">Mark Unloaded</button>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- Unfinished -->
+    <sc-if value="{{ hasUnfinished }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="label" style="color: var(--rr-st-unfinished);">Unfinished</div>
+        <sc-for list="{{ unfinished }}" as="t" hint-placeholder-count="1">
+          <div class="card" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-left: 3px solid var(--rr-st-unfinished);">
+            <span style="font-family: var(--rr-font-mono); font-size: 22px; font-weight: 800;">{{ t.id }}</span>
+            <span style="flex: 1; font-size: 12px; color: var(--rr-ink-muted);">{{ t.detail }}</span>
+            <button class="btn-ghost" onClick="{{ t.onUnload }}">Finish unload</button>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- Dirty: coverage trucks -->
+    <sc-if value="{{ hasDirtyCov }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="label">Dirty — coverage</div>
+        <sc-for list="{{ dirtyCov }}" as="t" hint-placeholder-count="1">
+          <div class="card" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-left: 3px solid var(--rr-st-spare);">
+            <span style="font-family: var(--rr-font-mono); font-size: 22px; font-weight: 800;">{{ t.id }}</span>
+            <span class="badge" style="background: var(--rr-st-spare); color: #04222b;">{{ t.covers }}</span>
+            <span style="flex: 1; font-size: 12px; color: var(--rr-ink-muted);">{{ t.detail }}</span>
+            <sc-if value="{{ t.justDone }}" hint-placeholder-val="{{ false }}">
+              <span class="badge" style="background: var(--rr-st-unloaded); color: #052e16;">Unloaded</span>
+              <button class="btn-ghost" onClick="{{ t.onUndo }}">Undo</button>
+            </sc-if>
+            <sc-if value="{{ t.notDone }}" hint-placeholder-val="{{ true }}">
+              <button class="btn-primary" onClick="{{ t.onUnload }}">Mark Unloaded</button>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- Dirty: route trucks -->
+    <sc-if value="{{ hasDirtyRoute }}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 8px;">
+        <div class="label">Dirty — route trucks</div>
+        <sc-for list="{{ dirtyRoute }}" as="t" hint-placeholder-count="2">
+          <div class="card" style="display: flex; align-items: center; gap: 12px; padding: 12px 16px;">
+            <span style="font-family: var(--rr-font-mono); font-size: 22px; font-weight: 800;">{{ t.id }}</span>
+            <span style="flex: 1; font-size: 12px; color: var(--rr-ink-muted);">{{ t.detail }}</span>
+            <sc-if value="{{ t.justDone }}" hint-placeholder-val="{{ false }}">
+              <span class="badge" style="background: var(--rr-st-unloaded); color: #052e16;">Unloaded</span>
+              <button class="btn-ghost" onClick="{{ t.onUndo }}">Undo</button>
+            </sc-if>
+            <sc-if value="{{ t.notDone }}" hint-placeholder-val="{{ true }}">
+              <button class="btn-primary" onClick="{{ t.onUnload }}">Mark Unloaded</button>
+            </sc-if>
+          </div>
+        </sc-for>
+      </div>
+    </sc-if>
+
+    <!-- Unloaded today -->
+    <div style="display: flex; flex-direction: column; gap: 8px;">
+      <div style="display: flex; align-items: center; gap: 10px;">
+        <div class="label">Unloaded today · {{ unloadedCount }}</div>
+        <span style="flex: 1;"></span>
+        <button onClick="{{ sortByNumber }}" style="border: 1px solid {{ numBorder }}; background: var(--rr-surface); color: var(--rr-ink-soft); border-radius: var(--rr-radius-pill); padding: 4px 12px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: var(--rr-font-sans);">Number</button>
+        <button onClick="{{ sortByOrder }}" style="border: 1px solid {{ orderBorder }}; background: var(--rr-surface); color: var(--rr-ink-soft); border-radius: var(--rr-radius-pill); padding: 4px 12px; font-size: 11px; font-weight: 700; cursor: pointer; font-family: var(--rr-font-sans);">Unload order</button>
+      </div>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px;">
+        <sc-for list="{{ unloadedToday }}" as="t" hint-placeholder-count="4">
+          <div style="border: 1px solid rgba(34, 197, 94, 0.35); background: rgba(34, 197, 94, 0.06); border-radius: 10px; padding: 10px 6px; text-align: center;">
+            <span style="display: block; font-family: var(--rr-font-mono); font-size: 17px; font-weight: 800;">{{ t.id }}</span>
+            <span style="display: block; font-size: 10px; color: var(--rr-ink-muted); margin-top: 2px; font-family: var(--rr-font-mono);">{{ t.time }}</span>
+          </div>
+        </sc-for>
+      </div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;showPriorityHolds&quot;: {&quot;editor&quot;: &quot;boolean&quot;, &quot;default&quot;: true, &quot;tsType&quot;: &quot;boolean&quot;, &quot;section&quot;: &quot;Sections&quot;}, &quot;dirtyCount&quot;: {&quot;editor&quot;: &quot;range&quot;, &quot;default&quot;: 2, &quot;min&quot;: 1, &quot;max&quot;: 40, &quot;step&quot;: 1, &quot;tsType&quot;: &quot;number&quot;, &quot;section&quot;: &quot;Demo data&quot;}}">
+class Component extends DCLogic {
+  state = {
+    // done: truckNumber -> unload order index (this session)
+    done: { 68: 1, 12: 2 },
+    nextOrder: 3,
+    sort: 'number',
+  };
+
+  static DIRTY_ROUTE = [
+    { n: 23, detail: 'Route 4 — back 05:58' },
+    { n: 45, detail: 'Route 7 — back 06:12' },
+  ];
+
+  dirtyRoutePool() {
+    const count = Math.max(1, Math.min(40, Number(this.props.dirtyCount) || 2));
+    const base = Component.DIRTY_ROUTE;
+    if (count <= base.length) return base.slice(0, count);
+    const extra = [];
+    for (let i = base.length; i < count; i++) {
+      const n = 2 + i * 2 + (i % 3); // spread of plausible truck numbers
+      const h = 5 + Math.floor(i / 12), m = (i * 7) % 60;
+      extra.push({ n, detail: 'Route ' + (i + 1) + ' — back 0' + h + ':' + String(m).padStart(2, '0') });
+    }
+    return [...base, ...extra];
+  }
+  static DIRTY_COV = [
+    { n: 1, covers: 'Cov. #31', detail: 'Unload as Route 4 — prev. day coverage' },
+  ];
+  static HOLDS = [
+    { n: 14, detail: 'Requested first — dust garments needed' },
+  ];
+  static UNFINISHED = [
+    { n: 54, detail: 'Half unloaded Fri — 6 carts left' },
+  ];
+  static DONE_TIMES = { 68: '06:28', 12: '06:05' };
+
+  renderVals() {
+    const st = this.state;
+    const C = Component;
+    const showHolds = this.props.showPriorityHolds ?? true;
+    const mark = (n) => () => this.setState(s => ({ done: { ...s.done, [n]: s.nextOrder }, nextOrder: s.nextOrder + 1 }));
+    const undo = (n) => () => this.setState(s => {
+      const d = { ...s.done }; delete d[n];
+      return { done: d };
+    });
+    const row = (t, covers) => ({
+      id: '#' + t.n,
+      detail: t.detail,
+      covers: covers || false,
+      justDone: !!st.done[t.n],
+      notDone: !st.done[t.n],
+      onUnload: mark(t.n),
+      onUndo: undo(t.n),
+    });
+
+    const dirtyRoute = this.dirtyRoutePool().map(t => row(t));
+    const dirtyCov = C.DIRTY_COV.map(t => row(t, t.covers));
+    const holdsList = showHolds ? C.HOLDS.filter(t => !st.done[t.n]).map(t => row(t)) : [];
+    const unfinished = C.UNFINISHED.filter(t => !st.done[t.n]).map(t => ({ ...row(t), onUnload: mark(t.n) }));
+
+    const doneNums = Object.keys(st.done).map(Number);
+    const unloadedToday = doneNums
+      .map(n => ({ n, id: '#' + n, time: C.DONE_TIMES[n] || 'now', order: st.done[n] }))
+      .sort((a, b) => st.sort === 'order' ? a.order - b.order : a.n - b.n);
+
+    const stillDirty = [...this.dirtyRoutePool(), ...C.DIRTY_COV, ...(showHolds ? C.HOLDS : []), ...C.UNFINISHED].filter(t => !st.done[t.n]).length;
+
+    return {
+      dirtyCount: stillDirty,
+      hasDirtyRoute: dirtyRoute.length > 0, dirtyRoute,
+      hasDirtyCov: dirtyCov.length > 0, dirtyCov,
+      hasHolds: holdsList.length > 0, holds: holdsList,
+      hasUnfinished: unfinished.length > 0, unfinished,
+      unloadedCount: unloadedToday.length,
+      unloadedToday,
+      sortByNumber: () => this.setState({ sort: 'number' }),
+      sortByOrder: () => this.setState({ sort: 'order' }),
+      numBorder: st.sort === 'number' ? 'var(--rr-accent)' : 'var(--rr-hairline)',
+      orderBorder: st.sort === 'order' ? 'var(--rr-accent)' : 'var(--rr-hairline)',
+    };
+  }
+}
+</script>
+</body>
+</html>

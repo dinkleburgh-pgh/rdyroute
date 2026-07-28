@@ -10,7 +10,7 @@ import re
 import time
 import uuid
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
@@ -18,6 +18,7 @@ from database import get_db
 from models import AppSetting, AuthRole, CommunicationMessage, User
 from routers.auth import get_current_user
 from schemas import MessageCreate, MessageOut
+from ws_manager import manager
 
 router = APIRouter(prefix="/communications", tags=["communications"])
 
@@ -55,7 +56,12 @@ def list_messages(
 # ---------------------------------------------------------------------------
 
 @router.post("/messages", response_model=MessageOut, status_code=status.HTTP_201_CREATED)
-def send_message(payload: MessageCreate, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def send_message(
+    payload: MessageCreate,
+    background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
     censored_text = _apply_censor(payload.message, db)
     msg = CommunicationMessage(
         id=uuid.uuid4().hex,
@@ -68,6 +74,19 @@ def send_message(payload: MessageCreate, current_user: User = Depends(get_curren
     db.add(msg)
     db.commit()
     db.refresh(msg)
+    # Chat was poll-only: nobody knew a message had landed until their next
+    # refresh. Push it so the app can refresh the thread and toast everyone
+    # except the sender.
+    background_tasks.add_task(
+        manager.broadcast,
+        {
+            "type": "chat_message",
+            "channel": msg.channel,
+            "username": msg.username,
+            "body": (msg.message or "")[:120],
+            "actor": msg.username,
+        },
+    )
     return msg
 
 

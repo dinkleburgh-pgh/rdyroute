@@ -69,6 +69,15 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
           }
         } else if (event.type === "shortage_updated") {
           qc.invalidateQueries({ queryKey: ["shorts"] });
+        } else if (event.type === "chat_message") {
+          qc.invalidateQueries({ queryKey: ["messages"] });
+          window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
+        } else if (event.type === "notice_created") {
+          qc.invalidateQueries({ queryKey: ["notices"] });
+          window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
+        } else if (event.type === "truck_arrived") {
+          if (event.run_date) qc.invalidateQueries({ queryKey: ["board", event.run_date] });
+          window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
         } else if (event.type === "driver_note_created") {
           // A driver just added a note from the QR page — refresh the notes
           // board live and let the app surface a clickable toast.

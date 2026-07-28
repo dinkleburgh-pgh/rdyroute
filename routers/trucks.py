@@ -557,11 +557,13 @@ def create_truck_state(
         background_tasks.add_task(
             dispatch_notification,
             truck_hold_notification(truck_number=truck_number, run_date=payload.run_date),
+            actor=_user.username,
         )
     if row.status == "oos":
         background_tasks.add_task(
             dispatch_notification,
             truck_oos_notification(truck_number=truck_number, run_date=payload.run_date),
+            actor=_user.username,
         )
     background_tasks.add_task(
         manager.broadcast,
@@ -654,11 +656,26 @@ def update_truck_state(
         background_tasks.add_task(
             dispatch_notification,
             truck_hold_notification(truck_number=truck_number, run_date=run_date),
+            actor=_user.username,
         )
     if previous_status != "oos" and row.status == "oos":
         background_tasks.add_task(
             dispatch_notification,
             truck_oos_notification(truck_number=truck_number, run_date=run_date),
+            actor=_user.username,
+        )
+    # Truck parked in the yard. arrived_at is set ONLY by the explicit "Arrived"
+    # tap (never auto-stamped), so this None -> set edge is exactly that tap —
+    # worth pushing so unload leads see the truck land without watching the board.
+    if before_state.arrived_at is None and row.arrived_at is not None:
+        background_tasks.add_task(
+            manager.broadcast,
+            {
+                "type": "truck_arrived",
+                "truck_number": truck_number,
+                "run_date": str(run_date),
+                "actor": _user.username,
+            },
         )
     background_tasks.add_task(
         manager.broadcast,
@@ -977,6 +994,7 @@ def bulk_update_status(
             background_tasks.add_task(
                 dispatch_notification,
                 truck_oos_notification(truck_number=truck_number, run_date=run_date),
+                actor=_user.username,
             )
     # Re-query to return all affected rows (includes newly-created ones)
     updated = db.scalars(

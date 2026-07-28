@@ -220,6 +220,7 @@ def assign_spare(
             route_truck=payload.covering_route_truck,
             covering_truck=payload.spare_truck_number,
         ),
+        actor=current_user.username,
     )
     return row
 
@@ -405,6 +406,7 @@ def return_spare(
             route_truck=row.covering_route_truck,
             covering_truck=row.spare_truck_number,
         ),
+        actor=current_user.username,
     )
     return row
 
@@ -459,5 +461,5 @@ def delete_assignment(
     )
     db.delete(row)
     db.commit()
-    background_tasks.add_task(dispatch_notification, removed_notification)
+    background_tasks.add_task(dispatch_notification, removed_notification, actor=current_user.username)
     return None

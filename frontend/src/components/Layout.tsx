@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
@@ -216,6 +216,78 @@ export default function Layout() {
     window.addEventListener("readyroute:driver-note", onDriverNote);
     return () => window.removeEventListener("readyroute:driver-note", onDriverNote);
   }, [toast, nav]);
+
+  // Everything else that's worth interrupting someone for: chat, notices,
+  // arrivals, and the server's own notifications (hold / OOS / coverage).
+  // All of them skip the person who caused the event, and de-dupe by tag so a
+  // burst (e.g. clearing every swap) doesn't stack a wall of toasts.
+  const seenToastTags = useRef<Map<string, number>>(new Map());
+  useEffect(() => {
+    const me = user?.username;
+    const once = (tag: string, withinMs = 10_000): boolean => {
+      const now = Date.now();
+      const prev = seenToastTags.current.get(tag);
+      if (prev && now - prev < withinMs) return false;
+      seenToastTags.current.set(tag, now);
+      return true;
+    };
+
+    const onAppEvent = (e: Event) => {
+      const d = (e as CustomEvent<Record<string, unknown>>).detail ?? {};
+      if (typeof d.actor === "string" && me && d.actor === me) return; // don't toast yourself
+      const truck = typeof d.truck_number === "number" ? d.truck_number : null;
+
+      if (d.type === "chat_message") {
+        const who = typeof d.username === "string" ? d.username : "Someone";
+        if (!once(`chat-${who}-${String(d.body ?? "")}`)) return;
+        toast.info(String(d.body || "Tap to open the conversation."), {
+          title: `New message · ${who}`,
+          durationMs: 12_000,
+          onClick: () => nav("/communications"),
+        });
+      } else if (d.type === "notice_created") {
+        if (!once(`notice-${String(d.notice_id ?? "")}`)) return;
+        toast.info(String(d.body || "Tap to read it on the Run Day board."), {
+          title: `Notice · ${String(d.title ?? "")}`.trim(),
+          durationMs: 15_000,
+          onClick: () => nav("/"),
+        });
+      } else if (d.type === "truck_arrived") {
+        if (truck == null || !once(`arrived-${truck}`)) return;
+        toast.info("Parked in the yard — ready to unload.", {
+          title: "Truck arrived",
+          chip: `#${truck}`,
+          durationMs: 10_000,
+          onClick: () => nav("/unload"),
+        });
+      }
+    };
+
+    // Server-side notifications (priority hold, OOS, coverage assigned/changed/
+    // removed). These already carried a url; they were only shown as a plain,
+    // unclickable toast and ONLY on push-enabled devices. Now every session
+    // gets the same rich card.
+    const onNotification = (e: Event) => {
+      const n = (e as CustomEvent<import("../types").NotificationEvent & { actor?: string }>).detail;
+      if (!n) return;
+      if (n.actor && me && n.actor === me) return;
+      if (!once(`notif-${n.tag}`)) return;
+      const chipTruck = n.truck_number ?? n.route_truck ?? null;
+      toast.info(n.body, {
+        title: n.title,
+        chip: chipTruck != null ? `#${chipTruck}` : undefined,
+        durationMs: 12_000,
+        onClick: () => nav(n.url || "/fleet"),
+      });
+    };
+
+    window.addEventListener("readyroute:app-event", onAppEvent);
+    window.addEventListener("readyroute:notification", onNotification);
+    return () => {
+      window.removeEventListener("readyroute:app-event", onAppEvent);
+      window.removeEventListener("readyroute:notification", onNotification);
+    };
+  }, [toast, nav, user?.username]);
 
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {

@@ -26,6 +26,9 @@ class NotificationEvent:
     route_truck: int | None = None
     covering_truck: int | None = None
     run_date: str | None = None
+    # Username of whoever triggered this. Clients use it to avoid toasting the
+    # person who just performed the action.
+    actor: str | None = None
 
 
 def notifications_configured() -> bool:
@@ -116,7 +119,10 @@ async def dispatch_notification(
     *,
     user_id: int | None = None,
     endpoint: str | None = None,
+    actor: str | None = None,
 ) -> None:
+    if actor is not None:
+        event.actor = actor
     await manager.broadcast({"type": "notification", "event": asdict(event)})
     if not notifications_configured():
         return
