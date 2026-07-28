@@ -81,11 +81,11 @@ function BatchCard({
     >
       {/* Header */}
       <div className="flex items-center justify-between gap-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
           <h3 className="text-base font-bold md:text-xl">Batch {batch.batch_number}</h3>
           <OverbatchedChip show={displayTotal > cap} />
         </div>
-        <span className="text-xs text-slate-500">
+        <span className="shrink-0 whitespace-nowrap text-xs text-slate-500">
           {batch.trucks.length} truck{batch.trucks.length !== 1 ? "s" : ""}
         </span>
       </div>

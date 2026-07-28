@@ -184,8 +184,8 @@ export default function BatchingPanel() {
             const count = b?.trucks.length ?? 0;
             return (
               <div key={n} className="rounded-lg border border-slate-800 bg-slate-900/60 p-2">
-                <div className="flex items-center justify-between gap-1">
-                  <span className="flex min-w-0 items-center gap-1.5 text-xs font-bold text-slate-300">
+                <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1">
+                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-bold text-slate-300">
                     Batch {n}
                     <OverbatchedChip show={total > wearerCap} />
                   </span>

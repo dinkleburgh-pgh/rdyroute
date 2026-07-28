@@ -582,8 +582,8 @@ export default function Unload() {
               const pct = capacityPct(b.total_wearers, wearerCap);
               return (
                 <AnimateCard key={b.batch_number} delay={index * 0.03} className="card space-y-2 p-4">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="flex min-w-0 items-center gap-2 font-bold text-ink">
+                  <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+                    <span className="flex flex-wrap items-center gap-x-2 gap-y-1 font-bold text-ink">
                       Batch {b.batch_number}
                       <OverbatchedChip show={b.total_wearers > wearerCap} />
                     </span>

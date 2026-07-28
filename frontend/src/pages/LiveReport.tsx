@@ -139,12 +139,12 @@ function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number
   const pct = Math.min(100, Math.round((batch.total_wearers / Math.max(cap, 1)) * 100));
   return (
     <AnimateCard className="card flex flex-col gap-2 p-3">
-      <div className="flex items-center justify-between gap-2">
-        <span className="flex min-w-0 items-center gap-2 text-sm font-bold text-ink">
+      <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1">
+        <span className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm font-bold text-ink">
           Batch {batch.batch_number}
           <OverbatchedChip show={batch.total_wearers > cap} />
         </span>
-        <span className={clsx("font-mono text-xs font-semibold tabular-nums", text)}>
+        <span className={clsx("shrink-0 whitespace-nowrap font-mono text-xs font-semibold tabular-nums", text)}>
           {batch.total_wearers.toLocaleString()}
           {noCap ? "" : ` / ${cap.toLocaleString()}`}
         </span>
