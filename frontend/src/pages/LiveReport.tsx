@@ -11,11 +11,11 @@
  * (board 5s, batches 10s, spares/route-swaps 10s, shortages via WS). The audit
  * query has no live channel of its own, so we poke it on an interval here.
  */
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
-import { motion } from "framer-motion";
+import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
@@ -25,7 +25,7 @@ import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "../components/shorts/
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
 import { capacityColor } from "../utils/batchCapacity";
-import { FileDown } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown, Maximize2, Pause, Play, X } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
@@ -602,6 +602,96 @@ export default function LiveReport() {
   ];
   const anySelected = Object.values(selected).some(Boolean);
 
+  // ---------------------------------------------------------------------
+  // Kiosk mode — full-screen rotation through the report's sections for a
+  // wall display. Renders one section at a time over the app chrome, auto
+  // advancing with an animated transition. Data keeps polling underneath, so
+  // the board on the wall stays live.
+  // ---------------------------------------------------------------------
+  const [kiosk, setKiosk] = useState(false);
+  const [kioskIdx, setKioskIdx] = useState(0);
+  const [kioskPaused, setKioskPaused] = useState(false);
+  const [kioskSecs, setKioskSecs] = useState(20);
+  const [kioskTick, setKioskTick] = useState(0); // drives the progress bar
+
+  // Only rotate through sections the user picked that actually have something
+  // to show — nobody wants a wall display parked on "No shortages logged".
+  const kioskSlides = useMemo(() => {
+    const has: Record<SectionKey, boolean> = {
+      shortages: shorts.length > 0,
+      batches: (batches?.length ?? 0) > 0,
+      coverage: coverageRows.length > 0,
+      loadTimes: finished.length > 0,
+      audit: auditEntries.length > 0,
+    };
+    const live = sectionDefs.filter((d) => selected[d.key] && has[d.key]);
+    // Fall back to whatever is selected so kiosk mode is never empty.
+    return (live.length > 0 ? live : sectionDefs.filter((d) => selected[d.key])).map((d) => d.key);
+  }, [selected, shorts.length, batches, coverageRows.length, finished.length, auditEntries.length, sectionDefs]);
+
+  const kioskKey = kioskSlides[Math.min(kioskIdx, Math.max(0, kioskSlides.length - 1))] ?? "shortages";
+  const kioskNext = useCallback(() => setKioskIdx((i) => (kioskSlides.length ? (i + 1) % kioskSlides.length : 0)), [kioskSlides.length]);
+  const kioskPrev = useCallback(
+    () => setKioskIdx((i) => (kioskSlides.length ? (i - 1 + kioskSlides.length) % kioskSlides.length : 0)),
+    [kioskSlides.length],
+  );
+
+  // Advance timer + 100ms tick for the progress bar.
+  useEffect(() => {
+    if (!kiosk || kioskPaused) return;
+    setKioskTick(0);
+    const started = Date.now();
+    const id = window.setInterval(() => {
+      const elapsed = Date.now() - started;
+      if (elapsed >= kioskSecs * 1000) kioskNext();
+      else setKioskTick(elapsed / (kioskSecs * 1000));
+    }, 100);
+    return () => window.clearInterval(id);
+  }, [kiosk, kioskPaused, kioskSecs, kioskIdx, kioskNext]);
+
+  // Keyboard: Esc exits, Space pauses, arrows step.
+  useEffect(() => {
+    if (!kiosk) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setKiosk(false); return; }
+      if (e.key === " ") { e.preventDefault(); setKioskPaused((v) => !v); return; }
+      if (e.key === "ArrowRight") kioskNext();
+      if (e.key === "ArrowLeft") kioskPrev();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [kiosk, kioskNext, kioskPrev]);
+
+  // Keep the wall display awake and hide the browser chrome where allowed.
+  async function toggleFullscreen() {
+    try {
+      if (document.fullscreenElement) await document.exitFullscreen();
+      else await document.documentElement.requestFullscreen();
+    } catch { /* denied / unsupported — the overlay still covers the app */ }
+  }
+
+  function startKiosk() {
+    setKioskIdx(0);
+    setKioskPaused(false);
+    setKiosk(true);
+    void toggleFullscreen();
+  }
+
+  // In kiosk mode only the active section renders; otherwise everything does.
+  const showSection = (key: SectionKey) => (kiosk ? kioskKey === key : true);
+
+  const kioskButton = (
+    <button
+      type="button"
+      onClick={startKiosk}
+      title="Full-screen rotating display"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+    >
+      <Play className="h-4 w-4" />
+      Kiosk
+    </button>
+  );
+
   const pdfButton = (
     <button
       type="button"
@@ -669,96 +759,25 @@ export default function LiveReport() {
       )
     : null;
 
-  return (
-    <>
-      {sectionPicker}
-      <PageHeader
-        eyebrow="Live Report"
-        title="Run Report"
-        subtitle={`${formatRunDate(runDate)} · Load Day ${loadDay} · Unload Day ${unloadsDay}`}
-        actions={
-          <div className="flex items-center gap-2">
-            {isToday && (
-              <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
-                <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
-                Live
-              </span>
-            )}
-            <input
-              className="input text-xs [color-scheme:dark]"
-              type="date"
-              max={todayIso()}
-              value={runDate}
-              onChange={(e) => setRunDate(e.target.value)}
-            />
-            {pdfButton}
-            {pdfErr && <span className="text-[10px] text-st-dirty">PDF failed</span>}
-          </div>
-        }
-      />
-      {/* Mobile date bar — PageHeader hides its actions under md, so on a
-          phone the report had no way to change the date (and no Live badge
-          or day numbers, which live in the md-only subtitle). */}
-      <div className="flex items-center gap-2 border-b border-hairline bg-surface/60 px-3 py-2 md:hidden">
-        <button
-          type="button"
-          aria-label="Previous run day"
-          onClick={() => setRunDate(previousRunDate(runDate))}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95"
-        >
-          ‹
-        </button>
-        <div className="min-w-0 flex-1">
-          <input
-            className="input w-full text-sm [color-scheme:dark]"
-            type="date"
-            max={todayIso()}
-            value={runDate}
-            onChange={(e) => e.target.value && setRunDate(e.target.value)}
-          />
-          <p className="mt-1 truncate text-center text-[10px] text-ink-muted">
-            Load Day {loadDay} · Unload Day {unloadsDay}
-          </p>
-        </div>
-        <button
-          type="button"
-          aria-label="Next run day"
-          disabled={isToday}
-          onClick={() => setRunDate(nextRunDate(runDate, todayIso()))}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95 disabled:opacity-30"
-        >
-          ›
-        </button>
-        {isToday ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-st-inprogress">
-            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
-            Live
-          </span>
-        ) : (
-          <button
-            type="button"
-            onClick={() => setRunDate(todayIso())}
-            className="shrink-0 rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
-          >
-            Today
-          </button>
-        )}
-        {pdfButton}
-      </div>
-
-      {/* Horizontal padding respects the landscape safe area so the system nav
-          bar (right side in landscape) doesn't cover the grid's last columns. */}
+  // The report body itself. Rendered inline on the page, or one section at a
+  // time inside the kiosk overlay — showSection() decides which.
+  const reportBody = (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ duration: 0.3 }}
-        className="space-y-8 py-3 md:py-6"
-        style={{
-          paddingLeft: "calc(0.75rem + env(safe-area-inset-left))",
-          paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
-        }}
+        className={clsx(kiosk ? "px-6 pb-6 pt-2" : "space-y-8 py-3 md:py-6")}
+        style={
+          kiosk
+            ? undefined
+            : {
+                paddingLeft: "calc(0.75rem + env(safe-area-inset-left))",
+                paddingRight: "calc(0.75rem + env(safe-area-inset-right))",
+              }
+        }
       >
         {/* ===================== LOAD · SHORTAGES (shown first) ===================== */}
+        {showSection("shortages") && (
         <Section eyebrow="Load" title="Shortages" downloadName={`Shortages ${runDate}`}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
@@ -863,8 +882,10 @@ export default function LiveReport() {
             </div>
           )}
         </Section>
+        )}
 
         {/* ===================== UNLOAD ===================== */}
+        {showSection("batches") && (
         <Section eyebrow="Unload" title="Batches" downloadName={`Batches ${runDate}`}>
           {batchingDisabled ? (
             <Empty>Batching is turned off for this day.</Empty>
@@ -884,8 +905,10 @@ export default function LiveReport() {
             </>
           )}
         </Section>
+        )}
 
         {/* ===================== LOAD · COVERAGE ===================== */}
+        {showSection("coverage") && (
         <Section eyebrow="Load" title="Routes covered">
           {coverageRows.length === 0 ? (
             <Empty>No route coverage recorded for this day.</Empty>
@@ -945,8 +968,10 @@ export default function LiveReport() {
             </div>
           )}
         </Section>
+        )}
 
         {/* ===================== LOAD · LOAD TIMES ===================== */}
+        {showSection("loadTimes") && (
         <Section eyebrow="Load" title="Load times">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Kpi label="Trucks timed" value={durations.length} />
@@ -976,8 +1001,10 @@ export default function LiveReport() {
             </div>
           )}
         </Section>
+        )}
 
         {/* ===================== LOAD · AUDIT ===================== */}
+        {showSection("audit") && (
         <Section eyebrow="Load" title="Audit">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Kpi label="Trucks audited" value={auditByTruck.length} />
@@ -1041,7 +1068,186 @@ export default function LiveReport() {
             </div>
           )}
         </Section>
+        )}
       </motion.div>
+  );
+
+  const kioskBar = (
+    <div className="flex items-center gap-3 border-b border-hairline bg-surface/80 px-6 py-3 backdrop-blur">
+      <div className="min-w-0">
+        <p className="text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-faint">
+          Run Report · {formatRunDate(runDate)}
+        </p>
+        <h2 className="truncate text-2xl font-black leading-tight text-ink">
+          {sectionDefs.find((d) => d.key === kioskKey)?.label ?? ""}
+        </h2>
+      </div>
+      {isToday && (
+        <span className="ml-2 inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
+          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-st-inprogress" />
+          Live
+        </span>
+      )}
+      {/* which slide we're on */}
+      <div className="ml-auto flex shrink-0 items-center gap-1.5">
+        {kioskSlides.map((k, i) => (
+          <button
+            key={k}
+            onClick={() => setKioskIdx(i)}
+            title={sectionDefs.find((d) => d.key === k)?.label}
+            className={clsx(
+              "h-1.5 rounded-full transition-all",
+              i === kioskIdx ? "w-8 bg-sky-400" : "w-3 bg-slate-600 hover:bg-slate-500",
+            )}
+          />
+        ))}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        <button onClick={kioskPrev} title="Previous (←)" className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink">
+          <ChevronLeft className="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => setKioskPaused((v) => !v)}
+          title={kioskPaused ? "Resume (space)" : "Pause (space)"}
+          className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink"
+        >
+          {kioskPaused ? <Play className="h-5 w-5" /> : <Pause className="h-5 w-5" />}
+        </button>
+        <button onClick={kioskNext} title="Next (→)" className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink">
+          <ChevronRight className="h-5 w-5" />
+        </button>
+        <select
+          value={kioskSecs}
+          onChange={(e) => setKioskSecs(Number(e.target.value))}
+          title="Seconds per section"
+          className="input ml-1 w-20 px-2 py-1 text-xs"
+        >
+          {[10, 15, 20, 30, 45, 60].map((n) => (
+            <option key={n} value={n}>{n}s</option>
+          ))}
+        </select>
+        <button onClick={toggleFullscreen} title="Toggle full screen" className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink">
+          <Maximize2 className="h-5 w-5" />
+        </button>
+        <button
+          onClick={() => { setKiosk(false); if (document.fullscreenElement) void document.exitFullscreen(); }}
+          title="Exit kiosk (Esc)"
+          className="rounded-lg p-2 text-ink-muted hover:bg-surface-2 hover:text-ink"
+        >
+          <X className="h-5 w-5" />
+        </button>
+      </div>
+    </div>
+  );
+
+  return (
+    <>
+      {sectionPicker}
+      {kiosk && (
+        <div className="fixed inset-0 z-[95] flex flex-col overflow-hidden bg-app">
+          {kioskBar}
+          {/* progress through the current slide */}
+          <div className="h-0.5 w-full bg-slate-800">
+            <div
+              className="h-full bg-sky-500"
+              style={{ width: `${Math.round(kioskTick * 100)}%`, transition: "width 0.1s linear" }}
+            />
+          </div>
+          <div className="min-h-0 flex-1 overflow-auto">
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={kioskKey}
+                initial={{ opacity: 0, y: 24, scale: 0.99 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -24, scale: 0.99 }}
+                transition={{ duration: 0.35, ease: "easeOut" }}
+                className="px-6 py-5"
+              >
+                {reportBody}
+              </motion.div>
+            </AnimatePresence>
+          </div>
+        </div>
+      )}
+      <PageHeader
+        eyebrow="Live Report"
+        title="Run Report"
+        subtitle={`${formatRunDate(runDate)} · Load Day ${loadDay} · Unload Day ${unloadsDay}`}
+        actions={
+          <div className="flex items-center gap-2">
+            {isToday && (
+              <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
+                <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+                Live
+              </span>
+            )}
+            <input
+              className="input text-xs [color-scheme:dark]"
+              type="date"
+              max={todayIso()}
+              value={runDate}
+              onChange={(e) => setRunDate(e.target.value)}
+            />
+            {kioskButton}
+            {pdfButton}
+            {pdfErr && <span className="text-[10px] text-st-dirty">PDF failed</span>}
+          </div>
+        }
+      />
+      {/* Mobile date bar — PageHeader hides its actions under md, so on a
+          phone the report had no way to change the date (and no Live badge
+          or day numbers, which live in the md-only subtitle). */}
+      <div className="flex items-center gap-2 border-b border-hairline bg-surface/60 px-3 py-2 md:hidden">
+        <button
+          type="button"
+          aria-label="Previous run day"
+          onClick={() => setRunDate(previousRunDate(runDate))}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95"
+        >
+          ‹
+        </button>
+        <div className="min-w-0 flex-1">
+          <input
+            className="input w-full text-sm [color-scheme:dark]"
+            type="date"
+            max={todayIso()}
+            value={runDate}
+            onChange={(e) => e.target.value && setRunDate(e.target.value)}
+          />
+          <p className="mt-1 truncate text-center text-[10px] text-ink-muted">
+            Load Day {loadDay} · Unload Day {unloadsDay}
+          </p>
+        </div>
+        <button
+          type="button"
+          aria-label="Next run day"
+          disabled={isToday}
+          onClick={() => setRunDate(nextRunDate(runDate, todayIso()))}
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95 disabled:opacity-30"
+        >
+          ›
+        </button>
+        {isToday ? (
+          <span className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-st-inprogress">
+            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+            Live
+          </span>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setRunDate(todayIso())}
+            className="shrink-0 rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+          >
+            Today
+          </button>
+        )}
+        {kioskButton}
+        {pdfButton}
+      </div>
+
+      {/* Horizontal padding respects the landscape safe area so the system nav
+          bar (right side in landscape) doesn't cover the grid's last columns. */}
+      {!kiosk && reportBody}
     </>
   );
 }
