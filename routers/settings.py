@@ -266,10 +266,17 @@ def delete_setting(
 def bulk_upsert_settings(
     payload: dict[str, object],
     db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
 ):
     """
     Accept a dict of {key: value} and upsert each one.
     Useful for seeding default settings on first run.
+
+    Admin-gated like PUT/DELETE /settings/{key}: this writes ARBITRARY keys
+    (wearer cap, holiday mode, feature toggles, censor list…), and it was
+    reachable unauthenticated — anyone who could reach the API could rewrite
+    the app's configuration. Nothing calls it programmatically, so requiring
+    admin costs nothing.
     """
     results = []
     for key, value in payload.items():
