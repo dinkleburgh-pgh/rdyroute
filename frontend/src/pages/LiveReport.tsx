@@ -505,10 +505,10 @@ export default function LiveReport() {
       vm.shortages = {
         kpis: [
           { label: "Qty short", value: String(totalPieces), sub: "total units", tone: totalPieces > 0 ? "#f87171" : "#34d399" },
-          { label: "Distinct items", value: String(distinctItems) },
-          { label: "Trucks shorted", value: String(shortsByTruck.length) },
           { label: "Most shorted item", value: topItem ? topItem.label : "—", sub: topItem ? `${topItem.qty} qty · ${topItem.trucks.size} truck${topItem.trucks.size === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
           { label: "Most shorted truck", value: topTruck ? `#${topTruck.truck}` : "—", sub: topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : null, tone: "#fcd34d" },
+          { label: "Distinct items", value: String(distinctItems) },
+          { label: "Trucks shorted", value: String(shortsByTruck.length) },
         ],
         top_trucks: topTrucks.map((t) => ({
           truck_number: t.truck,
@@ -750,8 +750,6 @@ export default function LiveReport() {
         <Section eyebrow="Load" title="Shortages" downloadName={`Shortages ${runDate}`}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
-            <Kpi label="Distinct items" value={distinctItems} />
-            <Kpi label="Trucks shorted" value={shortsByTruck.length} />
             <Kpi
               label="Most shorted item"
               value={topItem ? topItem.label : "—"}
@@ -764,6 +762,8 @@ export default function LiveReport() {
               sub={topTruck ? `${topTruck.qty} qty · ${topTruck.items} item${topTruck.items === 1 ? "" : "s"}` : undefined}
               tone="text-amber-300"
             />
+            <Kpi label="Distinct items" value={distinctItems} />
+            <Kpi label="Trucks shorted" value={shortsByTruck.length} />
           </div>
           {topTrucks.length > 0 && (
             <div>
