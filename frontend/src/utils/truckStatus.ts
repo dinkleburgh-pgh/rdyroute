@@ -810,3 +810,26 @@ export function getSwapHistory(routeTruck: number): number[] {
     return all[String(routeTruck)] ?? [];
   } catch { return []; }
 }
+
+// ---------------------------------------------------------------------------
+// Dust-garment indicator colour
+// ---------------------------------------------------------------------------
+
+/** Garments still need loading — amber (needs action). */
+export const GARMENT_PENDING_HEX = "#fcd34d";
+/** Garments are loaded and out the door — cyan (done). */
+export const GARMENT_LOADED_HEX = "#7dd3fc";
+
+/**
+ * The colour a truck's dust-garment badge should paint. One helper so the Load
+ * chips, the Fleet board, the workflow cards and the Run Day cards can never
+ * disagree about what "garments are done" looks like.
+ */
+export function garmentHex(t: TruckWithState): string {
+  return t.state?.status === "loaded" ? GARMENT_LOADED_HEX : GARMENT_PENDING_HEX;
+}
+
+/** True once this truck's garments have gone out (it is marked loaded). */
+export function garmentIsLoaded(t: TruckWithState): boolean {
+  return t.state?.status === "loaded";
+}

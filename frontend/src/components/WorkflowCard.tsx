@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 import type { TruckWithState } from "../types";
-import { getCoverageRouteNumber } from "../utils/truckStatus";
+import { garmentHex, garmentIsLoaded, getCoverageRouteNumber } from "../utils/truckStatus";
 import { DustGarmentIcon } from "./icons";
 
 /**
@@ -74,10 +74,15 @@ export default function WorkflowCard({
               )}
               {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
                 <span
-                  className="inline-flex items-center justify-center rounded-pill border border-st-inprogress/60 bg-st-inprogress/10 p-0.5"
-                  title="Dust garment"
+                  className={clsx(
+                    "inline-flex items-center justify-center rounded-pill border p-0.5",
+                    garmentIsLoaded(truck)
+                      ? "border-sky-500/60 bg-sky-500/10"
+                      : "border-st-inprogress/60 bg-st-inprogress/10",
+                  )}
+                  title={garmentIsLoaded(truck) ? "Loaded with garments" : "Dust garment"}
                 >
-                  <DustGarmentIcon className="h-3.5 w-3.5" style={{ color: "#fcd34d" }} />
+                  <DustGarmentIcon className="h-3.5 w-3.5" style={{ color: garmentHex(truck) }} />
                 </span>
               )}
             </span>

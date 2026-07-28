@@ -34,6 +34,8 @@ import {
   isScheduledOff,
   loadedTruckNumbers,
   unloadedTruckNumbersFromContext,
+  GARMENT_LOADED_HEX,
+  GARMENT_PENDING_HEX,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
 import { NextUpPanel, PaceBar, useElapsed } from "../components/LiveInProgress";
@@ -392,13 +394,13 @@ export default function Load() {
                   // Garments already out the door read blue/cyan (done); still
                   // pending ones stay amber (needs action); no garment is muted.
                   const done = garment && t.state?.status === "loaded";
-                  const color = done ? "#7dd3fc" : garment ? "#fcd34d" : "#6f7c8e";
+                  const color = done ? GARMENT_LOADED_HEX : garment ? GARMENT_PENDING_HEX : "#6f7c8e";
                   return (
                     <span
                       key={t.truck_number}
                       title={done ? "Loaded with garments" : garment ? "Garments to load" : "No garments"}
                       className={clsx(
-                        "inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-sm font-semibold",
+                        "inline-flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-base font-bold",
                         done
                           ? "border-sky-500/60 bg-sky-950/50"
                           : garment
@@ -408,7 +410,7 @@ export default function Load() {
                       style={{ color }}
                     >
                       #{t.truck_number}
-                      {garment && <DustGarmentIcon className="h-4 w-4" style={{ color }} />}
+                      {garment && <DustGarmentIcon className="h-5 w-5" style={{ color }} />}
                     </span>
                   );
                 })}

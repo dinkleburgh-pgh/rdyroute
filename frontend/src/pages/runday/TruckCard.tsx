@@ -9,6 +9,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import clsx from "clsx";
+import { garmentHex, garmentIsLoaded } from "../../utils/truckStatus";
 import type { TruckNote, TruckStatus, TruckWithState } from "../../types";
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./constants";
 import AnimateCard from "../../components/AnimateCard";
@@ -178,10 +179,15 @@ export default function TruckCard({
     >
       {hasGarmentBadge && (
         <span
-          className="absolute right-2 top-2 inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
-          title="Garments assigned"
+          className={clsx(
+            "absolute right-2 top-2 inline-flex items-center justify-center rounded-full border p-0.5",
+            garmentIsLoaded(t)
+              ? "border-sky-500/60 bg-sky-950/70"
+              : "border-amber-500/60 bg-amber-950/70",
+          )}
+          title={garmentIsLoaded(t) ? "Loaded with garments" : "Garments assigned"}
         >
-          <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+          <DustGarmentIcon className="h-3.5 w-3.5" style={{ color: garmentHex(t) }} />
         </span>
       )}
       <span

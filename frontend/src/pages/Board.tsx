@@ -28,7 +28,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { buildHistoricalCoverageFallback, effectiveStatus, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousRunDate, previousWorkday, recordSwapHistory, takenOverRouteNumber } from "../utils/truckStatus";
+import { buildHistoricalCoverageFallback, effectiveStatus, garmentHex, garmentIsLoaded, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousRunDate, previousWorkday, recordSwapHistory, takenOverRouteNumber } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -1135,10 +1135,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       {/* 7. Dust garment */}
                       {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
                         <span
-                          className="inline-flex items-center justify-center rounded-full border border-amber-500/60 bg-amber-950/70 p-0.5"
-                          title="Garments assigned"
+                          className={clsx(
+                            "inline-flex items-center justify-center rounded-full border p-0.5",
+                            garmentIsLoaded(truck)
+                              ? "border-sky-500/60 bg-sky-950/70"
+                              : "border-amber-500/60 bg-amber-950/70",
+                          )}
+                          title={garmentIsLoaded(truck) ? "Loaded with garments" : "Garments assigned"}
                         >
-                          <DustGarmentIcon className="h-3.5 w-3.5 text-amber-300" />
+                          <DustGarmentIcon className="h-3.5 w-3.5" style={{ color: garmentHex(truck) }} />
                         </span>
                       )}
                     </span>
