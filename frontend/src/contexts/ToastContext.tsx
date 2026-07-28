@@ -25,6 +25,10 @@ export interface ToastOptions {
   onClick?: () => void;
   /** Override the auto-dismiss delay (ms). Actionable toasts want longer. */
   durationMs?: number;
+  /** Renders the toast as a rich card: this eyebrow title over the message. */
+  title?: string;
+  /** Small mono chip beside the title — e.g. a truck number ("#57"). */
+  chip?: string;
 }
 
 export interface Toast {
@@ -32,6 +36,8 @@ export interface Toast {
   message: string;
   variant: ToastVariant;
   onClick?: () => void;
+  title?: string;
+  chip?: string;
 }
 
 interface ToastContextValue {
@@ -58,7 +64,10 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   const push = useCallback(
     (message: string, variant: ToastVariant, opts?: ToastOptions) => {
       const id = _nextId++;
-      setToasts((prev) => [...prev, { id, message, variant, onClick: opts?.onClick }]);
+      setToasts((prev) => [
+        ...prev,
+        { id, message, variant, onClick: opts?.onClick, title: opts?.title, chip: opts?.chip },
+      ]);
       setTimeout(() => dismiss(id), opts?.durationMs ?? AUTO_DISMISS_MS);
     },
     [dismiss],

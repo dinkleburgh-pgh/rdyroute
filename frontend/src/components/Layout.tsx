@@ -206,13 +206,12 @@ export default function Layout() {
     const onDriverNote = (e: Event) => {
       const d = (e as CustomEvent<{ truck_number?: number; body?: string }>).detail ?? {};
       const truck = d.truck_number;
-      toast.info(
-        truck != null ? `New Driver Note — #${truck}` : "New Driver Note",
-        {
-          durationMs: 12_000,
-          onClick: () => nav(truck != null ? `/notes?truck=${truck}` : "/notes"),
-        },
-      );
+      toast.info(d.body?.trim() || "Tap to view the note.", {
+        title: "New Driver Note",
+        chip: truck != null ? `#${truck}` : undefined,
+        durationMs: 12_000,
+        onClick: () => nav(truck != null ? `/notes?truck=${truck}` : "/notes"),
+      });
     };
     window.addEventListener("readyroute:driver-note", onDriverNote);
     return () => window.removeEventListener("readyroute:driver-note", onDriverNote);
