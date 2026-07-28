@@ -18,7 +18,6 @@ import ConnectionsPanel from "../components/management/ConnectionsPanel";
 import RecoveryPanel from "../components/management/RecoveryPanel";
 import ResetsPanel from "../components/management/ResetsPanel";
 import FleetManagementPanel from "../components/management/FleetManagementPanel";
-import BulkStatusPanel from "../components/management/BulkStatusPanel";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
 import NoticesPanel from "../components/management/NoticesPanel";
 import ItemsPanel from "../components/management/ItemsPanel";
@@ -44,7 +43,6 @@ type Category =
   | "users"
   | "fleet_mgmt"
   | "off_day_schedule"
-  | "bulk_status"
   | "advanced"
   | "development"
   | "recovery"
@@ -137,7 +135,6 @@ const CARD_GROUPS: CardGroup[] = [
     tabs: [
       { id: "fleet_mgmt",       label: "Fleet" },
       { id: "off_day_schedule", label: "Off Day Schedule" },
-      { id: "bulk_status",      label: "Bulk Status" },
       { id: "driver_qr",        label: "Driver QR Codes" },
     ],
   },
@@ -301,7 +298,6 @@ export default function Management() {
       case "resets":         return <ResetsPanel />;
       case "fleet_mgmt":       return <FleetManagementPanel />;
       case "off_day_schedule": return <OffDaySchedulePanel />;
-      case "bulk_status":      return <BulkStatusPanel />;
       case "driver_qr":      return <DriverQRPanel />;
       case "export_import":  return <ExportImportPanel />;
       case "pdf_reports":    return <PDFReportsPanel />;
