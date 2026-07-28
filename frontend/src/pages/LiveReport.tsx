@@ -842,6 +842,11 @@ export default function LiveReport() {
       )
     : null;
 
+  // Kiosk slides drop the per-section "Download image" buttons — nobody taps
+  // them from across the room, and their height pushed slides into scrolling
+  // that wasn't otherwise needed.
+  const dlName = (label: string) => (kiosk ? undefined : `${label} ${runDate}`);
+
   // The report body itself. Rendered inline on the page, or one section at a
   // time inside the kiosk overlay — showSection() decides which.
   const reportBody = (
@@ -861,7 +866,7 @@ export default function LiveReport() {
       >
         {/* ===================== LOAD · SHORTAGES (shown first) ===================== */}
         {showSection("shortages") && (
-        <Section eyebrow="Load" title="Shortages" downloadName={`Shortages ${runDate}`}>
+        <Section eyebrow="Load" title="Shortages" downloadName={dlName("Shortages")}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
             <Kpi
@@ -963,7 +968,7 @@ export default function LiveReport() {
         {/* The grid is its own section so it can be picked, exported and shown
             in kiosk mode independently of the shortage summary above. */}
         {showSection("shortSheet") && (
-        <Section eyebrow="Load" title="Short sheet" downloadName={`Short sheet ${runDate}`}>
+        <Section eyebrow="Load" title="Short sheet" downloadName={dlName("Short sheet")}>
           {shorts.length === 0 ? (
             <Empty>No shortages logged for this day.</Empty>
           ) : (
@@ -978,7 +983,7 @@ export default function LiveReport() {
 
         {/* ===================== UNLOAD ===================== */}
         {showSection("batches") && (
-        <Section eyebrow="Unload" title="Batches" downloadName={`Batches ${runDate}`}>
+        <Section eyebrow="Unload" title="Batches" downloadName={dlName("Batches")}>
           {batchingDisabled ? (
             <Empty>Batching is turned off for this day.</Empty>
           ) : (
