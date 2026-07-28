@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import CoverageList from "../components/CoverageList";
@@ -11,7 +11,6 @@ import {
   countLoaded,
   countUnloadedFromContext,
   getCoverageRouteNumber,
-  getOperationalTruckType,
   resolvePrevRunDate,
 } from "../utils/truckStatus";
 import CoverageTag from "../components/CoverageTag";
@@ -31,8 +30,10 @@ import clsx from "clsx";
  *   dirty → unloaded (single click; the in_progress step is reserved for LOAD).
  *
  * Two layouts, per-device toggle ("unload:style"):
- *   cards (default) — the Load page's look: full-width, Dusts/Uniforms/Spares
- *     stat cards, progress bars, big WorkflowCard truck cards, batch cards.
+ *   cards (default) — the Load page's look: full-width stat cards, progress
+ *     bars, big WorkflowCard truck cards, batch cards. The stat cards are
+ *     unload-specific (route / coverage / hold), not the Load page's split by
+ *     truck type.
  *   list — the classic compact horizontal rows with inline actions.
  *
  * COVERAGE on this page is always PREVIOUS-day (the route a truck actually
@@ -110,7 +111,7 @@ export default function Unload() {
   const [batchOpen, setBatchOpen] = useState<number | null>(null);
   const [overflowOpen, setOverflowOpen] = useState<number | null>(null);
   const [unloadedSort, setUnloadedSort] = useState<"number" | "order">("number");
-  const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
+  const [statFilter, setStatFilter] = useState<"routes" | "coverage" | "holds" | "total" | null>(null);
   // Per-device layout preference: "cards" (Load-page look, default) | "list".
   const [style, setStyle] = useState<"cards" | "list">(() => (localStorage.getItem("unload:style") === "list" ? "list" : "cards"));
   const setStylePref = (s: "cards" | "list") => { setStyle(s); localStorage.setItem("unload:style", s); };
@@ -185,20 +186,31 @@ export default function Unload() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allTrucks, recentlyUnloaded, prevDayCarriers],
   );
-  const dirtyRoute = useMemo(
-    () => dirty.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && !isSplitHelper(t) && t.state?.priority_hold !== true),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dirty, prevCoverage],
-  );
-  // Coverage section = today's covering trucks + prev-day SPLIT helpers (they
+  // One predicate per unload bucket, shared by the sections below AND the stat
+  // cards above, so a truck can never sit in a section but go missing from its
+  // count. Coverage = today's covering trucks + prev-day SPLIT helpers (they
   // carried a route's overflow yesterday, so call them out for that route).
-  const dirtyCoverages = useMemo(
-    () => dirty.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null || isSplitHelper(t)) && t.state?.priority_hold !== true),
+  const isHoldTruck = (t: TruckWithState) => t.state?.priority_hold === true;
+  const isCoverageTruck = useCallback(
+    (t: TruckWithState) =>
+      t.truck_type === "Spare" ||
+      t.route_swap_route != null ||
+      t.state?.oos_spare_route != null ||
+      isSplitHelper(t),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dirty, prevCoverage],
+    [prevCoverage],
+  );
+
+  const dirtyRoute = useMemo(
+    () => dirty.filter((t) => !isCoverageTruck(t) && !isHoldTruck(t)),
+    [dirty, isCoverageTruck],
+  );
+  const dirtyCoverages = useMemo(
+    () => dirty.filter((t) => isCoverageTruck(t) && !isHoldTruck(t)),
+    [dirty, isCoverageTruck],
   );
   const requested = useMemo(
-    () => dirty.filter((t) => t.state?.priority_hold === true),
+    () => dirty.filter(isHoldTruck),
     [dirty],
   );
   const unfinished = useMemo(
@@ -240,28 +252,34 @@ export default function Unload() {
     return arr;
   }, [unloaded, unloadedSort]);
 
-  // ── Stat cards — Dusts / Uniforms / Spares still needing unload ─────────
+  // ── Stat cards — the unload work still outstanding, bucketed the way THIS
+  // page is organised (route / coverage / hold), not by truck type the way the
+  // Load page splits it. Each card is the count of the section with the same
+  // accent colour below, so tapping one drills into exactly that list.
   const stillDirty = useMemo(
     () => dirty.filter((t) => !recentlyUnloaded.has(t.truck_number)),
     [dirty, recentlyUnloaded],
   );
-  const dustsLeftTrucks = useMemo(
-    () => stillDirty.filter((t) => getOperationalTruckType(t, unloadCtx.routeTruckByNumber) === "Dust"),
-    [stillDirty, unloadCtx.routeTruckByNumber],
+  const routesLeftTrucks = useMemo(
+    () => stillDirty.filter((t) => !isCoverageTruck(t) && !isHoldTruck(t)),
+    [stillDirty, isCoverageTruck],
   );
-  const uniformsLeftTrucks = useMemo(
-    () => stillDirty.filter((t) => getOperationalTruckType(t, unloadCtx.routeTruckByNumber) === "Uniform"),
-    [stillDirty, unloadCtx.routeTruckByNumber],
+  const coverageLeftTrucks = useMemo(
+    () => stillDirty.filter((t) => isCoverageTruck(t) && !isHoldTruck(t)),
+    [stillDirty, isCoverageTruck],
   );
-  const sparesLeftTrucks = useMemo(
-    () => stillDirty.filter((t) => getOperationalTruckType(t, unloadCtx.routeTruckByNumber) === "Spare"),
-    [stillDirty, unloadCtx.routeTruckByNumber],
+  const holdsLeftTrucks = useMemo(() => stillDirty.filter(isHoldTruck), [stillDirty]);
+  const routesLeft = routesLeftTrucks.length;
+  const coverageLeft = coverageLeftTrucks.length;
+  const holdsLeft = holdsLeftTrucks.length;
+  // Unfinished trucks are outstanding unload work too — `dirty` deliberately
+  // excludes them (they get their own section), so add them back here or the
+  // total under-reports what's left to do.
+  const totalLeft = routesLeft + coverageLeft + holdsLeft + unfinished.length;
+  const totalLeftTrucks = useMemo(
+    () => [...stillDirty, ...unfinished].sort((a, b) => a.truck_number - b.truck_number),
+    [stillDirty, unfinished],
   );
-  const dustsLeft = dustsLeftTrucks.length;
-  const uniformsLeft = uniformsLeftTrucks.length;
-  const sparesLeft = sparesLeftTrucks.length;
-  const totalLeft = dustsLeft + uniformsLeft + sparesLeft;
-  const totalLeftTrucks = useMemo(() => [...stillDirty].sort((a, b) => a.truck_number - b.truck_number), [stillDirty]);
 
   // ── Progress bars — schedule-based, matching the sidebar/Report/Day Overview
   const unloadTotal = unloadCtx.activeTrucks.length;
@@ -459,30 +477,44 @@ export default function Unload() {
           </div>
         )}
 
-        {/* Stats grid — left to unload by type */}
+        {/* Stats grid — outstanding unload work, by the page's own buckets */}
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Dusts Left" value={dustsLeft} accent="#ef4444" active={statFilter === "dust"} onClick={() => setStatFilter(statFilter === "dust" ? null : "dust")} />
-          <StatCard label="Uniforms Left" value={uniformsLeft} accent="#6366f1" active={statFilter === "uniform"} onClick={() => setStatFilter(statFilter === "uniform" ? null : "uniform")} />
-          <StatCard label="Spares Left" value={sparesLeft} accent="#22c55e" active={statFilter === "spare"} onClick={() => setStatFilter(statFilter === "spare" ? null : "spare")} />
+          <StatCard label="Routes Left" value={routesLeft} accent="#ef4444" active={statFilter === "routes"} onClick={() => setStatFilter(statFilter === "routes" ? null : "routes")} />
+          <StatCard label="Coverage Left" value={coverageLeft} accent="#06b6d4" active={statFilter === "coverage"} onClick={() => setStatFilter(statFilter === "coverage" ? null : "coverage")} />
+          <StatCard label="Holds" value={holdsLeft} accent="#f59e0b" active={statFilter === "holds"} onClick={() => setStatFilter(statFilter === "holds" ? null : "holds")} />
           <StatCard label="Total Left" value={totalLeft} accent="#dbe3ee" active={statFilter === "total"} onClick={() => setStatFilter(statFilter === "total" ? null : "total")} />
         </div>
 
         {/* Stat drill-down */}
         {statFilter && (() => {
-          const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
+          const trucks =
+            statFilter === "routes" ? routesLeftTrucks
+            : statFilter === "coverage" ? coverageLeftTrucks
+            : statFilter === "holds" ? holdsLeftTrucks
+            : totalLeftTrucks;
+          const heading =
+            statFilter === "routes" ? "Route trucks"
+            : statFilter === "coverage" ? "Coverage"
+            : statFilter === "holds" ? "Priority holds"
+            : "All";
           return (
             <div className="card animate-slide-down space-y-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                {statFilter === "dust" ? "Dusts" : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} still to unload ({trucks.length})
+                {heading} still to unload ({trucks.length})
               </p>
               <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
                 {trucks.map((t) => {
                   const cd = coverDisplay(t);
+                  const isUnfinished = t.state?.status === "unfinished";
                   return (
                     <span key={t.truck_number} className="flex min-h-[3.35rem] items-start justify-between rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5">
                       <span className="pt-0.5 text-lg font-extrabold tracking-tight tabular-nums text-ink">#{t.truck_number}</span>
                       <span className="flex flex-col items-end gap-1">
-                        <span className="rounded-full bg-red-950/60 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-300 ring-1 ring-red-900/80">Dirty</span>
+                        {isUnfinished ? (
+                          <span className="rounded-full bg-fuchsia-950/60 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-fuchsia-300 ring-1 ring-fuchsia-900/80">Unfinished</span>
+                        ) : (
+                          <span className="rounded-full bg-red-950/60 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-300 ring-1 ring-red-900/80">Dirty</span>
+                        )}
                         {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
                         {t.state?.priority_hold && (
                           <span className="inline-flex items-center rounded-pill bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-300 ring-1 ring-amber-900/80">Hold</span>

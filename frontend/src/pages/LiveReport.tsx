@@ -1094,14 +1094,20 @@ export default function LiveReport() {
           {finished.length === 0 ? (
             <Empty>No trucks have finished loading yet.</Empty>
           ) : (
-            <div className="overflow-hidden rounded-xl border border-hairline">
-              {finished.map((t, i) => {
+            /* Tiles rather than full-width rows: a row pinned the duration to
+               the far right edge, stranding it a screen-width away from the
+               truck number and finish time it belongs to. */
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+              {finished.map((t) => {
                 const d = t.state!.load_duration_seconds!;
                 return (
-                  <div key={t.truck_number} className={clsx("flex items-center gap-3 px-3 py-2 text-sm", i > 0 && "border-t border-hairline")}>
-                    <span className="w-12 font-mono font-bold tabular-nums text-ink">#{t.truck_number}</span>
-                    <span className="text-xs text-ink-muted">{clock(t.state?.load_finish_time)}</span>
-                    <span className={clsx("ml-auto font-mono font-semibold tabular-nums", durTone(d))}>{formatDuration(d)}</span>
+                  <div
+                    key={t.truck_number}
+                    className="flex items-center justify-center gap-3 rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-sm"
+                  >
+                    <span className="w-12 text-right font-mono font-bold tabular-nums text-ink">#{t.truck_number}</span>
+                    <span className="w-16 text-center text-xs text-ink-muted">{clock(t.state?.load_finish_time)}</span>
+                    <span className={clsx("w-16 font-mono font-semibold tabular-nums", durTone(d))}>{formatDuration(d)}</span>
                   </div>
                 );
               })}
