@@ -304,7 +304,7 @@ def _coverage_html(c: CoverageSectionVM | None) -> str:
             f'<div><div class="covlab">Route</div>'
             f'<div class="covnum mono route">#{int(r.route_truck)}</div></div>'
             f'<div class="covarrow">&#8594;</div>'
-            f'<div><div class="covlab">Loads on</div>'
+            f'<div><div class="covlab">Loaded on</div>'
             f'<div class="covnum mono">#{int(r.load_on_truck)}</div></div></div>'
             f'<div class="covchips"><span class="chip">{_e(r.type)}</span>{rec}{ret}</div>'
             f'<div class="covstat" style="color:{r.status_hex}">{_e(r.status_label)}</div></div>'

@@ -843,7 +843,7 @@ export default function LiveReport() {
                       </div>
                       <span className="text-2xl font-black leading-none text-ink-faint">→</span>
                       <div className="text-center">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Loads on</p>
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Loaded on</p>
                         <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">
                           #{r.loadOnTruck}
                         </p>
