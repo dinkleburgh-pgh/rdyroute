@@ -671,9 +671,35 @@ export default function LiveReport() {
   useEffect(() => {
     const el = kioskScrollRef.current;
     if (!kiosk || !el || kioskPaused) return;
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
     const total = kioskSecs * 1000;
+    // Reduced motion: no continuous crawl, but the bottom of a long slide still
+    // has to be reachable on an unattended display — so page through it in
+    // discrete jumps instead of skipping the scroll entirely.
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      let holdTimer = 0;
+      let stepTimer = 0;
+      holdTimer = window.setTimeout(() => {
+        const max = el.scrollHeight - el.clientHeight;
+        const remaining = max - el.scrollTop;
+        if (remaining <= 8) return;
+        const page = Math.max(120, el.clientHeight * 0.85);
+        const steps = Math.max(1, Math.ceil(remaining / page));
+        const every = Math.max(400, (total * (1 - 2 * KIOSK_HOLD)) / steps);
+        const from = el.scrollTop;
+        let i = 0;
+        stepTimer = window.setInterval(() => {
+          i += 1;
+          el.scrollTop = Math.min(max, from + (remaining * i) / steps);
+          if (i >= steps) window.clearInterval(stepTimer);
+        }, every);
+      }, total * KIOSK_HOLD);
+      return () => {
+        window.clearTimeout(holdTimer);
+        window.clearInterval(stepTimer);
+      };
+    }
+
     const travelMs = total * (1 - 2 * KIOSK_HOLD);
     // Resume from wherever we are rather than snapping back.
     const max0 = el.scrollHeight - el.clientHeight;
