@@ -73,6 +73,14 @@ export default function WorkflowCard({
               {truck.state?.needs_checked && (
                 <span className="badge bg-st-inprogress/25 text-st-inprogress">Needs Checked</span>
               )}
+              {truck.state?.crossload_to_truck != null && (
+                <span
+                  className="badge bg-fuchsia-500/25 text-fuchsia-300"
+                  title={`Needs crossloaded to truck #${truck.state.crossload_to_truck}`}
+                >
+                  Crossload &rarr; #{truck.state.crossload_to_truck}
+                </span>
+              )}
               {truck.truck_type === "Dust" && truck.state?.has_dust_garment && (
                 <span
                   className={clsx(

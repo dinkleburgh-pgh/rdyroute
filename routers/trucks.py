@@ -213,9 +213,14 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             # ones. (Legitimate same-day holds/checks are set by wizard/workflow
             # AFTER init, which no longer runs once day_setup_source is set.)
             existing_today = today_states[truck.truck_number]
-            if existing_today.priority_hold or existing_today.needs_checked:
+            if (
+                existing_today.priority_hold
+                or existing_today.needs_checked
+                or existing_today.crossload_to_truck is not None
+            ):
                 existing_today.priority_hold = False
                 existing_today.needs_checked = False
+                existing_today.crossload_to_truck = None
             continue
 
         prior = prev_states_by_num.get(truck.truck_number)
@@ -611,6 +616,7 @@ def update_truck_state(
         "has_dust_garment": row.has_dust_garment,
         "priority_hold": row.priority_hold,
         "needs_checked": row.needs_checked,
+        "crossload_to_truck": row.crossload_to_truck,
         "arrived_at": row.arrived_at,
         "unloaded_at": row.unloaded_at,
         "state_source": row.state_source,

@@ -9,7 +9,7 @@
 import { useState, useMemo } from "react";
 import clsx from "clsx";
 import { todayIso } from "../api/client";
-import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useLoadDayOverride, useRouteSwapLog, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useSettings, useUpsertSetting } from "../api/hooks";
+import { useBoard, useSpareAssignments, useAssignSpare, useDeleteSpare, useHolidayLoad, useLoadDayOverride, useRouteSwapLog, useRouteSwaps, useCreateRouteSwap, useDeleteRouteSwap, useSettings, useUpsertSetting, useUpsertTruckState } from "../api/hooks";
 import { workdayNumbers } from "./Clock";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import { formatRunDate } from "../utils/dates";
@@ -68,9 +68,67 @@ export default function RouteSwapModal({ onClose }: Props) {
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   // Accordion: only one of Add swap / Recurring rules is open at a time.
-  const [openSection, setOpenSection] = useState<"add" | "recurring" | null>("add");
-  const toggleSection = (s: "add" | "recurring") =>
+  const [openSection, setOpenSection] = useState<"add" | "crossload" | "recurring" | null>("add");
+  const toggleSection = (s: "add" | "crossload" | "recurring") =>
     setOpenSection((prev) => (prev === s ? null : s));
+
+  // ---- Crossload ---------------------------------------------------------
+  // Two ways to resolve one: FLAG it (the freight still has to be moved by
+  // hand, so the truck carries a "Needs crossloaded to #N" marker until it is)
+  // or DO it now (hand the route straight to the other truck, same path the
+  // Add-swap form uses). Both are per-run-date, like every other marker.
+  const upsertState = useUpsertTruckState();
+  const [xFrom, setXFrom] = useState("");
+  const [xTo, setXTo] = useState("");
+  const [xBusy, setXBusy] = useState(false);
+  const [xError, setXError] = useState<string | null>(null);
+  const flaggedCrossloads = useMemo(
+    () => board.filter((t) => t.state?.crossload_to_truck != null)
+                .sort((a, b) => a.truck_number - b.truck_number),
+    [board],
+  );
+
+  async function setCrossloadFlag(truckNumber: number, target: number | null) {
+    await upsertState.mutateAsync({
+      truck_number: truckNumber,
+      run_date: runDate,
+      crossload_to_truck: target,
+    });
+  }
+
+  async function handleCrossload(immediate: boolean) {
+    const from = parseInt(xFrom);
+    const to = parseInt(xTo);
+    if (isNaN(from) || isNaN(to)) { setXError("Pick both trucks."); return; }
+    if (from === to) { setXError("Pick two different trucks."); return; }
+    setXError(null);
+    setXBusy(true);
+    try {
+      if (immediate) {
+        // Move the route now: the target truck covers `from`'s route. This is
+        // the same guarded call the Add-swap form makes, so the duplicate-cover
+        // checks and the late load-state transfer both still apply.
+        await assignSpare.mutateAsync({
+          run_date: runDate,
+          spare_truck_number: to,
+          covering_route_truck: from,
+        });
+        // Nothing is left pending once the route has actually moved.
+        if (board.find((t) => t.truck_number === from)?.state?.crossload_to_truck != null) {
+          await setCrossloadFlag(from, null);
+        }
+      } else {
+        await setCrossloadFlag(from, to);
+      }
+      setXFrom("");
+      setXTo("");
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { detail?: string } } };
+      setXError(e?.response?.data?.detail ?? "Couldn't save the crossload.");
+    } finally {
+      setXBusy(false);
+    }
+  }
 
   // Recurring rules — stored in the `recurring_route_swaps` app setting.
   const { data: settings = [] } = useSettings();
@@ -504,6 +562,143 @@ export default function RouteSwapModal({ onClose }: Props) {
               {assignSpare.isPending || createSwap.isPending ? "Saving…" : splitMode ? "Add Split Load" : "Add Swap"}
             </button>
             </div>
+            )}
+          </section>
+
+          {/* Crossload */}
+          <section className="overflow-hidden rounded-lg border border-fuchsia-800/50 bg-fuchsia-950/20">
+            <button
+              type="button"
+              onClick={() => toggleSection("crossload")}
+              aria-expanded={openSection === "crossload"}
+              className="flex w-full items-center justify-between gap-2 px-4 py-3 text-left transition-colors hover:bg-fuchsia-900/20"
+            >
+              <span className="flex items-center gap-2">
+                <span className="text-xs font-semibold uppercase tracking-wide text-fuchsia-300">Crossload</span>
+                {flaggedCrossloads.length > 0 && (
+                  <span className="rounded-full bg-fuchsia-700/50 px-2 py-0.5 text-[10px] font-bold text-fuchsia-200">
+                    {flaggedCrossloads.length}
+                  </span>
+                )}
+              </span>
+              <span className={clsx("text-fuchsia-400/70 transition-transform", openSection === "crossload" && "rotate-90")}>&#9656;</span>
+            </button>
+            {openSection === "crossload" && (
+              <div className="space-y-3 px-4 pb-4">
+                <p className="text-[11px] leading-relaxed text-slate-400">
+                  Flag a truck whose freight has to be moved onto another truck, or move the
+                  route across right now.
+                </p>
+
+                {/* Pending crossloads */}
+                {flaggedCrossloads.length > 0 && (
+                  <div className="space-y-1.5">
+                    {flaggedCrossloads.map((t) => (
+                      <div
+                        key={t.truck_number}
+                        className="flex items-center gap-2 rounded-lg border border-fuchsia-800/40 bg-fuchsia-950/30 px-3 py-2"
+                      >
+                        <span className="font-mono text-sm font-bold text-slate-100">#{t.truck_number}</span>
+                        <span className="text-fuchsia-400">&#8594;</span>
+                        <span className="font-mono text-sm font-bold text-fuchsia-200">
+                          #{t.state?.crossload_to_truck}
+                        </span>
+                        <span className="ml-auto flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            className="rounded-md border border-fuchsia-700/50 px-2 py-1 text-[11px] font-semibold text-fuchsia-200 hover:bg-fuchsia-900/40 disabled:opacity-40"
+                            disabled={xBusy}
+                            onClick={async () => {
+                              setXBusy(true);
+                              try {
+                                await assignSpare.mutateAsync({
+                                  run_date: runDate,
+                                  spare_truck_number: t.state!.crossload_to_truck as number,
+                                  covering_route_truck: t.truck_number,
+                                });
+                                await setCrossloadFlag(t.truck_number, null);
+                              } catch (err: unknown) {
+                                const e = err as { response?: { data?: { detail?: string } } };
+                                setXError(e?.response?.data?.detail ?? "Couldn't move the route.");
+                              } finally {
+                                setXBusy(false);
+                              }
+                            }}
+                          >
+                            Move now
+                          </button>
+                          <button
+                            type="button"
+                            className="rounded-md px-2 py-1 text-[11px] text-slate-500 hover:text-slate-200 disabled:opacity-40"
+                            disabled={xBusy}
+                            onClick={() => void setCrossloadFlag(t.truck_number, null)}
+                          >
+                            Clear
+                          </button>
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                <div className="grid grid-cols-2 items-end gap-3">
+                  <div>
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-fuchsia-400/80">
+                      From truck
+                    </label>
+                    <select
+                      className="input w-full text-sm"
+                      value={xFrom}
+                      onChange={(e) => { setXFrom(e.target.value); setXError(null); }}
+                    >
+                      <option value="">&mdash; select &mdash;</option>
+                      {board.filter((t) => t.truck_type !== "Spare")
+                            .sort((a, b) => a.truck_number - b.truck_number)
+                            .map((t) => (
+                              <option key={t.truck_number} value={t.truck_number}>#{t.truck_number}</option>
+                            ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-fuchsia-400/80">
+                      Onto truck
+                    </label>
+                    <select
+                      className="input w-full text-sm"
+                      value={xTo}
+                      onChange={(e) => { setXTo(e.target.value); setXError(null); }}
+                    >
+                      <option value="">&mdash; select &mdash;</option>
+                      <LoadOnOptions />
+                    </select>
+                  </div>
+                </div>
+
+                {xError && (
+                  <p className="rounded-md border border-red-800/50 bg-red-950/30 px-3 py-2 text-xs text-red-300">
+                    {xError}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className="flex-1 rounded-lg border border-fuchsia-700/60 bg-fuchsia-950/40 px-4 py-2 text-sm font-semibold text-fuchsia-200 hover:bg-fuchsia-900/40 disabled:opacity-40"
+                    disabled={!xFrom || !xTo || xBusy}
+                    onClick={() => void handleCrossload(false)}
+                  >
+                    {xBusy ? "Saving…" : "Flag as needs crossload"}
+                  </button>
+                  <button
+                    type="button"
+                    className="flex-1 rounded-lg bg-fuchsia-600 px-4 py-2 text-sm font-semibold text-white hover:bg-fuchsia-500 disabled:opacity-40"
+                    disabled={!xFrom || !xTo || xBusy}
+                    onClick={() => void handleCrossload(true)}
+                  >
+                    {xBusy ? "Moving…" : "Crossload now"}
+                  </button>
+                </div>
+              </div>
             )}
           </section>
 

@@ -321,6 +321,7 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
                 "has_dust_garment": bool(item.get("has_dust_garment", False)),
                 "priority_hold": bool(item.get("priority_hold", False)),
                 "needs_checked": bool(item.get("needs_checked", False)),
+                "crossload_to_truck": item.get("crossload_to_truck"),
                 "arrived_at": item.get("arrived_at"),
                 "state_source": str(item.get("state_source") or "workflow"),
             }

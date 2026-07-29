@@ -166,6 +166,11 @@ class TruckState(Base):
     priority_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Follow-up check required even while the truck continues its normal lifecycle
     needs_checked: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # CROSSLOAD: this truck's freight needs moving onto the named truck. A pending
+    # action, not a lifecycle status — the truck keeps its own dirty/unloaded/
+    # loaded status while flagged. Nullable truck-number pointer, mirroring
+    # oos_spare_route; cleared at day init like the other per-day markers.
+    crossload_to_truck: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Driver parked / truck arrived back in the yard for this run-date. Set ONLY
     # by an explicit "Arrived" tap — never auto-stamped on a status change.
     arrived_at: Mapped[float | None] = mapped_column(Float, nullable=True)

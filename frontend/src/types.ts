@@ -58,6 +58,8 @@ export interface TruckState {
   has_dust_garment: boolean;
   priority_hold: boolean;
   needs_checked: boolean;
+  /** Freight needs crossloading onto this truck number (pending action). */
+  crossload_to_truck: number | null;
   arrived_at: number | null;
   unloaded_at: number | null;
   state_source: TruckStateSource;
