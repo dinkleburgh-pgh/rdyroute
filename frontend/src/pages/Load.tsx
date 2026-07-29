@@ -798,6 +798,7 @@ export default function Load() {
                 unloaded={ready}
                 anyInProgress={anyInProgress}
                 onPick={() => setNextUpOpen(false)}
+                defaultOpen
               />
             </div>
           </div>

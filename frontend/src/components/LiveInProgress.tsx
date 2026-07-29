@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import clsx from "clsx";
+import { ChevronDown } from "lucide-react";
 import {
   useBoard,
   useClearNextUp,
@@ -706,6 +707,7 @@ function InProgressHero({
                 unloaded={unloaded}
                 anyInProgress={true}
                 onPick={() => setPickerOpen(false)}
+                defaultOpen
               />
             </div>
           </div>
@@ -764,19 +766,37 @@ function QueueRow({
   );
 }
 
+const SHOW_SPARES_KEY = "nextup:showSpares";
+
 export function NextUpPanel({
   runDate,
   nextUp,
   unloaded,
   anyInProgress: _anyInProgress,
   onPick,
+  defaultOpen = false,
 }: {
   runDate: string;
   nextUp: number | null;
   unloaded: TruckWithState[];
   anyInProgress: boolean;
   onPick?: () => void;
+  /** Start expanded — the Set Next Up modal exists to pick, so it opens open. */
+  defaultOpen?: boolean;
 }) {
+  const [open, setOpen] = useState(defaultOpen);
+  // Most of the queue is usually spares with no route yet, which can't be
+  // queued directly anyway (picking one opens the assign-route prompt), so they
+  // start hidden. Per-device preference.
+  const [showSpares, setShowSpares] = useState(
+    () => localStorage.getItem(SHOW_SPARES_KEY) === "1",
+  );
+  function toggleSpares() {
+    setShowSpares((v) => {
+      localStorage.setItem(SHOW_SPARES_KEY, v ? "0" : "1");
+      return !v;
+    });
+  }
   const setNext = useSetNextUp(runDate);
   const clearNext = useClearNextUp(runDate);
   const assignSpare = useAssignSpare();
@@ -833,15 +853,35 @@ export function NextUpPanel({
   }
 
   const nextStillAvailable = nextUp != null && options.some((t) => t.truck_number === nextUp);
+  const spareCount = options.filter((t) => t.truck_type === "Spare").length;
+  // The queued truck always stays listed, even when it's a spare and spares are
+  // hidden — otherwise the current pick silently vanishes from its own queue.
+  const visibleOptions = useMemo(
+    () =>
+      showSpares
+        ? options
+        : options.filter((t) => t.truck_type !== "Spare" || t.truck_number === nextUp),
+    [options, showSpares, nextUp],
+  );
 
   return (
     <div className="card space-y-3">
-      <div className="flex items-center justify-between">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center justify-between gap-2 text-left"
+        aria-expanded={open}
+      >
         <h4 className="text-[11px] font-semibold uppercase tracking-wide text-ink-muted">Next-Up Queue</h4>
-        {options.length > 0 && (
-          <span className="text-[11px] text-ink-faint">{options.length} ready</span>
-        )}
-      </div>
+        <span className="flex shrink-0 items-center gap-1.5 text-[11px] text-ink-faint">
+          {nextUp != null ? (
+            <span className="font-mono font-bold text-sky-300">#{nextUp}</span>
+          ) : (
+            `${options.length} ready`
+          )}
+          <ChevronDown className={clsx("h-3.5 w-3.5 transition-transform", open && "rotate-180")} />
+        </span>
+      </button>
 
       {nextUp != null && !nextStillAvailable && (
         <p className="rounded-md border border-st-dirty/30 bg-st-dirty/10 px-3 py-2 text-xs text-st-dirty">
@@ -882,24 +922,42 @@ export function NextUpPanel({
         </div>
       )}
 
-      {options.length === 0 ? (
-        <p className="text-center text-xs text-ink-faint">No Unloaded trucks available.</p>
-      ) : (
-        <div className="space-y-1">
-          {options.map((truck, i) => (
-            <QueueRow
-              key={truck.truck_number}
-              truck={truck}
-              index={i}
-              isNext={truck.truck_number === nextUp}
-              onSelect={() =>
-                needsRoute(truck)
-                  ? setAssignFor(truck)
-                  : (setNext.mutate(truck.truck_number), onPick?.())
-              }
-            />
-          ))}
-        </div>
+      {open && (
+        <>
+          {spareCount > 0 && (
+            <button
+              type="button"
+              onClick={toggleSpares}
+              className="w-full rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-[11px] font-semibold text-ink-muted transition-colors hover:bg-surface hover:text-ink"
+            >
+              {showSpares ? `Hide spares (${spareCount})` : `Show spares (${spareCount})`}
+            </button>
+          )}
+
+          {options.length === 0 ? (
+            <p className="text-center text-xs text-ink-faint">No Unloaded trucks available.</p>
+          ) : visibleOptions.length === 0 ? (
+            <p className="text-center text-xs text-ink-faint">
+              Only spares are ready — use “Show spares” above.
+            </p>
+          ) : (
+            <div className="space-y-1">
+              {visibleOptions.map((truck, i) => (
+                <QueueRow
+                  key={truck.truck_number}
+                  truck={truck}
+                  index={i}
+                  isNext={truck.truck_number === nextUp}
+                  onSelect={() =>
+                    needsRoute(truck)
+                      ? setAssignFor(truck)
+                      : (setNext.mutate(truck.truck_number), onPick?.())
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </>
       )}
 
       {nextUp != null && (
