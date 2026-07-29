@@ -1,9 +1,10 @@
 """Seed the per-unload-day standing sheets (wearers + notes) from the paper
 sheet photos.
 
-Wearers come from each sheet's "Routes and (Wearers)" table. Day 5's photo
-shows "Routes and (GARMENTS)" — a different metric entirely (hundreds, not
-tens) — so day 5 wearers are deliberately NOT seeded.
+Wearers come from each sheet's "Routes and (...)" table. Day 5's sheet heads
+that column "Garments" rather than "Wearers", but it is the day-5 wearers list
+(confirmed by the user) — its values simply run an order of magnitude higher
+than days 1-4.
 
 Idempotent: writes the settings rows outright, so re-running just refreshes.
 Set BASE to point at prod or dev.
@@ -40,7 +41,13 @@ WEARERS = {
         56: 69, 58: 37, 59: 121, 60: 221, 61: 58, 62: 70, 65: 40,
         66: 73, 68: 64, 69: 92, 70: 46, 73: 64, 75: 90, 91: 39,
     },
-    # Day 5 — NOT seeded: that photo lists GARMENTS, not wearers.
+    # Day 5 — 20260612 sheet. Its column is headed "Garments" but it IS the
+    # day-5 wearers list; the counts genuinely run much higher than days 1-4.
+    5: {
+        4: 673, 7: 533, 50: 289, 51: 424, 53: 564, 54: 339, 55: 148,
+        56: 354, 57: 486, 58: 348, 60: 741, 62: 401, 64: 642, 65: 330,
+        69: 319, 73: 332, 88: 123, 91: 409,
+    },
 }
 
 NOTES = {
