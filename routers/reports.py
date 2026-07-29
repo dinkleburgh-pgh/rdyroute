@@ -124,6 +124,16 @@ body { font-family: "DejaVu Sans", sans-serif; background: #07090d; color: #f2f6
 .head h1 { font-size: 26px; font-weight: 700; letter-spacing: .01em; margin: 0; }
 .head .sub { font-size: 10px; color: #8a96a8; margin: 3px 0 0; }
 section { margin: 0 0 14px; page-break-inside: avoid; }
+/* Each major section is read as its own standalone sheet, so it starts a fresh
+   page and is allowed to flow across pages when it outgrows one (the default
+   page-break-inside:avoid above would otherwise shunt a tall section wholesale
+   onto the next page and leave the one before it empty). The FIRST block on
+   page 1 must never carry this — that is exactly what left the title stranded
+   on a blank opening page. */
+section.page { page-break-before: always; page-break-inside: auto; }
+/* The lead section shares page 1 with the title; allow it to flow rather than
+   orphan the header if it ever grows past the remaining space. */
+section.lead { page-break-inside: auto; }
 /* Section headers are centred and large so each block reads as its own titled
    sheet (e.g. "Unload / Batches"). */
 .shead { text-align: center; margin: 0 0 8px; }
@@ -209,10 +219,8 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
 .igroup { text-align: center; font-size: 7px; text-transform: uppercase;
           letter-spacing: .14em; color: #7a8698; }
 
-/* Per-truck "Sheet" cards, on their own page. The section must be allowed to
-   break across pages (the global page-break-inside:avoid would be dropped
-   anyway once it outgrows a page) — instead each ROW is kept intact. */
-.sheetpage { page-break-before: always; page-break-inside: auto; }
+/* Per-truck "Sheet" cards. The section flows across pages via section.page;
+   each ROW is kept intact so a card never splits mid-truck. */
 .sc-row { display: flex; gap: 6px; page-break-inside: avoid; }
 .sc-row + .sc-row { margin-top: 6px; }
 .sc { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
@@ -276,7 +284,7 @@ def _kpis_html(kpis) -> str:
 def _batches_html(b: BatchesSectionVM | None) -> str:
     if b is None:
         return ""
-    out = ["<section>", _section_head("Unload", "Batches")]
+    out = ['<section class="page">', _section_head("Unload", "Batches")]
     if b.disabled:
         out.append('<div class="empty">Batching is turned off for this day.</div></section>')
         return "".join(out)
@@ -315,7 +323,7 @@ def _batches_html(b: BatchesSectionVM | None) -> str:
 def _coverage_html(c: CoverageSectionVM | None) -> str:
     if c is None:
         return ""
-    out = ["<section>", _section_head("Load", "Routes covered")]
+    out = ['<section class="page">', _section_head("Load", "Routes covered")]
     if not c.rows:
         out.append('<div class="empty">No route coverage recorded for this day.</div></section>')
         return "".join(out)
@@ -346,7 +354,7 @@ def _coverage_html(c: CoverageSectionVM | None) -> str:
 def _load_times_html(lt: LoadTimesSectionVM | None) -> str:
     if lt is None:
         return ""
-    out = ["<section>", _section_head("Load", "Load times"), _kpis_html(lt.kpis)]
+    out = ['<section class="page">', _section_head("Load", "Load times"), _kpis_html(lt.kpis)]
     if not lt.rows:
         out.append('<div class="empty">No trucks have finished loading yet.</div></section>')
         return "".join(out)
@@ -458,7 +466,7 @@ def _sheet_cards_html(s: ShortagesSectionVM | None) -> str:
         chunk += ['<div class="sc spacer"></div>'] * (4 - len(chunk))
         rows.append(f'<div class="sc-row">{"".join(chunk)}</div>')
     return (
-        '<section class="sheetpage">'
+        '<section class="page">'
         + _section_head("Load", "Short sheet by truck")
         + "".join(rows)
         + "</section>"
@@ -466,21 +474,34 @@ def _sheet_cards_html(s: ShortagesSectionVM | None) -> str:
 
 
 def _shortages_html(s: ShortagesSectionVM | None) -> str:
+    """The shortage SUMMARY — KPIs, top shorted trucks, top shorted items. This
+    is the report's opening block, so it shares page 1 with the title. The
+    truck x item grid is a separate section (_short_grid_html) that gets its own
+    page."""
     if s is None:
         return ""
-    out = [
-        "<section>",
-        _section_head("Load", "Shortages"),
-        _kpis_html(s.kpis),
-        _top_trucks_html(s.top_trucks),
-        _top_items_html(s.matrix),
-    ]
+    return "".join(
+        [
+            '<section class="lead">',
+            _section_head("Load", "Shortages"),
+            _kpis_html(s.kpis),
+            _top_trucks_html(s.top_trucks),
+            _top_items_html(s.matrix),
+            "</section>",
+        ]
+    )
+
+
+def _short_grid_html(s: ShortagesSectionVM | None) -> str:
+    """The short-sheet GRID (item rows x truck columns), on its own page."""
+    if s is None:
+        return ""
     m = s.matrix
     if m is None:
-        # The short-sheet grid is its own selectable section — a null matrix
-        # means it wasn't included, which is not the same as "no shortages".
-        out.append("</section>")
-        return "".join(out)
+        # The grid is its own selectable section — a null matrix means it wasn't
+        # included, which is not the same as "no shortages".
+        return ""
+    out = ['<section class="page">', _section_head("Load", "Short sheet")]
     if not m.rows:
         out.append('<div class="empty">No shortages logged for this day.</div></section>')
         return "".join(out)
@@ -522,7 +543,7 @@ def _shortages_html(s: ShortagesSectionVM | None) -> str:
 def _audit_html(a: AuditSectionVM | None) -> str:
     if a is None:
         return ""
-    out = ["<section>", _section_head("Load", "Audit"), _kpis_html(a.kpis)]
+    out = ['<section class="page">', _section_head("Load", "Audit"), _kpis_html(a.kpis)]
     if a.chips:
         chips = "".join(
             f'<span class="achip"><span class="dot" style="background:{c.dot_hex}"></span>'
@@ -576,13 +597,15 @@ def render_report_html(vm: ReportViewModel) -> str:
         bits.append("Generated " + gen.strftime("%b %d, %Y %I:%M %p"))
     body = "".join(
         [
+            # Page 1 shares the title with the shortage summary; every
+            # section after it starts a fresh page of its own.
             _shortages_html(vm.shortages),
+            _short_grid_html(vm.shortages),
+            _sheet_cards_html(vm.shortages),
             _batches_html(vm.batches),
             _coverage_html(vm.coverage),
             _load_times_html(vm.load_times),
             _audit_html(vm.audit),
-            # Per-truck sheet cards last — they start their own page.
-            _sheet_cards_html(vm.shortages),
         ]
     )
     return (
