@@ -1,5 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { useSearchParams } from "react-router-dom";
+import { MonitorPlay } from "lucide-react";
 import clsx from "clsx";
 import { format } from "date-fns";
 import {
@@ -9,11 +11,9 @@ import {
   useLoadDayOverride,
   useUnloadsDayOverride,
   usePaceAverage,
-  useRecordLoadDuration,
   useShortages,
   useCoverageForRole,
   useSettings,
-  useUpsertTruckState,
   useLoadSequenceSuggestions,
   useNextUp,
   useClearNextUp,
@@ -38,7 +38,12 @@ import {
   GARMENT_PENDING_HEX,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
-import { NextUpPanel, PaceBar, StartNextUpBanner, useElapsed } from "../components/LiveInProgress";
+import { NextUpPanel, PaceBar, StartNextUpBanner, formatDuration, useElapsed } from "../components/LiveInProgress";
+import { useLoadActions } from "../hooks/useLoadActions";
+import LoadActionDialogs from "../components/load/LoadActionDialogs";
+import InProgressHeroPanel from "../components/load/InProgressHeroPanel";
+import GarmentsStrip from "../components/load/GarmentsStrip";
+import LoadDisplay from "../components/load/LoadDisplay";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
@@ -60,16 +65,36 @@ import CoverageCards from "../components/CoverageCards";
 export default function Load() {
   const runDate = todayIso();
   const { data } = useBoard(runDate);
-  const upsert = useUpsertTruckState();
-  const recordDuration = useRecordLoadDuration();
   const { data: pace } = usePaceAverage(30);
-  const [busy, setBusy] = useState<number | null>(null);
+  // The URL is the source of truth for the display, so /load?display=1 is
+  // bookmarkable and the device comes back up straight into it.
+  const [params, setParams] = useSearchParams();
+  const displayOpen = params.get("display") === "1";
+  function openDisplay() {
+    const next = new URLSearchParams(params);
+    next.set("display", "1");
+    setParams(next); // pushes history, so Android back exits the display
+    // Fullscreen needs the user gesture, so it has to happen in this handler.
+    void document.documentElement.requestFullscreen?.().catch(() => {});
+  }
+  function closeDisplay() {
+    const next = new URLSearchParams(params);
+    next.delete("display");
+    setParams(next, { replace: true });
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+  }
+  // Start / finish / cancel + both confirmations live in one shared hook so the
+  // Load page and the full-screen Load Display can never drift apart.
+  const actions = useLoadActions(runDate, {
+    // Bring the now-loading truck's panel into view — the tap that starts a
+    // load is usually deep down in the truck grid. The display passes nothing.
+    onStarted: () => document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" }),
+  });
+  const { busy, cancelLoad, requestStart, requestFinish } = actions;
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
-  const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
   // Dust-garment finish confirmation — asks "Did you load garments?" before
   // finishing a truck flagged with dust garments.
-  const [confirmGarmentTruck, setConfirmGarmentTruck] = useState<TruckWithState | null>(null);
 
   const board = data ?? [];
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
@@ -243,97 +268,37 @@ export default function Load() {
     );
   }, [board, loadDay, unloadsDay, holidayLoad, holidayUnload, loadDisplayTrucks, unloadScheduleContext, runDate]);
 
-  const anyInProgress = Boolean(inProgress);
-  // A spare can't load until it's covering a route (enforced on the backend
-  // too). A SPLIT assignment counts — the spare is carrying a route's
-  // overflow even though it isn't "covering" it.
-  const confirmIsUncoveredSpare =
-    confirmLoadTruck != null &&
-    confirmLoadTruck.truck_type === "Spare" &&
-    confirmLoadTruck.route_swap_route == null &&
-    confirmLoadTruck.route_split_route == null &&
-    confirmLoadTruck.state?.oos_spare_route == null;
-
-  async function startLoad(t: TruckWithState) {
-    if (anyInProgress) return;
-    if (t.state?.priority_hold) return;
-    setBusy(t.truck_number);
-    try {
-      const nowSec = Date.now() / 1000;
-      await upsert.mutateAsync({
-        truck_number: t.truck_number,
-        run_date: runDate,
-        status: "in_progress",
-        wearers: t.state?.wearers ?? 0,
-        load_start_time: nowSec,
-        load_finish_time: null,
-        load_duration_seconds: null,
-      });
-      // Once the queued truck is actually loading it isn't "next" any more —
-      // clear it so the queue doesn't hold a stale pick through the next
-      // hand-off.
-      if (storedNextUp === t.truck_number) clearNextUp.mutate();
-      // Bump the viewer to the top of the page so the now-loading truck's
-      // In-Progress panel (with the Finish Loading button) scrolls into view —
-      // the tap that starts a load is usually deep down in the truck grid.
-      document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" });
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function finishLoad(t: TruckWithState) {
-    setBusy(t.truck_number);
-    try {
-      const nowSec = Date.now() / 1000;
-      const startSec = t.state?.load_start_time ?? nowSec;
-      const duration = Math.max(1, Math.round(nowSec - startSec));
-      await upsert.mutateAsync({
-        truck_number: t.truck_number,
-        run_date: runDate,
-        status: "loaded",
-        wearers: t.state?.wearers ?? 0,
-        load_finish_time: nowSec,
-        load_duration_seconds: duration,
-      });
-      if (duration >= 30 && duration <= 7200) {
-        try {
-          await recordDuration.mutateAsync({
-            truck_number: t.truck_number,
-            run_date: runDate,
-            duration_seconds: duration,
-            load_day_num: t.state?.load_day_num ?? null,
-          });
-        } catch {
-          // history append failure shouldn't block status change
-        }
-      }
-    } finally {
-      setBusy(null);
-    }
-  }
-
-  async function cancelLoad(t: TruckWithState) {
-    setBusy(t.truck_number);
-    try {
-      await upsert.mutateAsync({
-        truck_number: t.truck_number,
-        run_date: runDate,
-        status: "unloaded",
-        wearers: t.state?.wearers ?? 0,
-        load_start_time: null,
-        load_finish_time: null,
-        load_duration_seconds: null,
-      });
-    } finally {
-      setBusy(null);
-    }
-  }
+  const anyInProgress = actions.anyInProgress;
 
   // All dust trucks — show garment checklist regardless of schedule/status
   const dustGarmentTrucks = board
     .filter((t) => t.truck_type === "Dust")
     .sort((a, b) => a.truck_number - b.truck_number);
+
+  if (displayOpen) {
+    return (
+      <>
+        <LoadDisplay
+          runDate={runDate}
+          loadDay={loadDay}
+          actions={actions}
+          paceAvgSeconds={pace?.avg_seconds ?? null}
+          ready={ready}
+          nextUpTruck={nextUpTruck}
+          queuedNextUp={queuedNextUp}
+          coverage={loadCoverage}
+          isRecurringCoverage={isRecurringCoverage}
+          garmentTrucks={dustGarmentTrucks}
+          loadedCount={loadDone}
+          loadTotal={loadTotal}
+          onExit={closeDisplay}
+        />
+        {/* Rendered here, outside the display, so the dialogs portal at z-90
+            land above the z-85 overlay. */}
+        <LoadActionDialogs actions={actions} />
+      </>
+    );
+  }
 
   return (
     <>
@@ -341,7 +306,20 @@ export default function Load() {
         eyebrow="Workflow"
         title="Load"
         subtitle="Start loading, finish routes, and track pace for the next run day."
-        actions={<PaceBadge avgSeconds={pace?.avg_seconds ?? null} />}
+        actions={
+          <div className="flex items-center gap-2">
+            <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
+            <button
+              type="button"
+              onClick={openDisplay}
+              title="Open the full-screen load display"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+            >
+              <MonitorPlay className="h-4 w-4" />
+              Display
+            </button>
+          </div>
+        }
         mobileBadge={anyInProgress ? (
           <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
             <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
@@ -351,49 +329,17 @@ export default function Load() {
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
-      {/* Dust Garments — read-only, always open */}
-      <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.30)", background: "rgba(245,158,11,0.07)" }}>
-        <div className="flex w-full items-center gap-2 px-3 py-2.5">
-          <DustGarmentIcon className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-          <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">F.S. Garments</span>
-          <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
-            {dustGarmentTrucks.filter((t) => t.state?.has_dust_garment).length} w/ garment
-          </span>
-        </div>
-        <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(245,158,11,0.20)" }}>
-            {dustGarmentTrucks.length === 0 ? (
-              <p className="text-xs text-ink-faint">No F.S. trucks scheduled.</p>
-            ) : (
-              <div className="flex flex-wrap gap-1.5">
-                {dustGarmentTrucks.map((t) => {
-                  const garment = t.state?.has_dust_garment === true;
-                  // Garments already out the door read blue/cyan (done); still
-                  // pending ones stay amber (needs action); no garment is muted.
-                  const done = garment && t.state?.status === "loaded";
-                  const color = done ? GARMENT_LOADED_HEX : garment ? GARMENT_PENDING_HEX : "#6f7c8e";
-                  return (
-                    <span
-                      key={t.truck_number}
-                      title={done ? "Loaded with garments" : garment ? "Garments to load" : "No garments"}
-                      className={clsx(
-                        "inline-flex items-center gap-2 rounded-lg border px-3.5 py-1.5 text-base font-bold",
-                        done
-                          ? "border-sky-500/60 bg-sky-950/50"
-                          : garment
-                            ? "border-amber-600/60 bg-amber-950/50"
-                            : "border-hairline bg-surface-3",
-                      )}
-                      style={{ color }}
-                    >
-                      #{t.truck_number}
-                      {garment && <DustGarmentIcon className="h-5 w-5" style={{ color }} />}
-                    </span>
-                  );
-                })}
-              </div>
-            )}
-        </div>
-      </div>
+      {/* PageHeader hides its actions below md, so the phone gets its own. */}
+      <button
+        type="button"
+        onClick={openDisplay}
+        className="flex w-full items-center justify-center gap-2 rounded-lg border border-hairline bg-surface-2 py-2 text-sm font-semibold text-ink-soft md:hidden"
+      >
+        <MonitorPlay className="h-4 w-4" />
+        Open Load Display
+      </button>
+
+      <GarmentsStrip trucks={dustGarmentTrucks} />
 
       {/* Coverage today — always open; big ROUTE -> TRUCK cards, same read as
           the report's coverage section. */}
@@ -414,16 +360,13 @@ export default function Load() {
       {/* In-progress truck — top of page */}
       {inProgress && (
         <>
-          <InProgressPanel
+          <InProgressHeroPanel
             truck={inProgress}
             paceAvgSeconds={pace?.avg_seconds ?? null}
             busy={busy === inProgress.truck_number}
             loadDay={loadDay}
             nextUp={nextUpTruck}
-            onFinish={() => {
-              if (inProgress.state?.has_dust_garment) setConfirmGarmentTruck(inProgress);
-              else void finishLoad(inProgress);
-            }}
+            onFinish={() => requestFinish(inProgress)}
             onCancel={() => cancelLoad(inProgress)}
           />
           <InlineShortages truck={inProgress} runDate={runDate} />
@@ -437,7 +380,7 @@ export default function Load() {
           truck={queuedNextUp}
           paceAvgSeconds={pace?.avg_seconds ?? null}
           busy={busy === queuedNextUp.truck_number}
-          onStart={() => setConfirmLoadTruck(queuedNextUp)}
+          onStart={() => requestStart(queuedNextUp)}
         />
       )}
 
@@ -579,7 +522,7 @@ export default function Load() {
               <button
                 type="button"
                 disabled={disabled}
-                onClick={() => setConfirmLoadTruck(t)}
+                onClick={() => requestStart(t)}
                 className={clsx(
                   "h-full w-full text-left transition-all duration-150",
                   disabled
@@ -687,56 +630,7 @@ export default function Load() {
           )}
         </div>
       </section>
-      {confirmLoadTruck && createPortal(
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setConfirmLoadTruck(null)}
-        >
-          <div
-            className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-xl border border-hairline bg-surface p-5 shadow-card"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <h3 className="mb-1 text-base font-semibold font-mono tabular-nums">Start Loading Truck #{confirmLoadTruck.truck_number}?</h3>
-            <p className="mb-4 text-sm text-ink-muted">
-              {anyInProgress
-                ? "Another truck is already in progress. Finish it first."
-                : confirmIsUncoveredSpare
-                ? "This spare has no route to cover yet. Assign a route to it on the board before loading."
-                : confirmLoadTruck.route_split_route != null
-                ? `Split load — carrying route #${confirmLoadTruck.route_split_route}'s overflow.`
-                : `${confirmLoadTruck.truck_type}${confirmLoadTruck.state?.batch_id != null ? ` · Batch ${confirmLoadTruck.state.batch_id}` : ""}${confirmLoadTruck.state?.wearers ? ` · ${confirmLoadTruck.state.wearers} wearers` : ""}`}
-            </p>
-            <div className="flex justify-end gap-2">
-              <button className="btn-ghost" onClick={() => setConfirmLoadTruck(null)}>Cancel</button>
-              <button
-                className="rounded-lg px-4 py-1.5 text-sm font-semibold text-white disabled:opacity-50"
-                style={{ background: "#16a34a" }}
-                disabled={anyInProgress || confirmIsUncoveredSpare || busy === confirmLoadTruck.truck_number}
-                onClick={() => {
-                  startLoad(confirmLoadTruck);
-                  setConfirmLoadTruck(null);
-                }}
-              >
-                {busy === confirmLoadTruck.truck_number ? "Starting…" : "Start Loading"}
-              </button>
-            </div>
-          </div>
-        </div>,
-        document.body,
-      )}
-      <ConfirmDialog
-        open={confirmGarmentTruck !== null}
-        title="Did you load garments?"
-        description={`Truck #${confirmGarmentTruck?.truck_number ?? ""} is flagged with F.S. garments — confirm the garments were loaded before finishing.`}
-        confirmLabel="Yes, finish loading"
-        cancelLabel="Not yet"
-        onConfirm={() => {
-          const t = confirmGarmentTruck;
-          setConfirmGarmentTruck(null);
-          if (t) void finishLoad(t);
-        }}
-        onCancel={() => setConfirmGarmentTruck(null)}
-      />
+      <LoadActionDialogs actions={actions} />
       {/* Next Up picker — same panel the In Progress page uses */}
       {nextUpOpen && createPortal(
         <div
@@ -840,14 +734,6 @@ function PaceBadge({ avgSeconds }: { avgSeconds: number | null }) {
   );
 }
 
-const LOAD_DAY_NAMES: Record<number, string> = {
-  1: "Monday",
-  2: "Tuesday",
-  3: "Wednesday",
-  4: "Thursday",
-  5: "Friday",
-};
-
 function InlineShortages({ truck, runDate }: { truck: TruckWithState; runDate: string }) {
   const { data: shorts = [] } = useShortages(runDate, truck.truck_number);
   return (
@@ -863,167 +749,6 @@ function InlineShortages({ truck, runDate }: { truck: TruckWithState; runDate: s
   );
 }
 
-function InProgressPanel({
-  truck,
-  paceAvgSeconds,
-  busy,
-  loadDay,
-  nextUp,
-  onFinish,
-  onCancel,
-}: {
-  truck: TruckWithState;
-  paceAvgSeconds: number | null;
-  busy: boolean;
-  loadDay: number;
-  nextUp?: TruckWithState;
-  onFinish: () => void;
-  onCancel: () => void;
-}) {
-  const startSec = truck.state?.load_start_time ?? null;
-  const elapsed = useElapsed(startSec);
-
-  const pct = paceAvgSeconds && paceAvgSeconds > 0 ? elapsed / paceAvgSeconds : null;
-  const onPace = pct == null ? null : pct < 1;
-
-  const timerColor =
-    pct == null   ? "text-ink"
-    : pct >= 1    ? "text-st-dirty"
-    : pct >= 0.85 ? "text-orange-400"
-    :               "text-st-inprogress";
-
-  const paceLabel =
-    paceAvgSeconds == null ? null
-    : onPace
-      ? `on pace · avg ${formatDuration(paceAvgSeconds)}`
-      : `+${formatDuration(elapsed - paceAvgSeconds)} over · avg ${formatDuration(paceAvgSeconds)}`;
-
-  const paceLabelColor =
-    onPace == null ? "text-ink-muted"
-    : onPace       ? "text-st-unloaded"
-    :                "text-st-dirty";
-
-  return (
-    <section className="overflow-hidden rounded-xl border-2" style={{ borderColor: "rgba(245,158,11,0.50)", background: "rgba(245,158,11,0.07)" }}>
-      {/* Amber pulse strip */}
-      <div className="h-[3px] w-full animate-pulse" style={{ background: "#f59e0b" }} />
-
-      <div className="space-y-4 p-4">
-        {/* Identity row: Current Truck | divider | Next Up */}
-        <div className="flex items-start gap-4">
-          {/* Current Truck */}
-          <div className="flex-1 text-center">
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Current Truck</div>
-            <div className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none" style={{ color: "#fbbf5c" }}>
-              #{truck.truck_number}
-            </div>
-            {(() => {
-              const cr = getCoverageRouteNumber(truck);
-              return cr != null ? (
-                <div className="mt-1">
-                  <CoverageTag route={cr} truck={truck.truck_number} />
-                </div>
-              ) : null;
-            })()}
-            <div className="mt-2 inline-flex items-center gap-1.5 rounded-pill border border-st-unloaded/50 bg-st-unloaded/10 px-3 py-0.5 text-xs font-semibold text-st-unloaded">
-              <span className="h-1.5 w-1.5 rounded-full bg-st-unloaded" />
-              Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}
-            </div>
-            {truck.state?.has_dust_garment && (
-              <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-st-inprogress">
-                <DustGarmentIcon className="h-5 w-5" />
-                F.S. garment
-              </div>
-            )}
-            {truck.state?.wearers ? (
-              <div className="mt-0.5 text-xs text-ink-muted">{truck.state.wearers} wearers</div>
-            ) : null}
-          </div>
-
-          <div className="w-px self-stretch bg-hairline" />
-
-          {/* Next Up */}
-          <div className="flex-1 text-center">
-            <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-ink-muted">Next Up</div>
-                {nextUp ? (
-                  <>
-                    <div className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none" style={{ color: "#7dd3fc" }}>
-                      #{nextUp.truck_number}
-                    </div>
-                    {(() => {
-                      const cr = getCoverageRouteNumber(nextUp);
-                      return cr != null ? (
-                        <CoverageTag route={cr} truck={nextUp.truck_number} className="mt-1" />
-                      ) : null;
-                    })()}
-                    {paceAvgSeconds != null && (
-                      <div className="mt-1.5 text-xs text-ink-muted">
-                        avg <span className="text-ink">{formatDuration(paceAvgSeconds)}</span>
-                      </div>
-                    )}
-                  </>
-                ) : (
-              <div className="font-mono font-black tabular-nums tracking-[-0.02em] text-[58px] leading-none text-ink-faint">—</div>
-            )}
-          </div>
-        </div>
-
-        {/* Timer — centered */}
-        <div className="flex flex-col items-center gap-2 py-1">
-          <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none", timerColor)}
-            style={{ fontSize: "3.5rem" }}>
-            {formatDuration(elapsed)}
-          </span>
-          {paceLabel && (
-            <span className={clsx("text-sm font-medium", paceLabelColor)}>
-              {paceLabel}
-            </span>
-          )}
-        </div>
-
-        {/* Full-width pace bar */}
-        <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
-
-        {/* Finish Loading — immediately below bar */}
-        <button
-          className="w-full rounded-xl py-4 text-lg font-bold text-white shadow transition-colors active:scale-[0.99] disabled:opacity-50"
-          style={{ background: "#16a34a" }}
-          disabled={busy}
-          onClick={onFinish}
-        >
-          {busy ? "Finishing…" : "Finish Loading"}
-        </button>
-
-        {/* Cancel */}
-        <div className="flex items-center gap-3">
-          <button
-            className="btn-ghost"
-            disabled={busy || elapsed >= 15}
-            onClick={onCancel}
-          >
-            Cancel (back to Unloaded)
-          </button>
-          <span className="text-xs text-ink-muted">
-            {elapsed < 15 ? `locks in ${15 - elapsed}s` : "cancel locked"}
-          </span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function formatDuration(totalSeconds: number): string {
-  const s = Math.max(0, Math.round(totalSeconds));
-  const m = Math.floor(s / 60);
-  const sec = s % 60;
-  if (m >= 60) {
-
-    const h = Math.floor(m / 60);
-    const mm = m % 60;
-    return `${h}h ${mm}m`;
-  }
-  return `${m}:${sec.toString().padStart(2, "0")}`;
-}
 
 
 

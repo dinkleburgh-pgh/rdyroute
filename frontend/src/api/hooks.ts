@@ -1054,6 +1054,26 @@ export function useDeleteAuditEntry() {
   });
 }
 
+/**
+ * Unacknowledged load warnings, grouped by truck number.
+ *
+ * The endpoint has existed since the audit feature shipped — its docstring
+ * says it is "used by the loader workflow to surface warnings before starting
+ * a truck" — but nothing on the load side ever rendered it. The Load Display
+ * is the first consumer.
+ */
+export function useActiveWarnings(runDate: string = todayIso()) {
+  return useQuery({
+    queryKey: ["active-warnings", runDate],
+    queryFn: async () =>
+      (await api.get<Record<string, AuditEntry[]>>("/audit/active-warnings", {
+        params: { run_date: runDate },
+      })).data,
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+  });
+}
+
 export function useAuditDailyTrend(daysBack = 14) {
   return useQuery({
     queryKey: ["audit-trend", daysBack],
