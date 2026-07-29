@@ -21,6 +21,7 @@ import {
   useRemoveTruckFromBatch,
   useSettings,
   useUnloadsDayOverride,
+  useUnloadDayTemplate,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
@@ -31,6 +32,7 @@ import PageHeader from "../components/PageHeader";
 import OverbatchedChip from "../components/OverbatchedChip";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { DustGarmentIcon } from "../components/icons";
+import UnloadDayNotes from "../components/UnloadDayNotes";
 import type { TruckWithState } from "../types";
 
 const BATCH_NUMBERS = [1, 2, 3, 4, 5, 6];
@@ -71,6 +73,8 @@ export default function BatchingWizard() {
 
   const [yr, mo, dy] = runDate.split("-").map(Number);
   const unloadsDay = unloadsOverride ?? workdayNumbers(new Date(yr, mo - 1, dy, 12)).unloadsDay;
+  // Standing sheet for this unload day: wearer counts + notes.
+  const dayTemplate = useUnloadDayTemplate(unloadsDay);
 
   // Which batch each truck currently sits in (from the live summary).
   const batchByTruck = useMemo(() => {
@@ -117,9 +121,21 @@ export default function BatchingWizard() {
     return { trucks: b?.trucks ?? [], total: b?.total_wearers ?? 0 };
   }
 
+  // Wearers: whatever is already on the truck wins (someone set it tonight);
+  // otherwise fall back to this unload day's standing sheet, so the common case
+  // is confirming a number rather than typing one.
   function draftWearers(truckNumber: number): string {
     if (wearerDrafts[truckNumber] != null) return wearerDrafts[truckNumber];
-    return String(boardByNum.get(truckNumber)?.state?.wearers ?? 0);
+    const live = boardByNum.get(truckNumber)?.state?.wearers ?? 0;
+    if (live > 0) return String(live);
+    return String(dayTemplate.wearers[truckNumber] ?? 0);
+  }
+
+  /** True when the shown value came from the day sheet, not from tonight's board. */
+  function wearersFromTemplate(truckNumber: number): boolean {
+    if (wearerDrafts[truckNumber] != null) return false;
+    const live = boardByNum.get(truckNumber)?.state?.wearers ?? 0;
+    return live === 0 && (dayTemplate.wearers[truckNumber] ?? 0) > 0;
   }
 
   async function assignTruck(truckNumber: number, batchNumber: number) {
@@ -181,6 +197,10 @@ export default function BatchingWizard() {
         title="Batching Wizard"
         subtitle={`Work batch by batch for ${runDate}. Target ${noCap ? "∞" : wearerCap.toLocaleString()} wearers per batch — as close as possible, don't go over.`}
       />
+
+      {/* The sheet notes ARE batching constraints ("69 must be in its own
+          batch"), so they belong in front of whoever is batching. */}
+      <UnloadDayNotes unloadsDay={unloadsDay} />
 
       {/* Run date + roster scope */}
       <div className="card flex flex-wrap items-center justify-between gap-3">
@@ -273,6 +293,7 @@ export default function BatchingWizard() {
           setFilter={setFilter}
           busyTruck={busyTruck}
           draftWearers={draftWearers}
+          wearersFromTemplate={wearersFromTemplate}
           setWearerDrafts={setWearerDrafts}
           onToggleTruck={toggleTruck}
           onAssignTruck={assignTruck}
@@ -367,6 +388,7 @@ function BatchStep({
   setFilter,
   busyTruck,
   draftWearers,
+  wearersFromTemplate,
   setWearerDrafts,
   onToggleTruck,
   onAssignTruck,
@@ -387,6 +409,7 @@ function BatchStep({
   setFilter: (v: string) => void;
   busyTruck: number | null;
   draftWearers: (n: number) => string;
+  wearersFromTemplate: (n: number) => boolean;
   setWearerDrafts: React.Dispatch<React.SetStateAction<Record<number, string>>>;
   onToggleTruck: (t: TruckWithState) => void;
   onAssignTruck: (truckNumber: number, batchNumber: number) => void;
@@ -547,6 +570,14 @@ function BatchStep({
                     }}
                   />
                   <span className="text-xs text-slate-500">wearers</span>
+                  {wearersFromTemplate(num) && (
+                    <span
+                      className="rounded bg-sky-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300"
+                      title="Prefilled from this unload day's standing sheet — edit if it's different tonight"
+                    >
+                      sheet
+                    </span>
+                  )}
                   <button
                     disabled={busy}
                     className="ml-auto h-7 w-7 rounded-md bg-slate-800 text-xs text-slate-500 hover:bg-red-900/60 hover:text-red-300"

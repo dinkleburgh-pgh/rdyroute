@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import CoverageCards from "../components/CoverageCards";
+import UnloadDayNotes from "../components/UnloadDayNotes";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import {
@@ -465,6 +466,8 @@ export default function Unload() {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-5 p-3 md:p-6">
 
         {/* Previous load-day coverage */}
+        <UnloadDayNotes unloadsDay={unloadsDay} />
+
         {prevCoverage.items.length > 0 && (
           <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 px-3 py-2.5">
             <div className="mb-1.5 flex items-center gap-2">

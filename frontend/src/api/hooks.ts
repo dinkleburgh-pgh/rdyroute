@@ -1126,6 +1126,48 @@ export function useUpsertSetting() {
   });
 }
 
+// ---------------------------------------------------------------------------
+// Unload-day templates (per unload day 1-5)
+//
+// The paper unload sheet is the same every week for a given day: the same
+// routes with the same wearer counts, and the same standing notes ("69 must be
+// in its own batch"). Storing that per day means the batching wizard can
+// prefill wearers instead of someone retyping ~20 numbers a night.
+//
+// Kept in AppSettings (like recurring_route_swaps) rather than a table — it's
+// a handful of small documents, edited rarely, and needs no migration.
+// ---------------------------------------------------------------------------
+
+export const unloadDayWearersKey = (day: number) => `unload_day_wearers_${day}`;
+export const unloadDayNotesKey = (day: number) => `unload_day_notes_${day}`;
+
+export interface UnloadDayTemplate {
+  /** truck number -> wearers for this unload day. */
+  wearers: Record<number, number>;
+  /** Standing notes for this unload day, one per line. */
+  notes: string;
+}
+
+/** The stored template for an unload day (1-5). Reads the shared settings
+ *  payload, so it costs no extra request. */
+export function useUnloadDayTemplate(day: number | null | undefined): UnloadDayTemplate {
+  const { data: settings = [] } = useSettings();
+  return useMemo(() => {
+    if (day == null) return { wearers: {}, notes: "" };
+    const raw = settings.find((s) => s.key === unloadDayWearersKey(day))?.value;
+    const wearers: Record<number, number> = {};
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        const n = Number(k);
+        const w = Number(v);
+        if (Number.isFinite(n) && Number.isFinite(w)) wearers[n] = w;
+      }
+    }
+    const notesRaw = settings.find((s) => s.key === unloadDayNotesKey(day))?.value;
+    return { wearers, notes: typeof notesRaw === "string" ? notesRaw : "" };
+  }, [settings, day]);
+}
+
 export function useSyncProductionData() {
   const qc = useQueryClient();
   return useMutation({
