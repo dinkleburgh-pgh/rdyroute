@@ -33,6 +33,7 @@ export default function InProgressHeroPanel({
   onFinish,
   onCancel,
   onShortSheet,
+  onChangeNextUp,
   variant = "page",
 }: {
   truck: TruckWithState;
@@ -44,6 +45,9 @@ export default function InProgressHeroPanel({
   onCancel: () => void;
   /** Display only — opens the short-sheet drawer for this truck. */
   onShortSheet?: () => void;
+  /** Opens the next-up picker. Rendered as a button under the Next Up number
+   *  so the queue can be changed without leaving the timer. */
+  onChangeNextUp?: () => void;
   variant?: "page" | "display";
 }) {
   const big = variant === "display";
@@ -130,7 +134,16 @@ export default function InProgressHeroPanel({
                     )}
                   </>
                 ) : (
-              <div className="font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-ink-faint">—</div>
+              <div className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-ink-faint", big ? "text-[92px]" : "text-[58px]")}>—</div>
+            )}
+            {onChangeNextUp && (
+              <button
+                type="button"
+                onClick={onChangeNextUp}
+                className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-sky-700/50 bg-sky-950/40 px-3 py-1.5 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-900/50"
+              >
+                {nextUp ? "Change Next Up" : "Set Next Up"}
+              </button>
             )}
           </div>
         </div>

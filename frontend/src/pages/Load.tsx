@@ -368,6 +368,7 @@ export default function Load() {
             nextUp={nextUpTruck}
             onFinish={() => requestFinish(inProgress)}
             onCancel={() => cancelLoad(inProgress)}
+            onChangeNextUp={() => setNextUpOpen(true)}
           />
           <InlineShortages truck={inProgress} runDate={runDate} />
         </>

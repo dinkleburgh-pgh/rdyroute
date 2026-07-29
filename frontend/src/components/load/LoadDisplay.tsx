@@ -3,9 +3,9 @@ import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Maximize2, X } from "lucide-react";
 import { formatRunDate } from "../../utils/dates";
-import { useShortages } from "../../api/hooks";
+import { useNextUp, useShortages } from "../../api/hooks";
 import { ShortageLogger } from "../../pages/Shorts";
-import { StartNextUpBanner } from "../LiveInProgress";
+import { NextUpPanel, StartNextUpBanner } from "../LiveInProgress";
 import CoverageCards from "../CoverageCards";
 import WorkflowCard from "../WorkflowCard";
 import GarmentsStrip from "./GarmentsStrip";
@@ -69,7 +69,9 @@ export default function LoadDisplay({
     return ZOOM_STEPS.includes(raw) ? raw : 1.5;
   });
   const [shortSheetOpen, setShortSheetOpen] = useState(false);
+  const [nextUpOpen, setNextUpOpen] = useState(false);
   const [viewportWidth, setViewportWidth] = useState(() => window.innerWidth);
+  const { data: storedNextUp } = useNextUp(runDate);
 
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth);
@@ -88,7 +90,8 @@ export default function LoadDisplay({
     effectiveWidth >= 1000 ? "minmax(0,2.2fr) minmax(0,1fr)" : "minmax(0,1fr)";
 
   const dialogOpen =
-    actions.confirmLoadTruck !== null || actions.confirmGarmentTruck !== null || shortSheetOpen;
+    actions.confirmLoadTruck !== null || actions.confirmGarmentTruck !== null ||
+    shortSheetOpen || nextUpOpen;
 
   // Esc leaves the display — but never while something is layered on top.
   // ConfirmDialog registers its own Escape listener, so without this guard a
@@ -187,6 +190,7 @@ export default function LoadDisplay({
                   onFinish={() => requestFinish(inProgress)}
                   onCancel={() => void cancelLoad(inProgress)}
                   onShortSheet={() => setShortSheetOpen(true)}
+                  onChangeNextUp={() => setNextUpOpen(true)}
                 />
               ) : queuedNextUp ? (
                 <StartNextUpBanner
@@ -284,6 +288,42 @@ export default function LoadDisplay({
           </div>
         </div>
       </div>
+
+      {/* Next-up picker. Portaled to body at z-[90] — the Load page's own
+          picker is z-[80], which would render BEHIND this overlay. */}
+      {nextUpOpen && createPortal(
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/70 p-4"
+          onClick={() => setNextUpOpen(false)}
+        >
+          <div
+            className="flex w-full max-w-lg flex-col rounded-xl border border-hairline bg-surface shadow-card"
+            style={{ maxHeight: "90vh" }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
+              <h3 className="text-base font-bold tracking-wide">Set Next Up</h3>
+              <button
+                onClick={() => setNextUpOpen(false)}
+                className="rounded-md p-1 text-ink-muted hover:bg-surface-2 hover:text-ink"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="overflow-y-auto p-5">
+              <NextUpPanel
+                runDate={runDate}
+                nextUp={storedNextUp ?? null}
+                unloaded={readySorted}
+                anyInProgress={Boolean(inProgress)}
+                onPick={() => setNextUpOpen(false)}
+                defaultOpen
+              />
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )}
 
       {shortSheetOpen && inProgress && (
         <ShortSheetDrawer
