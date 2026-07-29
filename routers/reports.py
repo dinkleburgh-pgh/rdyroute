@@ -206,7 +206,7 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
 /* Top-shorted trucks: one equal-width card per truck on a single row. With
    flex-basis 220px the 5th card wrapped and stretched to the full width, and
    sat flush against the shortage table below. */
-.tcards { display: flex; gap: 6px; margin: 0 0 12px; }
+.tcards { display: flex; gap: 6px; margin: 0 0 12px; page-break-inside: avoid; }
 .tcard { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
          border-radius: 12px; padding: 7px 9px; }
 .rank { font-size: 10px; font-weight: 700; color: #7a8698; }
@@ -238,7 +238,7 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
 
 /* Coverage renders as big paired ROUTE -> TRUCK cards (the app's canonical
    coverage read) rather than a dense list. */
-.cov-row { display: flex; gap: 8px; }
+.cov-row { display: flex; gap: 8px; page-break-inside: avoid; }
 .cov-row + .cov-row { margin-top: 8px; }
 .cov { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
        border-radius: 12px; padding: 9px 10px; text-align: center; }
@@ -323,7 +323,7 @@ def _batches_html(b: BatchesSectionVM | None) -> str:
 def _coverage_html(c: CoverageSectionVM | None) -> str:
     if c is None:
         return ""
-    out = ['<section class="page">', _section_head("Load", "Routes covered")]
+    out = ['<section class="lead">', _section_head("Load", "Routes covered")]
     if not c.rows:
         out.append('<div class="empty">No route coverage recorded for this day.</div></section>')
         return "".join(out)
@@ -597,15 +597,17 @@ def render_report_html(vm: ReportViewModel) -> str:
         bits.append("Generated " + gen.strftime("%b %d, %Y %I:%M %p"))
     body = "".join(
         [
-            # Page 1 shares the title with the shortage summary; every
-            # section after it starts a fresh page of its own.
+            # Page 1 leads with route coverage — who is carrying whose
+            # route is the first thing to know — followed by the shortage
+            # summary. Every section after those starts a fresh page.
+            _coverage_html(vm.coverage),
             _shortages_html(vm.shortages),
             _short_grid_html(vm.shortages),
             _sheet_cards_html(vm.shortages),
-            _batches_html(vm.batches),
-            _coverage_html(vm.coverage),
             _load_times_html(vm.load_times),
             _audit_html(vm.audit),
+            # Batches last.
+            _batches_html(vm.batches),
         ]
     )
     return (
