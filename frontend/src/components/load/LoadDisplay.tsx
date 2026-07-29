@@ -81,11 +81,11 @@ export default function LoadDisplay({
   // md:/xl: breakpoints would keep resolving against the real viewport and the
   // panels would squeeze instead of reflowing. Derive the columns ourselves.
   const effectiveWidth = viewportWidth / zoom;
-  const heroCols = effectiveWidth >= 1100 ? "minmax(0,2fr) minmax(0,1fr)" : "minmax(0,1fr)";
-  const panelCols =
-    effectiveWidth >= 1400 ? "repeat(3,minmax(0,1fr))"
-    : effectiveWidth >= 900 ? "repeat(2,minmax(0,1fr))"
-    : "minmax(0,1fr)";
+  // Main working column on the left (truck, ready list, notes), a narrower
+  // reference rail on the right (garments, coverage). Below ~1000px effective
+  // it stacks, and the rail follows the work rather than crowding it.
+  const shellCols =
+    effectiveWidth >= 1000 ? "minmax(0,2.2fr) minmax(0,1fr)" : "minmax(0,1fr)";
 
   const dialogOpen =
     actions.confirmLoadTruck !== null || actions.confirmGarmentTruck !== null || shortSheetOpen;
@@ -171,104 +171,108 @@ export default function LoadDisplay({
       {/* Body */}
       <div className="min-h-0 flex-1 overflow-auto">
         <div style={{ zoom }} className="space-y-4 p-4 sm:p-6">
-          {/* Hero row */}
-          <div className="grid items-stretch gap-4" style={{ gridTemplateColumns: heroCols }}>
-            {inProgress ? (
-              <InProgressHeroPanel
-                variant="display"
-                truck={inProgress}
-                paceAvgSeconds={paceAvgSeconds}
-                busy={busy === inProgress.truck_number}
-                loadDay={loadDay}
-                nextUp={nextUpTruck}
-                onFinish={() => requestFinish(inProgress)}
-                onCancel={() => void cancelLoad(inProgress)}
-                onShortSheet={() => setShortSheetOpen(true)}
-              />
-            ) : queuedNextUp ? (
-              <StartNextUpBanner
-                truck={queuedNextUp}
-                paceAvgSeconds={paceAvgSeconds}
-                busy={busy === queuedNextUp.truck_number}
-                onStart={() => requestStart(queuedNextUp)}
-                blockedReason={
-                  queuedNextUp.truck_type === "Spare" &&
-                  queuedNextUp.route_swap_route == null &&
-                  queuedNextUp.state?.oos_spare_route == null
-                    ? "This spare has no route to cover yet — assign one on the board first."
-                    : null
-                }
-              />
-            ) : (
-              <div className="card flex flex-col items-center justify-center py-10 text-center">
-                <p className="text-2xl font-bold text-st-loaded">
-                  {readySorted.length > 0 ? "Nothing loading" : "All caught up"}
-                </p>
-                <p className="mt-1 text-sm text-ink-muted">
-                  {readySorted.length > 0
-                    ? "Tap a truck below to start it."
-                    : `${loadedCount} loaded today.`}
-                </p>
-              </div>
-            )}
+          {/* Two columns: the work on the left, reference on the right. */}
+          <div className="grid items-start gap-4" style={{ gridTemplateColumns: shellCols }}>
 
-            <LoadNotesPanel truck={inProgress} loadDay={loadDay} runDate={runDate} />
-          </div>
-
-          {/* Panel row */}
-          <div className="grid items-start gap-4" style={{ gridTemplateColumns: panelCols }}>
-            <div className="card">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-st-unloaded">
-                Ready to load ({readySorted.length})
-              </h3>
-              {readySorted.length === 0 ? (
-                <p className="py-4 text-center text-sm text-ink-faint">Nothing ready.</p>
+            {/* LEFT — what you act on */}
+            <div className="flex min-w-0 flex-col gap-4">
+              {inProgress ? (
+                <InProgressHeroPanel
+                  variant="display"
+                  truck={inProgress}
+                  paceAvgSeconds={paceAvgSeconds}
+                  busy={busy === inProgress.truck_number}
+                  loadDay={loadDay}
+                  nextUp={nextUpTruck}
+                  onFinish={() => requestFinish(inProgress)}
+                  onCancel={() => void cancelLoad(inProgress)}
+                  onShortSheet={() => setShortSheetOpen(true)}
+                />
+              ) : queuedNextUp ? (
+                <StartNextUpBanner
+                  truck={queuedNextUp}
+                  paceAvgSeconds={paceAvgSeconds}
+                  busy={busy === queuedNextUp.truck_number}
+                  onStart={() => requestStart(queuedNextUp)}
+                  blockedReason={
+                    queuedNextUp.truck_type === "Spare" &&
+                    queuedNextUp.route_swap_route == null &&
+                    queuedNextUp.state?.oos_spare_route == null
+                      ? "This spare has no route to cover yet — assign one on the board first."
+                      : null
+                  }
+                />
               ) : (
-                <div
-                  className="grid gap-2"
-                  style={{ gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))" }}
-                >
-                  {readySorted.map((t) => (
-                    <button
-                      key={t.truck_number}
-                      type="button"
-                      disabled={Boolean(inProgress) || busy === t.truck_number}
-                      onClick={() => requestStart(t)}
-                      className={clsx(
-                        "text-left transition-all",
-                        inProgress ? "cursor-not-allowed opacity-50" : "active:scale-[0.98]",
-                      )}
-                    >
-                      <WorkflowCard
-                        truck={t}
-                        accent="text-st-unloaded"
-                        statusLabel="Unloaded"
-                        statusClassName="bg-[#16a34a] text-white"
-                        interactive={!inProgress}
-                        ringClassName="hover:ring-st-unloaded"
-                      />
-                    </button>
-                  ))}
+                <div className="card flex flex-col items-center justify-center py-10 text-center">
+                  <p className="text-2xl font-bold text-st-loaded">
+                    {readySorted.length > 0 ? "Nothing loading" : "All caught up"}
+                  </p>
+                  <p className="mt-1 text-sm text-ink-muted">
+                    {readySorted.length > 0
+                      ? "Tap a truck below to start it."
+                      : `${loadedCount} loaded today.`}
+                  </p>
                 </div>
               )}
+
+              <div className="card">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-st-unloaded">
+                  Ready to load ({readySorted.length})
+                </h3>
+                {readySorted.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink-faint">Nothing ready.</p>
+                ) : (
+                  <div
+                    className="grid gap-2"
+                    style={{ gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))" }}
+                  >
+                    {readySorted.map((t) => (
+                      <button
+                        key={t.truck_number}
+                        type="button"
+                        disabled={Boolean(inProgress) || busy === t.truck_number}
+                        onClick={() => requestStart(t)}
+                        className={clsx(
+                          "text-left transition-all",
+                          inProgress ? "cursor-not-allowed opacity-50" : "active:scale-[0.98]",
+                        )}
+                      >
+                        <WorkflowCard
+                          truck={t}
+                          accent="text-st-unloaded"
+                          statusLabel="Unloaded"
+                          statusClassName="bg-[#16a34a] text-white"
+                          interactive={!inProgress}
+                          ringClassName="hover:ring-st-unloaded"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <LoadNotesPanel truck={inProgress} loadDay={loadDay} runDate={runDate} />
             </div>
 
-            <div className="card">
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-400">
-                Coverage today ({coverage.length})
-              </h3>
-              {coverage.length === 0 ? (
-                <p className="py-4 text-center text-sm text-ink-faint">No coverage today.</p>
-              ) : (
-                <CoverageCards
-                  entries={coverage}
-                  isRecurring={isRecurringCoverage}
-                  className="grid grid-cols-1 gap-2.5"
-                />
-              )}
-            </div>
+            {/* RIGHT — reference you glance at, garments first */}
+            <div className="flex min-w-0 flex-col gap-4">
+              <GarmentsStrip trucks={garmentTrucks} />
 
-            <GarmentsStrip trucks={garmentTrucks} />
+              <div className="card">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-400">
+                  Coverage today ({coverage.length})
+                </h3>
+                {coverage.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink-faint">No coverage today.</p>
+                ) : (
+                  <CoverageCards
+                    entries={coverage}
+                    isRecurring={isRecurringCoverage}
+                    className="grid grid-cols-1 gap-2.5"
+                  />
+                )}
+              </div>
+            </div>
 
           </div>
         </div>
