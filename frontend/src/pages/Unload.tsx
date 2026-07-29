@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
-import CoverageList from "../components/CoverageList";
+import CoverageCards from "../components/CoverageCards";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import {
@@ -474,7 +474,9 @@ export default function Unload() {
                 <span className="text-[10px] text-amber-500/70">({format(new Date(`${prevCoverage.date}T12:00:00`), "EEE MMM d")})</span>
               )}
             </div>
-            <CoverageList entries={unloadCoverage} />
+            <div className="mt-2">
+              <CoverageCards entries={unloadCoverage} showPrevBadge={false} />
+            </div>
           </div>
         )}
 

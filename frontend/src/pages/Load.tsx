@@ -47,6 +47,7 @@ import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import CoverageTag from "../components/CoverageTag";
+import CoverageCards from "../components/CoverageCards";
 
 /**
  * Load workflow (V1 parity):
@@ -405,40 +406,7 @@ export default function Load() {
             </span>
           </div>
           <div className="border-t px-3 pb-3 pt-3" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-            <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3">
-              {loadCoverage.map((e) => (
-                <div
-                  key={`${e.route}-${e.cover}-${e.prev ? "p" : "t"}`}
-                  className="rounded-xl border border-hairline bg-surface p-3"
-                >
-                  <div className="flex items-center justify-center gap-4">
-                    <div className="text-center">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Route</p>
-                      <p className="font-mono text-3xl font-black leading-none tabular-nums text-sky-300">#{e.route}</p>
-                    </div>
-                    <span className="text-2xl font-black leading-none text-ink-faint">{e.kind === "split" ? "+" : "→"}</span>
-                    <div className="text-center">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Loads on</p>
-                      <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">#{e.cover}</p>
-                    </div>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
-                    {e.kind === "split" && (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">split</span>
-                    )}
-                    {e.kind === "swap-twoway" && (
-                      <span className="rounded bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">2-way</span>
-                    )}
-                    {isRecurringCoverage(e.route, e.cover) && (
-                      <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
-                    )}
-                    {e.prev && (
-                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">prev day</span>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>
+            <CoverageCards entries={loadCoverage} isRecurring={isRecurringCoverage} />
           </div>
         </div>
       )}
