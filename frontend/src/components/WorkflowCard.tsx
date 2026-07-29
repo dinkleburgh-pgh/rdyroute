@@ -22,6 +22,7 @@ export default function WorkflowCard({
   ringClassName = "hover:ring-blue-500",
   coverageRoute,
   coverageSplit = false,
+  compact = false,
 }: {
   truck: TruckWithState;
   accent: string;
@@ -42,6 +43,9 @@ export default function WorkflowCard({
   /** With coverageRoute set, render the pair as a SPLIT ("route + truck",
    *  amber) — the truck carried that route's overflow (prev-day split). */
   coverageSplit?: boolean;
+  /** Denser card — smaller number and a shorter body. Used where many cards
+   *  share a panel (the Load Display's ready list) rather than owning a page. */
+  compact?: boolean;
 }) {
   const overrideActive = coverageRoute !== undefined;
   const derivedCover = getCoverageRouteNumber(truck);
@@ -53,7 +57,10 @@ export default function WorkflowCard({
   return (
     <div
       className={clsx(
-        "card relative flex h-full min-h-[5.5rem] flex-col gap-1 p-2 md:min-h-[11.5rem] md:gap-2 md:p-4",
+        "card relative flex h-full flex-col gap-1 p-2",
+        compact
+          ? "min-h-[4.25rem] md:min-h-[6.5rem] md:gap-1.5 md:p-2.5"
+          : "min-h-[5.5rem] md:min-h-[11.5rem] md:gap-2 md:p-4",
         interactive && "hover:ring-2 transition-shadow",
         interactive && ringClassName,
         disabled && "cursor-not-allowed opacity-50",
@@ -99,8 +106,8 @@ export default function WorkflowCard({
           if (pairRoute == null) {
             return (
               <div className="flex w-full items-start justify-between gap-2">
-                <div className="flex min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
-                  <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl md:text-5xl", accent)}>
+                <div className={clsx("flex flex-col justify-between gap-0.5", compact ? "min-h-[2rem] md:min-h-[2.5rem]" : "min-h-[2.5rem] md:min-h-[4.5rem]")}>
+                  <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none", compact ? "text-xl md:text-3xl" : "text-2xl md:text-5xl", accent)}>
                     {truck.truck_number}
                   </span>
                 </div>
@@ -116,7 +123,7 @@ export default function WorkflowCard({
           return (
             <>
               <div className="flex w-full justify-end">{badges}</div>
-              <div className="flex min-h-[2.5rem] min-w-0 items-start gap-1.5 md:min-h-[4rem] md:gap-2">
+              <div className={clsx("flex min-w-0 items-start gap-1.5 md:gap-2", compact ? "min-h-[1.75rem] md:min-h-[2rem]" : "min-h-[2.5rem] md:min-h-[4rem]")}>
                 <div className="flex flex-col items-center">
                   <span className={clsx(
                     "font-mono font-black tabular-nums tracking-[-0.02em] leading-none text-2xl md:text-4xl",

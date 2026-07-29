@@ -41,12 +41,16 @@ function applies(n: TruckNote, loadDayNum: number | null): boolean {
 
 export default function LoadNotesPanel({
   truck,
+  upcoming = [],
   loadDay,
   runDate,
   className,
 }: {
   /** The truck being loaded — null when nothing is in progress. */
   truck: TruckWithState | null | undefined;
+  /** Trucks waiting to load. Their notes show in a secondary section, so a
+   *  constraint is read BEFORE the truck is started, not after. */
+  upcoming?: TruckWithState[];
   loadDay: number;
   runDate: string;
   className?: string;
@@ -60,22 +64,35 @@ export default function LoadNotesPanel({
   const { data: notices = [] } = useNotices(true);
   // Passing loadDay lets the server drop non-matching workday notes for us —
   // supported since the notes router shipped, never used until now.
-  const { data: notes = [] } = useTruckNotes(
-    truckNumber != null ? { truckNumber, loadDay: dayNum, activeOnly: true } : { activeOnly: true },
-  );
+  // One query for the whole fleet rather than one per truck — the endpoint
+  // returns every truck's notes when truck_number is omitted.
+  const { data: notes = [] } = useTruckNotes({ loadDay: dayNum, activeOnly: true });
   const { data: settings = [] } = useSettings();
   const shiftNotesEnabled = settings.find((s) => s.key === "shift_notes_enabled")?.value !== false;
   const { data: dailyNotes = "" } = useDailyNotes(runDate);
 
   const warnings = truckNumber != null ? warningsByTruck[String(truckNumber)] ?? [] : [];
-  const truckNotes = truckNumber != null ? notes.filter((n) => applies(n, dayNum)) : [];
+  const truckNotes =
+    truckNumber != null
+      ? notes.filter((n) => n.truck_number === truckNumber && applies(n, dayNum))
+      : [];
+  // Notes and warnings on the trucks queued behind this one.
+  const upcomingNotes = upcoming
+    .filter((t) => t.truck_number !== truckNumber)
+    .map((t) => ({
+      truck: t,
+      notes: notes.filter((n) => n.truck_number === t.truck_number && applies(n, dayNum)),
+      warnings: warningsByTruck[String(t.truck_number)] ?? [],
+    }))
+    .filter((g) => g.notes.length > 0 || g.warnings.length > 0);
   const loudNotices = notices.filter((n) => n.severity !== "info");
   const offNote = truck?.state?.off_note?.trim() ?? "";
   const shopNote = truck?.state?.shop_note?.trim() ?? "";
   const shiftNote = shiftNotesEnabled ? dailyNotes.trim() : "";
 
+  const upcomingCount = upcomingNotes.reduce((n, g) => n + g.notes.length + g.warnings.length, 0);
   const count =
-    warnings.length + truckNotes.length + loudNotices.length +
+    warnings.length + truckNotes.length + loudNotices.length + upcomingCount +
     (offNote ? 1 : 0) + (shopNote ? 1 : 0) + (shiftNote ? 1 : 0);
 
   return (
@@ -94,7 +111,7 @@ export default function LoadNotesPanel({
           panel row every time the truck changes. */}
       {count === 0 && (
         <p className="py-4 text-center text-sm text-ink-faint">
-          {truckNumber != null ? "Nothing flagged for this truck." : "No truck loading."}
+          {truckNumber != null ? "Nothing flagged for this truck." : "Nothing flagged."}
         </p>
       )}
 
@@ -163,6 +180,29 @@ export default function LoadNotesPanel({
         <div className="rounded-xl border border-hairline bg-surface-2 px-3 py-2">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Shop note</p>
           <p className="text-sm leading-snug text-ink-soft">{shopNote}</p>
+        </div>
+      )}
+
+      {/* 4b — what's flagged on the trucks coming up */}
+      {upcomingNotes.length > 0 && (
+        <div className="space-y-1.5 border-t border-hairline pt-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Coming up</p>
+          {upcomingNotes.map((g) => (
+            <div key={g.truck.truck_number} className="rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5">
+              <p className="font-mono text-xs font-bold tabular-nums text-ink-soft">#{g.truck.truck_number}</p>
+              {g.warnings.map((w) => (
+                <p key={w.id} className="mt-0.5 flex gap-1.5 text-xs leading-snug text-st-dirty">
+                  <AlertTriangleIcon className="mt-0.5 h-3 w-3 shrink-0" />
+                  <span>{w.item_label} ×{w.quantity}{w.note ? ` — ${w.note}` : ""}</span>
+                </p>
+              ))}
+              {g.notes.map((n) => (
+                <p key={n.id} className="mt-0.5 text-xs leading-snug text-ink-muted">
+                  {n.created_by === "driver" ? "Driver: " : ""}{n.body}
+                </p>
+              ))}
+            </div>
+          ))}
         </div>
       )}
 

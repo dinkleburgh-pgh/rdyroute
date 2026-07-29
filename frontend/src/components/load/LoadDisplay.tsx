@@ -81,9 +81,9 @@ export default function LoadDisplay({
   // md:/xl: breakpoints would keep resolving against the real viewport and the
   // panels would squeeze instead of reflowing. Derive the columns ourselves.
   const effectiveWidth = viewportWidth / zoom;
-  // Main working column on the left (truck, ready list, notes), a narrower
-  // reference rail on the right (garments, coverage). Below ~1000px effective
-  // it stacks, and the rail follows the work rather than crowding it.
+  // Main working column on the left (the truck, then the ready list), a
+  // narrower reference rail on the right (garments, notes, coverage). Below
+  // ~1000px effective it stacks, rail after the work.
   const shellCols =
     effectiveWidth >= 1000 ? "minmax(0,2.2fr) minmax(0,1fr)" : "minmax(0,1fr)";
 
@@ -224,7 +224,7 @@ export default function LoadDisplay({
                 ) : (
                   <div
                     className="grid gap-2"
-                    style={{ gridTemplateColumns: "repeat(auto-fill,minmax(220px,1fr))" }}
+                    style={{ gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))" }}
                   >
                     {readySorted.map((t) => (
                       <button
@@ -239,6 +239,7 @@ export default function LoadDisplay({
                       >
                         <WorkflowCard
                           truck={t}
+                          compact
                           accent="text-st-unloaded"
                           statusLabel="Unloaded"
                           statusClassName="bg-[#16a34a] text-white"
@@ -251,12 +252,18 @@ export default function LoadDisplay({
                 )}
               </div>
 
-              <LoadNotesPanel truck={inProgress} loadDay={loadDay} runDate={runDate} />
             </div>
 
             {/* RIGHT — reference you glance at, garments first */}
             <div className="flex min-w-0 flex-col gap-4">
               <GarmentsStrip trucks={garmentTrucks} />
+
+              <LoadNotesPanel
+                truck={inProgress}
+                upcoming={readySorted}
+                loadDay={loadDay}
+                runDate={runDate}
+              />
 
               <div className="card">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-400">
