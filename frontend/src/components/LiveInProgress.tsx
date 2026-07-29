@@ -42,6 +42,37 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
     [board],
   );
 
+  // Starting the queued truck straight from here — see the no-truck branch.
+  const upsert = useUpsertTruckState();
+  const clearNextUp = useClearNextUp(runDate);
+  const [starting, setStarting] = useState(false);
+  const nextUpTruck = useMemo(
+    () => unloaded.find((t) => t.truck_number === nextUp && t.state?.priority_hold !== true) ?? null,
+    [unloaded, nextUp],
+  );
+  async function startNextUp(t: TruckWithState) {
+    setStarting(true);
+    try {
+      await upsert.mutateAsync({
+        truck_number: t.truck_number,
+        run_date: runDate,
+        status: "in_progress",
+        wearers: t.state?.wearers ?? 0,
+        load_start_time: Date.now() / 1000,
+        load_finish_time: null,
+        load_duration_seconds: null,
+      });
+      // It's loading now, so it isn't "next" any more.
+      clearNextUp.mutate();
+    } catch (err) {
+      // Backend refuses an uncovered spare (409) — surfaced by the guard below,
+      // but a race can still land here.
+      console.error("start next up failed", err);
+    } finally {
+      setStarting(false);
+    }
+  }
+
   const loadDay = inProgress?.state?.load_day_num ?? null;
   const scheduledTotal = useMemo(
     () =>
@@ -58,13 +89,26 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
           <div className="card flex flex-col items-center justify-center py-8 text-center">
             <p className="text-lg font-semibold text-st-loaded">No truck currently in progress.</p>
             <p className="mt-1 text-sm text-ink-muted">
-              {nextUp != null ? (
-                <>Next up: <span className="font-mono font-bold text-sky-300">#{nextUp}</span> — start it from the Load page.</>
-              ) : (
-                "Pick a next-up truck below, then start it from the Load page."
-              )}
+              {nextUpTruck != null
+                ? "The queued truck is ready to go — start it below."
+                : nextUp != null
+                  ? <>Next up <span className="font-mono font-bold text-sky-300">#{nextUp}</span> isn't ready to load right now.</>
+                  : "Pick a next-up truck below to queue it."}
             </p>
           </div>
+          {nextUpTruck && (
+            <StartNextUpBanner
+              truck={nextUpTruck}
+              paceAvgSeconds={pace?.avg_seconds ?? null}
+              busy={starting}
+              onStart={() => void startNextUp(nextUpTruck)}
+              blockedReason={
+                nextUpTruck.truck_type === "Spare" && getCoverageRouteNumber(nextUpTruck) == null
+                  ? "This spare has no route to cover yet — assign one on the board first."
+                  : null
+              }
+            />
+          )}
           {/* The queue picker used to be unreachable here — the hero (with its
               Set Next Up button) only renders while a truck IS in progress. */}
           <NextUpPanel runDate={runDate} nextUp={nextUp ?? null} unloaded={unloaded} anyInProgress={false} />
@@ -105,6 +149,77 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
         </div>
       </div>
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StartNextUpBanner — the hand-off between one load and the next
+// ---------------------------------------------------------------------------
+
+/**
+ * Shown when NOTHING is in progress and a next-up truck is queued: the whole
+ * point is that finishing a load leaves you one tap from starting the next one,
+ * instead of hunting the queued truck back out of the ready grid.
+ *
+ * Starting is the caller's job (`onStart`) because the two surfaces differ: the
+ * Load page routes it through its existing confirm dialog (which carries the
+ * uncovered-spare guard), while the live board starts it directly.
+ */
+export function StartNextUpBanner({
+  truck,
+  paceAvgSeconds,
+  busy,
+  onStart,
+  blockedReason,
+}: {
+  truck: TruckWithState;
+  paceAvgSeconds?: number | null;
+  busy?: boolean;
+  onStart: () => void;
+  /** Set to explain why starting isn't possible; disables the button. */
+  blockedReason?: string | null;
+}) {
+  const coverageRoute = getCoverageRouteNumber(truck);
+  return (
+    <section
+      className="overflow-hidden rounded-xl border-2"
+      style={{ borderColor: "rgba(125,211,252,0.45)", background: "rgba(125,211,252,0.07)" }}
+    >
+      <div className="h-[3px] w-full" style={{ background: "#7dd3fc" }} />
+      <div className="flex flex-wrap items-center gap-4 p-4">
+        <div className="min-w-0 flex-1 text-center sm:text-left">
+          <div className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Next up</div>
+          <div className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1 sm:justify-start">
+            <span
+              className="font-mono text-[46px] font-black leading-none tabular-nums tracking-[-0.02em]"
+              style={{ color: "#7dd3fc" }}
+            >
+              #{truck.truck_number}
+            </span>
+            <span className="text-sm text-ink-muted">
+              {truckTypeLabel(truck.truck_type)}
+              {truck.state?.wearers ? ` · ${truck.state.wearers} wearers` : ""}
+              {paceAvgSeconds != null ? ` · avg ${formatDuration(paceAvgSeconds)}` : ""}
+            </span>
+          </div>
+          {coverageRoute != null && (
+            <CoverageTag route={coverageRoute} truck={truck.truck_number} className="mt-1.5" />
+          )}
+          {blockedReason && (
+            <p className="mt-1.5 text-xs text-st-inprogress">{blockedReason}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={busy || Boolean(blockedReason)}
+          className="w-full rounded-lg px-5 py-3 text-sm font-bold text-white transition-opacity disabled:opacity-50 sm:w-auto"
+          style={{ background: "#16a34a" }}
+        >
+          {busy ? "Starting…" : `Start Loading #${truck.truck_number}`}
+        </button>
+      </div>
+    </section>
   );
 }
 

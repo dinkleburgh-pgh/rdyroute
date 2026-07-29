@@ -16,6 +16,7 @@ import {
   useUpsertTruckState,
   useLoadSequenceSuggestions,
   useNextUp,
+  useClearNextUp,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
 } from "../api/hooks";
@@ -37,7 +38,7 @@ import {
   GARMENT_PENDING_HEX,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
-import { NextUpPanel, PaceBar, useElapsed } from "../components/LiveInProgress";
+import { NextUpPanel, PaceBar, StartNextUpBanner, useElapsed } from "../components/LiveInProgress";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
@@ -116,9 +117,18 @@ export default function Load() {
   // Manually-set Next Up (shared with the In Progress page). When set and the
   // truck is still ready it wins; otherwise fall back to the first ready truck.
   const { data: storedNextUp } = useNextUp(runDate);
+  const clearNextUp = useClearNextUp(runDate);
   const [nextUpOpen, setNextUpOpen] = useState(false);
   const nextUpTruck = useMemo(
     () => ready.find((t) => t.truck_number === storedNextUp) ?? ready[0],
+    [ready, storedNextUp],
+  );
+  // Only an EXPLICITLY queued truck gets the big green start banner — the
+  // fallback above (first ready truck) is fine as a hint inside the in-progress
+  // panel, but it shouldn't put a one-tap "Start Loading" on a truck nobody
+  // actually picked.
+  const queuedNextUp = useMemo(
+    () => ready.find((t) => t.truck_number === storedNextUp) ?? null,
     [ready, storedNextUp],
   );
   // Historical load-order suggestions ("usually loads ~3rd"), filtered to
@@ -258,6 +268,10 @@ export default function Load() {
         load_finish_time: null,
         load_duration_seconds: null,
       });
+      // Once the queued truck is actually loading it isn't "next" any more —
+      // clear it so the queue doesn't hold a stale pick through the next
+      // hand-off.
+      if (storedNextUp === t.truck_number) clearNextUp.mutate();
       // Bump the viewer to the top of the page so the now-loading truck's
       // In-Progress panel (with the Finish Loading button) scrolls into view —
       // the tap that starts a load is usually deep down in the truck grid.
@@ -446,6 +460,17 @@ export default function Load() {
           />
           <InlineShortages truck={inProgress} runDate={runDate} />
         </>
+      )}
+
+      {/* Nothing loading — hand straight off to the queued truck rather than
+          making the user find it again down in the ready grid. */}
+      {!anyInProgress && queuedNextUp && (
+        <StartNextUpBanner
+          truck={queuedNextUp}
+          paceAvgSeconds={pace?.avg_seconds ?? null}
+          busy={busy === queuedNextUp.truck_number}
+          onStart={() => setConfirmLoadTruck(queuedNextUp)}
+        />
       )}
 
       {/* Stats grid */}
