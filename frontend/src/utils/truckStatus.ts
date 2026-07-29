@@ -76,7 +76,9 @@ export function loadedTruckNumbers(
   _holidayUnload?: boolean,
 ): number[] {
   return buildOperationalDayContext(board, loadDayNum, holidayLoad)
-    .activeTrucks.filter((t) => t.state?.status === "loaded")
+    // Durable stamp OR the live status: a truck that finished loading and was
+    // then marked OOS/shop keeps its credit (status alone took it back off).
+    .activeTrucks.filter((t) => t.state?.status === "loaded" || hasLoadFinishStamp(t))
     .map((t) => t.truck_number);
 }
 
@@ -114,10 +116,34 @@ export function isPureUnloadSeed(t: TruckWithState): boolean {
  */
 export function carrierCountsAsUnloaded(carrier: TruckWithState): boolean {
   if (isPureUnloadSeed(carrier)) return false;
+  if (hasUnloadedStamp(carrier)) return true;
   const raw = (carrier.state?.status ?? "dirty") as TruckStatus;
   // in_progress also counts: the carrier was unloaded earlier and has already
   // moved on to loading tonight.
   return raw === "unloaded" || raw === "in_progress" || raw === "loaded";
+}
+
+/**
+ * Did this truck actually get unloaded today, per the DURABLE stamp?
+ *
+ * `status` is transient — a truck that unloads and is then marked OOS (or shop,
+ * or off) carries that status instead, and counting on status alone silently
+ * took its progress back off the bar. `unloaded_at` is only written by a real
+ * unload and is only cleared by a genuine undo (back to dirty/in_progress/
+ * unfinished), so it survives whatever happens to the truck afterwards.
+ */
+export function hasUnloadedStamp(t: TruckWithState): boolean {
+  return t.state?.unloaded_at != null;
+}
+
+/**
+ * Did this truck actually finish loading today, per the DURABLE stamp? Same
+ * reasoning as {@link hasUnloadedStamp}: `load_finish_time` is stamped at
+ * finish and cleared on cancel, so a truck marked OOS after loading keeps its
+ * credit on the load bar.
+ */
+export function hasLoadFinishStamp(t: TruckWithState): boolean {
+  return t.state?.load_finish_time != null;
 }
 
 /**
@@ -140,6 +166,9 @@ export function unloadedTruckNumbersFromContext(
 ): number[] {
   const isDone = (t: TruckWithState): boolean => {
     if (isPureUnloadSeed(t)) return false;
+    // Durable stamp first: a truck that unloaded and was then marked OOS/shop
+    // still unloaded, and must keep its place on the bar.
+    if (hasUnloadedStamp(t)) return true;
     const raw = (t.state?.status ?? "dirty") as TruckStatus;
     return raw === "unloaded" || raw === "loaded";
   };

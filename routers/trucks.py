@@ -634,11 +634,18 @@ def update_truck_state(
     # unloaded_at stamps the moment a truck is genuinely unloaded via this
     # per-truck workflow (dirty / in_progress / unfinished -> unloaded), for
     # unload-timing pattern analysis. Bulk/admin status changes go through the
-    # separate bulk endpoint and never stamp. Undoing (leaving unloaded) clears it.
+    # separate bulk endpoint and never stamp.
+    #
+    # It is cleared ONLY by a genuine UNDO — going back to an open unload state.
+    # Anything else that happens to a truck afterwards (marked OOS or shop,
+    # sent off, or moving on to loaded) does not rewrite the fact that it was
+    # unloaded. Clearing on any non-unloaded status wiped the record when a
+    # truck was marked OOS after unloading, which both erased its unload dwell
+    # and dropped it out of the day's unload progress.
     _UNLOAD_OPEN = (TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished)
     if row.status == TruckStatus.unloaded and previous_status in _UNLOAD_OPEN:
         row.unloaded_at = time.time()
-    elif row.status != TruckStatus.unloaded and previous_status == TruckStatus.unloaded:
+    elif row.status in _UNLOAD_OPEN and previous_status == TruckStatus.unloaded:
         row.unloaded_at = None
 
     append_truck_state_activity(
