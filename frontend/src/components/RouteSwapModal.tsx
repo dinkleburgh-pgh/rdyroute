@@ -80,6 +80,8 @@ export default function RouteSwapModal({ onClose }: Props) {
   const upsertState = useUpsertTruckState();
   const [xFrom, setXFrom] = useState("");
   const [xTo, setXTo] = useState("");
+  /** What the emptied truck becomes once its freight has been moved off. */
+  const [xFromStatus, setXFromStatus] = useState<"unloaded" | "oos" | "shop">("unloaded");
   const [xBusy, setXBusy] = useState(false);
   const [xError, setXError] = useState<string | null>(null);
   const flaggedCrossloads = useMemo(
@@ -96,6 +98,40 @@ export default function RouteSwapModal({ onClose }: Props) {
     });
   }
 
+  /**
+   * Actually move the freight. One path, used by both the form's "Crossload
+   * now" and a pending row's "Move now", so the two can't drift.
+   *
+   * The physical move has to be reflected in both trucks' statuses:
+   *   - `to` receives the route (coverage) AND is now carrying it, so it ends
+   *     up LOADED.
+   *   - `from` has been emptied, so it ends up unloaded — or OOS/shop, which
+   *     is usually why the freight had to move in the first place.
+   *
+   * assignSpare runs first because it carries the guards (duplicate cover,
+   * self-cover) and already transfers load timings when the source truck was
+   * mid-workflow; the explicit statuses below then cover the case where it
+   * wasn't (a dirty or unloaded source still leaves `to` loaded).
+   */
+  async function performCrossload(from: number, to: number, fromStatus: "unloaded" | "oos" | "shop") {
+    await assignSpare.mutateAsync({
+      run_date: runDate,
+      spare_truck_number: to,
+      covering_route_truck: from,
+    });
+    await upsertState.mutateAsync({
+      truck_number: to,
+      run_date: runDate,
+      status: "loaded",
+    });
+    await upsertState.mutateAsync({
+      truck_number: from,
+      run_date: runDate,
+      status: fromStatus,
+      crossload_to_truck: null,
+    });
+  }
+
   async function handleCrossload(immediate: boolean) {
     const from = parseInt(xFrom);
     const to = parseInt(xTo);
@@ -105,18 +141,7 @@ export default function RouteSwapModal({ onClose }: Props) {
     setXBusy(true);
     try {
       if (immediate) {
-        // Move the route now: the target truck covers `from`'s route. This is
-        // the same guarded call the Add-swap form makes, so the duplicate-cover
-        // checks and the late load-state transfer both still apply.
-        await assignSpare.mutateAsync({
-          run_date: runDate,
-          spare_truck_number: to,
-          covering_route_truck: from,
-        });
-        // Nothing is left pending once the route has actually moved.
-        if (board.find((t) => t.truck_number === from)?.state?.crossload_to_truck != null) {
-          await setCrossloadFlag(from, null);
-        }
+        await performCrossload(from, to, xFromStatus);
       } else {
         await setCrossloadFlag(from, to);
       }
@@ -611,12 +636,11 @@ export default function RouteSwapModal({ onClose }: Props) {
                             onClick={async () => {
                               setXBusy(true);
                               try {
-                                await assignSpare.mutateAsync({
-                                  run_date: runDate,
-                                  spare_truck_number: t.state!.crossload_to_truck as number,
-                                  covering_route_truck: t.truck_number,
-                                });
-                                await setCrossloadFlag(t.truck_number, null);
+                                await performCrossload(
+                                  t.truck_number,
+                                  t.state!.crossload_to_truck as number,
+                                  xFromStatus,
+                                );
                               } catch (err: unknown) {
                                 const e = err as { response?: { data?: { detail?: string } } };
                                 setXError(e?.response?.data?.detail ?? "Couldn't move the route.");
@@ -672,6 +696,34 @@ export default function RouteSwapModal({ onClose }: Props) {
                       <LoadOnOptions />
                     </select>
                   </div>
+                </div>
+
+                {/* What the emptied truck becomes. The receiving truck always
+                    ends up Loaded — it is physically carrying the route now. */}
+                <div>
+                  <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-fuchsia-400/80">
+                    After the move, set the emptied truck to
+                  </label>
+                  <div className="flex gap-1.5">
+                    {(["unloaded", "oos", "shop"] as const).map((v) => (
+                      <button
+                        key={v}
+                        type="button"
+                        onClick={() => setXFromStatus(v)}
+                        className={clsx(
+                          "flex-1 rounded-md border px-2 py-1.5 text-[11px] font-semibold capitalize transition-colors",
+                          xFromStatus === v
+                            ? "border-fuchsia-500 bg-fuchsia-600/30 text-fuchsia-100"
+                            : "border-slate-700 bg-slate-800/40 text-slate-400 hover:text-slate-200",
+                        )}
+                      >
+                        {v === "oos" ? "OOS" : v}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="mt-1 text-[10px] text-slate-500">
+                    The receiving truck is set to Loaded and takes the route&rsquo;s coverage.
+                  </p>
                 </div>
 
                 {xError && (

@@ -420,6 +420,9 @@ export default function LiveReport() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfErr, setPdfErr] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Short-sheet layout is owned here (not inside ShortageSheetView) so the
+  // Images export can flip it to capture BOTH the grid and the paper sheet.
+  const [sheetLayout, setSheetLayout] = useState<"grid" | "paper">("grid");
   // Images export — same section choice as the PDF, one PNG per section.
   const [imagesOpen, setImagesOpen] = useState(false);
   const [imgBusy, setImgBusy] = useState<string | null>(null);
@@ -828,25 +831,46 @@ export default function LiveReport() {
     setImgErr(false);
     setImgDone(0);
     let failed = false;
+    const restoreLayout = sheetLayout;
     for (const def of wanted) {
-      const node = document.querySelector<HTMLElement>(`[data-report-section="${def.key}"]`);
-      if (!node) continue; // section not rendered (e.g. deselected earlier)
-      setImgBusy(def.label);
-      try {
-        const blob = await captureNodeToPngBlob(node);
-        const safe = `ReadyRoute-${def.label}-${runDate}`.replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
-        await exportFile(blob, `${safe}.png`, "image/png");
-        setImgDone((n) => n + 1);
-      } catch (e) {
-        console.error("report images: capture failed for", def.key, e);
-        failed = true;
+      // The short sheet has two readings — the truck x item grid and the paper
+      // sheet cards — and the PDF prints both, so the images do too.
+      const variants: { suffix: string; layout?: "grid" | "paper" }[] =
+        def.key === "shortSheet"
+          ? [{ suffix: "Grid", layout: "grid" }, { suffix: "Sheet", layout: "paper" }]
+          : [{ suffix: "" }];
+      for (const v of variants) {
+        if (v.layout) {
+          setSheetLayout(v.layout);
+          // Let React commit the layout switch before the DOM is cloned.
+          await new Promise((r) => setTimeout(r, 250));
+        }
+        const node = document.querySelector<HTMLElement>(`[data-report-section="${def.key}"]`);
+        if (!node) continue; // section not rendered (e.g. deselected earlier)
+        setImgBusy(v.suffix ? `${def.label} (${v.suffix})` : def.label);
+        try {
+          const blob = await captureNodeToPngBlob(node);
+          const name = v.suffix ? `${def.label}-${v.suffix}` : def.label;
+          const safe = `ReadyRoute-${name}-${runDate}`.replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
+          await exportFile(blob, `${safe}.png`, "image/png");
+          setImgDone((n) => n + 1);
+        } catch (e) {
+          console.error("report images: capture failed for", def.key, v.suffix, e);
+          failed = true;
+        }
+        await new Promise((r) => setTimeout(r, 350));
       }
-      await new Promise((r) => setTimeout(r, 350));
     }
+    setSheetLayout(restoreLayout);
     setImgBusy(null);
     if (failed) setImgErr(true);
     else setImagesOpen(false);
   }
+
+  // The short sheet yields two images (grid + paper sheet), so the progress
+  // denominator isn't simply the number of ticked sections.
+  const imgTotal = sectionDefs.filter((d) => selected[d.key])
+    .reduce((n, d) => n + (d.key === "shortSheet" ? 2 : 1), 0);
 
   const imagesButton = (
     <button
@@ -880,8 +904,8 @@ export default function LiveReport() {
           >
             <h3 className="text-base font-semibold text-slate-100">Download report images</h3>
             <p className="mt-1 text-sm text-slate-400">
-              One PNG per section, at report-page size. Your browser may ask to allow
-              multiple downloads.
+              One PNG per section, at report-page size — the short sheet gives you both the
+              grid and the paper sheet. Your browser may ask to allow multiple downloads.
             </p>
             <div className="mt-4 space-y-0.5">
               {sectionDefs.map((sec) => (
@@ -903,7 +927,7 @@ export default function LiveReport() {
             </div>
             {imgBusy && (
               <p className="mt-3 text-xs text-sky-300">
-                Capturing {imgBusy}… ({imgDone}/{sectionDefs.filter((d) => selected[d.key]).length})
+                Capturing {imgBusy}… ({imgDone}/{imgTotal})
               </p>
             )}
             <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
@@ -1170,7 +1194,7 @@ export default function LiveReport() {
             /* Same Grid / Sheet views as the Short Sheet page, so the report
                shows the crew's actual sheet. */
             <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
-              <ShortageSheetView shorts={shorts} board={board} />
+              <ShortageSheetView shorts={shorts} board={board} layout={sheetLayout} onLayoutChange={setSheetLayout} />
             </div>
           )}
         </Section>

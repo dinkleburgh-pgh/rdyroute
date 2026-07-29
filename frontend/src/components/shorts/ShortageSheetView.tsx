@@ -16,13 +16,23 @@ import { buildShortageMatrix } from "./shortageMatrix";
 export default function ShortageSheetView({
   shorts,
   board,
+  layout: layoutProp,
+  onLayoutChange,
 }: {
   shorts: Shortage[];
   board: TruckWithState[];
+  /** Controlled layout. Omit to let the view own its own Grid/Sheet toggle. */
+  layout?: "grid" | "paper";
+  onLayoutChange?: (l: "grid" | "paper") => void;
 }) {
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
-  const [layout, setLayout] = useState<"grid" | "paper">("grid");
+  const [ownLayout, setOwnLayout] = useState<"grid" | "paper">("grid");
+  const layout = layoutProp ?? ownLayout;
+  const setLayout = (l: "grid" | "paper") => {
+    setOwnLayout(l);
+    onLayoutChange?.(l);
+  };
 
   const { trucks, rows, truckTotals, grandTotal, byTruckItems } = useMemo(
     () => buildShortageMatrix(shorts, items),
