@@ -9,11 +9,12 @@ than days 1-4.
 Idempotent: writes the settings rows outright, so re-running just refreshes.
 Set BASE to point at prod or dev.
 """
-import json
-import os
 import sys
 
-sys.path.insert(0, r"C:\Users\dinkleburgh\readyroutev2")
+from pathlib import Path
+
+# Repo root, so this runs the same from a dev checkout or inside the container.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # ---- transcribed from the sheet photos -----------------------------------
 WEARERS = {
