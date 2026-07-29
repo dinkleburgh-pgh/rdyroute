@@ -177,6 +177,17 @@ h2 { font-size: 14px; font-weight: 700; margin: 1px 0 6px; }
 .row { display: flex; align-items: center; gap: 8px; padding: 5px 10px; font-size: 10px; }
 .row + .row { border-top: 1px solid rgba(255,255,255,0.06); }
 .route { color: #7dd3fc; }
+/* Load-time tiles: three per row, values grouped and centred inside each tile
+   (mirrors the report page). */
+.lt-row { display: flex; gap: 6px; page-break-inside: avoid; }
+.lt-row + .lt-row { margin-top: 6px; }
+.lt { flex: 1 1 0; min-width: 0; display: flex; align-items: baseline; justify-content: center;
+      gap: 8px; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+      border-radius: 10px; padding: 5px 10px; }
+.lt.spacer { border-color: transparent; background: transparent; }
+.ltnum { font-size: 12px; font-weight: 700; min-width: 34px; text-align: right; }
+.ltfin { font-size: 9px; min-width: 52px; text-align: center; }
+.ltdur { font-size: 12px; font-weight: 700; min-width: 44px; }
 .w12 { min-width: 34px; }
 .status, .dur { margin-left: auto; }
 
@@ -358,14 +369,21 @@ def _load_times_html(lt: LoadTimesSectionVM | None) -> str:
     if not lt.rows:
         out.append('<div class="empty">No trucks have finished loading yet.</div></section>')
         return "".join(out)
+    # Condensed tiles, three per row — the same shape the report page uses. A
+    # full-width row per truck stranded the duration a page-width away from the
+    # truck number it belongs to, and ran three times as long.
+    tiles = [
+        f'<div class="lt"><span class="mono ltnum">#{int(r.truck_number)}</span>'
+        f'<span class="dim ltfin">{_e(r.finish_label)}</span>'
+        f'<span class="mono ltdur" style="color:{r.tone}">{_e(r.duration_label)}</span></div>'
+        for r in lt.rows
+    ]
     rows = []
-    for r in lt.rows:
-        rows.append(
-            f'<div class="row"><span class="mono w12">#{int(r.truck_number)}</span>'
-            f'<span class="dim">{_e(r.finish_label)}</span>'
-            f'<span class="dur mono" style="color:{r.tone}">{_e(r.duration_label)}</span></div>'
-        )
-    out.append(f'<div class="list">{"".join(rows)}</div></section>')
+    for i in range(0, len(tiles), 3):
+        chunk = tiles[i : i + 3]
+        chunk += ['<div class="lt spacer"></div>'] * (3 - len(chunk))
+        rows.append(f'<div class="lt-row">{"".join(chunk)}</div>')
+    out.append(f'{"".join(rows)}</section>')
     return "".join(out)
 
 

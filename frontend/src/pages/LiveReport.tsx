@@ -19,13 +19,15 @@ import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
+import { captureNodeToPngBlob } from "../lib/captureImage";
+import { exportFile } from "../lib/exportFile";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
 import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "../components/shorts/HierarchyPicker";
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
 import { capacityColor } from "../utils/batchCapacity";
-import { ChevronLeft, ChevronRight, FileDown, Maximize2, Pause, Play, X } from "lucide-react";
+import { ChevronLeft, ChevronRight, FileDown, Image as ImageIcon, Maximize2, Pause, Play, X } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
@@ -104,10 +106,13 @@ function Section({
   title,
   children,
   downloadName,
+  sectionKey,
 }: {
   eyebrow: string;
   title: string;
   children: ReactNode;
+  /** Stable id so the Images generator can find this block in the DOM. */
+  sectionKey?: string;
   /** When set, renders a "Download image" button that snapshots this whole
    *  section (title + content) to a PNG with the given base filename. */
   downloadName?: string;
@@ -115,7 +120,7 @@ function Section({
   const captureRef = useRef<HTMLElement>(null);
   const inKioskSlide = useContext(KioskSlideContext);
   return (
-    <section ref={captureRef} className="space-y-3">
+    <section ref={captureRef} data-report-section={sectionKey} className="space-y-3">
       {!inKioskSlide && (
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</p>
@@ -415,6 +420,11 @@ export default function LiveReport() {
   const [pdfBusy, setPdfBusy] = useState(false);
   const [pdfErr, setPdfErr] = useState(false);
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Images export — same section choice as the PDF, one PNG per section.
+  const [imagesOpen, setImagesOpen] = useState(false);
+  const [imgBusy, setImgBusy] = useState<string | null>(null);
+  const [imgDone, setImgDone] = useState(0);
+  const [imgErr, setImgErr] = useState(false);
   const [selected, setSelected] = useState<Record<SectionKey, boolean>>({
     batches: true, coverage: true, loadTimes: true, shortages: true, shortSheet: true, audit: true,
   });
@@ -607,13 +617,15 @@ export default function LiveReport() {
   // Which sections have content today (drives the picker's muted hints).
   // `phase` mirrors each Section's eyebrow so kiosk mode can show it in the
   // toolbar instead of inside the slide.
+  // Order matches the report page AND the PDF: coverage first (who is carrying
+  // whose route is the first thing to know), batches last.
   const sectionDefs: { key: SectionKey; label: string; phase: "Load" | "Unload"; hint?: string }[] = [
+    { key: "coverage", label: "Routes covered", phase: "Load", hint: coverageRows.length ? undefined : "empty" },
     { key: "shortages", label: "Shortages", phase: "Load", hint: shorts.length ? undefined : "empty" },
     { key: "shortSheet", label: "Short sheet", phase: "Load", hint: shorts.length ? undefined : "empty" },
-    { key: "batches", label: "Batches", phase: "Unload", hint: batchingDisabled ? "off" : batches.length ? undefined : "empty" },
-    { key: "coverage", label: "Routes covered", phase: "Load", hint: coverageRows.length ? undefined : "empty" },
     { key: "loadTimes", label: "Load times", phase: "Load", hint: finished.length ? undefined : "empty" },
     { key: "audit", label: "Audit", phase: "Load", hint: auditByTruck.length ? undefined : "empty" },
+    { key: "batches", label: "Batches", phase: "Unload", hint: batchingDisabled ? "off" : batches.length ? undefined : "empty" },
   ];
   const anySelected = Object.values(selected).some(Boolean);
 
@@ -801,6 +813,118 @@ export default function LiveReport() {
     </button>
   );
 
+  /**
+   * Save one PNG per selected section. Each section is captured from the live
+   * DOM by its data-report-section id, through the same desktop-width iframe the
+   * per-section download uses — so the images come out at report-page width and
+   * resolution rather than whatever the current viewport happens to be.
+   *
+   * Downloads are sequential with a beat between them: browsers throttle (or
+   * silently drop) a burst of programmatic saves.
+   */
+  async function handleDownloadImages(sel: Record<SectionKey, boolean>) {
+    const wanted = sectionDefs.filter((d) => sel[d.key]);
+    if (wanted.length === 0) return;
+    setImgErr(false);
+    setImgDone(0);
+    let failed = false;
+    for (const def of wanted) {
+      const node = document.querySelector<HTMLElement>(`[data-report-section="${def.key}"]`);
+      if (!node) continue; // section not rendered (e.g. deselected earlier)
+      setImgBusy(def.label);
+      try {
+        const blob = await captureNodeToPngBlob(node);
+        const safe = `ReadyRoute-${def.label}-${runDate}`.replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
+        await exportFile(blob, `${safe}.png`, "image/png");
+        setImgDone((n) => n + 1);
+      } catch (e) {
+        console.error("report images: capture failed for", def.key, e);
+        failed = true;
+      }
+      await new Promise((r) => setTimeout(r, 350));
+    }
+    setImgBusy(null);
+    if (failed) setImgErr(true);
+    else setImagesOpen(false);
+  }
+
+  const imagesButton = (
+    <button
+      type="button"
+      onClick={() => {
+        setImgErr(false);
+        setImgDone(0);
+        setImagesOpen(true);
+      }}
+      disabled={imgBusy !== null}
+      title="Download the report as images"
+      className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95 disabled:opacity-50"
+    >
+      <ImageIcon className="h-4 w-4" />
+      {imgBusy ? "…" : "Images"}
+    </button>
+  );
+
+  const imagesPicker = imagesOpen
+    ? createPortal(
+        <div
+          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
+          onClick={() => imgBusy === null && setImagesOpen(false)}
+        >
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-label="Download report images"
+            className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="text-base font-semibold text-slate-100">Download report images</h3>
+            <p className="mt-1 text-sm text-slate-400">
+              One PNG per section, at report-page size. Your browser may ask to allow
+              multiple downloads.
+            </p>
+            <div className="mt-4 space-y-0.5">
+              {sectionDefs.map((sec) => (
+                <label
+                  key={sec.key}
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-800/60"
+                >
+                  <input
+                    type="checkbox"
+                    checked={selected[sec.key]}
+                    disabled={imgBusy !== null}
+                    onChange={(e) => setSelected((prev) => ({ ...prev, [sec.key]: e.target.checked }))}
+                    className="h-4 w-4 accent-blue-600"
+                  />
+                  <span className="flex-1 text-sm text-slate-200">{sec.label}</span>
+                  {sec.hint && <span className="text-[11px] text-slate-500">{sec.hint}</span>}
+                </label>
+              ))}
+            </div>
+            {imgBusy && (
+              <p className="mt-3 text-xs text-sky-300">
+                Capturing {imgBusy}… ({imgDone}/{sectionDefs.filter((d) => selected[d.key]).length})
+              </p>
+            )}
+            <div className="mt-5 flex flex-wrap items-center justify-end gap-2">
+              {imgErr && <span className="mr-auto text-xs text-st-dirty">Some sections failed — try again.</span>}
+              <button className="btn-ghost" onClick={() => setImagesOpen(false)} disabled={imgBusy !== null}>
+                Cancel
+              </button>
+              <button
+                className="btn-primary"
+                onClick={() => void handleDownloadImages(selected)}
+                disabled={imgBusy !== null || !anySelected}
+              >
+                {imgBusy ? "Generating…" : "Download images"}
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body,
+      )
+    : null;
+
   const sectionPicker = pickerOpen
     ? createPortal(
         <div
@@ -874,9 +998,71 @@ export default function LiveReport() {
               }
         }
       >
-        {/* ===================== LOAD · SHORTAGES (shown first) ===================== */}
+        {/* ===================== LOAD · COVERAGE ===================== */}
+        {showSection("coverage") && (
+        <Section eyebrow="Load" title="Routes covered" sectionKey="coverage">
+          {coverageRows.length === 0 ? (
+            <Empty>No route coverage recorded for this day.</Empty>
+          ) : (
+            /* Full coverage cards — the canonical big ROUTE → TRUCK paired
+               numbers (same read as a fleet coverage card), not a dense list. */
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+              {coverageRows.map((r) => {
+                const st = boardByNum.get(r.loadOnTruck)?.state;
+                const done = st?.status === "loaded";
+                return (
+                  <div
+                    key={`${r.routeTruck}-${r.loadOnTruck}`}
+                    className="rounded-xl border border-hairline bg-surface p-4"
+                  >
+                    <div className="flex items-center justify-center gap-4">
+                      <div className="text-center">
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Route</p>
+                        <p className="font-mono text-3xl font-black leading-none tabular-nums text-sky-300">
+                          #{r.routeTruck}
+                        </p>
+                      </div>
+                      <span className="text-2xl font-black leading-none text-ink-faint">→</span>
+                      <div className="text-center">
+                        {/* Past tense only once the carrier has actually loaded. */}
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">
+                          {done ? "Loaded on" : "Loads on"}
+                        </p>
+                        <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">
+                          #{r.loadOnTruck}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
+                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">{r.type}</span>
+                      {isRecurring(r.routeTruck, r.loadOnTruck) && (
+                        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
+                      )}
+                      {r.returned && (
+                        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">returned</span>
+                      )}
+                    </div>
+                    <p className="mt-2.5 border-t border-hairline pt-2 text-center text-xs">
+                      {done ? (
+                        <span className="text-st-loaded">
+                          Loaded
+                          {st?.load_finish_time ? ` · ${clock(st.load_finish_time)}` : ""}
+                          {st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : ""}
+                        </span>
+                      ) : (
+                        <span className="text-ink-faint">{st?.status === "in_progress" ? "Loading…" : "Not loaded"}</span>
+                      )}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </Section>
+        )}
+        {/* ===================== LOAD · SHORTAGES ===================== */}
         {showSection("shortages") && (
-        <Section eyebrow="Load" title="Shortages" downloadName={dlName("Shortages")}>
+        <Section eyebrow="Load" title="Shortages" sectionKey="shortages" downloadName={dlName("Shortages")}>
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5">
             <Kpi label="Qty short" value={totalPieces} sub="total units" tone={totalPieces > 0 ? "text-red-400" : "text-emerald-400"} />
             <Kpi
@@ -973,12 +1159,11 @@ export default function LiveReport() {
           {shorts.length === 0 && <Empty>No shortages logged for this day.</Empty>}
         </Section>
         )}
-
         {/* ===================== LOAD · SHORT SHEET ===================== */}
         {/* The grid is its own section so it can be picked, exported and shown
             in kiosk mode independently of the shortage summary above. */}
         {showSection("shortSheet") && (
-        <Section eyebrow="Load" title="Short sheet" downloadName={dlName("Short sheet")}>
+        <Section eyebrow="Load" title="Short sheet" sectionKey="shortSheet" downloadName={dlName("Short sheet")}>
           {shorts.length === 0 ? (
             <Empty>No shortages logged for this day.</Empty>
           ) : (
@@ -990,96 +1175,9 @@ export default function LiveReport() {
           )}
         </Section>
         )}
-
-        {/* ===================== UNLOAD ===================== */}
-        {showSection("batches") && (
-        <Section eyebrow="Unload" title="Batches" downloadName={dlName("Batches")}>
-          {batchingDisabled ? (
-            <Empty>Batching is turned off for this day.</Empty>
-          ) : (
-            <>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
-                <Kpi label="Trucks batched" value={trucksBatched} />
-                <Kpi label="Total wearers" value={totalWearers.toLocaleString()} sub={`cap ${noCap ? "∞" : cap.toLocaleString()}/batch`} />
-                <Kpi label="Batches used" value={`${batchesUsed} / 6`} />
-                <Kpi label="Unloaded" value={`${unloadedCount} / ${unloadRosterSize}`} sub="trucks this shift" />
-              </div>
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {batches.map((b) => (
-                  <BatchMiniCard key={b.batch_number} batch={b} cap={cap} noCap={noCap} />
-                ))}
-              </div>
-            </>
-          )}
-        </Section>
-        )}
-
-        {/* ===================== LOAD · COVERAGE ===================== */}
-        {showSection("coverage") && (
-        <Section eyebrow="Load" title="Routes covered">
-          {coverageRows.length === 0 ? (
-            <Empty>No route coverage recorded for this day.</Empty>
-          ) : (
-            /* Full coverage cards — the canonical big ROUTE → TRUCK paired
-               numbers (same read as a fleet coverage card), not a dense list. */
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-              {coverageRows.map((r) => {
-                const st = boardByNum.get(r.loadOnTruck)?.state;
-                const done = st?.status === "loaded";
-                return (
-                  <div
-                    key={`${r.routeTruck}-${r.loadOnTruck}`}
-                    className="rounded-xl border border-hairline bg-surface p-4"
-                  >
-                    <div className="flex items-center justify-center gap-4">
-                      <div className="text-center">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">Route</p>
-                        <p className="font-mono text-3xl font-black leading-none tabular-nums text-sky-300">
-                          #{r.routeTruck}
-                        </p>
-                      </div>
-                      <span className="text-2xl font-black leading-none text-ink-faint">→</span>
-                      <div className="text-center">
-                        {/* Past tense only once the carrier has actually loaded. */}
-                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-                          {done ? "Loaded on" : "Loads on"}
-                        </p>
-                        <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">
-                          #{r.loadOnTruck}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
-                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">{r.type}</span>
-                      {isRecurring(r.routeTruck, r.loadOnTruck) && (
-                        <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
-                      )}
-                      {r.returned && (
-                        <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">returned</span>
-                      )}
-                    </div>
-                    <p className="mt-2.5 border-t border-hairline pt-2 text-center text-xs">
-                      {done ? (
-                        <span className="text-st-loaded">
-                          Loaded
-                          {st?.load_finish_time ? ` · ${clock(st.load_finish_time)}` : ""}
-                          {st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : ""}
-                        </span>
-                      ) : (
-                        <span className="text-ink-faint">{st?.status === "in_progress" ? "Loading…" : "Not loaded"}</span>
-                      )}
-                    </p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </Section>
-        )}
-
         {/* ===================== LOAD · LOAD TIMES ===================== */}
         {showSection("loadTimes") && (
-        <Section eyebrow="Load" title="Load times">
+        <Section eyebrow="Load" title="Load times" sectionKey="loadTimes">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Kpi label="Trucks timed" value={durations.length} />
             <Kpi
@@ -1115,10 +1213,9 @@ export default function LiveReport() {
           )}
         </Section>
         )}
-
         {/* ===================== LOAD · AUDIT ===================== */}
         {showSection("audit") && (
-        <Section eyebrow="Load" title="Audit">
+        <Section eyebrow="Load" title="Audit" sectionKey="audit">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Kpi label="Trucks audited" value={auditByTruck.length} />
             <Kpi label="Items logged" value={itemsLogged} />
@@ -1179,6 +1276,28 @@ export default function LiveReport() {
                 );
               })}
             </div>
+          )}
+        </Section>
+        )}
+        {/* ===================== UNLOAD ===================== */}
+        {showSection("batches") && (
+        <Section eyebrow="Unload" title="Batches" sectionKey="batches" downloadName={dlName("Batches")}>
+          {batchingDisabled ? (
+            <Empty>Batching is turned off for this day.</Empty>
+          ) : (
+            <>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Kpi label="Trucks batched" value={trucksBatched} />
+                <Kpi label="Total wearers" value={totalWearers.toLocaleString()} sub={`cap ${noCap ? "∞" : cap.toLocaleString()}/batch`} />
+                <Kpi label="Batches used" value={`${batchesUsed} / 6`} />
+                <Kpi label="Unloaded" value={`${unloadedCount} / ${unloadRosterSize}`} sub="trucks this shift" />
+              </div>
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                {batches.map((b) => (
+                  <BatchMiniCard key={b.batch_number} batch={b} cap={cap} noCap={noCap} />
+                ))}
+              </div>
+            </>
           )}
         </Section>
         )}
@@ -1273,6 +1392,7 @@ export default function LiveReport() {
   return (
     <>
       {sectionPicker}
+      {imagesPicker}
       {kiosk && (
         <div className="fixed inset-0 z-[95] flex flex-col overflow-hidden bg-app pt-[env(safe-area-inset-top)]">
           {kioskBar}
@@ -1321,6 +1441,7 @@ export default function LiveReport() {
             />
             {kioskButton}
             {pdfButton}
+            {imagesButton}
             {pdfErr && <span className="text-[10px] text-st-dirty">PDF failed</span>}
           </div>
         }
@@ -1374,6 +1495,7 @@ export default function LiveReport() {
         )}
         {kioskButton}
         {pdfButton}
+        {imagesButton}
       </div>
 
       {/* Horizontal padding respects the landscape safe area so the system nav
