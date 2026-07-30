@@ -12,6 +12,7 @@ import { motion } from "framer-motion";
 import clsx from "clsx";
 import { QRCodeSVG } from "qrcode.react";
 import { useBoard } from "../api/hooks";
+import { Truck } from "lucide-react";
 import { ChevronRightIcon } from "../components/icons";
 import {
   useCreateNote,
@@ -26,6 +27,7 @@ import { todayIso, publicBase } from "../api/client";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
+import NotesSection from "../components/notes/NotesSection";
 import WorkflowNotesSection from "../components/notes/WorkflowNotesSection";
 import { workdayNumbers } from "../components/Clock";
 import { useAuth } from "../contexts/AuthContext";
@@ -561,6 +563,9 @@ export default function NotesBoard() {
   const [showArchived,  setShowArchived] = useState(false);
   const [onlyWithNotes, setOnlyWithNotes] = useState(false);
   const [openTruck,     setOpenTruck]    = useState<number | null>(null);
+  // Open by default: the truck board is what this page has always been, and
+  // collapsing it behind a tap would be a regression for the common visit.
+  const [trucksOpen,    setTrucksOpen]   = useState(true);
 
   // Deep link from the "New Driver Note" toast (/notes?truck=57): open that
   // truck's notes and scroll it into view once the board has rendered.
@@ -570,6 +575,10 @@ export default function NotesBoard() {
     if (!raw) return;
     const num = parseInt(raw, 10);
     if (!Number.isFinite(num)) return;
+    // The drawer must be open before the scroll lands, or there is nothing to
+    // scroll to — a deep link from the driver-note toast has to work whatever
+    // state the section was left in.
+    setTrucksOpen(true);
     setOpenTruck(num);
     const id = window.setTimeout(() => {
       document
@@ -615,8 +624,8 @@ export default function NotesBoard() {
     >
       <PageHeader
         eyebrow="Workflow"
-        title="Truck Notes"
-        subtitle="Manage standing notes, workday instructions, and one-off reminders by truck."
+        title="Notes"
+        subtitle="Standing instructions for the unload and load workflows, plus notes on individual trucks."
         actions={
           <div className="flex flex-wrap justify-center gap-2 text-xs md:justify-end">
             <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.constant)}>
@@ -637,9 +646,8 @@ export default function NotesBoard() {
 
       <div className="space-y-5 p-3 md:p-6">
 
-      {/* Workflow notes — not tied to any one truck, unlike everything below.
-          Collapsed by default so the truck board stays the page's subject. */}
-      <div className="space-y-2">
+      {/* Three drawers: the two workflow note sets, then the truck board. */}
+      <div className="space-y-3">
         <WorkflowNotesSection
           scope="unload"
           title="Unload notes"
@@ -654,7 +662,16 @@ export default function NotesBoard() {
           currentDay={loadDay}
           canEdit={canEditWorkflowNotes}
         />
-      </div>
+
+      <NotesSection
+        title="Truck notes"
+        subtitle="Standing notes, workday instructions, and one-off reminders on individual trucks."
+        icon={<Truck className="h-6 w-6" />}
+        count={totalActive}
+        open={trucksOpen}
+        onToggle={() => setTrucksOpen((v) => !v)}
+      >
+      <div className="space-y-5">
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">
@@ -725,6 +742,9 @@ export default function NotesBoard() {
           ))}
         </div>
       )}
+      </div>
+      </NotesSection>
+      </div>
       </div>
     </motion.div>
   );

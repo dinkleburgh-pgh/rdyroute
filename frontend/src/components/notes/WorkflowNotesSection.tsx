@@ -8,6 +8,7 @@ import {
   workflowPersistentNotesKey,
   type NoteScope,
 } from "../../api/hooks";
+import NotesSection from "./NotesSection";
 
 /**
  * Editor for one workflow's standing notes: a persistent set that applies every
@@ -99,27 +100,14 @@ export default function WorkflowNotesSection({
     DAYS.reduce((n, d) => n + lineCount(stored.days[d] ?? ""), 0);
 
   return (
-    <div className="rounded-xl border border-slate-700 bg-slate-900/60">
-      <button
-        type="button"
-        onClick={() => setOpen((v) => !v)}
-        className="flex w-full items-center gap-3 px-4 py-3 text-left"
-      >
-        <StickyNote className="h-4 w-4 shrink-0 text-sky-400" />
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-bold text-slate-100">{title}</span>
-          <span className="block text-[11px] text-slate-500">{subtitle}</span>
-        </span>
-        {totalLines > 0 && (
-          <span className="shrink-0 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-bold text-slate-300">
-            {totalLines}
-          </span>
-        )}
-        <span className={clsx("shrink-0 text-slate-500 transition-transform", open && "rotate-90")}>▸</span>
-      </button>
-
-      {open && (
-        <div className="border-t border-slate-700 px-4 py-3">
+    <NotesSection
+      title={title}
+      subtitle={subtitle}
+      icon={<StickyNote className="h-6 w-6" />}
+      count={totalLines}
+      open={open}
+      onToggle={() => setOpen((v) => !v)}
+    >
           <div className="mb-2 flex flex-wrap gap-1.5">
             <button
               type="button"
@@ -220,8 +208,6 @@ export default function WorkflowNotesSection({
               </div>
             )}
           </div>
-        </div>
-      )}
-    </div>
+    </NotesSection>
   );
 }
