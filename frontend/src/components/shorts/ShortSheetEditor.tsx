@@ -16,7 +16,12 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
-import { useShortageSheetTemplates, useTrackedItems, useUpsertShortageCells } from "../../api/hooks";
+import {
+  useShortageByItem,
+  useShortageSheetTemplates,
+  useTrackedItems,
+  useUpsertShortageCells,
+} from "../../api/hooks";
 import type { Shortage, TruckWithState } from "../../types";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -76,6 +81,32 @@ export default function ShortSheetEditor({
   const paperRank = useMemo(() => buildPaperRank(template, items), [template, items]);
 
   // --- Rows: full catalog (blank cells) + any extra rows from existing data ---
+  //
+  // Two orders, deliberately different per mode:
+  //   Paper  — strict printed order, because it mirrors the page being read.
+  //   Grid /
+  //   Guided — most-shorted first, so the handful of items actually short on a
+  //            normal day sit at the top instead of wherever the paper happens
+  //            to print them. Ties and never-shorted items keep printed order,
+  //            so the tail still tracks the page.
+  const { data: topItems = [] } = useShortageByItem(30);
+  const frequencyRank = useMemo(() => {
+    const m = new Map<string, number>();
+    // Resolve each trend row onto the same canonical key the rows use, so
+    // historical rows logged under an older category shape still match.
+    [...topItems]
+      .sort((a, b) => b.total_qty - a.total_qty)
+      .forEach((p, i) => {
+        const item = findTrackedItem(items, p.category, p.detail);
+        const { category, detail } = item
+          ? catalogItemKey(item)
+          : { category: p.category, detail: p.detail };
+        const k = keyOf(category, detail);
+        if (!m.has(k)) m.set(k, i);
+      });
+    return m;
+  }, [topItems, items]);
+
   const catalogRows = useMemo(() => buildCatalogRows(items, paperRank), [items, paperRank]);
 
   // Existing quantities, normalized onto canonical (category, detail) keys so a
@@ -119,6 +150,16 @@ export default function ShortSheetEditor({
     () => buildPaperRows(template, items, extraRows),
     [template, items, extraRows],
   );
+
+  // Grid / Guided: most-shorted first, printed order as the tiebreak.
+  const rankedRows = useMemo(() => {
+    const freq = (r: SheetRow) =>
+      frequencyRank.get(keyOf(r.category, r.detail)) ?? Number.MAX_SAFE_INTEGER;
+    return rows
+      .map((r, i) => ({ r, i })) // keep printed order as the stable fallback
+      .sort((a, b) => freq(a.r) - freq(b.r) || a.i - b.i)
+      .map((x) => x.r);
+  }, [rows, frequencyRank]);
 
   const committedQty = (row: SheetRow, truck: number) =>
     qtyByKey.get(keyOf(row.category, row.detail))?.get(truck) ?? 0;
@@ -286,7 +327,7 @@ export default function ShortSheetEditor({
         </p>
       ) : mode === "grid" ? (
         <GridMode
-          rows={hideEmpty ? rows.filter((r) => rowTotal(r) > 0) : rows}
+          rows={hideEmpty ? rankedRows.filter((r) => rowTotal(r) > 0) : rankedRows}
           columns={columns}
           cellDisplay={cellDisplay}
           setDraft={setDraft}
@@ -295,12 +336,16 @@ export default function ShortSheetEditor({
           colTotal={colTotal}
           grandTotal={grandTotal}
           dotClass={palette.dotClass}
+          // Family dividers only make sense while rows are grouped. Once
+          // most-shorted ordering interleaves the families, a divider would
+          // fire on nearly every row.
+          showGroups={frequencyRank.size === 0}
         />
       ) : mode === "guided" ? (
         <GuidedMode
-          rows={rows}
+          rows={rankedRows}
           columns={columns}
-          guidedIdx={Math.min(guidedIdx, Math.max(0, rows.length - 1))}
+          guidedIdx={Math.min(guidedIdx, Math.max(0, rankedRows.length - 1))}
           setGuidedIdx={setGuidedIdx}
           filledRowKeys={filledRowKeys}
           cellDisplay={cellDisplay}
@@ -435,6 +480,7 @@ function GridMode({
   colTotal,
   grandTotal,
   dotClass,
+  showGroups,
 }: {
   rows: SheetRow[];
   columns: number[];
@@ -445,6 +491,7 @@ function GridMode({
   colTotal: (truck: number) => number;
   grandTotal: number;
   dotClass: (category: string) => string;
+  showGroups: boolean;
 }) {
   const topRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -503,7 +550,7 @@ function GridMode({
         </thead>
         <tbody>
           {rows.map((row, ri) => {
-            const showGroup = row.group !== lastGroup;
+            const showGroup = showGroups && row.group !== lastGroup;
             lastGroup = row.group;
             const rt = rowTotal(row);
             return (

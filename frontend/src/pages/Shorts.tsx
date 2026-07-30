@@ -414,10 +414,21 @@ export function ShortageLogger({
 // Shorts (root)
 // ---------------------------------------------------------------------------
 
+type ViewMode = "byItem" | "log" | "sheet" | "imports";
+
+/** One definition for the entry-mode tabs, so the desktop row and the mobile
+ *  grid can't drift in label or order. */
+const VIEW_MODES: { id: ViewMode; label: string }[] = [
+  { id: "byItem", label: "By item" },
+  { id: "log", label: "By truck" },
+  { id: "sheet", label: "Sheet" },
+  { id: "imports", label: "Import sheets" },
+];
+
 export function ShortsWorkspace() {
   const [runDate, setRunDate]        = useState(todayIso());
   const [selectedTruck, setSelected] = useState<TruckWithState | null>(null);
-  const [viewMode, setViewMode] = useState<"byItem" | "log" | "sheet" | "imports">("byItem");
+  const [viewMode, setViewMode] = useState<ViewMode>("byItem");
   const [searchParams]               = useSearchParams();
 
   const { data: shortDates = [] } = useShortageDates();
@@ -504,47 +515,29 @@ export function ShortsWorkspace() {
                 <option key={d} value={d}>{d}</option>
               ))}
             </select>
-            <div className="flex rounded-lg border border-slate-800 bg-slate-900/70 p-1">
-              <button
-                type="button"
-                onClick={() => setViewMode("byItem")}
-                className={clsx(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  viewMode === "byItem" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
-                )}
-              >
-                By item
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("log")}
-                className={clsx(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  viewMode === "log" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
-                )}
-              >
-                By truck
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("sheet")}
-                className={clsx(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  viewMode === "sheet" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
-                )}
-              >
-                Sheet
-              </button>
-              <button
-                type="button"
-                onClick={() => setViewMode("imports")}
-                className={clsx(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition",
-                  viewMode === "imports" ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
-                )}
-              >
-                Import sheets
-              </button>
+            {/* One sizing rule for all four, so the selected tab isn't the only
+                one that looks like a button. Equal min-width keeps "Sheet" the
+                same size as "Import sheets". */}
+            <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900/70 p-1">
+              {VIEW_MODES.map((m) => (
+                <button
+                  key={m.id}
+                  type="button"
+                  onClick={() => setViewMode(m.id)}
+                  className={clsx(
+                    // Fixed width sized to the longest label ("Import sheets"),
+                    // so every tab is the same box. flex-1 doesn't work here:
+                    // the bar is shrink-to-fit, so there's no free space to
+                    // distribute and each button collapses to its own text.
+                    "w-32 shrink-0 whitespace-nowrap rounded-md border px-2 py-1.5 text-center text-sm font-medium transition",
+                    viewMode === m.id
+                      ? "border-blue-500 bg-blue-600 text-white"
+                      : "border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-500 hover:text-slate-100",
+                  )}
+                >
+                  {m.label}
+                </button>
+              ))}
             </div>
           </>
         }
@@ -564,19 +557,16 @@ export function ShortsWorkspace() {
           ))}
         </select>
         <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-900/70 p-1">
-          {([
-            { id: "byItem", label: "By item" },
-            { id: "log", label: "By truck" },
-            { id: "sheet", label: "Sheet" },
-            { id: "imports", label: "Import sheets" },
-          ] as { id: typeof viewMode; label: string }[]).map((m) => (
+          {VIEW_MODES.map((m) => (
             <button
               key={m.id}
               type="button"
               onClick={() => setViewMode(m.id)}
               className={clsx(
-                "rounded-md px-3 py-2 text-sm font-medium transition",
-                viewMode === m.id ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
+                "rounded-md border px-3 py-2 text-center text-sm font-medium transition",
+                viewMode === m.id
+                  ? "border-blue-500 bg-blue-600 text-white"
+                  : "border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-500 hover:text-slate-100",
               )}
             >
               {m.label}
