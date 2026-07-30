@@ -2235,7 +2235,13 @@ export function useNextUp(runDate: string = todayIso()) {
         throw err;
       }
     },
-    refetchInterval: 10_000,
+    // Polled so a dock display picks up a Next Up set from someone's phone.
+    // Settings changes don't broadcast over the websocket, hence the poll — but
+    // Next Up changes a handful of times a shift, so 10s was ~350 requests an
+    // hour per open tab for a value that rarely moves. The 404-on-unset is
+    // still handled above for older backends; the server now returns a null
+    // default instead.
+    refetchInterval: 30_000,
   });
 }
 

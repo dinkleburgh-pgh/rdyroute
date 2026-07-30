@@ -36,6 +36,7 @@ KNOWN_KEYS = {
     "note_cards_enabled",
     "realtime_toasts_enabled",
     "tracked_items_map",
+    "tracked_item_categories",
     "calculator_fab_enabled",
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
@@ -73,6 +74,11 @@ _USER_READABLE_KEYS = {
     "note_cards_enabled",
     "realtime_toasts_enabled",
     "tracked_items_map",
+    # Sibling metadata to tracked_items_map (category existence + colour preset).
+    # Every shortage-entry surface resolves its palette from this, so leaving it
+    # admin-only meant non-admins logged a 403 per page and fell back to
+    # uncoloured categories.
+    "tracked_item_categories",
     "calculator_fab_enabled",
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
@@ -90,7 +96,37 @@ _OPTIONAL_DEFAULT_PREFIXES: tuple[tuple[str, object], ...] = (
     ("daily_notes_", ""),
     ("load_day_override_", None),
     ("unloads_day_override_", None),
+    # Next Up is unset on most days and the load timers poll it every ~10s, so
+    # leaving it out produced a steady stream of 404s in the client log.
+    ("runday_next_up_", None),
 )
+
+# Per-run-date operational keys any authenticated session may READ. These are
+# not a privilege — they are what the board needs to render itself correctly
+# (which day is a holiday, which load/unload day is in effect, what's queued
+# next). The board is already readable, so refusing these only produced a
+# constant 403 stream that buried real errors, and left a non-admin viewing a
+# board drawn with the wrong day flags. Writes are unaffected: those still go
+# through the admin check below.
+_USER_READABLE_PREFIXES: tuple[str, ...] = (
+    "holiday_mode_",
+    "holiday_load_",
+    "holiday_unload_",
+    "wizard_completed_",
+    "daily_notes_",
+    "load_day_override_",
+    "unloads_day_override_",
+    "runday_next_up_",
+    "day_setup_source_",
+)
+
+
+def _is_user_readable(key: str, user: User) -> bool:
+    return (
+        key in _USER_READABLE_KEYS
+        or key.startswith(_USER_READABLE_PREFIXES)
+        or _is_user_writable(key, user)
+    )
 
 
 def _optional_default_setting(key: str) -> dict[str, object] | None:
@@ -170,7 +206,7 @@ def list_settings(
     if current_user.role in _ADMIN_ROLES:
         return all_settings
     # Non-admins only see the user-readable subset
-    return [s for s in all_settings if s.key in _USER_READABLE_KEYS or _is_user_writable(s.key, current_user)]
+    return [s for s in all_settings if _is_user_readable(s.key, current_user)]
 
 
 # ---------------------------------------------------------------------------
@@ -183,9 +219,8 @@ def get_setting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    if current_user.role not in _ADMIN_ROLES:
-        if key not in _USER_READABLE_KEYS and not _is_user_writable(key, current_user):
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+    if current_user.role not in _ADMIN_ROLES and not _is_user_readable(key, current_user):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     setting = db.get(AppSetting, key)
     if setting is None:
         default_setting = _optional_default_setting(key)
