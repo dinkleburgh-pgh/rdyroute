@@ -74,6 +74,15 @@ export default function Unload() {
     const c = prevDayCarriers.get(t.truck_number);
     return !!c && c.truck_number !== t.truck_number && carrierCountsAsUnloaded(c);
   };
+  // Has this truck's unload already happened? Mirrors the `unloaded` memo below
+  // so the action menu can never offer "Mark Unloaded" on a truck that is
+  // sitting in the Unloaded-today section. Durable state only — the
+  // recentlyUnloaded set is per-tab, so anything keyed on it forgets the moment
+  // the page reloads or another device opens it.
+  const isUnloadDone = (t: TruckWithState): boolean => {
+    const s = t.state?.status;
+    return s === "unloaded" || s === "in_progress" || s === "loaded" || carrierDone(t);
+  };
   // Previous-day coverage chips, via the shared selector (same normalization as
   // Load/Fleet/Report) — what's being unloaded under coverage today.
   const unloadCoverage = useCoverageForRole("unload", runDate, data ?? []);
@@ -314,7 +323,14 @@ export default function Unload() {
     setOverflowOpen(null);
     // Pin BEFORE the mutation so the card stays in its section (styled done)
     // the moment the optimistic update flips status — avoids a jump/flash.
-    setRecentlyUnloaded((prev) => new Set([...prev, t.truck_number]));
+    //
+    // Only pin a truck that was genuinely mid-unload. The pin forces the truck
+    // into `dirty` (see that memo), which is what holds its card in place — so
+    // pinning one that is ALREADY unloaded drags it into the Dirty section
+    // instead, i.e. "marking it unloaded moved it to dirty".
+    if (!isUnloadDone(t)) {
+      setRecentlyUnloaded((prev) => new Set([...prev, t.truck_number]));
+    }
     try {
       await upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, status: "unloaded", wearers: t.state?.wearers ?? 0 });
     } catch {
@@ -650,11 +666,20 @@ export default function Unload() {
         {/* Truck action menu (cards style + unloaded-today taps) */}
         {menuTruck && (() => {
           const t = allTrucks.find((x) => x.truck_number === menuTruck.truck_number) ?? menuTruck;
-          const isUndo = recentlyUnloaded.has(t.truck_number);
           const isUnfin = t.state?.status === "unfinished";
           const cd = coverDisplay(t);
           const isBusy = busy === t.truck_number;
           const close = () => setMenuTruck(null);
+          // This truck's unload is finished — from durable state, not just this
+          // tab's memory of doing it. Undo is only offered where it means
+          // something: a truck sitting at "unloaded". A covered route was
+          // unloaded BY its carrier (nothing of its own to reverse), and one
+          // already loading or loaded is past the unload stage entirely.
+          const st = t.state?.status;
+          const done = isUnloadDone(t);
+          const carrierOnly = carrierDone(t) && st !== "unloaded";
+          const carrierNum = prevDayCarriers.get(t.truck_number)?.truck_number ?? null;
+          const canUndo = st === "unloaded" && !carrierOnly;
           return createPortal(
             <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={close}>
               <div className="max-h-[90svh] w-full max-w-sm space-y-4 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
@@ -670,10 +695,41 @@ export default function Unload() {
                   <button className="btn-ghost" onClick={close}>Close</button>
                 </div>
 
-                {isUndo ? (
-                  <button className="w-full rounded-lg border border-slate-600 bg-slate-800 py-3.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50" disabled={isBusy} onClick={async () => { await undoUnload(t.truck_number); close(); }}>
-                    {isBusy ? "…" : "Undo — back to Dirty"}
-                  </button>
+                {done ? (
+                  <>
+                    {canUndo ? (
+                      <button className="w-full rounded-lg border border-slate-600 bg-slate-800 py-3.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50" disabled={isBusy} onClick={async () => { await undoUnload(t.truck_number); close(); }}>
+                        {isBusy ? "…" : "Undo — back to Dirty"}
+                      </button>
+                    ) : (
+                      <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-3 text-sm leading-snug text-slate-300">
+                        {carrierOnly
+                          ? carrierNum != null
+                            ? `Unloaded on truck #${carrierNum}, which carried this route. Undo it there.`
+                            : "Unloaded by the truck that carried this route."
+                          : st === "loaded"
+                            ? "Already loaded for tonight — past the unload stage."
+                            : "Loading has started — past the unload stage."}
+                      </p>
+                    )}
+
+                    {/* Batching stays available: wearers and batch numbers are
+                        normally entered right after a truck is unloaded. */}
+                    {!batchingDisabled && (
+                      <section>
+                        <p className="label">Batch</p>
+                        <div className="grid grid-cols-6 gap-1.5">
+                          {[1, 2, 3, 4, 5, 6].map((n) => (
+                            <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"}>{n}</button>
+                          ))}
+                        </div>
+                        <input type="number" min={0} className="input mt-2" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />
+                        <button className="btn-primary mt-2 w-full font-semibold" disabled={assign.isPending} onClick={async () => { await assignBatch(t.truck_number); close(); }}>
+                          {assign.isPending ? "Saving…" : t.state?.batch_id != null ? `Assign (current: Batch ${t.state.batch_id})` : "Assign Batch"}
+                        </button>
+                      </section>
+                    )}
+                  </>
                 ) : (
                   <>
                     <button className="w-full rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnloaded(t); close(); }}>
