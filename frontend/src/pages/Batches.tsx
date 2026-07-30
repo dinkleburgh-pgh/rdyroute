@@ -291,7 +291,9 @@ export default function Batches() {
       {/* Centered hint — visible when truck entered but no batch selected yet */}
       {truck && selectedBatch === null && (
         <div className="flex items-center justify-center">
-          <div className="flex animate-pulse items-center gap-2 rounded-full border border-blue-500/40 bg-blue-950/50 px-5 py-2.5 shadow-lg shadow-blue-900/20">
+          {/* Solid. The cards themselves now carry the motion, and a pulsing
+              label above them competed with the thing it was pointing at. */}
+          <div className="flex items-center gap-2 rounded-full border border-blue-500/40 bg-blue-950/50 px-5 py-2.5 shadow-lg shadow-blue-900/20">
             <Package className="h-4 w-4 shrink-0 text-blue-400" />
             <span className="text-sm font-semibold text-blue-300">Tap a batch card to assign</span>
           </div>
