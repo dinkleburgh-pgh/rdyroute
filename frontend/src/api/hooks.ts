@@ -1188,6 +1188,65 @@ export function useUnloadDayTemplate(day: number | null | undefined): UnloadDayT
   }, [settings, day]);
 }
 
+// ---------------------------------------------------------------------------
+// Workflow notes (unload / load)
+//
+// Two kinds, per workflow:
+//   - PERSISTENT: applies every run day  -> "{scope}_persistent_notes"
+//   - PER WORKDAY 1-5                    -> "{scope}_day_notes_{n}"
+//
+// The unload side already used `unload_day_notes_{n}` for the standing notes
+// transcribed off the paper sheet, so this generalises those keys rather than
+// introducing a parallel set — editing day 3 here edits what the Unload page
+// and the batching wizard have always shown.
+//
+// Stored in AppSettings for the same reason as the wearer sheets: a handful of
+// small documents, edited rarely, no migration needed.
+// ---------------------------------------------------------------------------
+
+export type NoteScope = "unload" | "load";
+
+export const workflowDayNotesKey = (scope: NoteScope, day: number) =>
+  `${scope}_day_notes_${day}`;
+export const workflowPersistentNotesKey = (scope: NoteScope) =>
+  `${scope}_persistent_notes`;
+
+export interface WorkflowNotes {
+  /** Shown every run day for this workflow. */
+  persistent: string;
+  /** Workday number (1-5) -> that day's standing notes. */
+  days: Record<number, string>;
+}
+
+/** Every stored note for a workflow. Reads the shared settings payload, so it
+ *  costs no extra request. */
+export function useWorkflowNotes(scope: NoteScope): WorkflowNotes {
+  const { data: settings = [] } = useSettings();
+  return useMemo(() => {
+    const str = (key: string) => {
+      const v = settings.find((s) => s.key === key)?.value;
+      return typeof v === "string" ? v : "";
+    };
+    const days: Record<number, string> = {};
+    for (const d of [1, 2, 3, 4, 5]) days[d] = str(workflowDayNotesKey(scope, d));
+    return { persistent: str(workflowPersistentNotesKey(scope)), days };
+  }, [settings, scope]);
+}
+
+/** The notes that apply to a workflow RIGHT NOW: the persistent set plus the
+ *  current workday's, already split into lines with bullet markers stripped. */
+export function useActiveWorkflowNotes(scope: NoteScope, day: number | null | undefined) {
+  const notes = useWorkflowNotes(scope);
+  return useMemo(() => {
+    const split = (s: string) =>
+      s.split("\n").map((l) => l.replace(/^\s*[*•-]\s*/, "").trim()).filter(Boolean);
+    return {
+      persistent: split(notes.persistent),
+      day: day == null ? [] : split(notes.days[day] ?? ""),
+    };
+  }, [notes, day]);
+}
+
 export function useSyncProductionData() {
   const qc = useQueryClient();
   return useMutation({

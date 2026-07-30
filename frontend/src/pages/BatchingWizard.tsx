@@ -32,7 +32,7 @@ import PageHeader from "../components/PageHeader";
 import OverbatchedChip from "../components/OverbatchedChip";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { DustGarmentIcon } from "../components/icons";
-import UnloadDayNotes from "../components/UnloadDayNotes";
+import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import WearerDefaultsEditor from "../components/batching/WearerDefaultsEditor";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckWithState } from "../types";
@@ -209,7 +209,7 @@ export default function BatchingWizard() {
 
       {/* The sheet notes ARE batching constraints ("69 must be in its own
           batch"), so they belong in front of whoever is batching. */}
-      <UnloadDayNotes unloadsDay={unloadsDay} />
+      <WorkflowDayNotes scope="unload" day={unloadsDay} />
 
       {/* Run date + roster scope */}
       <div className="card flex flex-wrap items-center justify-between gap-3">

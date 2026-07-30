@@ -3,6 +3,7 @@ import { AlertTriangleIcon } from "../icons";
 import { todayIso } from "../../api/client";
 import {
   useActiveWarnings,
+  useActiveWorkflowNotes,
   useDailyNotes,
   useNotices,
   useSettings,
@@ -18,8 +19,10 @@ import type { TruckNote, TruckWithState } from "../../types";
  * transient toast; truck notes lived on the /notes board and inside the board's
  * in-progress hero. This gathers them against the truck actually being loaded.
  *
- * Deliberately NOT included: the per-unload-day sheet notes, which are keyed to
- * the UNLOAD day and are about batching — the wrong dimension for a load.
+ * Includes the LOAD workflow's standing notes (persistent + this load day),
+ * edited on the Notes page. Deliberately NOT included: the per-unload-day sheet
+ * notes, which are keyed to the UNLOAD day and are about batching — the wrong
+ * dimension for a load.
  */
 
 const NOTE_STYLE: Record<TruckNote["note_type"], { border: string; bg: string; chip: string; label: string }> = {
@@ -70,6 +73,8 @@ export default function LoadNotesPanel({
   const { data: settings = [] } = useSettings();
   const shiftNotesEnabled = settings.find((s) => s.key === "shift_notes_enabled")?.value !== false;
   const { data: dailyNotes = "" } = useDailyNotes(runDate);
+  // Standing load-workflow notes: the persistent set plus this load day's.
+  const workflowNotes = useActiveWorkflowNotes("load", dayNum);
 
   const warnings = truckNumber != null ? warningsByTruck[String(truckNumber)] ?? [] : [];
   const truckNotes =
@@ -91,9 +96,10 @@ export default function LoadNotesPanel({
   const shiftNote = shiftNotesEnabled ? dailyNotes.trim() : "";
 
   const upcomingCount = upcomingNotes.reduce((n, g) => n + g.notes.length + g.warnings.length, 0);
+  const workflowLines = [...workflowNotes.persistent, ...workflowNotes.day];
   const count =
     warnings.length + truckNotes.length + loudNotices.length + upcomingCount +
-    (offNote ? 1 : 0) + (shopNote ? 1 : 0) + (shiftNote ? 1 : 0);
+    workflowLines.length + (offNote ? 1 : 0) + (shopNote ? 1 : 0) + (shiftNote ? 1 : 0);
 
   return (
     <div className={clsx("card flex flex-col gap-2", className)}>
@@ -168,6 +174,24 @@ export default function LoadNotesPanel({
           </div>
         );
       })}
+
+      {/* 3b — standing load-workflow notes. Apply to the whole shift rather
+              than one truck, so they sit below the truck's own notes. */}
+      {workflowLines.length > 0 && (
+        <div className="rounded-xl border border-sky-700/40 bg-sky-950/20 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-400">
+            Load day {dayNum}
+          </p>
+          <ul className="mt-0.5 space-y-0.5">
+            {workflowLines.map((l, i) => (
+              <li key={i} className="flex gap-1.5 text-sm leading-snug text-ink-soft">
+                <span className="shrink-0 text-sky-500">•</span>
+                <span>{l}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {/* 4 — per-day state notes carried on the board payload */}
       {offNote && (

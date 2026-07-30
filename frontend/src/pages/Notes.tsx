@@ -16,14 +16,19 @@ import { ChevronRightIcon } from "../components/icons";
 import {
   useCreateNote,
   useDeleteNote,
+  useLoadDayOverride,
   useRegenerateQR,
   useTruckNotes,
+  useUnloadsDayOverride,
   useUpdateNote,
 } from "../api/hooks";
 import { todayIso, publicBase } from "../api/client";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
+import WorkflowNotesSection from "../components/notes/WorkflowNotesSection";
+import { workdayNumbers } from "../components/Clock";
+import { useAuth } from "../contexts/AuthContext";
 import { truckTypeLabel } from "../utils/truckType";
 
 // ---------------------------------------------------------------------------
@@ -538,6 +543,19 @@ export default function NotesBoard() {
   const { data: board = [] } = useBoard(runDate);
   const { data: allNotes = [] } = useTruckNotes({ activeOnly: false });
 
+  // Today's workday per workflow, so each section can flag which tab is live.
+  // Overrides win, same as every other surface.
+  const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
+  const { data: loadDayOverride } = useLoadDayOverride(runDate);
+  const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
+  const loadDay = loadDayOverride ?? computedLoadDay;
+  const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
+
+  // Writing an AppSetting is admin-gated server-side, so everyone else sees
+  // these read-only rather than hitting a 403 on save.
+  const { user } = useAuth();
+  const canEditWorkflowNotes = ["admin", "fleet", "supervisor"].includes(user?.role ?? "");
+
   const [search,        setSearch]       = useState("");
   const [typeFilter,    setTypeFilter]   = useState<NoteType | "all">("all");
   const [showArchived,  setShowArchived] = useState(false);
@@ -618,6 +636,25 @@ export default function NotesBoard() {
       />
 
       <div className="space-y-5 p-3 md:p-6">
+
+      {/* Workflow notes — not tied to any one truck, unlike everything below.
+          Collapsed by default so the truck board stays the page's subject. */}
+      <div className="space-y-2">
+        <WorkflowNotesSection
+          scope="unload"
+          title="Unload notes"
+          subtitle="Standing instructions for the unload workflow — shown on Unload and the batching wizard."
+          currentDay={unloadsDay}
+          canEdit={canEditWorkflowNotes}
+        />
+        <WorkflowNotesSection
+          scope="load"
+          title="Load notes"
+          subtitle="Standing instructions for the load workflow — shown on Load and the load display."
+          currentDay={loadDay}
+          canEdit={canEditWorkflowNotes}
+        />
+      </div>
 
       {/* Filters */}
       <div className="flex flex-wrap items-center gap-3">

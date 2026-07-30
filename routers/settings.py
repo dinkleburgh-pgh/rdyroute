@@ -37,6 +37,10 @@ KNOWN_KEYS = {
     "realtime_toasts_enabled",
     "tracked_items_map",
     "tracked_item_categories",
+    # Notes that apply every run day, one set per workflow. The per-workday
+    # notes live under the {scope}_day_notes_{1-5} prefixes.
+    "unload_persistent_notes",
+    "load_persistent_notes",
     "calculator_fab_enabled",
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
@@ -79,6 +83,8 @@ _USER_READABLE_KEYS = {
     # admin-only meant non-admins logged a 403 per page and fell back to
     # uncoloured categories.
     "tracked_item_categories",
+    "unload_persistent_notes",
+    "load_persistent_notes",
     "calculator_fab_enabled",
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
@@ -118,6 +124,13 @@ _USER_READABLE_PREFIXES: tuple[str, ...] = (
     "unloads_day_override_",
     "runday_next_up_",
     "day_setup_source_",
+    # Standing per-workday notes and the batching wearer sheets. These drive
+    # what the Unload, Batching and Load surfaces render for everyone, so
+    # withholding them from non-admins meant a lead saw no sheet notes and no
+    # wearer prefill at all — the floor is exactly who needs them.
+    "unload_day_notes_",
+    "unload_day_wearers_",
+    "load_day_notes_",
 )
 
 

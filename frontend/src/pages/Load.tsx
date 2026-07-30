@@ -50,6 +50,7 @@ import AnimateCard from "../components/AnimateCard";
 import ConfirmDialog from "../components/ConfirmDialog";
 import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
+import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
 import CoverageTag from "../components/CoverageTag";
 import CoverageCards from "../components/CoverageCards";
@@ -338,6 +339,9 @@ export default function Load() {
         <MonitorPlay className="h-4 w-4" />
         Open Load Display
       </button>
+
+      {/* Standing load-workflow notes for today, edited on the Notes page. */}
+      <WorkflowDayNotes scope="load" day={loadDay} />
 
       <GarmentsStrip trucks={dustGarmentTrucks} />
 
