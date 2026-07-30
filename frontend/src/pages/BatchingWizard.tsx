@@ -33,6 +33,8 @@ import OverbatchedChip from "../components/OverbatchedChip";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { DustGarmentIcon } from "../components/icons";
 import UnloadDayNotes from "../components/UnloadDayNotes";
+import WearerDefaultsEditor from "../components/batching/WearerDefaultsEditor";
+import { useAuth } from "../contexts/AuthContext";
 import type { TruckWithState } from "../types";
 
 const BATCH_NUMBERS = [1, 2, 3, 4, 5, 6];
@@ -56,6 +58,7 @@ export default function BatchingWizard() {
   const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const [confirmMove, setConfirmMove] = useState<{ truck: number; from: number } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<{ truck: number; from: number } | null>(null);
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
 
   const { data: board = [] } = useBoard(runDate);
   const { data: batches = [] } = useBatchSummary(runDate);
@@ -190,6 +193,12 @@ export default function BatchingWizard() {
 
   const isDust = (t: TruckWithState | undefined) => t?.truck_type === "Dust";
 
+  // Writing an AppSetting is admin-gated server-side, so only offer the editor
+  // to roles that can actually save — a button that always 403s is worse than
+  // no button.
+  const { user } = useAuth();
+  const canEditDefaults = ["admin", "fleet", "supervisor"].includes(user?.role ?? "");
+
   return (
     <div className="space-y-4 p-3 md:p-6">
       <PageHeader
@@ -239,8 +248,23 @@ export default function BatchingWizard() {
           >
             Hide batched
           </button>
+          {canEditDefaults && (
+            <button
+              type="button"
+              onClick={() => setDefaultsOpen(true)}
+              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-semibold text-slate-300 transition-colors hover:border-slate-500"
+            >
+              Wearer defaults
+            </button>
+          )}
         </div>
       </div>
+
+      <WearerDefaultsEditor
+        open={defaultsOpen}
+        initialDay={unloadsDay}
+        onClose={() => setDefaultsOpen(false)}
+      />
 
       {/* Progress pills — Batch 1-6 + Review, click to jump */}
       <div className="flex flex-wrap gap-2">
