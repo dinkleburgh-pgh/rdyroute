@@ -3,7 +3,7 @@
  * ShortageSheetView grid and the server-side PDF export, so both render the
  * exact same numbers. Extracted verbatim from ShortageSheetView's useMemo.
  */
-import type { Shortage } from "../../types";
+import type { Shortage, ShortageSheetTemplate } from "../../types";
 import type { TrackedItem } from "../../api/hooks";
 import { findTrackedItem, MAT_SIZES_S, subCatOf, topCatOf } from "./HierarchyPicker";
 
@@ -61,13 +61,88 @@ export function catalogItemKey(item: TrackedItem): { category: string; detail: s
   return { category, detail };
 }
 
+// ---------------------------------------------------------------------------
+// Printed-sheet order
+//
+// The paper sheet's 53 rows have a fixed printed order that has nothing to do
+// with alphabetical-within-family. Whoever is transcribing reads straight down
+// a truck column, so every surface that shows items — the editable grid, the
+// read-only sheet, the report/PDF — should list them in that same order.
+//
+// The order lives server-side in shortage_sheet_template.py and arrives via
+// useShortageSheetTemplates(). These helpers turn it into a rank map keyed by
+// the app's CANONICAL (category, detail), which is the join between the printed
+// template and what actually gets written to the shortages table.
+// ---------------------------------------------------------------------------
+
 /**
- * Every catalog item as an (empty) SheetRow in sheet order (family → category →
- * label) — the row set for the EDITABLE short sheet, where most cells start
- * blank. Deduped by (category, detail). `byTruck`/`total` are placeholders the
- * editor fills from live shortages.
+ * The canonical (category, detail) a printed template row maps onto.
+ *
+ * The template speaks its own dialect: `Bulk > Towels` / `Micro Blue`, where
+ * live rows use the SUBcategory alone (`Towels`). Prefer a real catalog match
+ * so the key is exactly what the pickers write; otherwise fall back to the same
+ * sub-else-top reduction catalogItemKey() applies, so both paths agree.
  */
-export function buildCatalogRows(items: TrackedItem[]): SheetRow[] {
+export function templateItemKey(
+  templateCategory: string,
+  templateDetail: string,
+  items: TrackedItem[],
+): { category: string; detail: string } {
+  const match = findTrackedItem(items, templateCategory, templateDetail);
+  if (match) return catalogItemKey(match);
+  const idx = templateCategory.indexOf(">");
+  const category = (idx >= 0 ? templateCategory.slice(idx + 1) : templateCategory).trim();
+  return { category, detail: templateDetail };
+}
+
+/** canonical "category||detail" → its position on the printed page. */
+export function buildPaperRank(
+  template: ShortageSheetTemplate | undefined,
+  items: TrackedItem[],
+): Map<string, number> {
+  const rank = new Map<string, number>();
+  if (!template) return rank;
+  template.rows.forEach((r, i) => {
+    const { category, detail } = templateItemKey(r.item_category, r.item_detail, items);
+    const k = `${category}||${detail}`;
+    // First occurrence wins — a duplicate mapping must not shuffle the page.
+    if (!rank.has(k)) rank.set(k, i);
+  });
+  return rank;
+}
+
+/**
+ * Sort comparator: printed order first, with anything not on the paper falling
+ * back to the family grouping and sorting after every printed row.
+ */
+function makeRowComparator(paperRank?: Map<string, number>) {
+  const groupRank = (g: string) => {
+    const i = GROUP_ORDER.indexOf(g);
+    return i === -1 ? GROUP_ORDER.length : i;
+  };
+  const paperOf = (r: SheetRow) =>
+    paperRank?.get(`${r.category}||${r.detail}`) ?? Number.MAX_SAFE_INTEGER;
+  return (a: SheetRow, b: SheetRow) => {
+    const pa = paperOf(a);
+    const pb = paperOf(b);
+    if (pa !== pb) return pa - pb;
+    return (
+      groupRank(a.group) - groupRank(b.group) ||
+      a.group.localeCompare(b.group) ||
+      a.category.localeCompare(b.category) ||
+      a.label.localeCompare(b.label)
+    );
+  };
+}
+
+/**
+ * Every catalog item as an (empty) SheetRow in sheet order — printed order when
+ * the paper template is supplied, else family → category → label. This is the
+ * row set for the EDITABLE short sheet, where most cells start blank. Deduped
+ * by (category, detail). `byTruck`/`total` are placeholders the editor fills
+ * from live shortages.
+ */
+export function buildCatalogRows(items: TrackedItem[], paperRank?: Map<string, number>): SheetRow[] {
   const seen = new Set<string>();
   const rows: SheetRow[] = [];
   for (const item of items) {
@@ -85,21 +160,66 @@ export function buildCatalogRows(items: TrackedItem[]): SheetRow[] {
       total: 0,
     });
   }
-  const groupRank = (g: string) => {
-    const i = GROUP_ORDER.indexOf(g);
-    return i === -1 ? GROUP_ORDER.length : i;
-  };
-  rows.sort(
-    (a, b) =>
-      groupRank(a.group) - groupRank(b.group) ||
-      a.group.localeCompare(b.group) ||
-      a.category.localeCompare(b.category) ||
-      a.label.localeCompare(b.label),
-  );
+  rows.sort(makeRowComparator(paperRank));
   return rows;
 }
 
-export function buildShortageMatrix(shorts: Shortage[], items: TrackedItem[]): ShortageMatrix {
+/** A row of the printed sheet, carrying the label as it appears on paper. */
+export interface PaperRow extends SheetRow {
+  /** Template row_key, or a synthetic key for off-template rows. */
+  rowKey: string;
+  /** Exactly as printed, e.g. "MICRO BLUE - x7432" — including the product
+   *  code, which is how the transcriber finds the line on the page. */
+  printedLabel: string;
+  /** Visual block on the paper (aprons, towels, dust mops …) for dividers. */
+  band: string;
+}
+
+/**
+ * The printed sheet as an ordered row list: every template row in printed
+ * order, then any item that has data today but isn't on the paper, so nothing
+ * already logged becomes unreachable from this screen.
+ */
+export function buildPaperRows(
+  template: ShortageSheetTemplate | undefined,
+  items: TrackedItem[],
+  extraRows: SheetRow[] = [],
+): PaperRow[] {
+  const out: PaperRow[] = [];
+  const seen = new Set<string>();
+  for (const r of template?.rows ?? []) {
+    const { category, detail } = templateItemKey(r.item_category, r.item_detail, items);
+    const k = `${category}||${detail}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const idx = r.item_category.indexOf(">");
+    out.push({
+      rowKey: r.row_key,
+      printedLabel: r.printed_label,
+      band: (idx >= 0 ? r.item_category.slice(idx + 1) : r.item_category).trim(),
+      group: superGroupOf(category, items),
+      category,
+      detail,
+      label: detail ? `${category} ${detail}` : category,
+      unit: findTrackedItem(items, category, detail)?.unit_label ?? null,
+      byTruck: new Map(),
+      total: 0,
+    });
+  }
+  for (const r of extraRows) {
+    const k = `${r.category}||${r.detail}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    out.push({ ...r, rowKey: `x:${k}`, printedLabel: r.label.toUpperCase(), band: "Not on sheet" });
+  }
+  return out;
+}
+
+export function buildShortageMatrix(
+  shorts: Shortage[],
+  items: TrackedItem[],
+  paperRank?: Map<string, number>,
+): ShortageMatrix {
   const truckSet = new Set<number>();
   const rowMap = new Map<string, SheetRow>();
   for (const s of shorts) {
@@ -124,19 +244,9 @@ export function buildShortageMatrix(shorts: Shortage[], items: TrackedItem[]): S
     row.total += s.quantity;
   }
   const trucks = [...truckSet].sort((a, b) => a - b);
-  // Ordered by FAMILY (Mats → Bulk → Paper → Hygiene), then by the category
-  // inside it (3x10 → 3x5 → 4x6), then by item.
-  const groupRank = (g: string) => {
-    const i = GROUP_ORDER.indexOf(g);
-    return i === -1 ? GROUP_ORDER.length : i;
-  };
-  const rows = [...rowMap.values()].sort(
-    (a, b) =>
-      groupRank(a.group) - groupRank(b.group) ||
-      a.group.localeCompare(b.group) ||
-      a.category.localeCompare(b.category) ||
-      a.label.localeCompare(b.label),
-  );
+  // Printed-page order when the template is available, else FAMILY (Mats →
+  // Bulk → Paper → Hygiene) then category then item.
+  const rows = [...rowMap.values()].sort(makeRowComparator(paperRank));
   const truckTotals = new Map<number, number>();
   for (const row of rows) {
     for (const [n, q] of row.byTruck) truckTotals.set(n, (truckTotals.get(n) ?? 0) + q);

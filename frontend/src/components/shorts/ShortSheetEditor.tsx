@@ -16,7 +16,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
-import { useTrackedItems, useUpsertShortageCells } from "../../api/hooks";
+import { useShortageSheetTemplates, useTrackedItems, useUpsertShortageCells } from "../../api/hooks";
 import type { Shortage, TruckWithState } from "../../types";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
@@ -25,14 +25,16 @@ import ConfirmDialog from "../ConfirmDialog";
 import ShortageSheetView from "./ShortageSheetView";
 import {
   buildCatalogRows,
+  buildPaperRank,
+  buildPaperRows,
   catalogItemKey,
   superGroupOf,
-  GROUP_ORDER,
+  type PaperRow,
   type SheetRow,
 } from "./shortageMatrix";
 import { findTrackedItem, useCategoryPalette } from "./HierarchyPicker";
 
-type Mode = "grid" | "guided" | "review";
+type Mode = "grid" | "guided" | "paper" | "review";
 
 const keyOf = (category: string, detail: string) => `${category}||${detail}`;
 const draftKey = (category: string, detail: string, truck: number) => `${category}|||${detail}|||${truck}`;
@@ -61,17 +63,24 @@ export default function ShortSheetEditor({
   const [hideEmpty, setHideEmpty] = useState(false);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [guidedIdx, setGuidedIdx] = useState(0);
+  const [paperTruckIdx, setPaperTruckIdx] = useState(0);
   const [confirmClear, setConfirmClear] = useState<SheetRow | null>(null);
   const [truckFilter, setTruckFilter] = useState("");
 
   const initials = user?.username?.slice(0, 3).toUpperCase() ?? "";
 
+  // The printed sheet's row order, straight off the same template the OCR
+  // importer uses — so every surface here lists items in page order.
+  const { data: templates = [] } = useShortageSheetTemplates();
+  const template = templates[0];
+  const paperRank = useMemo(() => buildPaperRank(template, items), [template, items]);
+
   // --- Rows: full catalog (blank cells) + any extra rows from existing data ---
-  const catalogRows = useMemo(() => buildCatalogRows(items), [items]);
+  const catalogRows = useMemo(() => buildCatalogRows(items, paperRank), [items, paperRank]);
 
   // Existing quantities, normalized onto canonical (category, detail) keys so a
   // short logged under any historical category shape lands on the right row.
-  const { qtyByKey, rows } = useMemo(() => {
+  const { qtyByKey, rows, extraRows } = useMemo(() => {
     const qtyByKey = new Map<string, Map<number, number>>();
     const extraMeta = new Map<string, { category: string; detail: string }>();
     for (const s of shorts) {
@@ -100,19 +109,16 @@ export default function ShortSheetEditor({
         total: 0,
       });
     }
-    const groupRank = (g: string) => {
-      const i = GROUP_ORDER.indexOf(g);
-      return i === -1 ? GROUP_ORDER.length : i;
-    };
-    const rows = [...catalogRows, ...extraRows].sort(
-      (a, b) =>
-        groupRank(a.group) - groupRank(b.group) ||
-        a.group.localeCompare(b.group) ||
-        a.category.localeCompare(b.category) ||
-        a.label.localeCompare(b.label),
-    );
-    return { qtyByKey, rows };
+    // catalogRows is already in printed order; off-template rows follow it.
+    const rows = [...catalogRows, ...extraRows];
+    return { qtyByKey, rows, extraRows };
   }, [shorts, items, catalogRows]);
+
+  // The printed page, in printed order, for Paper mode.
+  const paperRows = useMemo(
+    () => buildPaperRows(template, items, extraRows),
+    [template, items, extraRows],
+  );
 
   const committedQty = (row: SheetRow, truck: number) =>
     qtyByKey.get(keyOf(row.category, row.detail))?.get(truck) ?? 0;
@@ -245,7 +251,7 @@ export default function ShortSheetEditor({
       {/* Mode switch */}
       <div className="flex items-center justify-between gap-2">
         <div className="flex rounded-lg border border-slate-800 bg-slate-900/70 p-1">
-          {(["grid", "guided", "review"] as Mode[]).map((m) => (
+          {(["grid", "guided", "paper", "review"] as Mode[]).map((m) => (
             <button
               key={m}
               type="button"
@@ -255,7 +261,7 @@ export default function ShortSheetEditor({
                 mode === m ? "bg-blue-600 text-white" : "text-slate-400 hover:text-slate-200",
               )}
             >
-              {m === "grid" ? "Grid" : m === "guided" ? "Guided" : "Review"}
+              {m === "grid" ? "Grid" : m === "guided" ? "Guided" : m === "paper" ? "Paper" : "Review"}
             </button>
           ))}
         </div>
@@ -303,6 +309,19 @@ export default function ShortSheetEditor({
           rowTotal={rowTotal}
           dotClass={palette.dotClass}
           onClearRow={(r) => setConfirmClear(r)}
+        />
+      ) : mode === "paper" ? (
+        <PaperMode
+          rows={paperRows}
+          columns={columns}
+          truckIdx={Math.min(paperTruckIdx, Math.max(0, columns.length - 1))}
+          setTruckIdx={setPaperTruckIdx}
+          cellDisplay={cellDisplay}
+          setDraft={setDraft}
+          saveCell={saveCell}
+          effectiveQty={effectiveQty}
+          colTotal={colTotal}
+          dotClass={palette.dotClass}
         />
       ) : (
         <ShortageSheetView shorts={shorts} board={board} />
@@ -548,6 +567,171 @@ function GridMode({
 // Small helper so a group header + its data row share one keyed fragment.
 function FragmentRow({ children }: { children: ReactNode }) {
   return <>{children}</>;
+}
+
+// ---------------------------------------------------------------------------
+
+/**
+ * PaperMode — transcribe one truck column exactly as it reads on paper.
+ *
+ * The sheet is truck-major and sparse: 16 truck columns, 53 item rows in a
+ * fixed printed order, and only a handful of cells inked per column. Grid gets
+ * the data shape right but sorts rows alphabetically within family, so the eye
+ * has to hunt; Guided walks items, which is the wrong axis for transcription.
+ *
+ * Here the trucks are pills (the sheet's columns) and the body is the printed
+ * row list, in printed order, with the PRINTED label including its product code
+ * — the string the transcriber is actually looking at. Enter commits and drops
+ * to the next row, so a column is `digit, Enter, digit, Enter` straight down the
+ * page. Rows the paper doesn't have appear last, under a divider, so anything
+ * already logged off-template stays reachable.
+ */
+function PaperMode({
+  rows,
+  columns,
+  truckIdx,
+  setTruckIdx,
+  cellDisplay,
+  setDraft,
+  saveCell,
+  effectiveQty,
+  colTotal,
+  dotClass,
+}: {
+  rows: PaperRow[];
+  columns: number[];
+  truckIdx: number;
+  setTruckIdx: (n: number) => void;
+  cellDisplay: (row: SheetRow, truck: number) => string;
+  setDraft: (row: SheetRow, truck: number, v: string) => void;
+  saveCell: (row: SheetRow, truck: number) => void;
+  effectiveQty: (row: SheetRow, truck: number) => number;
+  colTotal: (truck: number) => number;
+  dotClass: (category: string) => string;
+}) {
+  const truck = columns[truckIdx];
+  const focusRow = (i: number) => {
+    const el = document.getElementById(`psc-${i}`) as HTMLInputElement | null;
+    if (el) { el.focus(); el.select(); }
+  };
+
+  if (rows.length === 0) {
+    return <p className="text-sm text-slate-500">The printed sheet template hasn't loaded yet.</p>;
+  }
+  if (truck == null) return <p className="text-sm text-slate-500">Pick the sheet's trucks above.</p>;
+
+  // How many rows this truck has inked — the pill's badge, so you can see at a
+  // glance which columns you've already done.
+  const filledFor = (t: number) => rows.reduce((n, r) => n + (effectiveQty(r, t) > 0 ? 1 : 0), 0);
+
+  let lastBand = "";
+  return (
+    <div className="space-y-3">
+      {/* Truck pills — the sheet's columns. */}
+      <div className="flex flex-wrap gap-1.5">
+        {columns.map((t, i) => {
+          const filled = filledFor(t);
+          return (
+            <button
+              key={t}
+              type="button"
+              onClick={() => setTruckIdx(i)}
+              className={clsx(
+                "rounded-lg border px-2.5 py-1 text-sm font-bold tabular-nums transition-colors",
+                i === truckIdx
+                  ? "border-blue-500 bg-blue-900/50 text-blue-100"
+                  : filled > 0
+                    ? "border-amber-700/60 bg-amber-950/30 text-amber-200"
+                    : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500",
+              )}
+            >
+              #{t}
+              {filled > 0 && <span className="ml-1 text-[10px] font-semibold opacity-80">{filled}</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Sticky column header — which truck, and its running total. */}
+      <div className="sticky top-0 z-20 flex items-center gap-2 rounded-lg border border-slate-700 bg-slate-900 px-2 py-2 shadow-lg">
+        <button className="btn-ghost shrink-0 px-3" disabled={truckIdx === 0} onClick={() => setTruckIdx(truckIdx - 1)}>
+          ←
+        </button>
+        <div className="min-w-0 flex-1 text-center">
+          <div className="text-xl font-black tabular-nums text-blue-300">#{truck}</div>
+          <div className="text-[10px] text-slate-500">
+            Column {truckIdx + 1} / {columns.length} · <span className="tabular-nums">{colTotal(truck)}</span> pieces
+          </div>
+        </div>
+        <button
+          className="btn-primary shrink-0 px-3"
+          disabled={truckIdx >= columns.length - 1}
+          onClick={() => setTruckIdx(truckIdx + 1)}
+        >
+          Next →
+        </button>
+      </div>
+
+      {/* The printed page, top to bottom. */}
+      <div className="overflow-hidden rounded-lg border border-slate-800">
+        {rows.map((row, i) => {
+          const showBand = row.band !== lastBand;
+          lastBand = row.band;
+          const qty = effectiveQty(row, truck);
+          return (
+            <FragmentRow key={row.rowKey}>
+              {showBand && (
+                <div className="bg-slate-950/80 px-3 py-1 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                  {row.band}
+                </div>
+              )}
+              <div
+                className={clsx(
+                  "flex items-center gap-2 border-b border-slate-800/60 px-3 py-1.5",
+                  qty > 0 && "bg-slate-900/50",
+                )}
+              >
+                <span className={clsx("h-2 w-2 shrink-0 rounded-full", dotClass(row.category))} />
+                <label
+                  htmlFor={`psc-${i}`}
+                  className={clsx(
+                    "min-w-0 flex-1 cursor-pointer truncate text-xs font-medium",
+                    qty > 0 ? "text-slate-100" : "text-slate-400",
+                  )}
+                  title={row.printedLabel}
+                >
+                  {row.printedLabel}
+                </label>
+                <input
+                  id={`psc-${i}`}
+                  className="w-16 shrink-0 rounded bg-slate-800/60 px-2 py-1 text-center text-sm font-semibold tabular-nums text-white outline-none focus:bg-slate-700 focus:ring-1 focus:ring-blue-500"
+                  type="text"
+                  inputMode="numeric"
+                  enterKeyHint="next"
+                  value={cellDisplay(row, truck)}
+                  onFocus={(e) => e.currentTarget.select()}
+                  onChange={(e) => setDraft(row, truck, e.target.value)}
+                  onBlur={() => saveCell(row, truck)}
+                  onKeyDown={(e) => {
+                    if (e.key !== "Enter") return;
+                    e.preventDefault();
+                    saveCell(row, truck);
+                    focusRow(i + 1); // straight down the page
+                  }}
+                />
+              </div>
+            </FragmentRow>
+          );
+        })}
+      </div>
+
+      {truckIdx < columns.length - 1 && (
+        <button className="btn-primary w-full py-3 font-semibold" onClick={() => setTruckIdx(truckIdx + 1)}>
+          Next truck → #{columns[truckIdx + 1]}
+        </button>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------

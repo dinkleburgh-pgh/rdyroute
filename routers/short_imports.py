@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from database import get_db, settings
 from models import AppSetting, Shortage, ShortageSheetImport, ShortageSheetPhoto, ShortageSheetRowDraft, User
-from routers.auth import require_admin, require_shorts_access
+from routers.auth import require_admin, require_non_guest, require_shorts_access
 from shortage_sheet_ocr import extract_shortage_rows_with_llm, preprocess_sheet_image
 from shortage_sheet_template import SHORTAGE_V1A_TEMPLATE, shortage_template_payload
 from schemas import (
@@ -1596,7 +1596,11 @@ def _get_import_or_404(import_id: str, db: Session) -> ShortageSheetImport:
 
 @router.get("/templates", response_model=list[ShortageSheetTemplateOut])
 def list_shortage_sheet_templates(
-    _user: User = Depends(require_shorts_access),
+    # Static, non-sensitive data (the printed sheet's row list). Gated only
+    # against guests: the Sheet editor's Paper mode renders from it, and every
+    # role that can WRITE shorts (require_non_guest, incl. loader/unloader)
+    # must be able to see the row order it writes against.
+    _user: User = Depends(require_non_guest),
 ):
     return _template_catalog()
 
