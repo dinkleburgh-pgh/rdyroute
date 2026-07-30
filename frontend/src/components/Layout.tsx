@@ -202,7 +202,15 @@ export default function Layout() {
   // refreshed by useRealtimeSync — surface a clickable toast that jumps to the
   // truck on the Notes board. Longer dwell than a normal toast since it's an
   // action, not just feedback.
+  // Master switch for the slide-in event cards (Operations → Pop-up alerts).
+  // Off means the listeners are never attached, so nothing queues up and
+  // nothing fires the moment it's turned back on. Deliberately does NOT cover
+  // the offline-sync conflict toast above: that reports on the user's own
+  // unsaved changes and losing it silently would hide real data loss.
+  const toastsEnabled = settingsMap.get("realtime_toasts_enabled") !== false;
+
   useEffect(() => {
+    if (!toastsEnabled) return;
     const onDriverNote = (e: Event) => {
       const d = (e as CustomEvent<{ truck_number?: number; body?: string }>).detail ?? {};
       const truck = d.truck_number;
@@ -215,7 +223,7 @@ export default function Layout() {
     };
     window.addEventListener("readyroute:driver-note", onDriverNote);
     return () => window.removeEventListener("readyroute:driver-note", onDriverNote);
-  }, [toast, nav]);
+  }, [toast, nav, toastsEnabled]);
 
   // Everything else that's worth interrupting someone for: chat, notices,
   // arrivals, and the server's own notifications (hold / OOS / coverage).
@@ -223,6 +231,7 @@ export default function Layout() {
   // burst (e.g. clearing every swap) doesn't stack a wall of toasts.
   const seenToastTags = useRef<Map<string, number>>(new Map());
   useEffect(() => {
+    if (!toastsEnabled) return;
     const me = user?.username;
     const once = (tag: string, withinMs = 10_000): boolean => {
       const now = Date.now();
@@ -310,7 +319,7 @@ export default function Layout() {
       window.removeEventListener("readyroute:app-event", onAppEvent);
       window.removeEventListener("readyroute:notification", onNotification);
     };
-  }, [toast, nav, user?.username, location.pathname]);
+  }, [toast, nav, user?.username, location.pathname, toastsEnabled]);
 
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {

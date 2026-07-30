@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
 from database import get_db, settings as app_settings
-from models import AppSetting, GarmentDayLog, RouteSwap, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
+from models import AppSetting, GarmentDayLog, RouteSwap, RouteSwapLog, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import (
@@ -144,6 +144,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     prev_states_by_num: dict[int, TruckState] = {}
     prev_loaded_on = set[int]()
     prev_spares_used = set[int]()
+    prev_crossload_targets = set[int]()
     if prev_run_date is not None:
         prev_states_by_num = {
             row.truck_number: row
@@ -157,14 +158,42 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 select(RouteSwap).where(RouteSwap.run_date == prev_run_date)
             ).all()
         }
+        # Every truck that carried someone else's freight yesterday, gathered
+        # from all three places coverage gets recorded. A truck that dispatched
+        # must come back dirty, so this deliberately does NOT filter on
+        # `returned` the way the coverage editor does — an assignment closed
+        # during the day still means the truck ran. RouteSwapLog is append-only
+        # so it survives a cleared assignment, and oos_spare_route catches
+        # coverage written straight onto the state row (the generic state upsert
+        # accepts that field without ever creating an assignment).
         prev_spares_used = {
             row.spare_truck_number
             for row in db.scalars(
-                select(SpareAssignment).where(
-                    SpareAssignment.run_date == prev_run_date,
-                    SpareAssignment.returned == False,
-                )
+                select(SpareAssignment).where(SpareAssignment.run_date == prev_run_date)
             ).all()
+        }
+        prev_spares_used |= {
+            row.load_on_truck
+            for row in db.scalars(
+                select(RouteSwapLog).where(RouteSwapLog.run_date == prev_run_date)
+            ).all()
+        }
+        prev_spares_used |= {
+            num
+            for num, row in prev_states_by_num.items()
+            if row.oos_spare_route is not None
+        }
+        # Trucks that had another truck's freight crossloaded ONTO them. The
+        # marker lives on the SOURCE truck's state and points at the target, so
+        # the target is otherwise invisible here: a crossload that was flagged
+        # and then moved by hand creates no assignment and no swap row. If a
+        # stale marker survives to end of day we still mark the target dirty —
+        # a truck that shows dirty costs one tap to unload, whereas one that
+        # comes back "unloaded" silently drops out of the crew's work list.
+        prev_crossload_targets = {
+            row.crossload_to_truck
+            for row in prev_states_by_num.values()
+            if row.crossload_to_truck is not None
         }
 
         # Retire spare assignments from run days BEFORE the previous one. Left
@@ -239,14 +268,23 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
         load_day_value = load_day_num
         status = TruckStatus.unloaded
 
+        # Recorded evidence that this truck dispatched yesterday, independent of
+        # whether it had a state row of its own. Coverage and crossload targets
+        # normally get one, but nothing guarantees it, and a truck that ran must
+        # not fall through to the no-prior default of "unloaded".
+        ran_on_record = (
+            truck.truck_number in prev_loaded_on
+            or truck.truck_number in prev_spares_used
+            or truck.truck_number in prev_crossload_targets
+        )
+
         if prior is not None:
             # needs_checked and ran-special off_note are intentionally NOT carried
             # forward — both reset each day.
             shop_note = prior.shop_note or ""
             used_yesterday = (
                 prior.status in {TruckStatus.loaded, TruckStatus.in_progress}
-                or truck.truck_number in prev_loaded_on
-                or truck.truck_number in prev_spares_used
+                or ran_on_record
             )
 
             if prior.status == TruckStatus.unfinished:
@@ -291,6 +329,9 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 status = TruckStatus.unloaded
             else:
                 status = TruckStatus.unloaded
+        elif ran_on_record:
+            used_yesterday = True
+            status = TruckStatus.dirty
         else:
             status = TruckStatus.off if scheduled_off_today else TruckStatus.unloaded
 

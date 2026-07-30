@@ -169,6 +169,7 @@ key/value rows:
 | `calendar_fab_enabled` / `calculator_fab_enabled` | Floating action buttons |
 | `force_unloaded_on_new_day` | Force-unload every truck at day rollover |
 | `shift_notes_enabled` | Show/hide the Shift Notes panel on Day Overview |
+| `realtime_toasts_enabled` | Master switch for the slide-in event pop-ups (chat, notices, driver notes, arrivals, unloads, server alerts). Defaults on when unset; offline-sync warnings are exempt |
 | `recurring_route_swaps` | Rules auto-applying coverage on given weekdays |
 | `holiday_load_<date>` / `holiday_unload_<date>` / `holiday_mode_<date>` | Per-day holiday flags (persist forward until changed) |
 | `daily_notes_<date>` | Shift handoff notes text |
