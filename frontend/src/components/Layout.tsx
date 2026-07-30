@@ -1,10 +1,10 @@
 import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
-import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, usePrevDayCarriers, usePrevDaySplitHelpers, useRouteSwapLog, useSettings, useWizardCompleted } from "../api/hooks";
+import { useBoard, useHolidayLoad, useHolidayUnload, useOpenSpareAssignments, usePrevDayCarriers, usePrevDaySplitHelpers, useRouteSwapLog, useSettings, useToastSettings, useWizardCompleted, type ToastKind } from "../api/hooks";
 import RouteSwapModal from "./RouteSwapModal";
 import RunDayWizard from "../pages/runday/RunDayWizard";
 import ToolFab from "./ToolFab";
@@ -202,28 +202,39 @@ export default function Layout() {
   // refreshed by useRealtimeSync — surface a clickable toast that jumps to the
   // truck on the Notes board. Longer dwell than a normal toast since it's an
   // action, not just feedback.
-  // Master switch for the slide-in event cards (Operations → Pop-up alerts).
-  // Off means the listeners are never attached, so nothing queues up and
-  // nothing fires the moment it's turned back on. Deliberately does NOT cover
-  // the offline-sync conflict toast above: that reports on the user's own
-  // unsaved changes and losing it silently would hide real data loss.
-  const toastsEnabled = settingsMap.get("realtime_toasts_enabled") !== false;
+  // Pop-up settings (Management → Operations → Pop-ups): a master switch plus
+  // a per-kind enable and dwell time. Master off means the listeners are never
+  // attached, so nothing queues up and nothing fires the moment it's turned
+  // back on. Deliberately does NOT cover the offline-sync conflict toast above:
+  // that reports on the user's own unsaved changes and losing it silently
+  // would hide real data loss.
+  const toastSettings = useToastSettings();
+  const toastsEnabled = toastSettings.enabled;
+  // seconds → ms, with 0 passed straight through as ToastContext's "sticky".
+  const kindMs = useCallback(
+    (kind: ToastKind) => toastSettings.kinds[kind].seconds * 1000,
+    [toastSettings],
+  );
+  const kindOn = useCallback(
+    (kind: ToastKind) => toastSettings.kinds[kind].enabled,
+    [toastSettings],
+  );
 
   useEffect(() => {
-    if (!toastsEnabled) return;
+    if (!toastsEnabled || !kindOn("driver_note")) return;
     const onDriverNote = (e: Event) => {
       const d = (e as CustomEvent<{ truck_number?: number; body?: string }>).detail ?? {};
       const truck = d.truck_number;
       toast.info(d.body?.trim() || "Tap to view the note.", {
         title: "New Driver Note",
         chip: truck != null ? `#${truck}` : undefined,
-        durationMs: 12_000,
+        durationMs: kindMs("driver_note"),
         onClick: () => nav(truck != null ? `/notes?truck=${truck}` : "/notes"),
       });
     };
     window.addEventListener("readyroute:driver-note", onDriverNote);
     return () => window.removeEventListener("readyroute:driver-note", onDriverNote);
-  }, [toast, nav, toastsEnabled]);
+  }, [toast, nav, toastsEnabled, kindOn, kindMs]);
 
   // Everything else that's worth interrupting someone for: chat, notices,
   // arrivals, and the server's own notifications (hold / OOS / coverage).
@@ -252,40 +263,44 @@ export default function Layout() {
       const truck = typeof d.truck_number === "number" ? d.truck_number : null;
 
       if (d.type === "chat_message") {
+        if (!kindOn("chat_message")) return;
         const who = typeof d.username === "string" ? d.username : "Someone";
         if (!once(`chat-${who}-${String(d.body ?? "")}`)) return;
         toast.info(String(d.body || "Tap to open the conversation."), {
           title: `New message · ${who}`,
-          durationMs: 12_000,
+          durationMs: kindMs("chat_message"),
           onClick: () => nav("/communications"),
         });
       } else if (d.type === "notice_created") {
+        if (!kindOn("notice")) return;
         if (!once(`notice-${String(d.notice_id ?? "")}`)) return;
         toast.info(String(d.body || "Tap to read it on the Run Day board."), {
           title: `Notice · ${String(d.title ?? "")}`.trim(),
-          durationMs: 15_000,
+          durationMs: kindMs("notice"),
           onClick: () => nav("/"),
         });
       } else if (d.type === "truck_unloaded") {
         // Unloads happen ~30x a shift, so this one is scoped to the two pages
         // that actually care: Fleet and Load (a freshly unloaded truck is the
         // next thing to load). Everywhere else it would just be noise.
+        if (!kindOn("truck_unloaded")) return;
         const onFleetOrLoad = location.pathname === "/fleet" || location.pathname === "/load";
         if (!onFleetOrLoad || truck == null || !once(`unloaded-${truck}`)) return;
         toast.info("Unloaded — ready to load.", {
           title: "Truck unloaded",
           chip: `#${truck}`,
-          // Long dwell (7 min): whoever walks up to Load should still see the
-          // trucks that came ready while they were away from the screen.
-          durationMs: 7 * 60_000,
+          // Defaults to a long dwell: whoever walks up to Load should still see
+          // the trucks that came ready while they were away from the screen.
+          durationMs: kindMs("truck_unloaded"),
           onClick: () => nav(`/fleet?truck=${truck}`),
         });
       } else if (d.type === "truck_arrived") {
+        if (!kindOn("truck_arrived")) return;
         if (truck == null || !once(`arrived-${truck}`)) return;
         toast.info("Parked in the yard — ready to unload.", {
           title: "Truck arrived",
           chip: `#${truck}`,
-          durationMs: 10_000,
+          durationMs: kindMs("truck_arrived"),
           onClick: () => nav("/unload"),
         });
       }
@@ -301,14 +316,17 @@ export default function Layout() {
       if (n.actor && me && n.actor === me) return;
       if (!once(`notif-${n.tag}`)) return;
       const chipTruck = n.truck_number ?? n.route_truck ?? null;
-      // Hold and OOS are exceptions: they must be acknowledged, so they never
-      // time out — only the X (or opening them) clears them. Coverage changes
-      // are informational and still auto-dismiss.
-      const mustAcknowledge = n.type === "truck_hold" || n.type === "truck_oos";
-      toast.push(n.body, mustAcknowledge ? "error" : "info", {
+      // Hold and OOS default to sticky because they must be acknowledged;
+      // everything else the server sends here is a coverage change. Each maps
+      // to its own configurable kind.
+      const kind: ToastKind =
+        n.type === "truck_hold" ? "truck_hold" : n.type === "truck_oos" ? "truck_oos" : "coverage";
+      if (!kindOn(kind)) return;
+      const isAlert = kind === "truck_hold" || kind === "truck_oos";
+      toast.push(n.body, isAlert ? "error" : "info", {
         title: n.title,
         chip: chipTruck != null ? `#${chipTruck}` : undefined,
-        durationMs: mustAcknowledge ? 0 : 12_000,
+        durationMs: kindMs(kind),
         onClick: () => nav(n.url || "/fleet"),
       });
     };
@@ -319,7 +337,7 @@ export default function Layout() {
       window.removeEventListener("readyroute:app-event", onAppEvent);
       window.removeEventListener("readyroute:notification", onNotification);
     };
-  }, [toast, nav, user?.username, location.pathname, toastsEnabled]);
+  }, [toast, nav, user?.username, location.pathname, toastsEnabled, kindOn, kindMs]);
 
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {

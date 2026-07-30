@@ -1247,6 +1247,95 @@ export function useActiveWorkflowNotes(scope: NoteScope, day: number | null | un
   }, [notes, day]);
 }
 
+// ---------------------------------------------------------------------------
+// Pop-up (toast) settings
+//
+// Every slide-in alert has a KIND. Each kind can be turned off on its own and
+// given its own dwell time, because they aren't equally urgent: a chat message
+// can flick past, a truck going out of service should sit there until someone
+// acknowledges it. Stored as one AppSetting document rather than a key per
+// kind — it's a handful of small values edited together on one screen.
+//
+// `seconds: 0` means STICKY: the toast stays until dismissed. That's the same
+// contract ToastContext already uses for durationMs <= 0.
+// ---------------------------------------------------------------------------
+
+export const TOAST_SETTINGS_KEY = "toast_settings";
+
+export type ToastKind =
+  | "driver_note"
+  | "chat_message"
+  | "notice"
+  | "truck_unloaded"
+  | "truck_arrived"
+  | "truck_hold"
+  | "truck_oos"
+  | "coverage";
+
+export interface ToastKindConfig {
+  enabled: boolean;
+  /** Dwell time in seconds; 0 = stays until dismissed. */
+  seconds: number;
+}
+
+/** Defaults reproduce the durations these alerts have always used, so an
+ *  install with no saved settings behaves exactly as before. */
+export const TOAST_DEFAULTS: Record<ToastKind, ToastKindConfig> = {
+  driver_note:    { enabled: true, seconds: 12 },
+  chat_message:   { enabled: true, seconds: 12 },
+  notice:         { enabled: true, seconds: 15 },
+  // Long by design: whoever walks up to Load should still see the trucks that
+  // came ready while they were away from the screen.
+  truck_unloaded: { enabled: true, seconds: 420 },
+  truck_arrived:  { enabled: true, seconds: 10 },
+  // Hold and OOS must be acknowledged — sticky unless someone changes it.
+  truck_hold:     { enabled: true, seconds: 0 },
+  truck_oos:      { enabled: true, seconds: 0 },
+  coverage:       { enabled: true, seconds: 12 },
+};
+
+export const TOAST_KIND_LABELS: Record<ToastKind, { label: string; hint: string }> = {
+  driver_note:    { label: "Driver note", hint: "A driver added a note from their QR page." },
+  chat_message:   { label: "Chat message", hint: "A new message in Communications." },
+  notice:         { label: "Notice", hint: "A fleet notice was posted." },
+  truck_unloaded: { label: "Truck unloaded", hint: "Shown only on Fleet and Load — a truck is ready to load." },
+  truck_arrived:  { label: "Truck arrived", hint: "A truck parked back in the yard." },
+  truck_hold:     { label: "Priority hold", hint: "A truck was put on hold. Needs acknowledging." },
+  truck_oos:      { label: "Out of service", hint: "A truck went OOS. Needs acknowledging." },
+  coverage:       { label: "Coverage change", hint: "Coverage assigned, changed, or removed." },
+};
+
+export interface ToastSettings {
+  /** Master switch — when false nothing pops at all. */
+  enabled: boolean;
+  kinds: Record<ToastKind, ToastKindConfig>;
+}
+
+/** Resolved pop-up settings: stored values over the defaults. Reads the shared
+ *  settings payload, so it costs no extra request. */
+export function useToastSettings(): ToastSettings {
+  const { data: settings = [] } = useSettings();
+  return useMemo(() => {
+    const enabled = settings.find((s) => s.key === "realtime_toasts_enabled")?.value !== false;
+    const raw = settings.find((s) => s.key === TOAST_SETTINGS_KEY)?.value;
+    const kinds = { ...TOAST_DEFAULTS };
+    if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+      for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+        if (!(k in TOAST_DEFAULTS) || !v || typeof v !== "object") continue;
+        const cfg = v as Partial<ToastKindConfig>;
+        const secs = Number(cfg.seconds);
+        kinds[k as ToastKind] = {
+          enabled: cfg.enabled !== false,
+          // Guard the stored value: a negative or non-numeric dwell would make
+          // a toast that should expire hang around forever.
+          seconds: Number.isFinite(secs) && secs >= 0 ? secs : TOAST_DEFAULTS[k as ToastKind].seconds,
+        };
+      }
+    }
+    return { enabled, kinds };
+  }, [settings]);
+}
+
 export function useSyncProductionData() {
   const qc = useQueryClient();
   return useMutation({

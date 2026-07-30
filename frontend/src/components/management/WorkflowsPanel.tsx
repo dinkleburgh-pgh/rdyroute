@@ -19,7 +19,6 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
       shift_notes_enabled: asBool(map.get("shift_notes_enabled"), true),
-      realtime_toasts_enabled: asBool(map.get("realtime_toasts_enabled"), true),
       calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), false),
       calendar_fab_enabled: asBool(map.get("calendar_fab_enabled"), false),
       force_unloaded_on_new_day: asBool(map.get("force_unloaded_on_new_day"), false),
@@ -188,19 +187,8 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           Show Shift Notes on Day Overview
         </label>
       </FieldRow>
-      <FieldRow
-        label="Pop-up alerts"
-        hint="The toast cards that slide in for chat messages, notices, driver notes, arrivals, unloads, and server alerts (hold / OOS / coverage). Turning this off silences all of them; the board and Notes page still update in real time. Offline-sync warnings are not affected."
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.realtime_toasts_enabled}
-            onChange={(e) => setForm({ ...form, realtime_toasts_enabled: e.target.checked })}
-          />
-          Show pop-up alerts
-        </label>
-      </FieldRow>
+      {/* Pop-up alerts moved to their own Operations → Pop-ups tab, where each
+          kind gets its own dwell time. One switch in one place. */}
       <FieldRow
         label="Calendar FAB"
         hint="Show a floating calendar button that opens the Fleet Schedule page."

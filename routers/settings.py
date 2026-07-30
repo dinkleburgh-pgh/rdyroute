@@ -35,6 +35,7 @@ KNOWN_KEYS = {
     "arrived_tracking_enabled",
     "note_cards_enabled",
     "realtime_toasts_enabled",
+    "toast_settings",
     "tracked_items_map",
     "tracked_item_categories",
     # Notes that apply every run day, one set per workflow. The per-workday
@@ -77,6 +78,9 @@ _USER_READABLE_KEYS = {
     "arrived_tracking_enabled",
     "note_cards_enabled",
     "realtime_toasts_enabled",
+    # Per-pop-up enable + dwell time, one document keyed by alert kind. Read by
+    # every session to decide what pops and for how long.
+    "toast_settings",
     "tracked_items_map",
     # Sibling metadata to tracked_items_map (category existence + colour preset).
     # Every shortage-entry surface resolves its palette from this, so leaving it

@@ -11,6 +11,7 @@ import RoleAccessPanel from "../components/management/RoleAccessPanel";
 import ActivityPanel from "../components/management/ActivityPanel";
 import ColorsPanel from "../components/management/ColorsPanel";
 import WorkflowsPanel from "../components/management/WorkflowsPanel";
+import ToastsPanel from "../components/management/ToastsPanel";
 import CommunicationsPanel from "../components/management/CommunicationsPanel";
 import AdvancedPanel from "../components/management/AdvancedPanel";
 import DevelopmentPanel from "../components/management/DevelopmentPanel";
@@ -38,6 +39,7 @@ import { ShortsWorkspace } from "./Shorts";
 type Category =
   | "colors"
   | "workflows"
+  | "toasts"
   | "batching"
   | "communications"
   | "users"
@@ -160,6 +162,7 @@ const CARD_GROUPS: CardGroup[] = [
     bgTint: "bg-orange-950/35",
     tabs: [
       { id: "workflows",    label: "Workflows" },
+      { id: "toasts",       label: "Pop-ups" },
       { id: "recovery",     label: "Recovery" },
       { id: "resets",       label: "Resets" },
     ],
@@ -282,6 +285,7 @@ export default function Management() {
     switch (activeTab) {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
+      case "toasts":         return <ToastsPanel map={map} />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
       case "development":    return <DevelopmentPanel />;
       case "connections":    return <ConnectionsPanel />;
