@@ -736,6 +736,19 @@ export default function Unload() {
                       {isBusy ? "…" : isUnfin ? "Finish Unload" : "Mark Unloaded"}
                     </button>
 
+                    {/* Both status actions sit together directly under the
+                        primary one — they're the same decision ("is this truck
+                        done?"), so batching shouldn't be wedged between them. */}
+                    {isUnfin ? (
+                      <button className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700" onClick={() => { upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); close(); }}>
+                        Back to Dirty
+                      </button>
+                    ) : (
+                      <button className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-st-unfinished transition-colors hover:bg-slate-700 disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnfinished(t); close(); }}>
+                        Mark Unfinished
+                      </button>
+                    )}
+
                     {!batchingDisabled && (
                       <section>
                         <p className="label">Batch</p>
@@ -749,16 +762,6 @@ export default function Unload() {
                           {assign.isPending ? "Saving…" : t.state?.batch_id != null ? `Assign (current: Batch ${t.state.batch_id})` : "Assign Batch"}
                         </button>
                       </section>
-                    )}
-
-                    {isUnfin ? (
-                      <button className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700" onClick={() => { upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); close(); }}>
-                        Back to Dirty
-                      </button>
-                    ) : (
-                      <button className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-st-unfinished transition-colors hover:bg-slate-700 disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnfinished(t); close(); }}>
-                        Mark Unfinished
-                      </button>
                     )}
                   </>
                 )}

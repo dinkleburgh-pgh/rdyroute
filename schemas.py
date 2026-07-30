@@ -603,6 +603,11 @@ class CoverageRowVM(BaseModel):
     type: str = Field(max_length=24)             # "Route swap" / "Spare cover"
     recurring: bool = False
     returned: bool = False
+    # A SPLIT load: the route runs on BOTH trucks (the carrier takes only the
+    # overflow), so the pair joins with "+" instead of the coverage arrow.
+    # Carried as its own flag rather than inferred from `type`, which is a
+    # display string and free to be reworded.
+    split: bool = False
     # Has the carrier actually loaded yet? Drives the card's tense
     # ("Loaded on" vs "Loads on"). Defaults False so an older client that
     # doesn't send it renders the present tense rather than claiming done.

@@ -499,6 +499,7 @@ export default function LiveReport() {
             type: r.type,
             recurring: isRecurring(r.routeTruck, r.loadOnTruck),
             returned: r.returned,
+            split: r.split,
             loaded: done,
             status_label,
             status_hex: done ? "#3b82f6" : "#7a8698",
@@ -1046,7 +1047,10 @@ export default function LiveReport() {
                           #{r.routeTruck}
                         </p>
                       </div>
-                      <span className="text-2xl font-black leading-none text-ink-faint">→</span>
+                      {/* A split isn't a handoff — the route runs on BOTH
+                          trucks — so it reads "+", matching CoverageCards and
+                          the truck cards. Only real coverage gets the arrow. */}
+                      <span className="text-2xl font-black leading-none text-ink-faint">{r.split ? "+" : "→"}</span>
                       <div className="text-center">
                         {/* Past tense only once the carrier has actually loaded. */}
                         <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">

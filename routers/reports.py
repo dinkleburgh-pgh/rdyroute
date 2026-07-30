@@ -342,11 +342,15 @@ def _coverage_html(c: CoverageSectionVM | None) -> str:
     for r in c.rows:
         rec = '<span class="pill rec">recurring</span>' if r.recurring else ""
         ret = '<span class="pill">returned</span>' if r.returned else ""
+        # A split load runs the route on BOTH trucks, so it joins with "+" —
+        # an arrow would read as a handoff. `type` is checked as a fallback so
+        # a client cached before `split` shipped still renders splits correctly.
+        joiner = "+" if (r.split or r.type == "Split") else "&#8594;"
         cards.append(
             f'<div class="cov"><div class="covpair">'
             f'<div><div class="covlab">Route</div>'
             f'<div class="covnum mono route">#{int(r.route_truck)}</div></div>'
-            f'<div class="covarrow">&#8594;</div>'
+            f'<div class="covarrow">{joiner}</div>'
             f'<div><div class="covlab">{"Loaded on" if r.loaded else "Loads on"}</div>'
             f'<div class="covnum mono">#{int(r.load_on_truck)}</div></div></div>'
             f'<div class="covchips"><span class="chip">{_e(r.type)}</span>{rec}{ret}</div>'

@@ -45,6 +45,9 @@ export interface CoverageRowVM {
   type: string;
   recurring: boolean;
   returned: boolean;
+  /** SPLIT load — the route runs on both trucks, so the pair joins with "+"
+   *  rather than the coverage arrow. */
+  split: boolean;
   /** Carrier has finished loading — drives "Loaded on" vs "Loads on". */
   loaded: boolean;
   status_label: string;
