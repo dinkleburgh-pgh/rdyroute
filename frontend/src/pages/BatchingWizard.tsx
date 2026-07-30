@@ -31,7 +31,7 @@ import { useToast } from "../contexts/ToastContext";
 import PageHeader from "../components/PageHeader";
 import OverbatchedChip from "../components/OverbatchedChip";
 import ConfirmDialog from "../components/ConfirmDialog";
-import { DustGarmentIcon } from "../components/icons";
+import { AlertTriangleIcon, DustGarmentIcon } from "../components/icons";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import WearerDefaultsEditor from "../components/batching/WearerDefaultsEditor";
 import { useAuth } from "../contexts/AuthContext";
@@ -331,6 +331,9 @@ export default function BatchingWizard() {
         <ReviewStep
           batches={batches}
           boardByNum={boardByNum}
+          rosterTrucks={rosterTrucks}
+          batchByTruck={batchByTruck}
+          templateWearers={dayTemplate.wearers}
           noCap={noCap}
           wearerCap={wearerCap}
           isDust={isDust}
@@ -625,6 +628,9 @@ function BatchStep({
 function ReviewStep({
   batches,
   boardByNum,
+  rosterTrucks,
+  batchByTruck,
+  templateWearers,
   noCap,
   wearerCap,
   isDust,
@@ -632,6 +638,12 @@ function ReviewStep({
 }: {
   batches: { batch_number: number; trucks: { truck_number: number; wearers: number }[]; total_wearers: number }[];
   boardByNum: Map<number, TruckWithState>;
+  /** Today's unload roster — the denominator for "which trucks still need a batch". */
+  rosterTrucks: TruckWithState[];
+  batchByTruck: Map<number, number>;
+  /** The day sheet's standing counts, used to tell a forgotten number from a
+   *  truck that genuinely runs empty. */
+  templateWearers: Record<number, number>;
   noCap: boolean;
   wearerCap: number;
   isDust: (t: TruckWithState | undefined) => boolean;
@@ -646,6 +658,26 @@ function ReviewStep({
     0,
   );
 
+  // A blank wearers box saves as 0, so 0 is all we can see here. But 0 is also
+  // a REAL answer: the paper sheet prints 0 for dust trucks that run empty, and
+  // those still get batched. Flagging every zero would nag about the same three
+  // trucks every night until the warning stopped meaning anything — so a zero
+  // is only suspicious when the day sheet doesn't also say zero.
+  const missingWearers = BATCH_NUMBERS.flatMap((n) => {
+    const b = batches.find((x) => x.batch_number === n);
+    return (b?.trucks ?? [])
+      .filter((t) => (t.wearers ?? 0) <= 0 && (templateWearers[t.truck_number] ?? -1) !== 0)
+      .map((t) => ({ truck: t.truck_number, batch: n }));
+  }).sort((a, b) => a.truck - b.truck);
+
+  // Every truck working today that hasn't landed in a batch.
+  const unbatched = rosterTrucks
+    .filter((t) => !batchByTruck.has(t.truck_number))
+    .map((t) => t.truck_number)
+    .sort((a, b) => a - b);
+
+  const clean = missingWearers.length === 0 && unbatched.length === 0;
+
   return (
     <div className="space-y-4">
       <div className="card flex items-center justify-between">
@@ -654,6 +686,68 @@ function ReviewStep({
           {totalTrucks} trucks · <span className="font-bold text-slate-200 tabular-nums">{grandTotal.toLocaleString()}</span> wearers total
         </span>
       </div>
+
+      {/* The point of Review: what still needs doing before the sheet is done. */}
+      {clean ? (
+        <div className="rounded-xl border border-emerald-700/40 bg-emerald-950/20 px-4 py-3">
+          <p className="text-sm font-semibold text-emerald-300">
+            Every truck is batched and has a wearer count.
+          </p>
+        </div>
+      ) : (
+        <div className="rounded-xl border border-amber-600/50 bg-amber-950/20 px-4 py-3 space-y-3">
+          <p className="flex items-center gap-2 text-sm font-bold text-amber-300">
+            <AlertTriangleIcon className="h-4 w-4 shrink-0" />
+            Needs attention before this sheet is done
+          </p>
+
+          {unbatched.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-200">
+                {unbatched.length} truck{unbatched.length === 1 ? "" : "s"} not in any batch
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {unbatched.map((num) => (
+                  <span
+                    key={num}
+                    className="inline-flex items-center gap-1 rounded-full border border-amber-600/50 bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-100"
+                  >
+                    #{num}
+                    {isDust(boardByNum.get(num)) && <DustGarmentIcon className="h-3 w-3 text-amber-400" />}
+                  </span>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-amber-200/70">
+                Open any batch and tap them in the grid to assign.
+              </p>
+            </div>
+          )}
+
+          {missingWearers.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-200">
+                {missingWearers.length} truck{missingWearers.length === 1 ? "" : "s"} with no wearers entered
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {missingWearers.map(({ truck, batch }) => (
+                  <button
+                    key={truck}
+                    type="button"
+                    onClick={() => onEditBatch(batch)}
+                    className="inline-flex items-center gap-1 rounded-full border border-amber-600/50 bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-800/40"
+                  >
+                    #{truck}
+                    <span className="text-[10px] font-normal text-amber-300/80">batch {batch}</span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-amber-200/70">
+                Tap one to jump to its batch. Trucks the day sheet lists as 0 aren't flagged.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {BATCH_NUMBERS.map((n) => {
           const b = batches.find((x) => x.batch_number === n);
@@ -686,18 +780,37 @@ function ReviewStep({
                 <p className="text-xs text-slate-600">empty</p>
               ) : (
                 <div className="flex flex-wrap gap-1">
-                  {trucks.map((t) => (
-                    <span
-                      key={t.truck_number}
-                      className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-300"
-                    >
-                      #{t.truck_number}
-                      {isDust(boardByNum.get(t.truck_number)) && (
-                        <DustGarmentIcon className="h-3 w-3 text-amber-400" />
-                      )}
-                      <span className="text-slate-500 tabular-nums">({t.wearers})</span>
-                    </span>
-                  ))}
+                  {trucks.map((t) => {
+                    // Same rule as the summary above: a zero only reads as a
+                    // gap when the day sheet doesn't also say zero.
+                    const noWearers =
+                      (t.wearers ?? 0) <= 0 && (templateWearers[t.truck_number] ?? -1) !== 0;
+                    return (
+                      <span
+                        key={t.truck_number}
+                        title={noWearers ? "No wearers entered" : undefined}
+                        className={clsx(
+                          "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs",
+                          noWearers
+                            ? "border border-amber-600/50 bg-amber-900/30 text-amber-100"
+                            : "bg-slate-800 text-slate-300",
+                        )}
+                      >
+                        #{t.truck_number}
+                        {isDust(boardByNum.get(t.truck_number)) && (
+                          <DustGarmentIcon className="h-3 w-3 text-amber-400" />
+                        )}
+                        <span
+                          className={clsx(
+                            "tabular-nums",
+                            noWearers ? "font-bold text-amber-300" : "text-slate-500",
+                          )}
+                        >
+                          ({noWearers ? "—" : t.wearers})
+                        </span>
+                      </span>
+                    );
+                  })}
                 </div>
               )}
             </div>
