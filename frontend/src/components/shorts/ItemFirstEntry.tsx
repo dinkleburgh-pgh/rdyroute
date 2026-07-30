@@ -202,7 +202,8 @@ export default function ItemFirstEntry({
           {recentItems.length > 0 && (
             <div>
               <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Shorted</p>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              {/* Wraps rather than scrolls — see Shorts.tsx recentItems. */}
+              <div className="flex flex-wrap gap-2">
                 {recentItems.map((item) => (
                   <button
                     key={`${item.category}||${item.detail}`}

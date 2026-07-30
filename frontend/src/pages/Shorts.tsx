@@ -320,7 +320,10 @@ export function ShortageLogger({
         {recentItems && recentItems.length > 0 && (
           <div>
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Shorted</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            {/* Wraps rather than scrolls: a horizontal scroller on a phone hid
+                half the chips behind a swipe, and the ones off-screen were the
+                whole point of the row. */}
+            <div className="flex flex-wrap gap-2">
               {recentItems.map((item) => (
                 <button
                   key={`${item.category}||${item.detail}`}
@@ -372,7 +375,10 @@ export function ShortageLogger({
         {recentItems && recentItems.length > 0 && (
           <div>
             <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Shorted</p>
-            <div className="flex gap-2 overflow-x-auto pb-1">
+            {/* Wraps rather than scrolls: a horizontal scroller on a phone hid
+                half the chips behind a swipe, and the ones off-screen were the
+                whole point of the row. */}
+            <div className="flex flex-wrap gap-2">
               {recentItems.map((item) => (
                 <button
                   key={`${item.category}||${item.detail}`}
@@ -452,9 +458,18 @@ export function ShortsWorkspace() {
     return map;
   }, [shorts]);
 
+  // Genuinely most-recent-first. The list endpoint returns shorts ordered by
+  // truck then time, so deduping in arrival order surfaced whatever was logged
+  // against the lowest truck number — which in practice meant the big early
+  // shorts sat at the front and a small one entered a minute ago fell off the
+  // end of the row, exactly when it was the one being repeated.
   const recentItems = useMemo(() => {
+    const at = (s: Shortage) => {
+      const t = Date.parse(s.recorded_at);
+      return Number.isFinite(t) ? t : 0;
+    };
     const map = new Map<string, { category: string; detail: string }>();
-    for (const s of shorts) {
+    for (const s of [...shorts].sort((a, b) => at(b) - at(a) || b.id - a.id)) {
       const key = `${s.item_category}||${s.item_detail}`;
       if (!map.has(key)) map.set(key, { category: s.item_category, detail: s.item_detail });
     }
