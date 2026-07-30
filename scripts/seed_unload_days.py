@@ -18,31 +18,34 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 # ---- transcribed from the sheet photos -----------------------------------
 #
-# WRONG COLUMN, days 1/2/4: these were read off a small-numbers column and do
-# NOT match what batching actually uses. The batching figure is the "Routes and
-# ( Garments )" table — the same numbers that get written into each batch's
-# WEARERS column and summed against the 1,800 cap. Day 3 has been corrected
-# from the 2026-07-29 photo and day 5 was always taken from that table; days 1,
-# 2 and 4 are still ~1/4 of reality and need re-photographing.
+# THE FORM CHANGED. The sheet was revised on 05/26/26: the bottom-left table
+# used to read "Routes and ( Wearers )" and now reads "Routes and ( Garments )".
+# Batching runs on GARMENTS — those are the numbers written into each batch's
+# WEARERS column and summed against the 1,800 cap. They run roughly 4-5x the old
+# wearer counts, which is the whole point: a day totals ~8,000 garments and
+# splits into five or six batches, whereas the old wearer totals (~1,600) would
+# not have filled one.
+#
+# So the pre-05/26 photos cannot be salvaged — they simply do not contain
+# garment figures. Days 3, 4 and 5 below come from post-revision sheets. Days 1
+# and 2 are left EMPTY on purpose: prefilling the old wearer numbers would build
+# batches at about a fifth of capacity, which is worse than prompting for entry.
+# Photograph a current day-1 and day-2 sheet and enter them in the app.
 #
 # This script is now only the initial seed. Day-to-day maintenance happens in
 # the app: Batching -> Wearer defaults, which writes the same settings keys.
 WEARERS = {
-    # Day 1 — STALE, wrong column. Re-shoot the sheet.
-    1: {
-        4: 144, 7: 51, 52: 141, 54: 79, 55: 51, 57: 61, 58: 83,
-        59: 110, 60: 105, 61: 75, 62: 32, 64: 122, 65: 71, 66: 57,
-        68: 76, 70: 94, 73: 50, 75: 37,
-    },
-    # Day 2 — STALE, wrong column. Re-shoot the sheet.
-    2: {
-        7: 101, 50: 95, 51: 44, 52: 61, 53: 77, 55: 33, 56: 54,
-        57: 87, 59: 67, 60: 201, 61: 70, 62: 96, 64: 108, 66: 80,
-        68: 77, 69: 214, 70: 33, 75: 49, 91: 91,
-    },
-    # Day 3 — CORRECTED 2026-07-30 from the 20260729 sheet photo (printed
-    # "Updated: 05/26/26"). The earlier day-3 numbers here were read off the
-    # wrong column and were ~1/4 of reality; see the WRONG COLUMN note above.
+    # Day 1 — no post-revision sheet. Superseded pre-05/26 WEARERS-form values,
+    # kept only as provenance, NOT loaded:
+    #   4:144, 7:51, 52:141, 54:79, 55:51, 57:61, 58:83, 59:110, 60:105,
+    #   61:75, 62:32, 64:122, 65:71, 66:57, 68:76, 70:94, 73:50, 75:37
+    1: {},
+    # Day 2 — no post-revision sheet. Superseded pre-05/26 WEARERS-form values
+    # (from the 20260505 photo, headed "Routes and ( Wearers )"), NOT loaded:
+    #   7:101, 50:95, 51:44, 52:61, 53:77, 55:33, 56:54, 57:87, 59:67,
+    #   60:201, 61:70, 62:96, 64:108, 66:80, 68:77, 69:214, 70:33, 75:49, 91:91
+    2: {},
+    # Day 3 — from the 20260729 photo (printed "Updated: 05/26/26").
     # Verified against the sheet's own handwritten batches, which each land
     # just under the 1,800 cap using exactly these values:
     #   B1 4+66+69+52 = 1768   B2 53+54+56+59+51 = 1789
@@ -57,18 +60,32 @@ WEARERS = {
         80: 41, 81: 21, 82: 1, 85: 0, 86: 0, 87: 39, 89: 7, 92: 27,
         93: 0, 94: 7, 95: 64,
     },
-    # Day 4 — STALE, wrong column. Re-shoot the sheet.
+    # Day 4 — from the 20260723 photo (printed "Updated: 05/26/26").
+    # Cross-checked against that sheet's handwritten batches:
+    #   B1 65+69+51+4 = 1540    B2 66+54+75+68+58 = 1670
+    #   B3 59+56+7+91+61 = 1728 B4 50+53+62 = 1246   B5 52+73+70 = 711
+    #   B6 60 = 1854 alone (one truck over cap, unavoidable)
     4: {
-        4: 123, 7: 75, 50: 73, 51: 29, 52: 37, 53: 107, 54: 95,
-        56: 69, 58: 37, 59: 121, 60: 221, 61: 58, 62: 70, 65: 40,
-        66: 73, 68: 64, 69: 92, 70: 46, 73: 64, 75: 90, 91: 39,
+        # Routes and (Garments) — UNIFORM
+        4: 666, 7: 382, 50: 403, 51: 131, 52: 168, 53: 542, 54: 368,
+        56: 369, 58: 165, 59: 483, 60: 1854, 61: 281, 62: 301, 65: 255,
+        66: 388, 68: 389, 69: 488, 70: 175, 73: 368, 75: 360, 91: 213,
+        # DUST table
+        80: 7, 82: 0, 83: 53, 84: 0, 85: 0, 86: 51, 87: 0, 88: 94,
+        89: 0, 92: 52, 94: 0, 95: 4,
     },
-    # Day 5 — 20260612 sheet. Its column is headed "Garments" but it IS the
-    # day-5 wearers list; the counts genuinely run much higher than days 1-4.
+    # Day 5 — from the 20260612 photo (printed "Updated: 05/26/26"), already a
+    # post-revision sheet, which is why its numbers always looked like outliers
+    # next to the old wearer counts. The uniform half was right from the start;
+    # the DUST rows were missed on the first pass and are added here.
     5: {
+        # Routes and (Garments) — UNIFORM
         4: 673, 7: 533, 50: 289, 51: 424, 53: 564, 54: 339, 55: 148,
         56: 354, 57: 486, 58: 348, 60: 741, 62: 401, 64: 642, 65: 330,
         69: 319, 73: 332, 88: 123, 91: 409,
+        # DUST table
+        80: 0, 81: 53, 82: 0, 83: 59, 84: 0, 85: 0, 86: 0, 87: 0,
+        93: 0, 95: 52,
     },
 }
 
