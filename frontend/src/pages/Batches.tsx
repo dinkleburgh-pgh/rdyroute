@@ -1,10 +1,20 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
-import { useAssignBatch, useBatchSummary, useSettings, useUpsertTruckState } from "../api/hooks";
+import {
+  useAssignBatch,
+  useBatchSummary,
+  useBoard,
+  usePrevDayCarriers,
+  useSettings,
+  useUnloadDayTemplate,
+  useUnloadsDayOverride,
+  useUpsertTruckState,
+} from "../api/hooks";
 import { Package } from "lucide-react";
 import { todayIso } from "../api/client";
+import { workdayNumbers } from "../components/Clock";
 import type { BatchSummary } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
@@ -24,6 +34,7 @@ function BatchCard({
   shouldFocus,
   awaitingPick,
   pulseDelayMs,
+  defaultWearers,
 }: {
   batch: BatchSummary;
   runDate: string;
@@ -39,17 +50,21 @@ function BatchCard({
   /** Staggers the pulse across the grid so it reads as a wave rather than six
    *  things flashing at once, which looks like an error state. */
   pulseDelayMs: number;
+  /** This truck's standing wearers off the day sheet; undefined = not on it. */
+  defaultWearers: number | undefined;
 }) {
   const assign = useAssignBatch();
-  // Pre-fill the wearers field with the Operations wearer_cap setting; still
-  // editable before assigning.
-  const [wearers, setWearers] = useState(String(cap));
+  // Prefill this truck's standing count off the day sheet. Empty when the sheet
+  // has no entry — a blank box asks for a number, where a wrong prefill gets
+  // accepted at a glance.
+  const [wearers, setWearers] = useState(defaultWearers != null ? String(defaultWearers) : "");
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Keep the field in sync when the wearer_cap setting changes.
+  // Re-seed when the truck changes (its default differs) — but only for the
+  // truck currently being assigned, so typing isn't overwritten mid-entry.
   useEffect(() => {
-    setWearers(String(cap));
-  }, [cap]);
+    setWearers(defaultWearers != null ? String(defaultWearers) : "");
+  }, [defaultWearers, truckNumber]);
 
   useEffect(() => {
     if (shouldFocus && truckNumber) {
@@ -150,13 +165,15 @@ function BatchCard({
             inputMode="numeric"
             pattern="[0-9]*"
             autoComplete="off"
-            placeholder="wearers"
+            placeholder={defaultWearers != null ? "wearers" : "wearers?"}
             value={wearers}
             onChange={(e) => setWearers(e.target.value.replace(/\D/g, ""))}
           />
           <button
             className="btn-primary shrink-0 px-2 py-1.5 text-xs md:px-5 md:py-2 md:text-sm"
-            disabled={assign.isPending}
+            // Blank is not zero. With no sheet default the field starts empty,
+            // and assigning then would silently record 0 wearers.
+            disabled={assign.isPending || wearers.trim() === ""}
             onClick={handleAssign}
           >
             {assign.isPending ? "…" : "Assign"}
@@ -179,6 +196,28 @@ export default function Batches() {
   })();
   const [truck, setTruck] = useState(params.get("truck") ?? "");
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
+
+  // The wearers field used to prefill with wearer_cap (1,800) — the batch
+  // CAPACITY, not anything to do with this truck. Accepting it silently loaded
+  // a whole batch's worth onto one truck. Prefill the day sheet's standing
+  // count instead, resolved through coverage so a spare running someone else's
+  // route gets that route's number; with no sheet entry the field stays EMPTY
+  // and asks, which is honest rather than confidently wrong.
+  const { data: board = [] } = useBoard(runDate);
+  const { data: unloadsOverride } = useUnloadsDayOverride(runDate);
+  const [uy, um, ud] = runDate.split("-").map(Number);
+  const unloadsDay = unloadsOverride ?? workdayNumbers(new Date(uy, um - 1, ud, 12)).unloadsDay;
+  const dayTemplate = useUnloadDayTemplate(unloadsDay);
+  const prevCarriers = usePrevDayCarriers(runDate, board);
+  const defaultWearers = useMemo(() => {
+    const n = Number(truck);
+    if (!Number.isFinite(n) || n <= 0) return undefined;
+    let route = n;
+    for (const [r, carrier] of prevCarriers) {
+      if (carrier.truck_number === n) { route = r; break; }
+    }
+    return dayTemplate.wearers[route];
+  }, [truck, prevCarriers, dayTemplate]);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
   const source = params.get("source");
   const navigate = useNavigate();
@@ -268,6 +307,7 @@ export default function Batches() {
               key={b.batch_number}
               awaitingPick={Boolean(truck) && selectedBatch === null}
               pulseDelayMs={i * 90}
+              defaultWearers={defaultWearers}
               batch={b}
               runDate={runDate}
               truckNumber={

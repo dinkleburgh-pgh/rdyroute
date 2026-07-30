@@ -68,14 +68,25 @@
   }
 }
 
-/* A UI that never stops moving is a real problem for some people, and this one
-   loops until you act. Fall back to a static ring, which still says "pick one"
-   without the motion. */
+/* Reduced motion asks for no MOVEMENT, not no feedback. Scale is the part that
+   triggers vestibular problems, so drop it and keep pulsing the ring — the cue
+   stays obvious on a device with animations turned off, which is easy to have
+   on without knowing it (Samsung's "Remove animations", Android's animator
+   duration scale). A fully static ring was too easy to miss. */
+@keyframes pickMeCalm {
+  0%, 100% {
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.35);
+    border-color: rgba(59, 130, 246, 0.5);
+  }
+  50% {
+    box-shadow: 0 0 0 4px rgba(96, 165, 250, 0.9), 0 0 18px rgba(59, 130, 246, 0.35);
+    border-color: rgba(147, 197, 253, 1);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-pick-me {
-    animation: none;
-    border-color: rgba(96, 165, 250, 0.95);
-    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
+    animation: pickMeCalm 1.8s ease-in-out infinite;
   }
 }
 
