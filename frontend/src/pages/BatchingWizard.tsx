@@ -10,7 +10,7 @@
  * BatchingPanel — so the wizard is resumable and stays in sync with the other
  * batching surfaces. useBatchSummary is the single source of truth.
  */
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
 import {
@@ -18,6 +18,7 @@ import {
   useBatchSummary,
   useBoard,
   useHolidayUnload,
+  usePrevDayCarriers,
   useRemoveTruckFromBatch,
   useSettings,
   useUnloadsDayOverride,
@@ -79,6 +80,34 @@ export default function BatchingWizard() {
   // Standing sheet for this unload day: wearer counts + notes.
   const dayTemplate = useUnloadDayTemplate(unloadsDay);
 
+  // Coverage from the PREVIOUS load day: which truck physically came back
+  // carrying which route's freight. When spare #11 ran route #4, the truck at
+  // the dock is #11 but the paper sheet — and the wearer template — say "4".
+  // Without this the roster shows #11 with no wearers and no clue which line of
+  // the sheet it is, while #4 (which never left the yard) looks unbatched.
+  const prevCarriers = usePrevDayCarriers(runDate, board);
+  const routeByCarrier = useMemo(() => {
+    const m = new Map<number, number>();
+    for (const [route, carrier] of prevCarriers) m.set(carrier.truck_number, route);
+    return m;
+  }, [prevCarriers]);
+
+  /** The sheet line a truck is unloading: the route it carried, else itself. */
+  const sheetRouteFor = useCallback(
+    (truckNumber: number) => routeByCarrier.get(truckNumber) ?? truckNumber,
+    [routeByCarrier],
+  );
+  /**
+   * The day sheet's entry for a truck, resolved through coverage.
+   * `undefined` means "not on this sheet" and is deliberately distinct from a
+   * stored 0, which means "runs empty" — the Review flag depends on telling a
+   * forgotten number from a real zero.
+   */
+  const templateEntryFor = useCallback(
+    (truckNumber: number): number | undefined => dayTemplate.wearers[sheetRouteFor(truckNumber)],
+    [dayTemplate, sheetRouteFor],
+  );
+
   // Which batch each truck currently sits in (from the live summary).
   const batchByTruck = useMemo(() => {
     const map = new Map<number, number>();
@@ -131,14 +160,14 @@ export default function BatchingWizard() {
     if (wearerDrafts[truckNumber] != null) return wearerDrafts[truckNumber];
     const live = boardByNum.get(truckNumber)?.state?.wearers ?? 0;
     if (live > 0) return String(live);
-    return String(dayTemplate.wearers[truckNumber] ?? 0);
+    return String(templateEntryFor(truckNumber) ?? 0);
   }
 
   /** True when the shown value came from the day sheet, not from tonight's board. */
   function wearersFromTemplate(truckNumber: number): boolean {
     if (wearerDrafts[truckNumber] != null) return false;
     const live = boardByNum.get(truckNumber)?.state?.wearers ?? 0;
-    return live === 0 && (dayTemplate.wearers[truckNumber] ?? 0) > 0;
+    return live === 0 && (templateEntryFor(truckNumber) ?? 0) > 0;
   }
 
   async function assignTruck(truckNumber: number, batchNumber: number) {
@@ -326,6 +355,7 @@ export default function BatchingWizard() {
           onPrev={() => setStep((n) => Math.max(1, n - 1))}
           onNext={() => setStep((n) => n + 1)}
           isDust={isDust}
+          sheetRouteFor={sheetRouteFor}
         />
       ) : (
         <ReviewStep
@@ -333,7 +363,8 @@ export default function BatchingWizard() {
           boardByNum={boardByNum}
           rosterTrucks={rosterTrucks}
           batchByTruck={batchByTruck}
-          templateWearers={dayTemplate.wearers}
+          templateEntryFor={templateEntryFor}
+          sheetRouteFor={sheetRouteFor}
           noCap={noCap}
           wearerCap={wearerCap}
           isDust={isDust}
@@ -424,6 +455,7 @@ function BatchStep({
   onPrev,
   onNext,
   isDust,
+  sheetRouteFor,
 }: {
   step: number;
   gridTrucks: TruckWithState[];
@@ -445,6 +477,9 @@ function BatchStep({
   onPrev: () => void;
   onNext: () => void;
   isDust: (t: TruckWithState | undefined) => boolean;
+  /** Route this truck is unloading — differs from its own number when it
+   *  carried another route's freight on the previous load day. */
+  sheetRouteFor: (n: number) => number;
 }) {
   const { total } = info;
   const cap = capacityColor(total, noCap, wearerCap);
@@ -494,6 +529,13 @@ function BatchStep({
                   )}
                 >
                   <span className="tabular-nums">#{t.truck_number}</span>
+                  {/* Carrying someone else's route: the sheet says that route's
+                      number, so show it or the operator can't match the line. */}
+                  {sheetRouteFor(t.truck_number) !== t.truck_number && (
+                    <span className="rounded-full bg-sky-500/20 px-1.5 text-[9px] font-bold text-sky-300">
+                      rt {sheetRouteFor(t.truck_number)}
+                    </span>
+                  )}
                   {inOther && (
                     <span className="rounded-full bg-slate-700/70 px-1.5 text-[9px] font-semibold text-slate-300">
                       in B{current}
@@ -563,9 +605,14 @@ function BatchStep({
                   key={num}
                   className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-2 py-1.5"
                 >
-                  <span className="flex w-16 shrink-0 items-center gap-1 text-base font-extrabold tabular-nums text-white">
-                    #{num}
-                    {isDust(t) && <DustGarmentIcon className="h-3.5 w-3.5 text-amber-400" />}
+                  <span className="flex w-16 shrink-0 flex-col items-start leading-tight">
+                    <span className="flex items-center gap-1 text-base font-extrabold tabular-nums text-white">
+                      #{num}
+                      {isDust(t) && <DustGarmentIcon className="h-3.5 w-3.5 text-amber-400" />}
+                    </span>
+                    {sheetRouteFor(num) !== num && (
+                      <span className="text-[9px] font-bold text-sky-300">rt {sheetRouteFor(num)}</span>
+                    )}
                   </span>
                   <input
                     id={`wearers-${step}-${num}`}
@@ -630,7 +677,8 @@ function ReviewStep({
   boardByNum,
   rosterTrucks,
   batchByTruck,
-  templateWearers,
+  templateEntryFor,
+  sheetRouteFor,
   noCap,
   wearerCap,
   isDust,
@@ -641,9 +689,11 @@ function ReviewStep({
   /** Today's unload roster — the denominator for "which trucks still need a batch". */
   rosterTrucks: TruckWithState[];
   batchByTruck: Map<number, number>;
-  /** The day sheet's standing counts, used to tell a forgotten number from a
-   *  truck that genuinely runs empty. */
-  templateWearers: Record<number, number>;
+  /** The day sheet's entry for a truck, resolved through coverage. `undefined`
+   *  = not on the sheet, which is NOT the same as a stored 0 ("runs empty"). */
+  templateEntryFor: (n: number) => number | undefined;
+  /** Route this truck is unloading; differs when it carried another's freight. */
+  sheetRouteFor: (n: number) => number;
   noCap: boolean;
   wearerCap: number;
   isDust: (t: TruckWithState | undefined) => boolean;
@@ -666,7 +716,7 @@ function ReviewStep({
   const missingWearers = BATCH_NUMBERS.flatMap((n) => {
     const b = batches.find((x) => x.batch_number === n);
     return (b?.trucks ?? [])
-      .filter((t) => (t.wearers ?? 0) <= 0 && (templateWearers[t.truck_number] ?? -1) !== 0)
+      .filter((t) => (t.wearers ?? 0) <= 0 && (templateEntryFor(t.truck_number) ?? -1) !== 0)
       .map((t) => ({ truck: t.truck_number, batch: n }));
   }).sort((a, b) => a.truck - b.truck);
 
@@ -713,6 +763,9 @@ function ReviewStep({
                     className="inline-flex items-center gap-1 rounded-full border border-amber-600/50 bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-100"
                   >
                     #{num}
+                    {sheetRouteFor(num) !== num && (
+                      <span className="text-[10px] font-normal text-sky-300">rt {sheetRouteFor(num)}</span>
+                    )}
                     {isDust(boardByNum.get(num)) && <DustGarmentIcon className="h-3 w-3 text-amber-400" />}
                   </span>
                 ))}
@@ -784,7 +837,7 @@ function ReviewStep({
                     // Same rule as the summary above: a zero only reads as a
                     // gap when the day sheet doesn't also say zero.
                     const noWearers =
-                      (t.wearers ?? 0) <= 0 && (templateWearers[t.truck_number] ?? -1) !== 0;
+                      (t.wearers ?? 0) <= 0 && (templateEntryFor(t.truck_number) ?? -1) !== 0;
                     return (
                       <span
                         key={t.truck_number}
