@@ -1164,20 +1164,24 @@ export default function LiveReport() {
                     </p>
                     {/* Which trucks this item was short on — the mirror of the
                         per-truck cards above, which list items. */}
-                    <ul className="mt-1.5 space-y-0.5 border-t border-hairline pt-1.5">
-                      {it.trucks.slice(0, 6).map((t) => (
-                        <li key={t.truck} className="flex items-baseline justify-between gap-2 text-xs">
+                    {/* Two balanced columns instead of a truncated single one.
+                        These rows are two short numbers in different colours —
+                        truck in grey, qty in amber — so they stay readable at
+                        half width, and the whole list fits: an item can be
+                        short on 20+ trucks, where "+14 more" hid exactly the
+                        detail someone opened the report for. */}
+                    <ul className="mt-1.5 columns-2 gap-x-3 border-t border-hairline pt-1.5">
+                      {it.trucks.map((t) => (
+                        <li
+                          key={t.truck}
+                          className="flex items-baseline justify-between gap-2 break-inside-avoid text-xs leading-relaxed"
+                        >
                           <span className="font-mono font-semibold tabular-nums text-ink-soft">#{t.truck}</span>
                           <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">
                             {t.qty.toLocaleString()}
                           </span>
                         </li>
                       ))}
-                      {it.trucks.length > 6 && (
-                        <li className="text-center text-[10px] text-ink-faint">
-                          +{it.trucks.length - 6} more truck{it.trucks.length - 6 === 1 ? "" : "s"}
-                        </li>
-                      )}
                     </ul>
                   </div>
                 ))}

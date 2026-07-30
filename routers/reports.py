@@ -263,6 +263,11 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
 .ah { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
 .alist { list-style: none; margin: 0; padding: 0; }
 .alist li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 9.5px; }
+/* Top-shorted-ITEM cards list every truck rather than truncating, so the rows
+   run in two balanced columns. Only these cards: the per-truck cards list item
+   names, which are words and need the full width. */
+.alist.cols { column-count: 2; column-gap: 10px; }
+.alist.cols li { break-inside: avoid; }
 .il { color: #cdd6e2; }
 .warn { display: inline-block; border-radius: 4px; padding: 0 4px; margin-left: 5px; font-size: 8px;
         font-weight: 700; text-transform: uppercase; background: rgba(245,158,11,0.20); color: #fcd34d; }
@@ -431,13 +436,15 @@ def _top_items_html(m) -> str:
             key=lambda kv: kv[1],
             reverse=True,
         )
+        # Every truck, in two balanced columns. The rows are two short numbers
+        # in different colours, so they stay legible at half width — and an item
+        # is routinely short on 15-20 trucks, where a "+14 more" tail hid the
+        # detail the page exists to show.
         rows_html = "".join(
             f'<li><span class="il mono">#{tn}</span>'
             f'<span class="mono" style="color:#fcd34d">{q}</span></li>'
-            for tn, q in hits[:6]
+            for tn, q in hits
         )
-        if len(hits) > 6:
-            rows_html += f'<li><span class="dim">+{len(hits) - 6} more</span><span></span></li>'
         cards.append(
             f'<div class="tcard">'
             f'<div class="ah"><span class="rank">#{i}</span>'
@@ -445,7 +452,7 @@ def _top_items_html(m) -> str:
             f'<div class="inum"><span class="dot" style="background:{r.dot_hex}"></span>'
             f"{_e(r.label)}</div>"
             f'<div class="igroup">{_e(r.group)}</div>'
-            f'<ul class="alist">{rows_html}</ul></div>'
+            f'<ul class="alist cols">{rows_html}</ul></div>'
         )
     return (
         '<div class="subhead">Top shorted items</div>'
