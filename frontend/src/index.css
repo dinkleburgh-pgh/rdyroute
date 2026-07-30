@@ -18,6 +18,14 @@
   .animate-priority-glow {
     animation: priorityGlow 2s ease-in-out infinite;
   }
+  /* "Your turn — pick one of these." Glow plus a small breathe, because a
+     colour change alone reads as decoration while movement reads as an
+     invitation. Used on the batch cards while a truck is waiting to be
+     assigned. */
+  .animate-pick-me {
+    animation: pickMe 1.6s ease-in-out infinite;
+    will-change: transform, box-shadow;
+  }
 
   /* Safe area inset utilities (iPhone notch / Android gesture bar) */
   .pt-safe  { padding-top:    env(safe-area-inset-top); }
@@ -44,6 +52,30 @@
   75% {
     box-shadow: 0 0 12px rgba(239, 68, 68, 0.3), inset 0 0 8px rgba(239, 68, 68, 0.05);
     border-color: rgba(239, 68, 68, 0.5);
+  }
+}
+
+@keyframes pickMe {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0);
+    border-color: rgba(59, 130, 246, 0.45);
+  }
+  50% {
+    transform: scale(1.035);
+    box-shadow: 0 0 22px 2px rgba(59, 130, 246, 0.45), inset 0 0 14px rgba(59, 130, 246, 0.08);
+    border-color: rgba(96, 165, 250, 0.95);
+  }
+}
+
+/* A UI that never stops moving is a real problem for some people, and this one
+   loops until you act. Fall back to a static ring, which still says "pick one"
+   without the motion. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-pick-me {
+    animation: none;
+    border-color: rgba(96, 165, 250, 0.95);
+    box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.5);
   }
 }
 

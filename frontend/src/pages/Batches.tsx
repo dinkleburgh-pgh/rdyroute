@@ -22,6 +22,8 @@ function BatchCard({
   noCap,
   cap,
   shouldFocus,
+  awaitingPick,
+  pulseDelayMs,
 }: {
   batch: BatchSummary;
   runDate: string;
@@ -32,6 +34,11 @@ function BatchCard({
   noCap: boolean;
   cap: number;
   shouldFocus: boolean;
+  /** A truck is waiting and no batch is chosen — the card is the next action. */
+  awaitingPick: boolean;
+  /** Staggers the pulse across the grid so it reads as a wave rather than six
+   *  things flashing at once, which looks like an error state. */
+  pulseDelayMs: number;
 }) {
   const assign = useAssignBatch();
   // Pre-fill the wearers field with the Operations wearer_cap setting; still
@@ -75,7 +82,9 @@ function BatchCard({
       className={clsx(
         "card flex flex-col gap-2 md:gap-3",
         selected && "ring-2 ring-blue-500",
+        awaitingPick && "cursor-pointer border animate-pick-me",
       )}
+      style={awaitingPick ? { animationDelay: `${pulseDelayMs}ms` } : undefined}
       delay={0.1}
       onClick={onSelect}
     >
@@ -254,9 +263,11 @@ export default function Batches() {
         <p className="text-sm text-slate-400">Loading…</p>
       ) : (
         <div className="grid grid-cols-2 gap-2 md:grid-cols-3 md:gap-3">
-          {(data ?? []).map((b) => (
+          {(data ?? []).map((b, i) => (
             <BatchCard
               key={b.batch_number}
+              awaitingPick={Boolean(truck) && selectedBatch === null}
+              pulseDelayMs={i * 90}
               batch={b}
               runDate={runDate}
               truckNumber={

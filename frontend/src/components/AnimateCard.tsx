@@ -8,6 +8,9 @@ interface Props {
   delay?: number;
   hoverScale?: number;
   onClick?: React.MouseEventHandler<HTMLDivElement>;
+  /** Inline style, for things the className can't express — e.g. a per-card
+   *  animation-delay used to stagger a CSS keyframe across a grid. */
+  style?: React.CSSProperties;
 }
 
 // Snappy entrance: short fade + tiny rise. The incoming stagger `delay` is hard
@@ -16,12 +19,12 @@ interface Props {
 // doesn't feel laggy. Honors the OS "reduce motion" setting.
 const MAX_STAGGER = 0.08;
 
-export default function AnimateCard({ children, className, id, delay = 0, hoverScale = 1.02, onClick }: Props) {
+export default function AnimateCard({ children, className, id, delay = 0, hoverScale = 1.02, onClick, style }: Props) {
   const reduceMotion = useReducedMotion();
 
   if (reduceMotion) {
     return (
-      <div id={id} className={className} onClick={onClick}>
+      <div id={id} className={className} style={style} onClick={onClick}>
         {children}
       </div>
     );
@@ -35,6 +38,7 @@ export default function AnimateCard({ children, className, id, delay = 0, hoverS
       transition={{ duration: 0.14, delay: Math.min(delay, MAX_STAGGER), ease: "easeOut" }}
       whileHover={{ scale: hoverScale }}
       className={className}
+      style={style}
       onClick={onClick}
     >
       {children}
