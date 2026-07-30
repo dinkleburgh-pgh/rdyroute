@@ -10,7 +10,6 @@ import {
   useRecordLoadDuration,
   useSetNextUp,
   useShortages,
-  useTruckNotes,
   useUpsertTruckState,
   useHolidayLoad,
   useAssignSpare,
@@ -18,10 +17,10 @@ import {
 } from "../api/hooks";
 import { ShortageLogger } from "../pages/Shorts";
 import CoverageTag from "./CoverageTag";
-import { todayIso } from "../api/client";
+import LoadNotesPanel from "./load/LoadNotesPanel";
 import { workdayNumbers } from "./Clock";
 import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
-import type { TruckNote, TruckWithState } from "../types";
+import type { TruckWithState } from "../types";
 import { truckTypeLabel } from "../utils/truckType";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
@@ -143,8 +142,12 @@ export function LiveInProgress({ runDate }: { runDate: string }) {
           />
         </div>
 
-        {/* Right column */}
+        {/* Right column — notes FIRST. They are the only thing here that can
+            change what someone does with the truck in front of them; stats and
+            finish history are context. Same panel the Load Display rail uses,
+            so the two surfaces can't drift apart again. */}
         <div className="space-y-4">
+          <LoadNotesPanel truck={inProgress} loadDay={dayNum ?? 0} runDate={runDate} />
           <SessionStats inProgress={inProgress} unloaded={unloaded} loadedToday={loadedToday} paceAvgSeconds={pace?.avg_seconds ?? null} scheduledTotal={scheduledTotal} />
           <RecentFinishes loadedToday={loadedToday} />
         </div>
@@ -335,42 +338,6 @@ export function ElapsedTimer({
         )}
       </div>
       <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={Math.round(size * 0.055)} />
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Truck note cards
-// ---------------------------------------------------------------------------
-
-const NOTE_CARD: Record<TruckNote["note_type"], { border: string; bg: string; chip: string; label: string }> = {
-  constant: { border: "border-st-loaded/30", bg: "bg-st-loaded/10", chip: "bg-st-loaded/25 text-st-loaded", label: "Constant" },
-  workday:  { border: "border-st-shop/30", bg: "bg-st-shop/10", chip: "bg-st-shop/25 text-st-shop", label: "Workday" },
-  one_off:  { border: "border-st-inprogress/30", bg: "bg-st-inprogress/10", chip: "bg-st-inprogress/25 text-st-inprogress", label: "One-off" },
-};
-
-function TruckNotesPanel({ truckNumber, loadDayNum }: { truckNumber: number; loadDayNum: number | null }) {
-  const { data: notes = [] } = useTruckNotes({ truckNumber, activeOnly: true });
-  const applicable = notes.filter((n) => {
-    if (n.note_type === "constant") return true;
-    if (n.note_type === "workday") return n.workday_num === loadDayNum;
-    if (n.note_type === "one_off") return n.expires_on == null || n.expires_on >= todayIso();
-    return false;
-  });
-  if (applicable.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-2">
-      {applicable.map((n) => {
-        const s = NOTE_CARD[n.note_type];
-        return (
-          <div key={n.id} className={clsx("rounded-xl border px-4 py-3", s.border, s.bg)}>
-            <div className="flex items-start gap-3">
-              <span className={clsx("mt-0.5 shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>{n.note_type === "workday" ? `Day ${n.workday_num}` : s.label}</span>
-              <span className="text-sm leading-snug text-ink">{n.body}</span>
-            </div>
-          </div>
-        );
-      })}
     </div>
   );
 }
@@ -664,7 +631,7 @@ function InProgressHero({
         </div>
 
         {/* Truck Notes */}
-        <TruckNotesPanel truckNumber={truck.truck_number} loadDayNum={dayNum} />
+        {/* Notes moved to the right rail — see the layout above. */}
 
         {/* Log Shortages */}
         <div className="border-t border-hairline pt-4">

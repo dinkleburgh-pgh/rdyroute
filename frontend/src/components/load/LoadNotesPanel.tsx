@@ -26,7 +26,9 @@ import type { TruckNote, TruckWithState } from "../../types";
  */
 
 const NOTE_STYLE: Record<TruckNote["note_type"], { border: string; bg: string; chip: string; label: string }> = {
-  constant: { border: "border-st-loaded/30", bg: "bg-st-loaded/10", chip: "bg-st-loaded/25 text-st-loaded", label: "Constant" },
+  // "Always" rather than "Constant" — the Notes page has always called this
+  // type Always, and two names for one thing is a needless translation.
+  constant: { border: "border-st-loaded/30", bg: "bg-st-loaded/10", chip: "bg-st-loaded/25 text-st-loaded", label: "Always" },
   workday: { border: "border-st-shop/30", bg: "bg-st-shop/10", chip: "bg-st-shop/25 text-st-shop", label: "Workday" },
   one_off: { border: "border-st-inprogress/30", bg: "bg-st-inprogress/10", chip: "bg-st-inprogress/25 text-st-inprogress", label: "One-off" },
 };
@@ -127,10 +129,10 @@ export default function LoadNotesPanel({
           <div className="flex items-start gap-2">
             <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-st-dirty" />
             <div className="min-w-0">
-              <p className="text-sm font-semibold text-st-dirty">
+              <p className="text-base font-bold text-st-dirty">
                 Load warning · {w.item_label} ×{w.quantity}
               </p>
-              {w.note && <p className="mt-0.5 text-sm leading-snug text-ink-soft">{w.note}</p>}
+              {w.note && <p className="mt-0.5 text-xl font-bold leading-snug text-ink">{w.note}</p>}
             </div>
           </div>
         </div>
@@ -147,44 +149,56 @@ export default function LoadNotesPanel({
               : "border-st-inprogress/40 bg-st-inprogress/10",
           )}
         >
-          <p className={clsx("text-sm font-semibold", n.severity === "critical" ? "text-st-dirty" : "text-st-inprogress")}>
+          <p className={clsx("text-base font-bold", n.severity === "critical" ? "text-st-dirty" : "text-st-inprogress")}>
             {n.title}
           </p>
-          {n.body && <p className="mt-0.5 text-sm leading-snug text-ink-soft">{n.body}</p>}
+          {n.body && <p className="mt-0.5 text-xl font-bold leading-snug text-ink">{n.body}</p>}
         </div>
       ))}
 
-      {/* 3 — notes on the truck itself */}
-      {truckNotes.map((n) => {
-        const s = NOTE_STYLE[n.note_type];
-        const fromDriver = n.created_by === "driver";
-        return (
-          <div key={n.id} className={clsx("rounded-xl border px-3 py-2", s.border, s.bg)}>
-            <div className="flex items-start gap-2">
-              <span className={clsx("mt-0.5 shrink-0 rounded-pill px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>
-                {n.note_type === "workday" ? `Day ${n.workday_num}` : s.label}
-              </span>
-              {fromDriver && (
-                <span className="mt-0.5 shrink-0 rounded-pill bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
-                  Driver
-                </span>
-              )}
-              <span className="text-sm leading-snug text-ink">{n.body}</span>
-            </div>
+      {/* 3 — notes on the truck itself. Grouped under their own heading: these
+              belong to ONE truck, where the block below applies to the whole
+              shift, and on a wall display the two were indistinguishable. */}
+      {truckNotes.length > 0 && (
+        <div className="rounded-xl border border-violet-700/40 bg-violet-950/20 px-3 py-2">
+          <p className="text-[11px] font-bold uppercase tracking-wide text-violet-300">
+            Truck{truckNumber != null ? ` #${truckNumber}` : ""} notes
+          </p>
+          <div className="mt-1.5 space-y-1.5">
+            {truckNotes.map((n) => {
+              const s = NOTE_STYLE[n.note_type];
+              const fromDriver = n.created_by === "driver";
+              return (
+                <div key={n.id} className={clsx("rounded-lg border px-3 py-2", s.border, s.bg)}>
+                  <div className="mb-1 flex flex-wrap items-center gap-1.5">
+                    <span className={clsx("rounded-pill px-1.5 py-0.5 text-[10px] font-semibold", s.chip)}>
+                      {n.note_type === "workday" ? `Day ${n.workday_num}` : s.label}
+                    </span>
+                    {fromDriver && (
+                      <span className="rounded-pill bg-sky-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-sky-300">
+                        Driver
+                      </span>
+                    )}
+                  </div>
+                  {/* Big and bold: this panel is read off a wall, not a desk. */}
+                  <p className="text-xl font-bold leading-snug text-ink">{n.body}</p>
+                </div>
+              );
+            })}
           </div>
-        );
-      })}
+        </div>
+      )}
 
       {/* 3b — standing load-workflow notes. Apply to the whole shift rather
               than one truck, so they sit below the truck's own notes. */}
       {workflowLines.length > 0 && (
         <div className="rounded-xl border border-sky-700/40 bg-sky-950/20 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-sky-400">
-            Load day {dayNum}
+          <p className="text-[11px] font-bold uppercase tracking-wide text-sky-400">
+            Daily · Load day {dayNum}
           </p>
-          <ul className="mt-0.5 space-y-0.5">
+          <ul className="mt-1 space-y-1">
             {workflowLines.map((l, i) => (
-              <li key={i} className="flex gap-1.5 text-sm leading-snug text-ink-soft">
+              <li key={i} className="flex gap-1.5 text-xl font-bold leading-snug text-ink">
                 <span className="shrink-0 text-sky-500">•</span>
                 <span>{l}</span>
               </li>
