@@ -28,13 +28,18 @@ export const STATUS_BADGE_TEXT: Partial<Record<TruckStatus, string>> = Object.fr
     .map(([s]) => [s, "!text-black"]),
 );
 
-// 'spare' is a truck *type* set via the truck detail panel — not offered as a status here.
-// 'off' is schedule-managed; 'in_progress' is managed by load workflow.
+// 'spare' is a truck *type* set via the truck detail panel — not offered as a
+// status here. 'off' is schedule-managed.
+//
+// 'in_progress' IS offered: the load workflow is the normal way in, but a truck
+// that started loading without anyone tapping Start (or that needs putting back
+// mid-load) previously had no route to that status at all.
 export const STATUS_OPTIONS: TruckStatus[] = [
   "dirty",
   "unfinished",
   "shop",
   "unloaded",
+  "in_progress",
   "loaded",
   "oos",
 ];
@@ -44,9 +49,28 @@ export const FLEET_STATUS_OPTIONS: TruckStatus[] = [
   "unfinished",
   "shop",
   "unloaded",
+  "in_progress",
   "loaded",
   "oos",
 ];
+
+/**
+ * Timestamp fields a MANUAL status change must carry so the load workflow's
+ * derived values stay coherent.
+ *
+ * Setting in_progress without a start time leaves the live timer counting from
+ * nothing and makes the eventual finish record a ~1 second load, which would
+ * quietly poison the 30-day pace average every surface reads. Finishing needs
+ * its own stamp for the same reason.
+ */
+export function statusStampFields(next: TruckStatus): Record<string, number | null> {
+  const now = Date.now() / 1000;
+  if (next === "in_progress") {
+    return { load_start_time: now, load_finish_time: null, load_duration_seconds: null };
+  }
+  if (next === "loaded") return { load_finish_time: now };
+  return {};
+}
 
 // All statuses shown in the fleet filter rail (ordered for display).
 export const FLEET_RAIL_STATUSES: TruckStatus[] = [

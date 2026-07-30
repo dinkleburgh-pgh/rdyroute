@@ -40,6 +40,7 @@ import {
   FLEET_STATUS_OPTIONS,
   FLEET_RAIL_STATUSES,
   DustGarmentIcon,
+  statusStampFields,
 } from "./board/constants";
 import { useOutsideTimer, usePaperBayTimer, fmtCountdown } from "./board/useOutsideTimer";
 import RouteCardPanel from "./board/RouteCardPanel";
@@ -688,7 +689,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         run_date: runDate,
         status: bulkStatus,
         wearers: truck?.state?.wearers ?? 0,
-        ...(bulkStatus === "loaded" ? { load_finish_time: Date.now() / 1000 } : {}),
+        ...statusStampFields(bulkStatus),
       });
     });
     setSelectedTrucks(new Set());

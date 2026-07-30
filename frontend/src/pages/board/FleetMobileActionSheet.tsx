@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useUpsertTruckState } from "../../api/hooks";
 import { fmtCountdown } from "./useOutsideTimer";
-import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS } from "./constants";
+import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, statusStampFields } from "./constants";
 import CoverageTag from "../../components/CoverageTag";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import { truckTypeLabel } from "../../utils/truckType";
@@ -13,6 +13,7 @@ const STATUS_ACTIONS: TruckStatus[] = [
   "unfinished",
   "shop",
   "unloaded",
+  "in_progress",
   "loaded",
   "oos",
 ];
@@ -109,7 +110,7 @@ export default function FleetMobileActionSheet({
                       run_date: runDate,
                       status: s,
                       wearers: truck.state?.wearers ?? 0,
-                      ...(s === "loaded" ? { load_finish_time: Date.now() / 1000 } : {}),
+                      ...statusStampFields(s),
                     });
                     onClose();
                   }}

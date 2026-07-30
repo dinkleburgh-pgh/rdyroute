@@ -20,6 +20,8 @@ import {
   useSetHolidayMode,
   useSetHolidayUnload,
   useSetWizardCompleted,
+  usePrevDayCarriers,
+  usePrevDaySplitHelpers,
   useUpsertSetting,
   useUpsertTruckState,
 } from "../../api/hooks";
@@ -120,11 +122,30 @@ export default function RunDayWizard({
 
   const { loadDay: todayLoad } = workdayNumbers(new Date(`${runDate}T12:00:00`));
   const prevDay = previousWorkday(todayLoad);
+
+  // Trucks that physically RAN yesterday despite being off the schedule —
+  // because they carried someone else's route, or took a split's overflow.
+  // The swap log is the only record: the live board carries no marker the
+  // morning after.
+  const prevCarriers = usePrevDayCarriers(runDate, board);
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
+  const ranYesterday = useMemo(() => {
+    const s = new Set<number>(prevSplitHelpers);
+    for (const carrier of prevCarriers.values()) s.add(carrier.truck_number);
+    return s;
+  }, [prevCarriers, prevSplitHelpers]);
+
+  // "Returning" = off yesterday, on today, so it comes back clean. That's only
+  // true if it actually SAT yesterday. A truck off the schedule that still ran
+  // coverage or a split came back dirty like any other, and cleaning it here
+  // erased real unload work (55 as a split helper and 57 covering route 7 were
+  // both wiped this way on 2026-07-30).
   const returningTrucks = board.filter(
     (t) =>
       t.truck_type !== "Spare" &&
       isScheduledOff(t, prevDay) &&
-      !isScheduledOff(t, loadDay),
+      !isScheduledOff(t, loadDay) &&
+      !ranYesterday.has(t.truck_number),
   );
   const spareTrucks = board.filter((t) => t.truck_type === "Spare");
   const specialTrucks = [...returningTrucks, ...spareTrucks].filter(

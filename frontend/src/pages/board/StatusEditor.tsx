@@ -5,7 +5,7 @@
 import clsx from "clsx";
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useUpsertTruckState } from "../../api/hooks";
-import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, STATUS_OPTIONS } from "./constants";
+import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, STATUS_OPTIONS, statusStampFields } from "./constants";
 
 export default function StatusEditor({
   truck,
@@ -45,7 +45,7 @@ export default function StatusEditor({
               run_date: runDate,
               status: val as TruckStatus,
               wearers: truck.state?.wearers ?? 0,
-              ...(val === "loaded" ? { load_finish_time: Date.now() / 1000 } : {}),
+              ...statusStampFields(val as TruckStatus),
             });
           }}
         >
