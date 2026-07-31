@@ -199,14 +199,21 @@ export default function Unload() {
   );
   // One predicate per unload bucket, shared by the sections below AND the stat
   // cards above, so a truck can never sit in a section but go missing from its
-  // count. Coverage = today's covering trucks + prev-day SPLIT helpers (they
-  // carried a route's overflow yesterday, so call them out for that route).
+  // count. Coverage on THIS page is previous-day: whoever physically carried
+  // someone else's freight on the prior load day is bringing back coverage
+  // freight now — plus prev-day SPLIT helpers (they carried a route's overflow,
+  // so call them out for that route). Today's covering fields stay in the test
+  // for trucks assigned coverage before the unload board is worked.
   const isHoldTruck = (t: TruckWithState) => t.state?.priority_hold === true;
   const isCoverageTruck = useCallback(
     (t: TruckWithState) =>
       t.truck_type === "Spare" ||
       t.route_swap_route != null ||
       t.state?.oos_spare_route != null ||
+      // Prev-day carrier. Without this only carriers that happen to be Spares by
+      // TYPE landed here, so a route truck that covered another route sat in
+      // "Dirty — route" with nothing saying what it actually brought back.
+      prevCoverOf(t) != null ||
       isSplitHelper(t),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [prevCoverage],
