@@ -451,22 +451,47 @@ export default function HierarchyPicker({
   const qtyRef = useRef<HTMLInputElement>(null);
   const catPalette = useCategoryPalette();
 
+  // Auto-log: the entry commits on its own once typing stops, so the Log tap
+  // is optional. Only reachable from the qty panel, which only exists on the
+  // per-truck path (the item-first mode passes onSelectItem and never opens
+  // it), so this can't fire on a bulk send.
+  //
+  // 1.2s rather than something snappier because the failure mode is committing
+  // "1" while the user is still reaching for the "2" of "12". Every keystroke
+  // restarts the clock, and Log still commits instantly for anyone who'd
+  // rather not wait.
+  const AUTO_LOG_MS = 1200;
+  const autoTimer = useRef<number | null>(null);
+  const [autoArmed, setAutoArmed] = useState(false);
+
+  function clearAuto() {
+    if (autoTimer.current != null) {
+      window.clearTimeout(autoTimer.current);
+      autoTimer.current = null;
+    }
+    setAutoArmed(false);
+  }
+
   const topCats = useMemo(() => [...new Set(items.map(topCatOf))], [items]);
 
-  function reset()    { setTopCat(null); setBulkSub(null); setPending(null); setQtyInput(""); }
-  function resetSub() { setBulkSub(null); setPending(null); setQtyInput(""); }
+  function reset()    { clearAuto(); setTopCat(null); setBulkSub(null); setPending(null); setQtyInput(""); }
+  function resetSub() { clearAuto(); setBulkSub(null); setPending(null); setQtyInput(""); }
 
   function selectItem(category: string, detail: string) {
     if (onSelectItem) {
       onSelectItem(category, detail);
       return;
     }
+    clearAuto();
     setPending({ category, detail });
     setQtyInput("");
     setTimeout(() => qtyRef.current?.focus(), 50);
   }
 
   function confirmLog() {
+    clearAuto();
+    // Guards a timer that fires after the entry already went in: committing
+    // clears `pending`, so a late tick is a no-op rather than a duplicate row.
     if (!pending) return;
     // Quantities are stored as RAW UNITS exactly as typed (2 bags → 2);
     // displays add the unit label, and the "= N pieces" hint is info-only.
@@ -475,6 +500,27 @@ export default function HierarchyPicker({
     setPending(null);
     setQtyInput("");
   }
+
+  // The timer calls through a ref so it always runs the CURRENT confirmLog —
+  // scheduling captures a closure, and the quantity changes after it's set.
+  const confirmRef = useRef(confirmLog);
+  confirmRef.current = confirmLog;
+
+  function scheduleAuto(next: string) {
+    clearAuto();
+    if (next.trim() === "") return; // nothing typed yet — don't commit a default
+    setAutoArmed(true);
+    autoTimer.current = window.setTimeout(() => {
+      autoTimer.current = null;
+      confirmRef.current();
+    }, AUTO_LOG_MS);
+  }
+
+  // Don't leave a timer running into an unmount — the drawer on the Load
+  // Display closes mid-entry often enough to matter.
+  useEffect(() => () => {
+    if (autoTimer.current != null) window.clearTimeout(autoTimer.current);
+  }, []);
 
   function subCatsFor(tc: string) {
     return [...new Set(
@@ -623,10 +669,16 @@ export default function HierarchyPicker({
                     className="input w-full text-2xl font-black"
                     placeholder="1"
                     value={qtyInput}
-                    onChange={(e) => setQtyInput(e.target.value)}
+                    onChange={(e) => { setQtyInput(e.target.value); scheduleAuto(e.target.value); }}
                     onKeyDown={(e) => { if (e.key === "Enter") confirmLog(); }}
                   />
                 </label>
+                {autoArmed && (
+                  <p className="mt-1 flex items-center gap-1.5 text-xs font-semibold text-amber-300">
+                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                    Saving…
+                  </p>
+                )}
                 {pieceCount != null && (
                   <p className="mt-1 text-xs text-slate-500">
                     = {pieceCount} {qtyNum === 1 ? "piece" : "pieces"}
@@ -643,7 +695,7 @@ export default function HierarchyPicker({
                   </button>
                   <button
                     type="button"
-                    onClick={() => { setPending(null); setQtyInput(""); }}
+                    onClick={() => { clearAuto(); setPending(null); setQtyInput(""); }}
                     className="rounded-xl bg-slate-800 px-4 py-3 text-sm font-semibold text-slate-300 hover:bg-slate-700 transition"
                   >
                     Cancel
