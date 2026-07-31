@@ -24,7 +24,7 @@ import { exportFile } from "../lib/exportFile";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
 import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "../components/shorts/HierarchyPicker";
-import { buildPaperRank, buildShortageMatrix } from "../components/shorts/shortageMatrix";
+import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
 import { capacityColor } from "../utils/batchCapacity";
 import { ChevronLeft, ChevronRight, FileDown, Image as ImageIcon, Maximize2, Pause, Play, X } from "lucide-react";
@@ -39,7 +39,6 @@ import {
   useSettings,
   useShortages,
   useAuditEntries,
-  useShortageSheetTemplates,
   useTrackedItems,
   useSpareAssignments,
   useRouteSwaps,
@@ -216,12 +215,6 @@ export default function LiveReport() {
   const { data: shorts = [] } = useShortages(runDate);
   const { data: auditEntries = [] } = useAuditEntries(runDate);
   const { data: trackedItems = [] } = useTrackedItems();
-  // Printed short-sheet row order, shared with the on-screen editor.
-  const { data: shortageTemplates = [] } = useShortageSheetTemplates();
-  const shortagePaperRank = useMemo(
-    () => buildPaperRank(shortageTemplates[0], trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS),
-    [shortageTemplates, trackedItems],
-  );
   const palette = useCategoryPalette();
   const { data: spares = [] } = useSpareAssignments(runDate);
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
@@ -544,7 +537,7 @@ export default function LiveReport() {
       const items = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
       // Printed-sheet order, so the PDF's short sheet reads in the same
       // sequence as the paper and as the on-screen editor.
-      const m = buildShortageMatrix(shorts, items, shortagePaperRank);
+      const m = buildShortageMatrix(shorts, items);
       // The summary (KPIs + top strips) and the sheet grid are separate picks,
       // so a report can carry either, both, or just the grid.
       vm.shortages = {

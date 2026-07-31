@@ -9,9 +9,9 @@
 import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import type { Shortage, TruckWithState } from "../../types";
-import { useShortageSheetTemplates, useTrackedItems } from "../../api/hooks";
+import { useTrackedItems } from "../../api/hooks";
 import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "./HierarchyPicker";
-import { buildPaperRank, buildShortageMatrix } from "./shortageMatrix";
+import { buildShortageMatrix } from "./shortageMatrix";
 
 export default function ShortageSheetView({
   shorts,
@@ -34,14 +34,12 @@ export default function ShortageSheetView({
     onLayoutChange?.(l);
   };
 
-  // Rows in printed-sheet order, so this reads in the same sequence as the
-  // paper it mirrors (and as the editable Paper mode).
-  const { data: templates = [] } = useShortageSheetTemplates();
-  const paperRank = useMemo(() => buildPaperRank(templates[0], items), [templates, items]);
-
+  // Family-grouped (Mats → Bulk → Paper → Hygiene), matching the editable
+  // Grid. Only Paper mode uses printed order — everywhere else the grouping is
+  // what makes a long list scannable.
   const { trucks, rows, truckTotals, grandTotal, byTruckItems } = useMemo(
-    () => buildShortageMatrix(shorts, items, paperRank),
-    [shorts, items, paperRank],
+    () => buildShortageMatrix(shorts, items),
+    [shorts, items],
   );
 
   const truckTypeByNum = useMemo(
