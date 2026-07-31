@@ -244,7 +244,10 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
     # HSTS only over real TLS — sending it on plaintext LAN dev would pin
     # http://192.168.x.x:5180 to https in the browser and break local testing.
-    if request.url.scheme == "https":
+    # TLS terminates at Cloudflare/nginx, so the origin request arrives as
+    # http; the forwarded header is what actually reports the client scheme.
+    forwarded_proto = request.headers.get("x-forwarded-proto", "")
+    if request.url.scheme == "https" or forwarded_proto == "https":
         response.headers.setdefault(
             "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
         )

@@ -17,6 +17,7 @@ Event shapes sent to clients:
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect, status
 
 from database import SessionLocal
+from models import AuthRole
 from routers.auth import authenticate_websocket
 from ws_manager import manager
 
@@ -34,7 +35,10 @@ async def websocket_endpoint(ws: WebSocket) -> None:
     finally:
         db.close()
 
-    if user is None:
+    # Guests are gated too, not just anonymous callers: /auth/guest issues a
+    # session to anyone, and this feed carries chat bodies and driver notes.
+    # Guests still get board updates from the normal polling queries.
+    if user is None or user.role == AuthRole.guest:
         await ws.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
