@@ -121,6 +121,13 @@ export default function BatchingWizard() {
     return map;
   }, [board]);
 
+  // Routes whose freight came back on ANOTHER truck. The route truck itself
+  // never left the yard, so it is not a thing to batch — its carrier stands in
+  // for it and wears the "rt N" chip. Without this the grid offered both, and
+  // the same route could be batched twice (#4 and #11 both showing under
+  // Batch 2 on 2026-07-30).
+  const coveredRoutes = useMemo(() => new Set(prevCarriers.keys()), [prevCarriers]);
+
   // Roster = today's unload-day trucks, plus anything already batched (so a
   // stray assignment is always visible/fixable); entire fleet when "show all".
   // Mirrors BatchingPanel's rosterTrucks.
@@ -129,9 +136,23 @@ export default function BatchingWizard() {
     const ctx = buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload");
     const nums = new Set(ctx.activeTrucks.map((t) => t.truck_number));
     return board
+      .filter((t) => !coveredRoutes.has(t.truck_number))
       .filter((t) => nums.has(t.truck_number) || batchByTruck.has(t.truck_number))
       .sort((a, b) => a.truck_number - b.truck_number);
-  }, [board, showAll, unloadsDay, holidayUnload, batchByTruck]);
+  }, [board, showAll, unloadsDay, holidayUnload, batchByTruck, coveredRoutes]);
+
+  // Batched, but not something this day should be batching — a covered route
+  // truck that never came back. Excluding it from the roster above stops it
+  // being picked again; surfacing it here stops the existing assignment going
+  // silently unnoticed.
+  const strandedBatched = useMemo(() => {
+    if (showAll) return [];
+    const rosterNums = new Set(rosterTrucks.map((t) => t.truck_number));
+    return [...batchByTruck.entries()]
+      .filter(([num]) => !rosterNums.has(num))
+      .map(([num, batch]) => ({ truck: num, batch, carrier: prevCarriers.get(num)?.truck_number ?? null }))
+      .sort((a, b) => a.truck - b.truck);
+  }, [batchByTruck, rosterTrucks, prevCarriers, showAll]);
 
   const gridTrucks = useMemo(() => {
     let list = rosterTrucks;
@@ -365,6 +386,8 @@ export default function BatchingWizard() {
           batchByTruck={batchByTruck}
           templateEntryFor={templateEntryFor}
           sheetRouteFor={sheetRouteFor}
+          strandedBatched={strandedBatched}
+          onRemoveStranded={(truck, batch) => setConfirmRemove({ truck, from: batch })}
           noCap={noCap}
           wearerCap={wearerCap}
           isDust={isDust}
@@ -679,6 +702,8 @@ function ReviewStep({
   batchByTruck,
   templateEntryFor,
   sheetRouteFor,
+  strandedBatched,
+  onRemoveStranded,
   noCap,
   wearerCap,
   isDust,
@@ -694,6 +719,10 @@ function ReviewStep({
   templateEntryFor: (n: number) => number | undefined;
   /** Route this truck is unloading; differs when it carried another's freight. */
   sheetRouteFor: (n: number) => number;
+  /** Batched trucks that aren't on today's roster — a covered route truck that
+   *  never came back, so its batch entry is wrong. */
+  strandedBatched: { truck: number; batch: number; carrier: number | null }[];
+  onRemoveStranded: (truck: number, batch: number) => void;
   noCap: boolean;
   wearerCap: number;
   isDust: (t: TruckWithState | undefined) => boolean;
@@ -726,7 +755,8 @@ function ReviewStep({
     .map((t) => t.truck_number)
     .sort((a, b) => a - b);
 
-  const clean = missingWearers.length === 0 && unbatched.length === 0;
+  const clean =
+    missingWearers.length === 0 && unbatched.length === 0 && strandedBatched.length === 0;
 
   return (
     <div className="space-y-4">
@@ -750,6 +780,33 @@ function ReviewStep({
             <AlertTriangleIcon className="h-4 w-4 shrink-0" />
             Needs attention before this sheet is done
           </p>
+
+          {strandedBatched.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-200">
+                {strandedBatched.length} truck{strandedBatched.length === 1 ? "" : "s"} batched but didn't run
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {strandedBatched.map(({ truck, batch, carrier }) => (
+                  <button
+                    key={truck}
+                    type="button"
+                    onClick={() => onRemoveStranded(truck, batch)}
+                    className="inline-flex items-center gap-1 rounded-full border border-amber-600/50 bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-800/40"
+                  >
+                    #{truck}
+                    <span className="text-[10px] font-normal text-amber-300/80">
+                      batch {batch}{carrier != null ? ` · ran on #${carrier}` : ""}
+                    </span>
+                  </button>
+                ))}
+              </div>
+              <p className="mt-1 text-[11px] text-amber-200/70">
+                Its route was covered, so this truck never came back — the carrier is the one to
+                batch. Tap to remove it from the batch.
+              </p>
+            </div>
+          )}
 
           {unbatched.length > 0 && (
             <div>
