@@ -153,6 +153,22 @@ def _extract_backup_run_dates(content: bytes) -> list[date]:
     return sorted(run_dates)
 
 
+def _dedupe_keys(db: Session, *columns, where=None) -> set[tuple]:
+    """Load every existing dedupe key for a table in ONE query.
+
+    Merge mode (replace_existing=False) used to run a SELECT per row across
+    nine tables, so restoring a real backup meant tens of thousands of
+    sequential round-trips on multi-column predicates with no matching index —
+    minutes of work, and long enough to hit a proxy timeout. Callers add each
+    inserted key back into the returned set, which also dedupes rows repeated
+    within the archive itself (the per-row SELECT never saw pending inserts).
+    """
+    stmt = select(*columns)
+    if where is not None:
+        stmt = stmt.where(where)
+    return {tuple(row) for row in db.execute(stmt)}
+
+
 def _import_backup_package(content: bytes, db: Session, *, replace_existing: bool = False) -> dict[str, int]:
     try:
         zf = zipfile.ZipFile(io.BytesIO(content))
@@ -199,6 +215,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     if "load_durations.json" in zf.namelist():
         rows_data = _coerce_json_rows(zf.read("load_durations.json"), file_label="load_durations.json")
         imported = 0
+        seen = set() if replace_existing else _dedupe_keys(
+            db, LoadDuration.truck_number, LoadDuration.run_date,
+            LoadDuration.duration_seconds, LoadDuration.load_day_num,
+        )
         for item in rows_data:
             run_date = _parse_date(item.get("run_date"))
             if run_date is None:
@@ -207,16 +227,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             duration_seconds = int(item.get("duration_seconds", 0) or 0)
             load_day_num = item.get("load_day_num")
             if not replace_existing:
-                existing = db.scalars(
-                    select(LoadDuration).where(
-                        LoadDuration.truck_number == truck_number,
-                        LoadDuration.run_date == run_date,
-                        LoadDuration.duration_seconds == duration_seconds,
-                        LoadDuration.load_day_num == load_day_num,
-                    )
-                ).first()
-                if existing is not None:
+                key = (truck_number, run_date, duration_seconds, load_day_num)
+                if key in seen:
                     continue
+                seen.add(key)
             db.add(LoadDuration(
                 truck_number=truck_number,
                 run_date=run_date,
@@ -230,13 +244,16 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     if "audit_entries.json" in zf.namelist():
         rows_data = _coerce_json_rows(zf.read("audit_entries.json"), file_label="audit_entries.json")
         imported = 0
+        seen = set() if replace_existing else _dedupe_keys(db, AuditEntry.id)
         for item in rows_data:
             entry_id = str(item.get("id") or "").strip()
             run_date = _parse_date(item.get("run_date"))
             if not entry_id or run_date is None:
                 continue
-            if not replace_existing and db.get(AuditEntry, entry_id) is not None:
-                continue
+            if not replace_existing:
+                if (entry_id,) in seen:
+                    continue
+                seen.add((entry_id,))
             db.add(AuditEntry(
                 id=entry_id,
                 truck_number=int(item.get("truck_number", 0) or 0),
@@ -339,6 +356,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     if "shortages.json" in zf.namelist():
         rows_data = _coerce_json_rows(zf.read("shortages.json"), file_label="shortages.json")
         imported = 0
+        seen = set() if replace_existing else _dedupe_keys(
+            db, Shortage.truck_number, Shortage.run_date, Shortage.item_category,
+            Shortage.item_detail, Shortage.quantity, Shortage.initials,
+        )
         for item in rows_data:
             run_date = _parse_date(item.get("run_date"))
             truck_number = int(item.get("truck_number", 0) or 0)
@@ -350,18 +371,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             initials = str(item.get("initials") or "")
             initials_ts = item.get("initials_ts")
             if not replace_existing:
-                existing = db.scalars(
-                    select(Shortage).where(
-                        Shortage.truck_number == truck_number,
-                        Shortage.run_date == run_date,
-                        Shortage.item_category == item_category,
-                        Shortage.item_detail == item_detail,
-                        Shortage.quantity == quantity,
-                        Shortage.initials == initials,
-                    )
-                ).first()
-                if existing is not None:
+                key = (truck_number, run_date, item_category, item_detail, quantity, initials)
+                if key in seen:
                     continue
+                seen.add(key)
             db.add(Shortage(
                 truck_number=truck_number,
                 run_date=run_date,
@@ -429,6 +442,9 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     if "route_swaps.json" in zf.namelist():
         rows_data = _coerce_json_rows(zf.read("route_swaps.json"), file_label="route_swaps.json")
         imported = 0
+        seen = set() if replace_existing else _dedupe_keys(
+            db, RouteSwap.run_date, RouteSwap.route_truck,
+        )
         for item in rows_data:
             run_date = _parse_date(item.get("run_date"))
             route_truck = int(item.get("route_truck", 0) or 0)
@@ -436,11 +452,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             if run_date is None or route_truck <= 0 or load_on_truck <= 0:
                 continue
             if not replace_existing:
-                existing = db.scalars(
-                    select(RouteSwap).where(RouteSwap.run_date == run_date, RouteSwap.route_truck == route_truck)
-                ).first()
-                if existing is not None:
+                key = (run_date, route_truck)
+                if key in seen:
                     continue
+                seen.add(key)
             db.add(RouteSwap(
                 run_date=run_date,
                 route_truck=route_truck,
@@ -454,6 +469,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     if "spare_assignments.json" in zf.namelist():
         rows_data = _coerce_json_rows(zf.read("spare_assignments.json"), file_label="spare_assignments.json")
         imported = 0
+        seen = set() if replace_existing else _dedupe_keys(
+            db, SpareAssignment.run_date, SpareAssignment.spare_truck_number,
+            SpareAssignment.covering_route_truck, SpareAssignment.assigned_at,
+        )
         for item in rows_data:
             run_date = _parse_date(item.get("run_date"))
             spare_truck_number = int(item.get("spare_truck_number", 0) or 0)
@@ -462,16 +481,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
                 continue
             assigned_at = _parse_datetime(item.get("assigned_at")) or datetime.utcnow()
             if not replace_existing:
-                existing = db.scalars(
-                    select(SpareAssignment).where(
-                        SpareAssignment.run_date == run_date,
-                        SpareAssignment.spare_truck_number == spare_truck_number,
-                        SpareAssignment.covering_route_truck == covering_route_truck,
-                        SpareAssignment.assigned_at == assigned_at,
-                    )
-                ).first()
-                if existing is not None:
+                key = (run_date, spare_truck_number, covering_route_truck, assigned_at)
+                if key in seen:
                     continue
+                seen.add(key)
             db.add(SpareAssignment(
                 run_date=run_date,
                 spare_truck_number=spare_truck_number,
@@ -487,6 +500,9 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     if "route_swap_log.json" in zf.namelist():
         rows_data = _coerce_json_rows(zf.read("route_swap_log.json"), file_label="route_swap_log.json")
         imported = 0
+        seen = set() if replace_existing else _dedupe_keys(
+            db, RouteSwapLog.run_date, RouteSwapLog.route_truck, RouteSwapLog.load_on_truck,
+        )
         for item in rows_data:
             run_date = _parse_date(item.get("run_date"))
             route_truck = int(item.get("route_truck", 0) or 0)
@@ -494,15 +510,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             if run_date is None or route_truck <= 0 or load_on_truck <= 0:
                 continue
             if not replace_existing:
-                existing = db.scalars(
-                    select(RouteSwapLog).where(
-                        RouteSwapLog.run_date == run_date,
-                        RouteSwapLog.route_truck == route_truck,
-                        RouteSwapLog.load_on_truck == load_on_truck,
-                    )
-                ).first()
-                if existing is not None:
+                key = (run_date, route_truck, load_on_truck)
+                if key in seen:
                     continue
+                seen.add(key)
             db.add(RouteSwapLog(
                 run_date=run_date,
                 route_truck=route_truck,
@@ -516,6 +527,9 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
     if "truck_notes.json" in zf.namelist():
         rows_data = _coerce_json_rows(zf.read("truck_notes.json"), file_label="truck_notes.json")
         imported = 0
+        seen = set() if replace_existing else _dedupe_keys(
+            db, TruckNote.truck_number, TruckNote.note_type, TruckNote.body, TruckNote.workday_num,
+        )
         for item in rows_data:
             truck_number = int(item.get("truck_number", 0) or 0)
             body = str(item.get("body") or "")
@@ -523,16 +537,10 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             if truck_number <= 0 or not body:
                 continue
             if not replace_existing:
-                existing = db.scalars(
-                    select(TruckNote).where(
-                        TruckNote.truck_number == truck_number,
-                        TruckNote.note_type == note_type,
-                        TruckNote.body == body,
-                        TruckNote.workday_num == item.get("workday_num"),
-                    )
-                ).first()
-                if existing is not None:
+                key = (truck_number, note_type, body, item.get("workday_num"))
+                if key in seen:
                     continue
+                seen.add(key)
             db.add(TruckNote(
                 truck_number=truck_number,
                 note_type=note_type,
@@ -557,6 +565,18 @@ def _import_activity_events_payload(payload: bytes, db: Session, *, replace_exis
         db.execute(delete(ActivityEvent))
         db.flush()
     imported = 0
+    # This is by far the biggest table — every truck state change appends a row —
+    # so the key preload is bounded to the window the archive actually covers
+    # rather than loading the whole history. occurred_at is indexed, and a key
+    # outside that window cannot collide with anything in the file.
+    seen: set[tuple] = set()
+    if not replace_existing:
+        stamps = [t for t in (_parse_datetime(i.get("occurred_at")) for i in rows_data) if t is not None]
+        if stamps:
+            seen = _dedupe_keys(
+                db, ActivityEvent.occurred_at, ActivityEvent.event_type, ActivityEvent.summary,
+                where=ActivityEvent.occurred_at.between(min(stamps), max(stamps)),
+            )
     for item in rows_data:
         occurred_at = _parse_datetime(item.get("occurred_at"))
         if occurred_at is None:
@@ -565,15 +585,10 @@ def _import_activity_events_payload(payload: bytes, db: Session, *, replace_exis
         truck_number = item.get("truck_number")
         summary_text = str(item.get("summary") or "")
         if not replace_existing:
-            existing = db.scalars(
-                select(ActivityEvent).where(
-                    ActivityEvent.occurred_at == occurred_at,
-                    ActivityEvent.event_type == str(item.get("event_type") or ""),
-                    ActivityEvent.summary == summary_text,
-                )
-            ).first()
-            if existing is not None:
+            key = (occurred_at, str(item.get("event_type") or ""), summary_text)
+            if key in seen:
                 continue
+            seen.add(key)
         db.add(ActivityEvent(
             occurred_at=occurred_at,
             actor_type=str(item.get("actor_type") or "system"),

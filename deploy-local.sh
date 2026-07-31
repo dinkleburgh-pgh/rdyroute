@@ -39,6 +39,17 @@ fi
 echo "[local-deploy] recreating stack…"
 "${COMPOSE[@]}" up -d --remove-orphans
 
+# nginx resolves the 'backend' upstream once at startup and caches that IP for
+# the life of the process — the `resolver` directive only applies to proxy_pass
+# with a variable, not to a named upstream block. A deploy that recreates only
+# the backend gives it a new container IP, and the frontend then serves 502s
+# until something restarts it. A reload re-resolves upstream hostnames without
+# dropping connections. Non-fatal: never fail a good deploy over this.
+echo "[local-deploy] reloading nginx so it re-resolves the backend IP…"
+docker exec readyroutev2-frontend nginx -s reload 2>/dev/null \
+  && echo "[local-deploy] nginx reloaded" \
+  || echo "[local-deploy] WARNING: nginx reload skipped (container not ready?)" >&2
+
 echo "[local-deploy] done → ${APP_VERSION}"
 docker ps --filter name=readyroutev2 --format '{{.Names}}\t{{.Status}}'
 

@@ -10,7 +10,7 @@
  * BatchingPanel — so the wizard is resumable and stays in sync with the other
  * batching surfaces. useBatchSummary is the single source of truth.
  */
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import clsx from "clsx";
 import {
@@ -60,6 +60,14 @@ export default function BatchingWizard() {
   const [confirmMove, setConfirmMove] = useState<{ truck: number; from: number } | null>(null);
   const [confirmRemove, setConfirmRemove] = useState<{ truck: number; from: number } | null>(null);
   const [defaultsOpen, setDefaultsOpen] = useState(false);
+
+  // Drafts are keyed by truck number only, and the date picker above changes
+  // runDate without remounting — so a number typed for truck 12 on one date
+  // would otherwise still be sitting there, and get written to the next date
+  // that truck is assigned on.
+  useEffect(() => {
+    setWearerDrafts({});
+  }, [runDate]);
 
   const { data: board = [] } = useBoard(runDate);
   const { data: batches = [] } = useBatchSummary(runDate);

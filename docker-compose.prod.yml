@@ -7,6 +7,15 @@
 # Data persists in named volumes even when images are repulled.
 # DB_PASSWORD and DB_REPL_PASSWORD must be set in .env / Portainer env vars.
 
+# Docker's json-file driver does not rotate by default. Every tablet on the
+# floor polls several endpoints a minute, so uvicorn access logs alone grow
+# without bound and share a pool with the database and backups.
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "5"
+
 services:
   # ---------------------------------------------------------------------------
   # Primary PostgreSQL — streaming replication to USB standby.
@@ -15,6 +24,7 @@ services:
   # ---------------------------------------------------------------------------
   db:
     profiles: [replication]
+    logging: *default-logging
     image: postgres:16-alpine
     container_name: readyroutev2-db
     restart: unless-stopped
@@ -49,6 +59,7 @@ services:
   # ---------------------------------------------------------------------------
   db-setup:
     profiles: [replication]
+    logging: *default-logging
     image: postgres:16-alpine
     container_name: readyroutev2-db-setup
     restart: on-failure
@@ -86,6 +97,7 @@ services:
           echo "[db-setup] done"
 
   backend:
+    logging: *default-logging
     image: ${BACKEND_IMAGE:-ghcr.io/dinkleburgh-pgh/rdyroute-backend}:${IMAGE_TAG:-latest}
     pull_policy: always
     container_name: readyroutev2-backend
@@ -130,6 +142,7 @@ services:
       start_period: 120s
 
   frontend:
+    logging: *default-logging
     image: ${FRONTEND_IMAGE:-ghcr.io/dinkleburgh-pgh/rdyroute-frontend}:${IMAGE_TAG:-latest}
     pull_policy: always
     container_name: readyroutev2-frontend
@@ -153,6 +166,7 @@ services:
           memory: "32M"
 
   watchdog:
+    logging: *default-logging
     image: alpine:3.20
     container_name: readyroutev2-watchdog
     restart: unless-stopped
