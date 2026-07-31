@@ -189,7 +189,7 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
                   tab === "truck" ? "bg-indigo-700 text-white" : "bg-slate-800 text-slate-400 hover:bg-slate-700",
                 )}
               >
-                Truck {activeNotes.length > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{activeNotes.length}</span>}
+                Driver/Route {activeNotes.length > 0 && <span className="ml-1 rounded-full bg-white/20 px-1">{activeNotes.length}</span>}
               </button>
               <button
                 type="button"
@@ -408,7 +408,7 @@ export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onCl
               </div>
             )}
 
-            {/* Truck Notes tab */}
+            {/* Driver/Route notes tab */}
             {tab === "truck" && truckNums.map((truckNum) => {
               const truckNotes = byTruck.get(truckNum) ?? [];
               return (

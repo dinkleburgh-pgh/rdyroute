@@ -84,9 +84,25 @@
   }
 }
 
+/* Rotating rail sections fade in as each takes its turn, so a swap reads as a
+   change rather than a flicker of new text in the same box. */
+@keyframes railFadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: railFadeIn 260ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-pick-me {
     animation: pickMeCalm 1.8s ease-in-out infinite;
+  }
+  /* The rotation itself still happens — it has to, or sections stay hidden —
+     but drop the movement and just cut between them. */
+  .animate-fade-in {
+    animation: none;
   }
 }
 

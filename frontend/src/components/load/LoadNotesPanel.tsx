@@ -1,3 +1,4 @@
+import { useEffect, useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { AlertTriangleIcon } from "../icons";
 import { todayIso } from "../../api/client";
@@ -33,6 +34,72 @@ const NOTE_STYLE: Record<TruckNote["note_type"], { border: string; bg: string; c
   workday: { border: "border-st-shop/30", bg: "bg-st-shop/10", chip: "bg-st-shop/25 text-st-shop", label: "Workday" },
   one_off: { border: "border-st-inprogress/30", bg: "bg-st-inprogress/10", chip: "bg-st-inprogress/25 text-st-inprogress", label: "One-off" },
 };
+
+/** How long each rotating section holds the rail before the next one. */
+const ROTATE_MS = 8000;
+
+/**
+ * Cycle the rail's informational sections one at a time.
+ *
+ * Stacked, these sections ran past the bottom of the rail on the wall display,
+ * so whatever sorted last — usually the shift notes and the trucks coming up —
+ * was never actually on screen. Rotating gives every section the full width and
+ * a guaranteed turn.
+ *
+ * Only the informational sections rotate. Audit warnings and loud notices stay
+ * pinned above this by the caller: a warning that is only visible one tick in
+ * three is a warning that gets missed.
+ */
+function RotatingSections({ sections }: { sections: { key: string; title: string; node: ReactNode }[] }) {
+  const [idx, setIdx] = useState(0);
+  const [paused, setPaused] = useState(false);
+  const count = sections.length;
+  // Reset when the set of sections changes (the loading truck moved on), so a
+  // fresh truck always starts at its first section rather than mid-cycle.
+  const signature = sections.map((s) => s.key).join("|");
+  useEffect(() => setIdx(0), [signature]);
+  useEffect(() => {
+    if (count <= 1 || paused) return;
+    const t = window.setInterval(() => setIdx((i) => (i + 1) % count), ROTATE_MS);
+    return () => window.clearInterval(t);
+  }, [count, paused]);
+
+  if (count === 0) return null;
+  const active = sections[Math.min(idx, count - 1)];
+
+  return (
+    <div
+      className="flex min-h-0 flex-col gap-1.5"
+      // Pause while someone is actually reading it.
+      onMouseEnter={() => setPaused(true)}
+      onMouseLeave={() => setPaused(false)}
+    >
+      {/* The heading always shows — each section owns it now, rather than
+          repeating one inside every node. Dots appear only when there is
+          somewhere to rotate to. */}
+      <div className="flex items-center gap-2">
+        <span className="text-[11px] font-bold uppercase tracking-wide text-sky-400">{active.title}</span>
+        {count > 1 && (
+          <div className="ml-auto flex items-center gap-1">
+            {sections.map((s, i) => (
+              <button
+                key={s.key}
+                type="button"
+                aria-label={s.title}
+                onClick={() => { setIdx(i); setPaused(true); }}
+                className={clsx(
+                  "h-1.5 rounded-full transition-all",
+                  i === (idx % count) ? "w-4 bg-ink-soft" : "w-1.5 bg-ink-faint/40 hover:bg-ink-faint",
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div key={active.key} className="min-h-0 animate-fade-in">{active.node}</div>
+    </div>
+  );
+}
 
 /** A truck note that actually applies to this load, right now. */
 function applies(n: TruckNote, loadDayNum: number | null): boolean {
@@ -158,15 +225,16 @@ export default function LoadNotesPanel({
         </div>
       ))}
 
-      {/* 3 — notes on the truck itself. Grouped under their own heading: these
-              belong to ONE truck, where the block below applies to the whole
-              shift, and on a wall display the two were indistinguishable. */}
-      {truckNotes.length > 0 && (
+      {/* 3 — the informational sections, rotating one at a time so each gets
+              the full rail instead of the last ones falling off the bottom. */}
+      <RotatingSections
+        sections={[
+          truckNotes.length > 0 && {
+            key: "driver",
+            title: `Driver/Route${truckNumber != null ? ` · #${truckNumber}` : ""}`,
+            node: (
         <div className="rounded-xl border border-violet-700/40 bg-violet-950/20 px-3 py-2">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-violet-300">
-            Truck{truckNumber != null ? ` #${truckNumber}` : ""} notes
-          </p>
-          <div className="mt-1.5 space-y-1.5">
+          <div className="space-y-1.5">
             {truckNotes.map((n) => {
               const s = NOTE_STYLE[n.note_type];
               const fromDriver = n.created_by === "driver";
@@ -189,16 +257,14 @@ export default function LoadNotesPanel({
             })}
           </div>
         </div>
-      )}
-
-      {/* 3b — standing load-workflow notes. Apply to the whole shift rather
-              than one truck, so they sit below the truck's own notes. */}
-      {workflowLines.length > 0 && (
+            ),
+          },
+          workflowLines.length > 0 && {
+            key: "load",
+            title: `Load notes · Day ${dayNum}`,
+            node: (
         <div className="rounded-xl border border-sky-700/40 bg-sky-950/20 px-3 py-2">
-          <p className="text-[11px] font-bold uppercase tracking-wide text-sky-400">
-            Daily · Load day {dayNum}
-          </p>
-          <ul className="mt-1 space-y-1">
+          <ul className="space-y-1">
             {workflowLines.map((l, i) => (
               <li key={i} className="flex gap-1.5 text-xl font-bold leading-snug text-ink">
                 <span className="shrink-0 text-sky-500">•</span>
@@ -207,26 +273,13 @@ export default function LoadNotesPanel({
             ))}
           </ul>
         </div>
-      )}
-
-      {/* 4 — per-day state notes carried on the board payload */}
-      {offNote && (
-        <div className="rounded-xl border border-hairline bg-surface-2 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Off note</p>
-          <p className="text-sm leading-snug text-ink-soft">{offNote}</p>
-        </div>
-      )}
-      {shopNote && (
-        <div className="rounded-xl border border-hairline bg-surface-2 px-3 py-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Shop note</p>
-          <p className="text-sm leading-snug text-ink-soft">{shopNote}</p>
-        </div>
-      )}
-
-      {/* 4b — what's flagged on the trucks coming up */}
-      {upcomingNotes.length > 0 && (
-        <div className="space-y-1.5 border-t border-hairline pt-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Coming up</p>
+            ),
+          },
+          upcomingNotes.length > 0 && {
+            key: "upcoming",
+            title: "Coming up",
+            node: (
+        <div className="space-y-1.5">
           {upcomingNotes.map((g) => (
             <div key={g.truck.truck_number} className="rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5">
               <p className="font-mono text-xs font-bold tabular-nums text-ink-soft">#{g.truck.truck_number}</p>
@@ -244,15 +297,35 @@ export default function LoadNotesPanel({
             </div>
           ))}
         </div>
-      )}
+            ),
+          },
+          shiftNote
+            ? {
+                key: "shift",
+                title: "Shift notes",
+                node: (
+        <p className="whitespace-pre-wrap text-sm leading-relaxed text-ink-soft">{shiftNote}</p>
+                ),
+              }
+            : null,
+        ].filter(Boolean) as { key: string; title: string; node: ReactNode }[]}
+      />
 
-      {/* 5 — the shift's own notes, quietest */}
-      {shiftNote && (
-        <div className="mt-auto border-t border-hairline pt-2">
-          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Shift notes</p>
-          <p className="whitespace-pre-wrap text-xs leading-relaxed text-ink-muted">{shiftNote}</p>
+      {/* 4 — per-day state notes carried on the board payload. Short and truck-
+              specific, so they stay pinned rather than costing a rotation slot. */}
+      {offNote && (
+        <div className="rounded-xl border border-hairline bg-surface-2 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Off note</p>
+          <p className="text-sm leading-snug text-ink-soft">{offNote}</p>
         </div>
       )}
+      {shopNote && (
+        <div className="rounded-xl border border-hairline bg-surface-2 px-3 py-2">
+          <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">Shop note</p>
+          <p className="text-sm leading-snug text-ink-soft">{shopNote}</p>
+        </div>
+      )}
+
     </div>
   );
 }

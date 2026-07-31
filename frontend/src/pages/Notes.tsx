@@ -664,8 +664,8 @@ export default function NotesBoard() {
         />
 
       <NotesSection
-        title="Truck notes"
-        subtitle="Standing notes, workday instructions, and one-off reminders on individual trucks."
+        title="Driver/Route notes"
+        subtitle="Standing notes, workday instructions, and one-off reminders on individual routes — including notes drivers add themselves."
         icon={<Truck className="h-6 w-6" />}
         count={totalActive}
         open={trucksOpen}
