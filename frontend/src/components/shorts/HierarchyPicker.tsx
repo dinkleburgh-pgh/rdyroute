@@ -44,8 +44,10 @@ export const LIGHT_BG_ITEMS = new Set(["White", "White Shop"]);
 
 export const MAT_SIZES_S = new Set(["3x10", "3x5", "4x6"]);
 
-export function topCatOf(item: TrackedItem): string {
-  const cat = item.category ?? "";
+// Accepts undefined so callers can pass a catalog lookup straight in — a label
+// with no matching item resolves to "General" rather than forcing a cast.
+export function topCatOf(item: TrackedItem | undefined): string {
+  const cat = item?.category ?? "";
   const idx = cat.indexOf(">");
   return (idx >= 0 ? cat.slice(0, idx) : cat).trim() || "General";
 }
@@ -54,6 +56,45 @@ export function subCatOf(item: TrackedItem): string | null {
   const cat = item.category ?? "";
   const idx = cat.indexOf(">");
   return idx >= 0 ? cat.slice(idx + 1).trim() : null;
+}
+
+/**
+ * The name to SHOW for a stored item label.
+ *
+ * Logged rows (audit entries, load warnings) store only the catalog label,
+ * which for a garment is just its colour — an audit read "Black" where the
+ * floor expects "Black Aprons". The label stays the storage key (it's globally
+ * unique and everything groups by it); this qualifies it for display only.
+ *
+ * The subcategory is appended AFTER the label because that is how the items are
+ * actually spoken: "Black Aprons", "White Shop Towels", "24\" Dust Mops".
+ * Skipped when:
+ *   - the label already starts with its group, so mats stay "4x6 Black" rather
+ *     than becoming "4x6 Black 4x6"; and
+ *   - there is no subcategory at all — Paper, Hygiene and MISC hold unique
+ *     product names ("C-PULL", "JRT", "Sig Soap") that read worse with their
+ *     top category bolted on.
+ * Unknown or retired labels fall through unchanged.
+ */
+export function itemDisplayName(label: string, items: TrackedItem[]): string {
+  const it = items.find((i) => i.label === label);
+  if (!it) return label;
+  const group = subCatOf(it);
+  if (!group || label.toLowerCase().startsWith(group.toLowerCase())) return label;
+  return `${label} ${group}`;
+}
+
+/**
+ * itemDisplayName bound to the live catalog. Use this at every surface that
+ * renders a stored item label — the previous version of this logic lived
+ * privately inside Audit.tsx and reached only two of its own chips, which is
+ * why the PDF, the report, the truck drawers and the load warnings all still
+ * showed the bare colour.
+ */
+export function useItemDisplayName(): (label: string) => string {
+  const { data: raw = [] } = useTrackedItems();
+  const items = raw.length > 0 ? raw : DEFAULT_TRACKED_ITEMS;
+  return useMemo(() => (label: string) => itemDisplayName(label, items), [items]);
 }
 
 /**

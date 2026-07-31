@@ -10,6 +10,7 @@ import {
   useTruckNotes,
 } from "../../api/hooks";
 import type { TruckNote, TruckWithState } from "../../types";
+import { useItemDisplayName } from "../shorts/HierarchyPicker";
 
 /**
  * Everything the loader needs to know right now, loudest first.
@@ -60,6 +61,7 @@ export default function LoadNotesPanel({
   runDate: string;
   className?: string;
 }) {
+  const itemDisplayName = useItemDisplayName();
   // The truck is loaded FOR a particular day, which isn't always today's
   // default — prefer its own stamp.
   const dayNum = truck?.state?.load_day_num ?? loadDay;
@@ -130,7 +132,7 @@ export default function LoadNotesPanel({
             <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-st-dirty" />
             <div className="min-w-0">
               <p className="text-base font-bold text-st-dirty">
-                Load warning · {w.item_label} ×{w.quantity}
+                Load warning · {itemDisplayName(w.item_label)} ×{w.quantity}
               </p>
               {w.note && <p className="mt-0.5 text-xl font-bold leading-snug text-ink">{w.note}</p>}
             </div>
@@ -231,7 +233,7 @@ export default function LoadNotesPanel({
               {g.warnings.map((w) => (
                 <p key={w.id} className="mt-0.5 flex gap-1.5 text-xs leading-snug text-st-dirty">
                   <AlertTriangleIcon className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span>{w.item_label} ×{w.quantity}{w.note ? ` — ${w.note}` : ""}</span>
+                  <span>{itemDisplayName(w.item_label)} ×{w.quantity}{w.note ? ` — ${w.note}` : ""}</span>
                 </p>
               ))}
               {g.notes.map((n) => (

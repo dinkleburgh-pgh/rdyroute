@@ -634,9 +634,10 @@ def render_report_html(vm: ReportViewModel) -> str:
             _short_grid_html(vm.shortages),
             _sheet_cards_html(vm.shortages),
             _load_times_html(vm.load_times),
-            _audit_html(vm.audit),
-            # Batches last.
             _batches_html(vm.batches),
+            # Audit last — it is reference material reviewed after the
+            # operational sections, not alongside them.
+            _audit_html(vm.audit),
         ]
     )
     return (

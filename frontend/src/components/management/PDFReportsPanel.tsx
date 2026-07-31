@@ -5,10 +5,12 @@ import { format } from "date-fns";
 import { useAuditEntries, useBoard } from "../../api/hooks";
 import { todayIso } from "../../api/client";
 import { truckTypeLabel } from "../../utils/truckType";
+import { useItemDisplayName } from "../shorts/HierarchyPicker";
 
 export default function PDFReportsPanel() {
   const { data: board }   = useBoard(todayIso());
   const { data: entries } = useAuditEntries(todayIso());
+  const itemDisplayName   = useItemDisplayName();
 
   function openReportDownloads() {
     const today = todayIso();
@@ -25,7 +27,7 @@ export default function PDFReportsPanel() {
 
     const auditRows = (entries ?? [])
       .slice().sort((a, b) => a.truck_number - b.truck_number)
-      .map((e) => `<tr><td>#${e.truck_number}</td><td>${e.item_label}</td><td>${e.quantity}</td><td>${e.note ?? ""}</td></tr>`)
+      .map((e) => `<tr><td>#${e.truck_number}</td><td>${itemDisplayName(e.item_label)}</td><td>${e.quantity}</td><td>${e.note ?? ""}</td></tr>`)
       .join("");
 
     const html = `<!DOCTYPE html>

@@ -13,6 +13,7 @@ import StatusEditor from "./StatusEditor";
 import FleetTruckEditor from "./FleetTruckEditor";
 import { format } from "date-fns";
 import { truckTypeLabel } from "../../utils/truckType";
+import { useItemDisplayName } from "../../components/shorts/HierarchyPicker";
 
 export default function TruckDetailModal({
   truck,
@@ -27,6 +28,7 @@ export default function TruckDetailModal({
   readOnly?: boolean;
   onClose: () => void;
 }) {
+  const itemDisplayName = useItemDisplayName();
   const { data: shorts } = useShortages(runDate, truck.truck_number);
   const { data: audits } = useAuditEntries(runDate);
   const truckAudits = (audits ?? []).filter(
@@ -152,7 +154,7 @@ export default function TruckDetailModal({
               <ul className="divide-y divide-slate-800 text-sm">
                 {truckAudits.map((a) => (
                   <li key={a.id} className="py-1.5">
-                    <span className="font-medium">{a.item_label}</span>{" "}
+                    <span className="font-medium">{itemDisplayName(a.item_label)}</span>{" "}
                     <span className="text-xs text-slate-500">qty {a.quantity}</span>
                     {a.warn_on_next_load && (
                       <span className="badge ml-2 bg-amber-700/70">Warn</span>

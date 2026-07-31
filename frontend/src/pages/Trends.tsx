@@ -39,6 +39,7 @@ import ShortageVolumeChart from "../components/trends/ShortageVolumeChart";
 import ShortageKpiSection from "../components/trends/ShortageKpiSection";
 import QualityRateCard from "../components/trends/QualityRateCard";
 import AnomalyPanel from "../components/trends/AnomalyPanel";
+import { useItemDisplayName } from "../components/shorts/HierarchyPicker";
 
 function fmtPace(s: number | null): string {
   if (s == null) return "—";
@@ -57,6 +58,7 @@ function fmtDwell(s: number | null): string {
 export default function Trends() {
   const [params, setParams] = useSearchParams();
   const navigate = useNavigate();
+  const itemDisplayName = useItemDisplayName();
   const tab = params.get("tab") || "overview";
   const daysParam = Number(params.get("days"));
   const days = [7, 14, 30, 90].includes(daysParam) ? daysParam : 14;
@@ -111,8 +113,9 @@ export default function Trends() {
       .map(([item_label, total_qty]) => ({ item_label, total_qty }))
       .sort((a, b) => b.total_qty - a.total_qty)
       .slice(0, 10)
-      .map((t) => ({ label: t.item_label, value: t.total_qty }));
-  }, [byTruck]);
+      // Group by the stored label (the stable key), display it qualified.
+      .map((t) => ({ label: itemDisplayName(t.item_label), value: t.total_qty }));
+  }, [byTruck, itemDisplayName]);
 
   const topRoutes = useMemo(() => {
     const totals = new Map<number, number>();

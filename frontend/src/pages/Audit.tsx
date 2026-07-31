@@ -9,7 +9,7 @@ import { motion } from "framer-motion";
 import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { colorWordClass, itemTileClass, useCategoryPalette, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
+import { colorWordClass, itemTileClass, subCatOf, topCatOf, useCategoryPalette, useItemDisplayName, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
 import {
   auditPhotoFileUrl,
   useAuditByRoute,
@@ -47,6 +47,7 @@ function TruckPicker({
   topItems: Array<{ route: number; item_label: string; total_qty: number }>;
   onSelect: (t: TruckWithState) => void;
 }) {
+  const itemDisplayName = useItemDisplayName();
   const trucks = board
     .filter((t) => t.truck_type !== "Spare")
     .sort((a, b) => a.truck_number - b.truck_number);
@@ -126,7 +127,7 @@ function TruckPicker({
                   {i + 1}
                 </span>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-sm font-semibold text-slate-200">{row.item_label}</p>
+                  <p className="truncate text-sm font-semibold text-slate-200">{itemDisplayName(row.item_label)}</p>
                   <p className="text-[10px] text-slate-500">Route {row.route} · x{row.total_qty}</p>
                 </div>
               </div>
@@ -144,17 +145,10 @@ function TruckPicker({
 
 const MAT_SIZES = new Set(["3x10", "3x5", "4x6"]);
 
-function topCatOf(item: TrackedItem): string {
-  const cat = item.category ?? "";
-  const idx = cat.indexOf(">");
-  return (idx >= 0 ? cat.slice(0, idx) : cat).trim() || "General";
-}
-
-function subCatOf(item: TrackedItem): string | null {
-  const cat = item.category ?? "";
-  const idx = cat.indexOf(">");
-  return idx >= 0 ? cat.slice(idx + 1).trim() : null;
-}
+// topCatOf / subCatOf now come from the shared picker module alongside
+// itemDisplayName. Local copies lived here and in LiveReport and drifted from
+// the canonical pair — the same duplication that produced four category-colour
+// maps before useCategoryPalette replaced them.
 
 // The empty-catalog fallback (DEFAULT_TRACKED_ITEMS) and per-item tile colour
 // resolution (itemTileClass — MAT palette → per-item colour preset → colour word
@@ -490,21 +484,8 @@ function ItemLogger({
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
 
-  // An audit entry stores only the bare item label ("Black"), which is ambiguous
-  // across categories (Aprons Black vs a mat colour). Qualify it with its
-  // category group — subcategory, else top category — from the catalog so chips
-  // and the log read "Aprons Black" instead of just "Black". Labels are globally
-  // unique keys, so the lookup is exact; unknown/removed labels fall back as-is,
-  // and a label that already starts with its group (e.g. "4x6 Black") isn't
-  // double-prefixed.
-  function itemDisplayName(label: string): string {
-    const it = items.find((i) => i.label === label);
-    if (!it) return label;
-    const group = subCatOf(it) ?? topCatOf(it);
-    return group && !label.toLowerCase().startsWith(group.toLowerCase())
-      ? `${group} ${label}`
-      : label;
-  }
+  // Shared with every other surface that renders a stored item label.
+  const itemDisplayName = useItemDisplayName();
 
   const [quickSelect, setQuickSelect] = useState<{ label: string } | null>(null);
   const [quickKey, setQuickKey] = useState(0);

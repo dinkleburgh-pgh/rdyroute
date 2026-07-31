@@ -23,7 +23,7 @@ import { captureNodeToPngBlob } from "../lib/captureImage";
 import { exportFile } from "../lib/exportFile";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "../components/shorts/HierarchyPicker";
+import { DEFAULT_TRACKED_ITEMS, topCatOf, useCategoryPalette, useItemDisplayName } from "../components/shorts/HierarchyPicker";
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
 import { capacityColor } from "../utils/batchCapacity";
@@ -74,13 +74,9 @@ const TONE_HEX: Record<string, string> = {
 // The report sections the PDF picker offers, in on-screen order.
 type SectionKey = "batches" | "coverage" | "loadTimes" | "shortages" | "shortSheet" | "audit";
 
-// Top-level audit category = text before the first ">" in the "Top > Sub"
-// category string (mirrors Audit.tsx topCatOf).
-function topCatOf(item: TrackedItem | undefined): string {
-  const cat = item?.category ?? "";
-  const idx = cat.indexOf(">");
-  return (idx >= 0 ? cat.slice(0, idx) : cat).trim() || "General";
-}
+// topCatOf is imported from the shared picker module — this file used to keep
+// its own byte-identical copy "mirroring Audit.tsx", which is exactly how the
+// three versions drifted.
 
 function clock(epochSec: number | null | undefined): string {
   return epochSec ? formatEasternTime(epochSec) : "—";
@@ -216,6 +212,7 @@ export default function LiveReport() {
   const { data: auditEntries = [] } = useAuditEntries(runDate);
   const { data: trackedItems = [] } = useTrackedItems();
   const palette = useCategoryPalette();
+  const itemDisplayName = useItemDisplayName();
   const { data: spares = [] } = useSpareAssignments(runDate);
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: pace } = usePaceAverage(30);
@@ -593,7 +590,9 @@ export default function LiveReport() {
           truck_number: truck,
           route_override: entries.find((e) => e.route_override != null)?.route_override ?? null,
           entries: entries.map((e) => ({
-            item_label: e.item_label,
+            // Qualify for the PDF: the stored label for a garment is only its
+            // colour, so this read "Black" instead of "Black Aprons".
+            item_label: itemDisplayName(e.item_label),
             quantity: e.quantity,
             warn: e.warn_on_next_load,
             warn_applied: e.warning_applied,
@@ -1290,7 +1289,7 @@ export default function LiveReport() {
                       {entries.map((e) => (
                         <li key={e.id} className="flex items-center justify-between gap-2 text-xs">
                           <span className="flex min-w-0 items-center gap-1.5">
-                            <span className="truncate text-ink-soft">{e.item_label}</span>
+                            <span className="truncate text-ink-soft">{itemDisplayName(e.item_label)}</span>
                             {e.warn_on_next_load && (
                               <span
                                 className={clsx(
