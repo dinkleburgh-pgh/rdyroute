@@ -34,6 +34,7 @@ import {
   buildPaperRows,
   catalogItemKey,
   superGroupOf,
+  GROUP_ORDER,
   type PaperRow,
   type SheetRow,
 } from "./shortageMatrix";
@@ -85,29 +86,11 @@ export default function ShortSheetEditor({
   // Two orders, deliberately different per mode:
   //   Paper  — strict printed order, because it mirrors the page being read.
   //   Grid /
-  //   Guided — most-shorted first, so the handful of items actually short on a
-  //            normal day sit at the top instead of wherever the paper happens
-  //            to print them. Ties and never-shorted items keep printed order,
-  //            so the tail still tracks the page.
-  const { data: topItems = [] } = useShortageByItem(30);
-  const frequencyRank = useMemo(() => {
-    const m = new Map<string, number>();
-    // Resolve each trend row onto the same canonical key the rows use, so
-    // historical rows logged under an older category shape still match.
-    [...topItems]
-      .sort((a, b) => b.total_qty - a.total_qty)
-      .forEach((p, i) => {
-        const item = findTrackedItem(items, p.category, p.detail);
-        const { category, detail } = item
-          ? catalogItemKey(item)
-          : { category: p.category, detail: p.detail };
-        const k = keyOf(category, detail);
-        if (!m.has(k)) m.set(k, i);
-      });
-    return m;
-  }, [topItems, items]);
-
-  const catalogRows = useMemo(() => buildCatalogRows(items, paperRank), [items, paperRank]);
+  //   Guided — grouped by family (Mats → Bulk → Paper → Hygiene) with dividers.
+  //            Tried printed order and then most-shorted-first here; both
+  //            interleave the families and lose the dividers, which is the
+  //            thing that makes a long list scannable.
+  const catalogRows = useMemo(() => buildCatalogRows(items), [items]);
 
   // Existing quantities, normalized onto canonical (category, detail) keys so a
   // short logged under any historical category shape lands on the right row.
@@ -140,8 +123,19 @@ export default function ShortSheetEditor({
         total: 0,
       });
     }
-    // catalogRows is already in printed order; off-template rows follow it.
-    const rows = [...catalogRows, ...extraRows];
+    // Family-grouped, with off-template rows sorted in alongside the rest so
+    // they land under their own family heading rather than in a tail.
+    const groupRank = (g: string) => {
+      const i = GROUP_ORDER.indexOf(g);
+      return i === -1 ? GROUP_ORDER.length : i;
+    };
+    const rows = [...catalogRows, ...extraRows].sort(
+      (a, b) =>
+        groupRank(a.group) - groupRank(b.group) ||
+        a.group.localeCompare(b.group) ||
+        a.category.localeCompare(b.category) ||
+        a.label.localeCompare(b.label),
+    );
     return { qtyByKey, rows, extraRows };
   }, [shorts, items, catalogRows]);
 
@@ -150,16 +144,6 @@ export default function ShortSheetEditor({
     () => buildPaperRows(template, items, extraRows),
     [template, items, extraRows],
   );
-
-  // Grid / Guided: most-shorted first, printed order as the tiebreak.
-  const rankedRows = useMemo(() => {
-    const freq = (r: SheetRow) =>
-      frequencyRank.get(keyOf(r.category, r.detail)) ?? Number.MAX_SAFE_INTEGER;
-    return rows
-      .map((r, i) => ({ r, i })) // keep printed order as the stable fallback
-      .sort((a, b) => freq(a.r) - freq(b.r) || a.i - b.i)
-      .map((x) => x.r);
-  }, [rows, frequencyRank]);
 
   const committedQty = (row: SheetRow, truck: number) =>
     qtyByKey.get(keyOf(row.category, row.detail))?.get(truck) ?? 0;
@@ -327,7 +311,7 @@ export default function ShortSheetEditor({
         </p>
       ) : mode === "grid" ? (
         <GridMode
-          rows={hideEmpty ? rankedRows.filter((r) => rowTotal(r) > 0) : rankedRows}
+          rows={hideEmpty ? rows.filter((r) => rowTotal(r) > 0) : rows}
           columns={columns}
           cellDisplay={cellDisplay}
           setDraft={setDraft}
@@ -336,16 +320,12 @@ export default function ShortSheetEditor({
           colTotal={colTotal}
           grandTotal={grandTotal}
           dotClass={palette.dotClass}
-          // Family dividers only make sense while rows are grouped. Once
-          // most-shorted ordering interleaves the families, a divider would
-          // fire on nearly every row.
-          showGroups={frequencyRank.size === 0}
         />
       ) : mode === "guided" ? (
         <GuidedMode
-          rows={rankedRows}
+          rows={rows}
           columns={columns}
-          guidedIdx={Math.min(guidedIdx, Math.max(0, rankedRows.length - 1))}
+          guidedIdx={Math.min(guidedIdx, Math.max(0, rows.length - 1))}
           setGuidedIdx={setGuidedIdx}
           filledRowKeys={filledRowKeys}
           cellDisplay={cellDisplay}
@@ -480,7 +460,6 @@ function GridMode({
   colTotal,
   grandTotal,
   dotClass,
-  showGroups,
 }: {
   rows: SheetRow[];
   columns: number[];
@@ -491,7 +470,6 @@ function GridMode({
   colTotal: (truck: number) => number;
   grandTotal: number;
   dotClass: (category: string) => string;
-  showGroups: boolean;
 }) {
   const topRef = useRef<HTMLDivElement>(null);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -550,7 +528,7 @@ function GridMode({
         </thead>
         <tbody>
           {rows.map((row, ri) => {
-            const showGroup = showGroups && row.group !== lastGroup;
+            const showGroup = row.group !== lastGroup;
             lastGroup = row.group;
             const rt = rowTotal(row);
             return (
