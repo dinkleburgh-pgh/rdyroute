@@ -524,7 +524,35 @@ Start-Frontend
 # ---------------------------------------------------------------------------
 # Summary
 # ---------------------------------------------------------------------------
+
+# This machine's LAN address, so a phone on the same wifi can open the dev app
+# (vite runs with host:true, so it really is listening on every interface).
+#
+# Picks the adapter that actually holds the default route rather than the first
+# private-looking address: a dev box with Hyper-V, WSL or a VPN up has several
+# 192.168/172.16 addresses, and the first one is usually a virtual switch that
+# no phone can reach.
+function Get-LanIPv4 {
+    try {
+        $cfg = Get-NetIPConfiguration -ErrorAction Stop |
+            Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } |
+            Select-Object -First 1
+        if ($cfg -and $cfg.IPv4Address.IPAddress) { return $cfg.IPv4Address.IPAddress }
+    } catch { }
+    try {
+        return Get-NetIPAddress -AddressFamily IPv4 -ErrorAction Stop |
+            Where-Object {
+                $_.IPAddress -notmatch '^(127\.|169\.254\.)' -and
+                $_.PrefixOrigin -in 'Dhcp', 'Manual'
+            } |
+            Select-Object -First 1 -ExpandProperty IPAddress
+    } catch { }
+    return $null
+}
+
+$lanIp       = Get-LanIPv4
 $frontendUrl = "http://localhost:$FrontendPort"
+$lanUrl      = if ($lanIp) { "http://${lanIp}:$FrontendPort" } else { $null }
 $backendUrl  = "http://${BackendHost}:${BackendPort}"
 
 Write-Divider
@@ -534,6 +562,10 @@ Write-Host "ReadyRoute V2 is running" -ForegroundColor White
 Write-Host ""
 Write-Host "    App    " -NoNewline -ForegroundColor DarkGray
 Write-Host $frontendUrl -ForegroundColor Cyan
+if ($lanUrl) {
+    Write-Host "    Phone  " -NoNewline -ForegroundColor DarkGray
+    Write-Host $lanUrl -ForegroundColor Green
+}
 Write-Host "    API    " -NoNewline -ForegroundColor DarkGray
 Write-Host "$backendUrl/docs" -ForegroundColor DarkCyan
 Write-Host "    Logs   " -NoNewline -ForegroundColor DarkGray
