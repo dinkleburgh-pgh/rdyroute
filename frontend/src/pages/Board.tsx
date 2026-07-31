@@ -11,6 +11,7 @@ import {
   useReturnSpare,
   useOpenSpareAssignments,
   useCoverageForRole,
+  usePrevOperatingDay,
   useRouteSwapLog,
   useRouteSwaps,
   useSettings,
@@ -28,7 +29,7 @@ import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
 import { format } from "date-fns";
 import type { RouteSwap, SpareAssignment, TruckStatus, TruckWithState } from "../types";
-import { buildHistoricalCoverageFallback, effectiveStatus, garmentHex, garmentIsLoaded, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousRunDate, previousWorkday, recordSwapHistory, takenOverRouteNumber } from "../utils/truckStatus";
+import { buildHistoricalCoverageFallback, buildPrevDayCoverage, effectiveStatus, garmentHex, garmentIsLoaded, effectiveWorkflowStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousRunDate, previousWorkday, recordSwapHistory, resolvePrevRunDate, takenOverRouteNumber } from "../utils/truckStatus";
 import { LiveInProgress } from "../components/LiveInProgress";
 import clsx from "clsx";
 import {
@@ -153,6 +154,24 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: swapLog = [] } = useRouteSwapLog(60);
   const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
+  // Who physically carried whose freight on the previous run day. A truck sits
+  // in the Dirty bucket BECAUSE it ran yesterday, so yesterday's carriers are
+  // the coverage on this board — today's assignment fields say nothing about
+  // what a dirty truck actually brought back. Uses the backend's resolved
+  // previous OPERATING day (not previousRunDate below, which only skips
+  // weekends and loses coverage across a mid-week holiday).
+  const { data: prevOp } = usePrevOperatingDay(runDate);
+  const prevDayCoverage = useMemo(
+    () => buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp)),
+    [swapLog, runDate, prevOp],
+  );
+  /** Did this truck carry coverage freight — today's assignment or yesterday's run? */
+  const isCoverageTruck = (t: TruckWithState) =>
+    t.truck_type === "Spare" ||
+    t.route_swap_route != null ||
+    t.state?.oos_spare_route != null ||
+    prevDayCoverage.byCover.has(t.truck_number) ||
+    prevDayCoverage.splitHelpers.has(t.truck_number);
   // Previous operating day — for the "Previous Day Coverage" setter modal.
   const prevRunDate = useMemo(() => previousRunDate(runDate), [runDate]);
   const { data: prevSwaps = [] } = useRouteSwaps(prevRunDate);
@@ -873,8 +892,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               (t) => effectiveWorkflowStatus(t, runDayNum, holidayLoad, runUnloadsDay, holidayUnload) === "unfinished" && t.state?.priority_hold !== true && t.state?.needs_checked !== true,
             );
             priorityRows = filtered.filter((t) => t.state?.priority_hold === true);
-            dirtyRouteRows = dirtyRows.filter((t) => t.truck_type !== "Spare" && t.route_swap_route == null && t.state?.oos_spare_route == null && t.state?.priority_hold !== true && t.state?.needs_checked !== true);
-            dirtyCoverageRows = dirtyRows.filter((t) => (t.truck_type === "Spare" || t.route_swap_route != null || t.state?.oos_spare_route != null) && t.state?.priority_hold !== true && t.state?.needs_checked !== true);
+            // Both halves read the SAME predicate rather than one spelling it
+            // out and the other negating it by hand — that duplication is how
+            // the two drifted apart in the first place.
+            const isPlainDirty = (t: TruckWithState) =>
+              t.state?.priority_hold !== true && t.state?.needs_checked !== true;
+            dirtyRouteRows = dirtyRows.filter((t) => !isCoverageTruck(t) && isPlainDirty(t));
+            dirtyCoverageRows = dirtyRows.filter((t) => isCoverageTruck(t) && isPlainDirty(t));
             needsCheckedRows = filtered.filter((t) => t.state?.needs_checked === true && t.state?.priority_hold !== true);
           } else if (!fleetMode && filter === "spare") {
             // A split helper has a real job tonight — it belongs with the
