@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from database import get_db, settings
 from models import PushSubscription, User
 from notification_service import NotificationEvent, dispatch_notification, notifications_configured
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_non_guest
 from schemas import (
     NotificationConfigOut,
     NotificationEventOut,
@@ -59,7 +59,7 @@ def subscribe(
     payload: PushSubscriptionCreate,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     if not notifications_configured():
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Push notifications are not configured")
@@ -93,7 +93,7 @@ def subscribe(
 def unsubscribe(
     payload: PushSubscriptionRemove,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     row = db.scalars(
         select(PushSubscription).where(
@@ -113,7 +113,7 @@ def unsubscribe(
 def send_test_notification(
     background_tasks: BackgroundTasks,
     payload: NotificationTestRequest | None = None,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     event = NotificationEvent(
         type="test",

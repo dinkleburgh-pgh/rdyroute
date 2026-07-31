@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
 from models import AppSetting, Batch, BatchHistory, TruckState, TruckStateSource, TruckStatus, User
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_non_guest
 from schemas import BatchAssign, BatchHistoryCreate, BatchHistoryOut, BatchOut, BatchSummary, BatchTruck
 from ws_manager import manager
 
@@ -52,6 +52,7 @@ def _wearer_cap(db: Session) -> int:
 def get_batch_summary(
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     """
     Return an aggregated view of all six batches for a given run-date.
@@ -96,7 +97,7 @@ def get_batch_history(
 def append_batch_history(
     payload: BatchHistoryCreate,
     db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
 ):
     row = BatchHistory(**payload.model_dump())
     db.add(row)
@@ -114,6 +115,7 @@ def get_batch(
     batch_number: int,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
 ):
     _validate_batch_number(batch_number)
     return db.scalars(
@@ -129,7 +131,7 @@ def assign_truck_to_batch(
     payload: BatchAssign,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """
     Assign a truck to a batch for a run-date.
@@ -258,7 +260,7 @@ def remove_truck_from_batch(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     _validate_batch_number(batch_number)
     assignment = db.scalars(
@@ -311,7 +313,7 @@ def clear_batch(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ):
     """Remove all truck assignments from a batch for a run-date."""
     _validate_batch_number(batch_number)

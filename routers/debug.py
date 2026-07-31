@@ -18,13 +18,15 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from models import User
-from routers.auth import get_current_user, require_admin
+from routers.auth import require_admin, require_non_guest
 
 router = APIRouter(prefix="/debug", tags=["debug"])
 # uvicorn configures this logger with a stdout handler, so these lines actually
 # reach `docker logs` (the app's own "readyroutev2.*" loggers do not).
 log = logging.getLogger("uvicorn.error")
 _LOG_FILE = Path("/app/.data/client-debug.log")
+_MAX_LINE_CHARS = 4000
+_MAX_LOG_BYTES = 5 * 1024 * 1024
 
 
 class ClientLogEvent(BaseModel):
@@ -35,7 +37,7 @@ class ClientLogEvent(BaseModel):
 @router.post("/client-log", status_code=204)
 def client_log(
     payload: ClientLogEvent,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
 ) -> None:
     """Record a client-side diagnostic event (container log + persistent file)."""
     line = json.dumps(
@@ -47,9 +49,15 @@ def client_log(
         },
         default=str,
     )
+    # This file shares the data volume with audit photos, documents and DB
+    # backups, so a caller must not be able to grow it without limit.
+    if len(line) > _MAX_LINE_CHARS:
+        line = line[:_MAX_LINE_CHARS] + '...[truncated]"}'
     log.warning("[client-debug] %s", line)
     try:
         _LOG_FILE.parent.mkdir(parents=True, exist_ok=True)
+        if _LOG_FILE.exists() and _LOG_FILE.stat().st_size > _MAX_LOG_BYTES:
+            _LOG_FILE.replace(_LOG_FILE.with_suffix(".1"))
         with open(_LOG_FILE, "a", encoding="utf-8") as f:
             f.write(line + "\n")
     except OSError:

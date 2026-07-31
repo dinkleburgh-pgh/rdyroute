@@ -67,6 +67,7 @@ function useTimedStatusTransition({
   storageKey,
   durationMs,
   targetStatus,
+  fireOnlyFrom,
   runDate,
   data,
   upsert,
@@ -75,6 +76,12 @@ function useTimedStatusTransition({
   storageKey: string;
   durationMs: number;
   targetStatus: TruckStatus;
+  /**
+   * Statuses the truck may still be in for the transition to apply. A timer
+   * runs for 20+ minutes on one device's localStorage, so the truck can be
+   * moved on by anyone in the meantime — firing blindly would undo their work.
+   */
+  fireOnlyFrom: readonly TruckStatus[];
   runDate: string;
   data: TruckWithState[] | undefined;
   upsert: UpsertFn;
@@ -123,6 +130,10 @@ function useTimedStatusTransition({
           next.delete(num);
           _expireRef.current?.(num);
           const truck = (_dataRef.current ?? []).find((x) => x.truck_number === num);
+          // Someone may have advanced this truck while the timer ran — on
+          // another device, or on this one. Let their state stand.
+          const current = truck?.state?.status;
+          if (current != null && !fireOnlyFrom.includes(current)) return;
           _upsertRef.current.mutate({
             truck_number: num,
             run_date: _runDateRef.current,
@@ -176,6 +187,10 @@ function useTimedStatusTransition({
 
 const _OUTSIDE_LS_KEY = "rr_outside_timers";
 const _OUTSIDE_DEFAULT_MINUTES = 20;
+// A truck sent outside is still dirty/unfinished. Once it reads in_progress or
+// loaded somebody is working it — flipping it back to unloaded would orphan
+// load_start_time and wipe the load mid-run.
+const _OUTSIDE_FIRE_FROM: readonly TruckStatus[] = ["dirty", "unfinished"];
 
 export function useOutsideTimer(
   runDate: string,
@@ -188,6 +203,7 @@ export function useOutsideTimer(
     storageKey: _OUTSIDE_LS_KEY,
     durationMs: ms,
     targetStatus: "unloaded",
+    fireOnlyFrom: _OUTSIDE_FIRE_FROM,
     runDate,
     data,
     upsert,
@@ -201,6 +217,9 @@ export function useOutsideTimer(
 
 const _PAPER_BAY_LS_KEY = "rr_paper_bay_timers";
 const _PAPER_BAY_DEFAULT_MINUTES = 25;
+// Only completes a load that is actually still running. If the truck went back
+// to dirty/unloaded meanwhile, marking it loaded would be a lie.
+const _PAPER_BAY_FIRE_FROM: readonly TruckStatus[] = ["in_progress"];
 
 export function usePaperBayTimer(
   runDate: string,
@@ -214,6 +233,7 @@ export function usePaperBayTimer(
     storageKey: _PAPER_BAY_LS_KEY,
     durationMs: ms,
     targetStatus: "loaded",
+    fireOnlyFrom: _PAPER_BAY_FIRE_FROM,
     runDate,
     data,
     upsert,

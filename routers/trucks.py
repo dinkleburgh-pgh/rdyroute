@@ -1177,7 +1177,9 @@ def truck_unload_trend(
         if unloaded_at is not None or status == "unloaded":
             a[1] += 1
         if arrived_at is not None and unloaded_at is not None:
-            dwell = (unloaded_at - arrived_at).total_seconds()
+            # Both columns are Float unix timestamps, so the difference is
+            # already seconds — calling .total_seconds() on it raises.
+            dwell = float(unloaded_at) - float(arrived_at)
             # same spirit as the load band: drop nonsense (negative / >12h)
             if 0 < dwell <= 43200:
                 a[2] += dwell

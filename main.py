@@ -17,7 +17,7 @@ from pathlib import Path
 import time
 from collections import defaultdict
 
-from fastapi import FastAPI, Request, Response
+from fastapi import Depends, FastAPI, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, PlainTextResponse
 
@@ -178,6 +178,18 @@ async def lifespan(app: FastAPI):
 import os as _os
 _APP_VERSION = _os.environ.get("APP_VERSION", "dev")
 
+_origins = (
+    [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
+    if settings.cors_origins != "*"
+    else ["*"]
+)
+
+# Interactive docs publish the whole API surface — every route, payload shape
+# and field name — to anyone who asks. Keep them on in development (where CORS
+# is wide open anyway) and off in production unless deliberately re-enabled.
+_IS_DEV = "*" in _origins
+_DOCS_ENABLED = _IS_DEV or _os.environ.get("ENABLE_API_DOCS", "").lower() in {"1", "true", "yes"}
+
 app = FastAPI(
     title="ReadyRoute V2 API",
     description=(
@@ -186,6 +198,9 @@ app = FastAPI(
     ),
     version=_APP_VERSION,
     lifespan=lifespan,
+    docs_url="/docs" if _DOCS_ENABLED else None,
+    redoc_url="/redoc" if _DOCS_ENABLED else None,
+    openapi_url="/openapi.json" if _DOCS_ENABLED else None,
 )
 
 # ---------------------------------------------------------------------------
@@ -193,12 +208,6 @@ app = FastAPI(
 # Allow all origins in development so the React dev server can connect.
 # Tighten this before deploying to production.
 # ---------------------------------------------------------------------------
-
-_origins = (
-    [o.strip() for o in settings.cors_origins.split(",") if o.strip()]
-    if settings.cors_origins != "*"
-    else ["*"]
-)
 
 # Browsers reject credentialed requests (withCredentials:true) to wildcard
 # origins. Log a warning so it's obvious in prod logs if misconfigured.
@@ -217,6 +226,29 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+# ---------------------------------------------------------------------------
+# Security headers
+# ---------------------------------------------------------------------------
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    response = await call_next(request)
+    # nosniff: stop a browser from re-interpreting a JSON error body as HTML.
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    # The app takes destructive actions on a single tap, so it must never be
+    # framed by another origin.
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
+    response.headers.setdefault("Referrer-Policy", "strict-origin-when-cross-origin")
+    # HSTS only over real TLS — sending it on plaintext LAN dev would pin
+    # http://192.168.x.x:5180 to https in the browser and break local testing.
+    if request.url.scheme == "https":
+        response.headers.setdefault(
+            "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+        )
+    return response
 
 # ---------------------------------------------------------------------------
 # `/api/*` compatibility shim
@@ -349,8 +381,13 @@ def health():
 
 
 @app.get("/health/detail", tags=["meta"])
-def health_detail():
-    """Detailed health info — DB connectivity, pool stats, uptime."""
+def health_detail(_admin=Depends(auth.require_admin)):
+    """Detailed health info — DB connectivity, pool stats, uptime.
+
+    Admin-only: the payload names internal DB hosts, the off-site backup
+    target, the interpreter version and backup file paths. Monitors should
+    poll /health, which is unauthenticated and reports liveness only.
+    """
     import platform
     from sqlalchemy import create_engine as _create_engine, text as _text
     from database import engine as _engine, settings as _settings

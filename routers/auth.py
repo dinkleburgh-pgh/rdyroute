@@ -195,6 +195,41 @@ def get_current_user(
     return user
 
 
+def authenticate_websocket(cookies: dict[str, str], db: Session) -> User | None:
+    """Resolve the user behind a WebSocket handshake, or None if unauthenticated.
+
+    Browsers send httpOnly cookies on same-origin WebSocket handshakes but
+    cannot set an Authorization header, so the cookies are the only credential
+    available here. The short-lived JWT cookie is preferred; the long-lived
+    session cookie is the fallback so a reconnect that happens after the JWT
+    has expired (but before the client's next REST call refreshes it) still
+    succeeds instead of silently dropping realtime.
+    """
+    now_ts = datetime.now(timezone.utc).timestamp()
+
+    def _user_for_session(sid: str | None) -> User | None:
+        if not sid:
+            return None
+        sess = db.get(SessionModel, sid)
+        if sess is None or sess.expires_ts <= now_ts:
+            return None
+        user = db.scalars(select(User).where(User.username == sess.username)).first()
+        return user if user is not None and user.is_enabled else None
+
+    token = cookies.get(JWT_COOKIE)
+    if token:
+        try:
+            claims = jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
+        except PyJWTError:
+            claims = None
+        if claims is not None:
+            user = _user_for_session(claims.get("sid"))
+            if user is not None and user.username == claims.get("sub"):
+                return user
+
+    return _user_for_session(cookies.get(SESSION_COOKIE))
+
+
 _ADMIN_ROLES = frozenset({AuthRole.admin, AuthRole.fleet, AuthRole.supervisor})
 _SHORTS_ACCESS_ROLES = frozenset({
     AuthRole.admin,

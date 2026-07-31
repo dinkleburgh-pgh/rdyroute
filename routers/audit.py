@@ -26,7 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_non_guest
 from routers.trends_common import (
     completed_load_filter,
     half_split_change,
@@ -103,7 +103,7 @@ def list_audit_entries(
 
 
 @router.post("/entries", response_model=AuditEntryOut, status_code=status.HTTP_201_CREATED)
-def create_audit_entry(payload: AuditEntryCreate, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_audit_entry(payload: AuditEntryCreate, background_tasks: BackgroundTasks, _user: User = Depends(require_non_guest), db: Session = Depends(get_db)):
     entry = AuditEntry(id=uuid.uuid4().hex, **payload.model_dump())
     db.add(entry)
     db.commit()
@@ -117,7 +117,7 @@ def update_audit_entry(
     entry_id: str,
     payload: AuditEntryUpdate,
     background_tasks: BackgroundTasks,
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
     db: Session = Depends(get_db),
 ):
     entry = db.get(AuditEntry, entry_id)
@@ -132,7 +132,7 @@ def update_audit_entry(
 
 
 @router.post("/entries/{entry_id}/warning-applied", response_model=AuditEntryOut)
-def mark_warning_applied(entry_id: str, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def mark_warning_applied(entry_id: str, _user: User = Depends(require_non_guest), db: Session = Depends(get_db)):
     """Mark a load-warning as having been seen/actioned by a loader."""
     entry = db.get(AuditEntry, entry_id)
     if entry is None:
@@ -144,7 +144,7 @@ def mark_warning_applied(entry_id: str, _user: User = Depends(get_current_user),
 
 
 @router.delete("/entries/{entry_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_audit_entry(entry_id: str, background_tasks: BackgroundTasks, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_audit_entry(entry_id: str, background_tasks: BackgroundTasks, _user: User = Depends(require_non_guest), db: Session = Depends(get_db)):
     entry = db.get(AuditEntry, entry_id)
     if entry is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Entry not found")
@@ -551,7 +551,7 @@ async def upload_audit_photo(
     caption: str = Form(default=""),
     uploaded_by: str = Form(default=""),
     file: UploadFile = File(...),
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(require_non_guest),
     db: Session = Depends(get_db),
 ):
     """Upload a photo attached to an audit (optionally tied to an entry)."""
@@ -605,7 +605,7 @@ def download_audit_photo(photo_id: str, _user: User = Depends(get_current_user),
 
 
 @router.delete("/photos/{photo_id}", status_code=status.HTTP_204_NO_CONTENT)
-def delete_audit_photo(photo_id: str, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_audit_photo(photo_id: str, _user: User = Depends(require_non_guest), db: Session = Depends(get_db)):
     row = db.get(AuditPhoto, photo_id)
     if row is None:
         raise HTTPException(status_code=404, detail="Photo not found")

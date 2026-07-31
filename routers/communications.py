@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import AppSetting, AuthRole, CommunicationMessage, User
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_admin, require_non_guest
 from schemas import MessageCreate, MessageOut
 from ws_manager import manager
 
@@ -59,7 +59,7 @@ def list_messages(
 def send_message(
     payload: MessageCreate,
     background_tasks: BackgroundTasks,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_non_guest),
     db: Session = Depends(get_db),
 ):
     censored_text = _apply_censor(payload.message, db)
@@ -133,7 +133,9 @@ def get_censor_words(_user: User = Depends(get_current_user), db: Session = Depe
 
 
 @router.put("/censor-words", response_model=list[str])
-def update_censor_words(words: list[str], _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def update_censor_words(words: list[str], _user: User = Depends(require_admin), db: Session = Depends(get_db)):
+    # Admin-only: this writes an AppSetting directly, so a weaker gate here
+    # would sidestep the role check that /settings/{key} enforces.
     cleaned = sorted({w.lower().strip() for w in words if w.strip()})
     setting = db.get(AppSetting, _CENSOR_WORDS_KEY)
     if setting is None:

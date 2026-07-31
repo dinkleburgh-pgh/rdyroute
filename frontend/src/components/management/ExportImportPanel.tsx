@@ -2,9 +2,11 @@
  * Export / Import panel — data backup and restore. Extracted from Settings.tsx.
  */
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { FieldRow } from "./shared";
 
 export default function ExportImportPanel() {
+  const queryClient = useQueryClient();
   const [importStatus, setImportStatus] = useState<string | null>(null);
   const [importing, setImporting] = useState(false);
 
@@ -30,6 +32,11 @@ export default function ExportImportPanel() {
           ([k, v]) => `${v} ${k.replace(/_/g, " ")} imported`,
         );
         setImportStatus(parts.length ? parts.join(", ") : "Done");
+        // An import rewrites fleet, states, batches and shortages wholesale.
+        // This request goes out through raw fetch, so nothing else drops the
+        // pre-import cache — without this the board keeps rendering the old
+        // data and there's no way to tell the restore worked.
+        await queryClient.invalidateQueries();
       }
     } catch (e) {
       setImportStatus(`Network error: ${String(e)}`);

@@ -4,6 +4,7 @@
  * allows downloading them, and provides the existing ZIP restore functionality.
  */
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useAuth } from "../../contexts/AuthContext";
 import { api } from "../../api/client";
 import { useToast } from "../../contexts/ToastContext";
@@ -38,6 +39,7 @@ function fmtDate(iso: string): string {
 export default function RecoveryPanel() {
   const { user } = useAuth();
   const toast = useToast();
+  const queryClient = useQueryClient();
 
   const [backups, setBackups] = useState<PgBackup[]>([]);
   const [loading, setLoading] = useState(false);
@@ -125,6 +127,10 @@ export default function RecoveryPanel() {
           ([k, v]) => `${v} ${k.replace(/_/g, " ")}`,
         );
         setImportStatus(parts.length ? `Restored: ${parts.join(", ")}` : "Done");
+        // Raw fetch, so no mutation hook clears the pre-restore cache. Drop it
+        // all — a restore that still shows the old board is worse than useless
+        // during an incident.
+        await queryClient.invalidateQueries();
       }
     } catch (e) {
       setImportStatus(`Network error: ${String(e)}`);

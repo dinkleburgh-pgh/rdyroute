@@ -17,7 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from routers.auth import get_current_user
+from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import MAX_LOAD_SECONDS, MIN_LOAD_SECONDS, window_bounds
 from models import LoadDuration, TruckState, User
 from schemas import LoadDurationCreate, LoadDurationOut, PaceDailyPoint
@@ -49,7 +49,7 @@ def list_durations(
 
 
 @router.post("", response_model=LoadDurationOut, status_code=status.HTTP_201_CREATED)
-def record_duration(payload: LoadDurationCreate, _user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+def record_duration(payload: LoadDurationCreate, _user: User = Depends(require_non_guest), db: Session = Depends(get_db)):
     row = LoadDuration(**payload.model_dump())
     db.add(row)
     db.commit()
@@ -87,9 +87,9 @@ def pace_average(
 
 @router.delete("/purge-abnormal", status_code=status.HTTP_200_OK)
 def purge_abnormal(
-    min_seconds: int = Query(default=MIN_LOAD_SECONDS, ge=1),
-    max_seconds: int = Query(default=MAX_LOAD_SECONDS, le=86400),
-    _user: User = Depends(get_current_user),
+    min_seconds: int = Query(default=MIN_LOAD_SECONDS, ge=1, le=86400),
+    max_seconds: int = Query(default=MAX_LOAD_SECONDS, ge=1, le=86400),
+    _user: User = Depends(require_admin),
     db: Session = Depends(get_db),
 ):
     """
@@ -98,6 +98,14 @@ def purge_abnormal(
     default purge never deletes records the charts are counting.
     """
     from sqlalchemy import delete
+
+    # An inverted band would delete the entire table: every row is both
+    # "below the minimum" and "above the maximum" when min > max.
+    if min_seconds >= max_seconds:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="min_seconds must be less than max_seconds",
+        )
 
     total_before = db.scalar(select(func.count()).select_from(LoadDuration))
     db.execute(

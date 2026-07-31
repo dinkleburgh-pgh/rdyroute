@@ -27,7 +27,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from database import settings
 from models import User
-from routers.auth import get_current_user
+from routers.auth import require_non_guest
 from schemas import (
     AuditSectionVM,
     BatchesSectionVM,
@@ -79,7 +79,7 @@ def _rate_limit(request: Request) -> None:
 def report_pdf(
     vm: ReportViewModel,
     request: Request,
-    current_user: User = Depends(get_current_user),  # any valid session incl. guest
+    current_user: User = Depends(require_non_guest),
 ) -> Response:
     _rate_limit(request)
 
