@@ -34,6 +34,10 @@ RUN set -eu; \
 # ---------------------------------------------------------------------------
 FROM nginx:1.30-alpine AS runtime
 COPY nginx.conf /etc/nginx/conf.d/default.conf
+# NOT under conf.d/ — nginx.conf's http block auto-includes conf.d/*.conf, which
+# would pull these add_headers in at http level as well as at each location and
+# emit every header twice.
+COPY nginx-security-headers.conf /etc/nginx/security-headers.inc
 COPY --from=build /app/dist /usr/share/nginx/html
 COPY docker-startup.sh /docker-startup.sh
 RUN chmod +x /docker-startup.sh
