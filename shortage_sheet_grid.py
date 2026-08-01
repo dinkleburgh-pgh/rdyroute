@@ -184,7 +184,7 @@ def _subdivide(lines: list[int], pitch: float, tol: float = 0.34) -> list[int]:
     return out
 
 
-def locate_cells(content: bytes, *, ink_cutoff: float = 0.24) -> tuple[Image.Image, list[SheetCell]]:
+def locate_cells(content: bytes, *, ink_cutoff: float = 0.12) -> tuple[Image.Image, list[SheetCell]]:
     """Return the full-resolution image plus every cell that has writing in it.
 
     Geometry is derived on a downscaled copy (cheap, and the rules are heavy
@@ -360,14 +360,21 @@ def crop_cell(full: Image.Image, cell: SheetCell, *, min_width: int = 180) -> by
 # lines then track the real rules. That took the worst sheets from unusable to
 # usable, and one that had reported 261 stray cells down to 15.
 #
-# Current state across the archive, at the default cutoff:
+# DO NOT TRUST THE CELL COUNT AS A QUALITY MEASURE.
 #
-#   106 photos  clean     (<=45 located cells, about the true count)
-#    13 photos  mid       (46-90)
-#    10 photos  noisy     (>90)
-#     3 photos  rejected  (geometry did not resolve — raises LowConfidenceSheet)
+# An earlier revision reported "106 of 132 photos clean" on the strength of the
+# located-cell count sitting near the expected ~20-25. That number was reached
+# by raising ink_cutoff to 0.24, and visual verification showed it was
+# suppressing real entries rather than suppressing noise: 2026-05-22 went from
+# 76 located cells to 5, and on 2026-07-09 the two rows carrying the most data
+# on the sheet (GRID TOWELS 140/550/580/1920/1440/480/1250 and RED SHOP TOWELS
+# 950/500/600/150/50/400/100/150) were not located at all, while empty
+# right-hand columns and the initials row collected boxes.
 #
-#   4417 located cells in total.
+# Counting cells measures whether a plausible NUMBER of things was found, not
+# whether they are the right things. The only honest measure is recall and
+# precision against entries read off the sheet by eye, which is what
+# scratchpad/verify.py renders.
 #
 # Getting there needed two more things beyond the arch correction. Choosing the
 # row pitch by which candidate reproduces the template's 53 rows, rather than
