@@ -22,6 +22,19 @@ The remaining false positives are crops holding only a rule, in the upper-left
 where residual bow survives the straightening. They cost review time but do not
 corrupt a training set as long as the reviewer marks them as blanks; the recall
 misses, at the very bottom of the sheet, are the real loss.
+
+THAT RESULT DOES NOT GENERALISE. Spot-checking five more sheets across both
+form revisions gave 469, 228, 156, 102 and 205 located cells against a true
+~20-25, and 2026-07-09 was rejected outright. Only 2026-07-31 produced a usable
+40. The dewarp itself is sound on all of them — the sheets come out flat — but
+downstream row-boundary detection picks the wrong phase, landing boundaries at
+the middle of each printed row instead of on the rules, so cells straddle a
+rule and whole bands of empty cells register as inked.
+
+Detecting the grid per sheet is the wrong idea now that dewarp exists. Every
+photo is the SAME printed form warped onto the same fixed canvas, so the cell
+geometry should be defined once against that canvas and reused, rather than
+re-derived (and re-broken) for each image. That is the next thing to build.
 """
 import sys
 
