@@ -146,6 +146,19 @@ def quad_is_sane(quad, shape):
     return True, ""
 
 
+def expand_quad(ordered, factor=0.045):
+    """Push corners outward from the centroid before warping.
+
+    The contour traces the table's RULES, but the printed item labels sit just
+    outside them. On 2026-04-07 p2 the warp clipped every label below
+    '3X5 BLACK', leaving quantities that were legible but could not be
+    attributed to a row — unusable, since the item name is the whole point. A
+    small outward margin keeps the label column in frame.
+    """
+    centre = ordered.mean(axis=0)
+    return (centre + (ordered - centre) * (1.0 + factor)).astype(np.float32)
+
+
 def warp(gray, ordered):
     dst = np.array([[0, 0], [OUT_W - 1, 0], [OUT_W - 1, OUT_H - 1], [0, OUT_H - 1]],
                    dtype=np.float32)
@@ -203,7 +216,7 @@ def process(path, tag):
     if not ok:
         print(f"  {tag}: rejected quad ({why})")
         return None
-    flat = warp(gray, ordered)
+    flat = warp(gray, expand_quad(ordered))
     straight, shifts = straighten_rows(flat)
     cv2.imwrite(f"{SCRATCH}\\dw_{tag}_flat.png", flat)
     cv2.imwrite(f"{SCRATCH}\\dw_{tag}_straight.png", straight)
