@@ -11,6 +11,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
     () => ({
       batching_disabled: asBool(map.get("batching_disabled"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
+      prebatch_mode: asBool(map.get("prebatch_mode"), false),
       wearer_cap: Number(map.get("wearer_cap") ?? 1800),
       outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
       outside_timer_minutes: Number(map.get("outside_timer_minutes") ?? 20),
@@ -74,6 +75,19 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, batching_disabled: e.target.checked })}
           />
           Hide Batches
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Pre-batch mode"
+        hint="Assigning a batch records the batch only — it no longer marks the truck unloaded. For transcribing the paper batch sheet ahead of the unload. Trucks stay Dirty until someone taps Mark Unloaded, so unload progress stays honest. Turn OFF while the crew is working: a Dirty truck does not appear in Ready to load."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.prebatch_mode}
+            onChange={(e) => setForm({ ...form, prebatch_mode: e.target.checked })}
+          />
+          Batch without unloading
         </label>
       </FieldRow>
       <FieldRow

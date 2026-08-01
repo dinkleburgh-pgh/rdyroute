@@ -11,6 +11,7 @@ const WELL_KNOWN_KEYS = new Set([
   "status_badge_colors",
   "batching_disabled",
   "batch_no_cap",
+  "prebatch_mode",
   "outside_timer_enabled",
   "paper_bay_enabled",
   "arrived_tracking_enabled",

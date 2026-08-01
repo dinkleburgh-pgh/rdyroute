@@ -4,6 +4,7 @@ import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolid
   useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import CoverageCards from "../components/CoverageCards";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
+import PreBatchBanner from "../components/PreBatchBanner";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import {
@@ -510,6 +511,7 @@ export default function Unload() {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-5 p-3 md:p-6">
 
         {/* Previous load-day coverage */}
+        <PreBatchBanner />
         <WorkflowDayNotes scope="unload" day={unloadsDay} />
 
         {prevCoverage.items.length > 0 && (

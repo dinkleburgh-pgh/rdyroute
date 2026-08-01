@@ -162,6 +162,7 @@ key/value rows:
 |---|---|
 | `batching_disabled` | Hides the Batches workflow entirely |
 | `batch_no_cap` / `wearer_cap` | Batch wearer capacity limit |
+| `prebatch_mode` | Assigning a batch records the batch only, without marking the truck unloaded — for transcribing the batch sheet ahead of the unload. Trucks stay Dirty until Mark Unloaded. Turn off while the crew is working: a Dirty truck is not offered in Ready to load |
 | `outside_timer_enabled` / `_minutes` | "Outside" countdown → auto-unload |
 | `paper_bay_enabled` / `_minutes` | "Paper Bay" countdown → auto-load |
 | `arrived_tracking_enabled` | Dev-only "Arrived" quick action |

@@ -214,6 +214,14 @@ def assign_truck_to_batch(
     )
     db.add(row)
 
+    # Pre-batch mode: batching records WHICH batch a truck belongs to without
+    # claiming it has been unloaded, so the paper batch sheet can be transcribed
+    # ahead of the actual unload. batch_id and wearers are still written —
+    # every "Batch N" chip in the UI reads TruckState.batch_id, not the Batch
+    # row, so skipping it would make pre-batching invisible on the board.
+    prebatch_setting = db.get(AppSetting, "prebatch_mode")
+    prebatch = prebatch_setting is not None and prebatch_setting.value is True
+
     # Also upsert the truck's state: mark dirty trucks as unloaded and sync
     # batch_id + wearers. Trucks already past dirty (loaded, in_progress, etc.)
     # keep their current status — only batch_id and wearers are updated.
@@ -228,14 +236,16 @@ def assign_truck_to_batch(
         state = TruckState(
             truck_number=payload.truck_number,
             run_date=payload.run_date,
-            status=TruckStatus.unloaded,
+            # A truck with no row yet has not been unloaded; only the normal
+            # mode's assume-it's-done shortcut says otherwise.
+            status=TruckStatus.dirty if prebatch else TruckStatus.unloaded,
             wearers=effective_wearers,
             batch_id=payload.batch_number,
             state_source=TruckStateSource.workflow.value,
         )
         db.add(state)
     else:
-        if state.status == TruckStatus.dirty:
+        if not prebatch and state.status == TruckStatus.dirty:
             state.status = TruckStatus.unloaded
         state.wearers = effective_wearers
         state.batch_id = payload.batch_number

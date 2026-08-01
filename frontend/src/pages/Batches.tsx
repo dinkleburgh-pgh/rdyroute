@@ -191,6 +191,7 @@ export default function Batches() {
   const { data, isLoading } = useBatchSummary(runDate);
   const { data: settings = [] } = useSettings();
   const noCap = settings.some((s) => s.key === "batch_no_cap" && s.value === true);
+  const prebatchMode = settings.some((s) => s.key === "prebatch_mode" && s.value === true);
   const wearerCap = (() => {
     const v = Number(settings.find((s) => s.key === "wearer_cap")?.value);
     return Number.isFinite(v) && v > 0 ? v : DEFAULT_WEARER_CAP;
@@ -327,12 +328,20 @@ export default function Batches() {
               cap={wearerCap}
               onAssigned={async () => {
                 if (source === "unload" && truck) {
-                  await upsert.mutateAsync({
-                    truck_number: Number(truck),
-                    run_date: runDate,
-                    status: "unloaded",
-                    wearers: 0,
-                  });
+                  // Coming from the Unload workflow, assigning a batch has also
+                  // meant "and it's unloaded" since f31a21c. Pre-batch mode is
+                  // exactly the case where that must not happen — the whole
+                  // point is to batch ahead of the unload.
+                  // `wearers` is deliberately NOT sent: the assign just wrote
+                  // the entered count, and this PUT applies whatever fields it
+                  // is given, so passing 0 here silently zeroed it.
+                  if (!prebatchMode) {
+                    await upsert.mutateAsync({
+                      truck_number: Number(truck),
+                      run_date: runDate,
+                      status: "unloaded",
+                    });
+                  }
                   navigate("/unload");
                 } else {
                   setTruck("");

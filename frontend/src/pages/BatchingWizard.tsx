@@ -35,6 +35,7 @@ import OverbatchedChip from "../components/OverbatchedChip";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { AlertTriangleIcon, DustGarmentIcon } from "../components/icons";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
+import PreBatchBanner from "../components/PreBatchBanner";
 import WearerDefaultsEditor from "../components/batching/WearerDefaultsEditor";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckWithState } from "../types";
@@ -289,6 +290,7 @@ export default function BatchingWizard() {
 
       {/* The sheet notes ARE batching constraints ("69 must be in its own
           batch"), so they belong in front of whoever is batching. */}
+      <PreBatchBanner />
       <WorkflowDayNotes scope="unload" day={unloadsDay} />
 
       {/* Run date + roster scope */}

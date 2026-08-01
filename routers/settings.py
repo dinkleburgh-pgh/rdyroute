@@ -30,6 +30,9 @@ KNOWN_KEYS = {
     "status_badge_colors",
     "batching_disabled",
     "batch_no_cap",
+    # When on, assigning a batch no longer marks the truck unloaded, so the
+    # paper batch sheet can be transcribed ahead of the actual unload.
+    "prebatch_mode",
     "outside_timer_enabled",
     "paper_bay_enabled",
     "arrived_tracking_enabled",
@@ -73,6 +76,9 @@ _USER_READABLE_KEYS = {
     "status_badge_colors",
     "batching_disabled",
     "batch_no_cap",
+    # Read by every batching surface to show the "won't mark unloaded" banner,
+    # so it must reach floor roles, not just admins.
+    "prebatch_mode",
     "outside_timer_enabled",
     "paper_bay_enabled",
     "arrived_tracking_enabled",
