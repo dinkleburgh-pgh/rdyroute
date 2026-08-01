@@ -1,76 +1,68 @@
 /**
- * PDF day reports panel — generates a printable HTML report. Extracted from Settings.tsx.
+ * PDF day reports.
+ *
+ * This used to build its own report: a light-themed HTML string with two bare
+ * tables (truck states, audit entries), opened in a pop-up that asked you to
+ * hit Ctrl+P yourself. It shared nothing with the real report — no coverage, no
+ * shortages, no batches, no load times, none of the styling.
+ *
+ * The real one is composed on the Report page and rendered server-side to a
+ * dark, selectable PDF by WeasyPrint. That composer closes over ~44 values from
+ * LiveReport, and routers/reports.py is explicit that the browser builds the
+ * view-model there on purpose — so this panel hands off to it (`?pdf=1`) rather
+ * than growing a second, weaker implementation.
  */
-import { format } from "date-fns";
-import { useAuditEntries, useBoard } from "../../api/hooks";
+import { useState } from "react";
+import { useNavigate } from "react-router-dom";
+import { FileText } from "lucide-react";
 import { todayIso } from "../../api/client";
-import { truckTypeLabel } from "../../utils/truckType";
-import { useItemDisplayName } from "../shorts/HierarchyPicker";
+import { FieldRow } from "./shared";
 
 export default function PDFReportsPanel() {
-  const { data: board }   = useBoard(todayIso());
-  const { data: entries } = useAuditEntries(todayIso());
-  const itemDisplayName   = useItemDisplayName();
-
-  function openReportDownloads() {
-    const today = todayIso();
-    const rows = (board ?? [])
-      .slice().sort((a, b) => a.truck_number - b.truck_number)
-      .map((t) => {
-        const s = t.state?.status ?? "dirty";
-        const label = s.replace("_", " ").replace(/\b\w/g, (c) => c.toUpperCase());
-        const duration = t.state?.load_duration_seconds
-          ? `${Math.floor(t.state.load_duration_seconds / 60)}m ${(t.state.load_duration_seconds % 60).toString().padStart(2, "0")}s`
-          : "—";
-        return `<tr><td>${t.truck_number}</td><td>${truckTypeLabel(t.truck_type)}</td><td>${label}</td><td>${t.state?.wearers ?? 0}</td><td>${duration}</td></tr>`;
-      }).join("");
-
-    const auditRows = (entries ?? [])
-      .slice().sort((a, b) => a.truck_number - b.truck_number)
-      .map((e) => `<tr><td>#${e.truck_number}</td><td>${itemDisplayName(e.item_label)}</td><td>${e.quantity}</td><td>${e.note ?? ""}</td></tr>`)
-      .join("");
-
-    const html = `<!DOCTYPE html>
-<html><head>
-  <meta charset="utf-8" />
-  <title>ReadyRoute Day Report — ${today}</title>
-  <style>
-    body { font-family: sans-serif; font-size: 12px; color: #111; margin: 20px; }
-    h1 { font-size: 18px; margin-bottom: 4px; }
-    h2 { font-size: 14px; margin-top: 24px; margin-bottom: 4px; border-bottom: 1px solid #ccc; padding-bottom: 2px; }
-    p.sub { color: #555; font-size: 11px; margin: 0 0 12px; }
-    table { border-collapse: collapse; width: 100%; margin-bottom: 16px; }
-    th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: left; }
-    th { background: #f0f0f0; font-weight: 600; }
-    @media print { body { margin: 0; } }
-  </style>
-</head><body>
-  <h1>ReadyRoute V2 — Day Report</h1>
-  <p class="sub">Run date: ${today} &nbsp;·&nbsp; Generated: ${format(new Date(), "PPpp")}</p>
-  <h2>Truck States</h2>
-  <table><thead><tr><th>#</th><th>Type</th><th>Status</th><th>Wearers</th><th>Load Time</th></tr></thead>
-    <tbody>${rows || "<tr><td colspan='5'>No trucks</td></tr>"}</tbody></table>
-  <h2>Audit Entries</h2>
-  <table><thead><tr><th>Truck</th><th>Item</th><th>Qty</th><th>Note</th></tr></thead>
-    <tbody>${auditRows || "<tr><td colspan='4'>No entries</td></tr>"}</tbody></table>
-  <script>window.addEventListener('load', function() { setTimeout(function() { window.print(); }, 200); });<\/script>
-</body></html>`;
-
-    const blob = new Blob([html], { type: "text/html" });
-    const url  = URL.createObjectURL(blob);
-    const win  = window.open(url, "_blank");
-    if (!win) { URL.revokeObjectURL(url); alert("Pop-up blocked — please allow pop-ups for this site."); return; }
-    setTimeout(() => URL.revokeObjectURL(url), 30000);
-  }
+  const navigate = useNavigate();
+  const [runDate, setRunDate] = useState(todayIso());
 
   return (
-    <div className="card space-y-3">
-      <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Download PDFs</h3>
-      <p className="text-xs text-slate-500">
-        Generate a print-ready day report. After clicking, use your browser&apos;s Print dialog (Ctrl+P / Cmd+P) and choose &ldquo;Save as PDF&rdquo; to download.
+    <div className="card space-y-4">
+      <div>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Day report PDF</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          The full run report — route coverage, shortages, the short sheet, load times, batches and
+          audit — rendered as a dark, selectable PDF. Same report as the Report page.
+        </p>
+      </div>
+
+      <FieldRow label="Run date" hint="Which day's report to generate.">
+        <input
+          type="date"
+          className="input w-44"
+          value={runDate}
+          max={todayIso()}
+          onChange={(e) => setRunDate(e.target.value)}
+        />
+      </FieldRow>
+
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="btn-primary inline-flex items-center gap-2"
+          onClick={() => navigate(`/report?run_date=${runDate}&pdf=1`)}
+        >
+          <FileText className="h-4 w-4" />
+          Download PDF
+        </button>
+        <button
+          className="btn-ghost"
+          onClick={() => navigate(`/report?run_date=${runDate}`)}
+        >
+          Open report
+        </button>
+      </div>
+
+      <p className="text-[11px] text-slate-600">
+        Download opens the report and saves the PDF straight away. Use{" "}
+        <span className="text-slate-500">Open report</span> to read it on screen or pick which
+        sections to include.
       </p>
-      <button className="btn-primary" onClick={openReportDownloads}>Open report downloads</button>
-      <p className="text-[11px] text-slate-600">Includes truck states and audit entries for today&apos;s run date.</p>
     </div>
   );
 }

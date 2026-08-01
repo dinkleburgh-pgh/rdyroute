@@ -619,6 +619,24 @@ export default function LiveReport() {
     }
   }
 
+  // `?pdf=1` — download the full report and stop, so another surface can hand
+  // off to THIS composer instead of growing a second one. buildViewModel closes
+  // over ~44 memos from this component; the report router's own docstring says
+  // the browser composes the view-model here by design, so Management's PDF
+  // download drives this page rather than re-deriving any of it.
+  //
+  // Waits on `board`: the memos feed off it, and firing on the first render
+  // would post a view-model full of empty sections.
+  const autoPdf = params.get("pdf") === "1";
+  const autoPdfFired = useRef(false);
+  useEffect(() => {
+    if (!autoPdf || autoPdfFired.current) return;
+    if (board.length === 0) return;
+    autoPdfFired.current = true;
+    void handleDownloadPdf(selected);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoPdf, board.length]);
+
   // Which sections have content today (drives the picker's muted hints).
   // `phase` mirrors each Section's eyebrow so kiosk mode can show it in the
   // toolbar instead of inside the slide.
