@@ -1094,11 +1094,24 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 }}
               >
                 <div className="flex w-full flex-col gap-0.5 md:gap-1">
-                  {/* flex-wrap: when the coverage pair + badge stack can't share
-                      the row (narrow cards), badges wrap BELOW the numbers
-                      instead of painting over them. */}
-                  <div className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2">
-                    <div className="flex min-w-0 min-h-[2.5rem] shrink-0 flex-col justify-between gap-0.5 md:min-h-[4.5rem]">
+                  {/* flex-wrap is the escape hatch for the route → truck coverage
+                      pair, which is wide enough that it and the badge stack
+                      cannot share a narrow card; badges drop BELOW rather than
+                      paint over the numbers. That pair only renders outside
+                      fleet mode, but the wrap applied everywhere — so on a fleet
+                      card a two-chip stack ("Unloaded" + "L Off") was wide
+                      enough to wrap, leaving those chips halfway down the card
+                      while a one-chip truck kept its chip in the corner. Fleet
+                      never wraps: the chips stay pinned top-right, and the
+                      number (2-3 digits there) yields the space instead. */}
+                  <div className={clsx(
+                    "flex w-full min-w-0 items-start justify-between gap-2",
+                    fleetMode ? "flex-nowrap" : "flex-wrap",
+                  )}>
+                    <div className={clsx(
+                      "flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]",
+                      !fleetMode && "shrink-0",
+                    )}>
                       {!fleetMode && (showCoverageBadge || showCoveredByBadge) ? (
                         /* Canonical coverage headline: route → carrying truck.
                            Same pair whether this card IS the carrier
