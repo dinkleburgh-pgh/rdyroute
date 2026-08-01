@@ -24,6 +24,7 @@ import { useToast } from "../../contexts/ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
 import OverbatchedChip from "../OverbatchedChip";
 import { FieldRow } from "./shared";
+import WearerDefaultsEditor from "../batching/WearerDefaultsEditor";
 import type { TruckWithState } from "../../types";
 
 const BATCH_NUMBERS = [1, 2, 3, 4, 5, 6];
@@ -45,6 +46,7 @@ export default function BatchingPanel() {
   const [wearerDrafts, setWearerDrafts] = useState<Record<number, string>>({});
   const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
+  const [defaultsOpen, setDefaultsOpen] = useState(false);
 
   const { data: board = [] } = useBoard(runDate);
   const { data: batches = [] } = useBatchSummary(runDate);
@@ -157,13 +159,27 @@ export default function BatchingPanel() {
               Every change saves instantly — there is no separate save or apply step.
             </p>
           </div>
-          <button
-            className="btn-ghost shrink-0 whitespace-nowrap text-xs"
-            onClick={() => navigate(`/batching?run_date=${runDate}`)}
-            title="Guided batch-by-batch entry (great for transcribing the paper sheet)"
-          >
-            Batching Wizard →
-          </button>
+          <div className="flex shrink-0 flex-col gap-1.5">
+            <button
+              className="btn-ghost whitespace-nowrap text-xs"
+              onClick={() => navigate(`/batching?run_date=${runDate}`)}
+              title="Guided batch-by-batch entry (great for transcribing the paper sheet)"
+            >
+              Batching Wizard →
+            </button>
+            {/* The wearer counts edited on the rows below belong to THIS run
+                date. The standing per-unload-day numbers off the paper sheets
+                are a different thing, and this was the one batching surface
+                with no way to reach them — the editor was reachable only from
+                the wizard. It carries its own Day 1-5 tabs. */}
+            <button
+              className="btn-ghost whitespace-nowrap text-xs"
+              onClick={() => setDefaultsOpen(true)}
+              title="Standing wearer counts per unload day, from the printed sheets"
+            >
+              Wearer defaults (by day)
+            </button>
+          </div>
         </div>
 
         <FieldRow label="Run date">
@@ -334,6 +350,13 @@ export default function BatchingPanel() {
           if (n != null) void clearBatch(n);
         }}
         onCancel={() => setConfirmClear(null)}
+      />
+
+      {/* Opens on the day this run date unloads, but every day is a tab away. */}
+      <WearerDefaultsEditor
+        open={defaultsOpen}
+        initialDay={unloadsDay}
+        onClose={() => setDefaultsOpen(false)}
       />
     </div>
   );

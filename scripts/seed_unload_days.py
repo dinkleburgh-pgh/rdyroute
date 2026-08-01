@@ -78,14 +78,20 @@ WEARERS = {
     # post-revision sheet, which is why its numbers always looked like outliers
     # next to the old wearer counts. The uniform half was right from the start;
     # the DUST rows were missed on the first pass and are added here.
+    # Re-read 2026-07-31 from the "Updated: 05/26/26" sheet. Same 28-route
+    # roster as before, but 20 of the 28 counts had moved; superseded values are
+    # kept below for reference. Uniform 6,960 + dust 122 = 7,082 (was 7,619).
+    #   4:673, 50:289, 51:424, 53:564, 54:339, 55:148, 56:354, 57:486,
+    #   58:348, 60:741, 62:401, 64:642, 65:330, 69:319, 73:332, 88:123,
+    #   91:409, 81:53, 83:59, 95:52
     5: {
         # Routes and (Garments) — UNIFORM
-        4: 673, 7: 533, 50: 289, 51: 424, 53: 564, 54: 339, 55: 148,
-        56: 354, 57: 486, 58: 348, 60: 741, 62: 401, 64: 642, 65: 330,
-        69: 319, 73: 332, 88: 123, 91: 409,
+        4: 629, 7: 533, 50: 271, 51: 401, 53: 621, 54: 357, 55: 122,
+        56: 302, 57: 469, 58: 311, 60: 647, 62: 333, 64: 530, 65: 263,
+        69: 309, 73: 323, 88: 175, 91: 364,
         # DUST table
-        80: 0, 81: 53, 82: 0, 83: 59, 84: 0, 85: 0, 86: 0, 87: 0,
-        93: 0, 95: 52,
+        80: 0, 81: 44, 82: 0, 83: 43, 84: 0, 85: 0, 86: 0, 87: 0,
+        93: 0, 95: 35,
     },
 }
 
