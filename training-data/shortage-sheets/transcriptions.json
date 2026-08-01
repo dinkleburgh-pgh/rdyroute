@@ -1,372 +1,2278 @@
 {
-  "_purpose": "TRAINING DATA ONLY. Transcribed by eye from dewarped photos. Never to be imported into the shortages tables or treated as operational data.",
-  "_method": "tools/sheet_dewarp.py flattens the photo; values are read visually. Automatic cell extraction was attempted and abandoned - see that module for why.",
-  "_confidence": "high = unambiguous. low = digit legible but row or column attribution uncertain; the sheet itself is ambiguous there.",
-  "_pages": "Same-date photos are DIFFERENT PAGES, not retakes - a day needs two 16-column pages to cover the fleet. Every photo must be transcribed.",
-  "_templates": "Surveyed 04-07 through 06-12. The item list stabilises on 2026-04-08 and every sheet from then on carries identical product codes (BLACK APRON x2873, WHITE APRON x2864, RED APRON x2861, REG TOWELS x2720, MICRO BLUE x7432, GRID TOWELS x1936, ...). Only 2026-04-07 is a different form (BINS row, paper-first order, GREEN/BLUE/DENIM APRON, LOGO MATS, 2X3 ALL). An earlier guess that the form changed on 05-26 was wrong.",
-  "_3x10_order_warning": "CRITICAL: the four 3X10 rows are NOT in a fixed printed order across sheets. Some read BLACK, COPPER, INDIGO, ONYX (05-01, 05-11, 05-15, 05-22, 05-26, 06-01) and others ONYX, COPPER, INDIGO, BLACK (04-08, 05-06, 05-27, 06-12). Row POSITION therefore does not identify the item in that band - the printed label must be read on every sheet. Anything that assumes a fixed row order will mislabel BLACK as ONYX and vice versa.",
-  "sheets": [
+ "_purpose": "TRAINING DATA ONLY. Transcribed by eye from dewarped photos. Never to be imported into the shortages tables or treated as operational data.",
+ "_method": "tools/sheet_dewarp.py flattens the photo; values are read visually. Automatic cell extraction was attempted and abandoned - see that module for why.",
+ "_confidence": "high = unambiguous. low = digit legible but row or column attribution uncertain; the sheet itself is ambiguous there.",
+ "_pages": "Same-date photos are DIFFERENT PAGES, not retakes - a day needs two 16-column pages to cover the fleet. Every photo must be transcribed.",
+ "_templates": "Surveyed 04-07 through 06-12. The item list stabilises on 2026-04-08 and every sheet from then on carries identical product codes (BLACK APRON x2873, WHITE APRON x2864, RED APRON x2861, REG TOWELS x2720, MICRO BLUE x7432, GRID TOWELS x1936, ...). Only 2026-04-07 is a different form (BINS row, paper-first order, GREEN/BLUE/DENIM APRON, LOGO MATS, 2X3 ALL). An earlier guess that the form changed on 05-26 was wrong.",
+ "_3x10_order_warning": "CRITICAL: the four 3X10 rows are NOT in a fixed printed order across sheets. Some read BLACK, COPPER, INDIGO, ONYX (05-01, 05-11, 05-15, 05-22, 05-26, 06-01) and others ONYX, COPPER, INDIGO, BLACK (04-08, 05-06, 05-27, 06-12). Row POSITION therefore does not identify the item in that band - the printed label must be read on every sheet. Anything that assumes a fixed row order will mislabel BLACK as ONYX and vice versa.",
+ "sheets": [
+  {
+   "source_photo": "20260407_215627 - Copy.heic",
+   "date": "2026-04-07",
+   "route_day": 3,
+   "page": 1,
+   "template": "APRIL",
+   "_template_note": "A DIFFERENT FORM from the July sheets - different items in a different order, plus a 4th header row 'BINS'. Items present here and absent later: GREEN/BLUE/DENIM APRON, 3X5 BROWN, 3X5 BLUE, 4X6 BROWN, 4X6 BLUE, 3X10 BROWN, 3X10 BLUE, NAPKINS, 2X3 ALL, LOGO MATS, 12\" ORANGE MOP. Row indices are NOT comparable across templates.",
+   "date_written_on_sheet": "4/07/2026",
+   "columns": [
     {
-      "source_photo": "20260731_213102.heic",
-      "date": "2026-07-31",
-      "page": 1,
-      "columns": [
-        {"col": 1,  "truck": 73, "route": 73, "initials": "PD"},
-        {"col": 2,  "truck": 55, "route": 55, "initials": "PD"},
-        {"col": 3,  "truck": 83, "route": 83, "initials": "NC"},
-        {"col": 4,  "truck": 7,  "route": 7,  "initials": "PD"},
-        {"col": 5,  "truck": 11, "route": 4,  "initials": "PD",
-         "note": "coverage: truck 11 ran route 4"},
-        {"col": 6,  "truck": 62, "route": 62, "initials": "MD"},
-        {"col": 7,  "truck": 92, "route": 92, "initials": "NC",
-         "note": "truck cell overwritten/struck through"},
-        {"col": 8,  "truck": 60, "route": 60, "initials": "NC"},
-        {"col": 9,  "truck": 81, "route": 81, "initials": "NC"},
-        {"col": 10, "truck": null, "route": null, "initials": null,
-         "note": "header blank but a quantity is written in this column below"},
-        {"col": 11, "truck": 75, "route": 75, "initials": "ANC"},
-        {"col": 12, "truck": 84, "route": 84, "initials": "WC"},
-        {"col": 13, "truck": 88, "route": 89, "initials": "AC",
-         "note": "truck/route disagree; both cells overwritten"}
-      ],
-      "entries": [
-        {"item": "3X10 COPPER", "col": 3,  "truck": 83,   "qty": 4,  "confidence": "low",
-         "note": "value sits between the ONYX and COPPER label lines"},
-        {"item": "3X10 COPPER", "col": 5,  "truck": 11,   "qty": 13, "confidence": "low"},
-        {"item": "3X10 COPPER", "col": 8,  "truck": 60,   "qty": 33, "confidence": "low"},
-        {"item": "3X10 COPPER", "col": 9,  "truck": 81,   "qty": null, "confidence": "low",
-         "note": "struck through, illegible"},
-        {"item": "3X10 COPPER", "col": 10, "truck": null, "qty": 4,  "confidence": "low",
-         "note": "column has no truck in the header"},
-        {"item": "3X10 COPPER", "col": 11, "truck": 75,   "qty": 3,  "confidence": "low"},
-
-        {"item": "3X10 BLACK", "col": 1,  "truck": 73, "qty": 12, "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 3,  "truck": 83, "qty": 4,  "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 4,  "truck": 7,  "qty": 10, "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 5,  "truck": 11, "qty": 14, "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 6,  "truck": 62, "qty": 7,  "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 7,  "truck": 92, "qty": 8,  "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 8,  "truck": 60, "qty": 5,  "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 9,  "truck": 81, "qty": 20, "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 11, "truck": 75, "qty": 10, "confidence": "high"},
-        {"item": "3X10 BLACK", "col": 13, "truck": 88, "qty": 11, "confidence": "high"},
-
-        {"item": "36\" DUST - x2590",  "col": 11, "truck": 75, "qty": 3,  "confidence": "low",
-         "note": "isolated value, row attribution uncertain"},
-        {"item": "WHITE SHOP TOWELS",  "col": 11, "truck": 75, "qty": 50, "confidence": "high"},
-
-        {"item": "3X5 BLACK", "col": 4,  "truck": 7,  "qty": 4, "confidence": "high"},
-        {"item": "3X5 BLACK", "col": 6,  "truck": 62, "qty": 7, "confidence": "high"},
-        {"item": "3X5 BLACK", "col": 13, "truck": 88, "qty": 3, "confidence": "high"},
-        {"item": "3X5 ONYX",  "col": 1,  "truck": 73, "qty": 3, "confidence": "high"},
-        {"item": "3X5 ONYX",  "col": 6,  "truck": 62, "qty": 3, "confidence": "high"},
-        {"item": "3X5 ONYX",  "col": 11, "truck": 75, "qty": 9, "confidence": "high"},
-
-        {"item": "C-PULL PAPER -x9025",     "col": 4, "truck": 7,  "qty": 13, "confidence": "high"},
-        {"item": "SIG SERIES Z-FOLD - x27012", "col": 6, "truck": 62, "qty": null, "confidence": "low",
-         "note": "mark present, not a legible digit"},
-        {"item": "SIG SERIES Z-FOLD - x27012", "col": 7, "truck": 92, "qty": 2, "confidence": "high"},
-
-        {"item": "3x10 TRAFFIC", "col": 7,  "truck": 92, "qty": 5, "confidence": "high"},
-        {"item": "3x5 TRAFFIC",  "col": 12, "truck": 84, "qty": 8, "confidence": "low",
-         "note": "could be 8 or 2; overlaps the row below"},
-        {"item": "4x6 TRAFFIC",  "col": 12, "truck": 84, "qty": 2, "confidence": "low"},
-        {"item": "4x6 TRAFFIC",  "col": 13, "truck": 88, "qty": 1, "confidence": "low"}
-      ]
+     "col": 1,
+     "truck": 50,
+     "route": 50,
+     "initials": null
     },
     {
-      "source_photo": "20260731_213110.heic",
-      "date": "2026-07-31",
-      "page": 2,
-      "_note": "Full 16 columns, but almost nothing logged against them.",
-      "columns": [
-        {"col": 1,  "truck": 66, "route": 66, "initials": "PB"},
-        {"col": 2,  "truck": 59, "route": 59, "initials": "PB"},
-        {"col": 3,  "truck": 68, "route": 68, "initials": "mm"},
-        {"col": 4,  "truck": 54, "route": 54, "initials": "mm"},
-        {"col": 5,  "truck": 94, "route": 94, "initials": "mm", "confidence": "low",
-         "note": "could read 54 or 94"},
-        {"col": 6,  "truck": 99, "route": 99, "initials": "PB", "confidence": "low",
-         "note": "could read 94 or 99"},
-        {"col": 7,  "truck": 70, "route": 70, "initials": "M"},
-        {"col": 8,  "truck": 65, "route": 65, "initials": "PB"},
-        {"col": 9,  "truck": 86, "route": 86, "initials": "PB"},
-        {"col": 10, "truck": 58, "route": 58, "initials": "NC"},
-        {"col": 11, "truck": 61, "route": 61, "initials": "NC"},
-        {"col": 12, "truck": 80, "route": 80, "initials": "LC"},
-        {"col": 13, "truck": 57, "route": 57, "initials": "PB"},
-        {"col": 14, "truck": 52, "route": 52, "initials": "PB"},
-        {"col": 15, "truck": 43, "route": 43, "initials": "mm"},
-        {"col": 16, "truck": 64, "route": 64, "initials": "M"}
-      ],
-      "entries": [
-        {"item": "3X10 ONYX",   "col": 15, "truck": 43, "qty": 4,  "confidence": "low",
-         "note": "isolated mark high in the band"},
-        {"item": "4X6 INDIGO",  "col": 10, "truck": 58, "qty": 3,  "confidence": "low"},
-        {"item": "3x5 TRAFFIC", "col": 15, "truck": 43, "qty": 13, "confidence": "low",
-         "note": "13 or 15"}
-      ],
-      "footer_note": "handwritten below the table: '6/.. 400 (a) ink towels' - not transcribed into entries"
+     "col": 2,
+     "truck": 69,
+     "route": 69,
+     "initials": "MM"
     },
     {
-      "source_photo": "20260407_215627 - Copy.heic",
-      "date": "2026-04-07",
-      "route_day": 3,
-      "page": 1,
-      "template": "APRIL",
-      "_template_note": "A DIFFERENT FORM from the July sheets - different items in a different order, plus a 4th header row 'BINS'. Items present here and absent later: GREEN/BLUE/DENIM APRON, 3X5 BROWN, 3X5 BLUE, 4X6 BROWN, 4X6 BLUE, 3X10 BROWN, 3X10 BLUE, NAPKINS, 2X3 ALL, LOGO MATS, 12\" ORANGE MOP. Row indices are NOT comparable across templates.",
-      "date_written_on_sheet": "4/07/2026",
-      "columns": [
-        {"col": 1, "truck": 50, "route": 50, "initials": null},
-        {"col": 2, "truck": 69, "route": 69, "initials": "MM"},
-        {"col": 3, "truck": 94, "route": 94, "initials": "JS"},
-        {"col": 4, "truck": 93, "route": 93, "initials": "JS"},
-        {"col": 5, "truck": 81, "route": 81, "initials": "AH"},
-        {"col": 6, "truck": 53, "route": 53, "initials": "NC"},
-        {"col": 7, "truck": 69, "route": 69, "initials": "SS",
-         "note": "truck 69 also appears in col 2"},
-        {"col": 8, "truck": 68, "route": 68, "initials": "SS", "confidence": "low"}
-      ],
-      "entries": [
-        {"item": "C-PULL PAPER",         "col": 1, "truck": 50, "qty": 1,    "confidence": "high"},
-        {"item": "C-PULL PAPER",         "col": 2, "truck": 69, "qty": 1,    "confidence": "high"},
-        {"item": "C-PULL PAPER",         "col": 7, "truck": 69, "qty": 6,    "confidence": "high"},
-        {"item": "C-PULL PAPER",         "col": 8, "truck": 68, "qty": 3,    "confidence": "high"},
-        {"item": "DRC (AIRLAID) PAPER",  "col": 4, "truck": 93, "qty": 6,    "confidence": "high"},
-        {"item": "DRC (AIRLAID) PAPER",  "col": 6, "truck": 53, "qty": 2,    "confidence": "high"},
-        {"item": "DRC (AIRLAID) PAPER",  "col": 8, "truck": 68, "qty": 4,    "confidence": "high"},
-        {"item": "SIG SERIES Z-FOLD",    "col": 7, "truck": 69, "qty": 1,    "confidence": "high"},
-        {"item": "B&V TP",               "col": 4, "truck": 93, "qty": 2,    "confidence": "high"},
-        {"item": "B&V Z-FOLD",           "col": 3, "truck": 94, "qty": 2,    "confidence": "high"},
-        {"item": "B&V Z-FOLD",           "col": 4, "truck": 93, "qty": 2,    "confidence": "high"},
-        {"item": "B&V Z-FOLD",           "col": 5, "truck": 81, "qty": 5,    "confidence": "high"},
-        {"item": "GRID TOWELS",          "col": 5, "truck": 81, "qty": 2400, "confidence": "high"},
-        {"item": "PREM TOWELS",          "col": 7, "truck": 69, "qty": 60,   "confidence": "high"},
-        {"item": "RED SHOP TOWELS",      "col": 7, "truck": 69, "qty": 350,  "confidence": "low",
-         "note": "written as 'New 350'"},
-        {"item": "WHITE SHOP TOWELS",    "col": 3, "truck": 94, "qty": 600,  "confidence": "high"},
-        {"item": "2X3 ALL",              "col": 3, "truck": 94, "qty": 2,    "confidence": "low",
-         "note": "sits just under the 600, row attribution uncertain"},
-        {"item": "4X6 BROWN",            "col": 3, "truck": 94, "qty": 2,    "confidence": "high"},
-        {"item": "3X10 BLUE",            "col": 7, "truck": 69, "qty": 14,   "confidence": "high"},
-        {"item": "3X10 BLUE",            "col": 8, "truck": 68, "qty": 1,    "confidence": "high"},
-        {"item": "LOGO MATS",            "col": 1, "truck": 50, "qty": 2,    "confidence": "high"},
-        {"item": "LOGO MATS",            "col": 2, "truck": 69, "qty": 1,    "confidence": "low"},
-        {"item": "LOGO MATS",            "col": 4, "truck": 93, "qty": 5,    "confidence": "high"},
-        {"item": "LOGO MATS",            "col": 6, "truck": 53, "qty": 1,    "confidence": "high"}
-      ]
+     "col": 3,
+     "truck": 94,
+     "route": 94,
+     "initials": "JS"
     },
     {
-      "source_photo": "20260407_215632 - Copy.heic",
-      "date": "2026-04-07",
-      "route_day": 3,
-      "page": 2,
-      "template": "APRIL",
-      "_render_note": "First render clipped the left label column, hiding item names below 3X5 BLACK. Fixed by expanding the detected quad ~4.5% outward before warping (the contour traces the rules, but labels sit just outside them). Re-rendered and completed.",
-      "columns": [
-        {"col": 1,  "truck": 54, "route": 54, "initials": "KB"},
-        {"col": 2,  "truck": 20, "route": 20, "initials": null, "confidence": "low"},
-        {"col": 3,  "truck": 86, "route": 86, "initials": "MC"},
-        {"col": 4,  "truck": 66, "route": 66, "initials": "AH"},
-        {"col": 5,  "truck": 57, "route": 57, "initials": "MG"},
-        {"col": 6,  "truck": 66, "route": 66, "initials": "AN",
-         "note": "truck 66 also in col 4"},
-        {"col": 7,  "truck": 61, "route": 61, "initials": "NC"},
-        {"col": 8,  "truck": 73, "route": 73, "initials": "MC"},
-        {"col": 9,  "truck": 85, "route": 11, "initials": "KB",
-         "note": "coverage: truck 85 ran route 11"},
-        {"col": 10, "truck": 95, "route": 95, "initials": "NC"},
-        {"col": 11, "truck": 55, "route": 55, "initials": "KB"},
-        {"col": 12, "truck": 58, "route": 58, "initials": "MG"},
-        {"col": 13, "truck": 67, "route": 61, "initials": "AH", "confidence": "low",
-         "note": "truck/route disagree"},
-        {"col": 14, "truck": 94, "route": 97, "initials": null, "confidence": "low"},
-        {"col": 15, "truck": 91, "route": 91, "initials": "AH"},
-        {"col": 16, "truck": 4,  "route": 4,  "initials": "NC"}
-      ],
-      "entries": [
-        {"item": "DRC (AIRLAID) PAPER", "col": 15, "truck": 91, "qty": 2,    "confidence": "high"},
-        {"item": "B&V TP",              "col": 15, "truck": 91, "qty": 1,    "confidence": "high"},
-        {"item": "B&V Z-FOLD",          "col": 5,  "truck": 57, "qty": 3,    "confidence": "high"},
-        {"item": "B&V Z-FOLD",          "col": 9,  "truck": 85, "qty": 2,    "confidence": "high"},
-        {"item": "REG TOWELS",          "col": 12, "truck": 58, "qty": 50,   "confidence": "high"},
-        {"item": "MICRO BLUE",          "col": 9,  "truck": 85, "qty": 20,   "confidence": "high"},
-        {"item": "20\" GREY MOP",       "col": 3,  "truck": 86, "qty": 10,   "confidence": "high"},
-        {"item": "20\" GREY MOP",       "col": 12, "truck": 58, "qty": 20,   "confidence": "high"},
-        {"item": "60\" DUST",           "col": 5,  "truck": 57, "qty": 2,    "confidence": "low"},
-        {"item": "SMALL INK TOWELS",    "col": 8,  "truck": 73, "qty": 1450, "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS",   "col": 7,  "truck": 61, "qty": 100,  "confidence": "low",
-         "note": "could be 100 or 160"},
-        {"item": "2X3 ALL",             "col": 5,  "truck": 57, "qty": 2,    "confidence": "high"},
-        {"item": "2X3 ALL",             "col": 6,  "truck": 66, "qty": 2,    "confidence": "high"},
-        {"item": "3X5 BROWN",           "col": 6,  "truck": 66, "qty": 1,    "confidence": "high"},
-        {"item": "3X10 BLUE",           "col": 7,  "truck": 61, "qty": 1,    "confidence": "low",
-         "note": "mark in the lower band; could be a tick rather than a 1"},
-        {"item": "LOGO MATS",           "col": 5,  "truck": 57, "qty": 2,    "confidence": "low",
-         "note": "bottom row, sheet skewed away at this corner"},
-        {"item": "LOGO MATS",           "col": 12, "truck": 58, "qty": null, "confidence": "low",
-         "note": "mark present, digit not legible"},
-        {"item": "LOGO MATS",           "col": 13, "truck": 67, "qty": 1,    "confidence": "low"},
-        {"item": "LOGO MATS",           "col": 14, "truck": 94, "qty": null, "confidence": "low",
-         "note": "mark present, digit not legible"}
-      ]
+     "col": 4,
+     "truck": 93,
+     "route": 93,
+     "initials": "JS"
     },
     {
-      "source_photo": "20260408_223748 - Copy.heic",
-      "date": "2026-04-08",
-      "route_day": 4,
-      "page": 1,
-      "template": "APRIL_WIDE",
-      "_template_note": "A THIRD layout, one day after the APRIL sheet. ~20 columns whose ROUTE numbers are PREPRINTED (4, 7, 50..67) with trucks written in above, and a SPECIAL REQUESTS block at the foot. Item order matches the later CURRENT form (mats first) rather than the APRIL form (paper first), so the item list changed between 04-07 and 04-08.",
-      "date_written_on_sheet": "4-8-26",
-      "columns_note": "Routes are preprinted and sequential; only trucks are handwritten and several are illegible. Entries below are keyed to the preprinted ROUTE, which is the reliable identifier on this variant.",
-      "columns": [
-        {"col": 1, "route": 4},  {"col": 2, "route": 7},  {"col": 3, "route": 50},
-        {"col": 4, "route": 51}, {"col": 5, "route": 52}, {"col": 6, "route": 53},
-        {"col": 7, "route": 54}, {"col": 8, "route": 55}, {"col": 9, "route": 56},
-        {"col": 10, "route": 57}, {"col": 11, "route": 58}, {"col": 12, "route": 59},
-        {"col": 13, "route": 60}, {"col": 14, "route": 61}, {"col": 15, "route": 62},
-        {"col": 16, "route": 63}, {"col": 17, "route": 64}, {"col": 18, "route": 65},
-        {"col": 19, "route": 66}, {"col": 20, "route": 67}
-      ],
-      "entries": [
-        {"item": "3X10 ONYX",         "col": 12, "route": 59, "qty": 7,    "confidence": "high"},
-        {"item": "3X10 ONYX",         "col": 15, "route": 62, "qty": 24,   "confidence": "low"},
-        {"item": "3X10 COPPER",       "col": 15, "route": 62, "qty": 3,    "confidence": "high"},
-        {"item": "3X10 INDIGO",       "col": 5,  "route": 52, "qty": 2,    "confidence": "high"},
-        {"item": "3X10 INDIGO",       "col": 7,  "route": 54, "qty": 2,    "confidence": "high"},
-        {"item": "PREM TOWELS -x5857","col": 1,  "route": 4,  "qty": 30,   "confidence": "high"},
-        {"item": "PREM TOWELS -x5857","col": 5,  "route": 52, "qty": 50,   "confidence": "high"},
-        {"item": "MICRO GREY - x7540","col": 4,  "route": 51, "qty": 540,  "confidence": "low",
-         "note": "540 or 510"},
-        {"item": "20\" GREY MOP - x7540", "col": 4, "route": 51, "qty": 12, "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 4,  "route": 51, "qty": 50,   "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 14, "route": 61, "qty": 50,   "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 15, "route": 62, "qty": 1450, "confidence": "low",
-         "note": "a struck-through 500 with 1450 written under it"},
-        {"item": "3X5 ONYX",          "col": 5,  "route": 52, "qty": 3,    "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 1,  "route": 4,  "qty": 6,  "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 4,  "route": 51, "qty": 4,  "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 5,  "route": 52, "qty": 6,  "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 7,  "route": 54, "qty": 24, "confidence": "low"},
-        {"item": "C-PULL PAPER -x9025", "col": 9,  "route": 56, "qty": 1,  "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 11, "route": 58, "qty": 1,  "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 15, "route": 62, "qty": 6,  "confidence": "high"},
-        {"item": "DRC (AIRLAID) PAPER - x9511", "col": 14, "route": 61, "qty": 10, "confidence": "high"},
-        {"item": "DRC (AIRLAID) PAPER - x9511", "col": 19, "route": 66, "qty": 6,  "confidence": "high"},
-        {"item": "SIG SERIES Z-FOLD - x27012", "col": 4, "route": 51, "qty": 1, "confidence": "high"},
-        {"item": "B&V Z-FOLD -x45695", "col": 1,  "route": 4,  "qty": 1,   "confidence": "high"},
-        {"item": "SIG SERIES TP -x27083", "col": 1, "route": 4, "qty": 2,  "confidence": "low"},
-        {"item": "SIG SERIES TP -x27083", "col": 5, "route": 52, "qty": 2, "confidence": "high"},
-        {"item": "4X6 ONYX",          "col": 4,  "route": 51, "qty": 1,    "confidence": "high"},
-        {"item": "4X6 ONYX",          "col": 12, "route": 59, "qty": 9,    "confidence": "high"},
-        {"item": "4X6 ONYX",          "col": 15, "route": 62, "qty": 9,    "confidence": "high"}
-      ]
+     "col": 5,
+     "truck": 81,
+     "route": 81,
+     "initials": "AH"
     },
     {
-      "source_photo": "20260501_215525.heic",
-      "date": "2026-05-01",
-      "page": 1,
-      "template": "CURRENT",
-      "_header_note": "The header appears filled ONE ROW HIGH: numbers occupy the DATE row and the TRUCK row, and initials sit in the ROUTE row, leaving the INITIALS row holding a second set of initials. Read as: DATE-row numbers = TRUCK, TRUCK-row numbers = ROUTE. Flagged rather than silently re-aligned.",
-      "columns": [
-        {"col": 1,  "truck": 62, "route": 62, "initials": "MG"},
-        {"col": 2,  "truck": 61, "route": 61, "initials": "MC"},
-        {"col": 3,  "truck": 60, "route": 66, "initials": "PB", "confidence": "low",
-         "note": "truck/route disagree"},
-        {"col": 4,  "truck": 4,  "route": 4,  "initials": "PB", "confidence": "low"},
-        {"col": 5,  "truck": 55, "route": 68, "initials": "PB", "confidence": "low",
-         "note": "truck/route disagree"},
-        {"col": 6,  "truck": 62, "route": 62, "initials": "PB",
-         "note": "truck 62 also in col 1"},
-        {"col": 7,  "truck": 64, "route": 64, "initials": "AU"},
-        {"col": 8,  "truck": 84, "route": 84, "initials": "MC"},
-        {"col": 9,  "truck": 50, "route": 58, "initials": "WC", "confidence": "low",
-         "note": "truck/route disagree"},
-        {"col": 10, "truck": 7,  "route": 7,  "initials": "PB"},
-        {"col": 11, "truck": 88, "route": 58, "initials": "PB", "confidence": "low",
-         "note": "truck/route disagree"},
-        {"col": 12, "truck": 16, "route": 65, "initials": "MC", "confidence": "low",
-         "note": "truck/route disagree"},
-        {"col": 13, "truck": 75, "route": 75, "initials": "PB"},
-        {"col": 14, "truck": 54, "route": 54, "initials": "MC"},
-        {"col": 15, "truck": 55, "route": 55, "initials": "PB",
-         "note": "truck 55 also in col 5"}
-      ],
-      "entries": [
-        {"item": "GLASS TOWELS - x2964", "col": 8,  "truck": 84, "qty": 200, "confidence": "high"},
-        {"item": "GLASS TOWELS - x2964", "col": 13, "truck": 75, "qty": 100, "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 1,  "truck": 62, "qty": 50,   "confidence": "low",
-         "note": "partly off the left edge"},
-        {"item": "WHITE SHOP TOWELS", "col": 2,  "truck": 61, "qty": 200,  "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 3,  "truck": 60, "qty": 100,  "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 4,  "truck": 4,  "qty": 100,  "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 7,  "truck": 64, "qty": 150,  "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 9,  "truck": 50, "qty": 300,  "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 10, "truck": 7,  "qty": 600,  "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 14, "truck": 54, "qty": 100,  "confidence": "high"},
-        {"item": "WHITE SHOP TOWELS", "col": 15, "truck": 55, "qty": 550,  "confidence": "high"},
-        {"item": "RED SHOP TOWELS",   "col": 15, "truck": 55, "qty": 350,  "confidence": "low",
-         "note": "written below the 550, may belong to WHITE SHOP TOWELS"},
-        {"item": "RED SHOP TOWELS",   "col": 16, "truck": null, "qty": 1600, "confidence": "low",
-         "note": "column beyond the last header entry"},
-        {"item": "LARGE INK TOWELS",  "col": 9,  "truck": 50, "qty": 80,   "confidence": "low",
-         "note": "80 or 30"}
-      ],
-      "footer_note": "SPECIAL REQUESTS block: 'Ink Towels Needed: 50'"
+     "col": 6,
+     "truck": 53,
+     "route": 53,
+     "initials": "NC"
     },
     {
-      "source_photo": "20260506_215515 - Copy.heic",
-      "date": "2026-05-06",
-      "page": 1,
-      "template": "CURRENT",
-      "_note": "3X10 band reads ONYX, COPPER, INDIGO, BLACK on this sheet (the other of the two printed orders).",
-      "columns": [
-        {"col": 1,  "truck": 94, "route": 94, "initials": "PB"},
-        {"col": 2,  "truck": 56, "route": 56, "initials": "PB"},
-        {"col": 3,  "truck": 82, "route": 2,  "initials": "PB", "confidence": "low",
-         "note": "route reads 02; truck/route disagree"},
-        {"col": 4,  "truck": 61, "route": 61, "initials": "PB"},
-        {"col": 5,  "truck": 91, "route": 91, "initials": "AA"},
-        {"col": 6,  "truck": null, "route": null, "initials": null,
-         "note": "struck through in the header but carries quantities below"},
-        {"col": 7,  "truck": 70, "route": 70, "initials": "PB"},
-        {"col": 8,  "truck": 88, "route": 88, "initials": "PB"},
-        {"col": 9,  "truck": 57, "route": 58, "initials": "PB", "confidence": "low",
-         "note": "truck/route disagree"},
-        {"col": 10, "truck": 73, "route": 73, "initials": "PB"},
-        {"col": 11, "truck": 50, "route": 50, "initials": "PB"},
-        {"col": 12, "truck": 51, "route": 51, "initials": "WC"},
-        {"col": 13, "truck": 62, "route": 62, "initials": "DB"},
-        {"col": 14, "truck": 83, "route": 83, "initials": "NC"}
-      ],
-      "entries": [
-        {"item": "MICRO GREY - x7540",  "col": 2,  "truck": 56, "qty": 60,  "confidence": "high"},
-        {"item": "MICRO GREY - x7540",  "col": 6,  "truck": null, "qty": 60, "confidence": "high"},
-        {"item": "MICRO GREY - x7540",  "col": 8,  "truck": 88, "qty": 200, "confidence": "high"},
-        {"item": "MICRO GREY - x7540",  "col": 11, "truck": 50, "qty": 520, "confidence": "high"},
-        {"item": "MICRO WHITE - x7717", "col": 3,  "truck": 82, "qty": 480, "confidence": "low",
-         "note": "480 or 400, overwritten"},
-        {"item": "MICRO WHITE - x7717", "col": 14, "truck": 83, "qty": 80,  "confidence": "high"},
-        {"item": "GRID TOWELS - x1936", "col": 3,  "truck": 82, "qty": 520, "confidence": "low",
-         "note": "overwritten, could be 320"},
-        {"item": "GRID TOWELS - x1936", "col": 8,  "truck": 88, "qty": 740, "confidence": "high"},
-        {"item": "FENDER COVERS -x2191","col": 12, "truck": 51, "qty": 30,  "confidence": "high"},
-        {"item": "BROWN HW - x9173",    "col": 14, "truck": 83, "qty": null, "confidence": "low",
-         "note": "reads like 5/6 written over something"},
-        {"item": "C-PULL PAPER -x9025", "col": 5,  "truck": 91, "qty": 12,  "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 6,  "truck": null, "qty": 12, "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 11, "truck": 50, "qty": 2,   "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 12, "truck": 51, "qty": 6,   "confidence": "high"},
-        {"item": "C-PULL PAPER -x9025", "col": 14, "truck": 83, "qty": 2,   "confidence": "high"},
-        {"item": "DRC (AIRLAID) PAPER - x9511", "col": 12, "truck": 51, "qty": 11, "confidence": "high"},
-        {"item": "SIG SERIES Z-FOLD - x27012", "col": 1,  "truck": 94, "qty": 4, "confidence": "high"},
-        {"item": "SIG SERIES Z-FOLD - x27012", "col": 11, "truck": 50, "qty": 1, "confidence": "high"},
-        {"item": "SIG SERIES TP -x27083", "col": 14, "truck": 83, "qty": 71, "confidence": "low",
-         "note": "71 or 7l"},
-        {"item": "SIG SOAP -x27070",    "col": 7,  "truck": 70, "qty": 11,  "confidence": "low",
-         "note": "reads as two vertical strokes"}
-      ]
+     "col": 7,
+     "truck": 69,
+     "route": 69,
+     "initials": "SS",
+     "note": "truck 69 also appears in col 2"
+    },
+    {
+     "col": 8,
+     "truck": 68,
+     "route": 68,
+     "initials": "SS",
+     "confidence": "low"
     }
-  ]
+   ],
+   "entries": [
+    {
+     "item": "C-PULL PAPER",
+     "col": 1,
+     "truck": 50,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER",
+     "col": 2,
+     "truck": 69,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER",
+     "col": 7,
+     "truck": 69,
+     "qty": 6,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER",
+     "col": 8,
+     "truck": 68,
+     "qty": 3,
+     "confidence": "high"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER",
+     "col": 4,
+     "truck": 93,
+     "qty": 6,
+     "confidence": "high"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER",
+     "col": 6,
+     "truck": 53,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER",
+     "col": 8,
+     "truck": 68,
+     "qty": 4,
+     "confidence": "high"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD",
+     "col": 7,
+     "truck": 69,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V TP",
+     "col": 4,
+     "truck": 93,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V Z-FOLD",
+     "col": 3,
+     "truck": 94,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V Z-FOLD",
+     "col": 4,
+     "truck": 93,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V Z-FOLD",
+     "col": 5,
+     "truck": 81,
+     "qty": 5,
+     "confidence": "high"
+    },
+    {
+     "item": "GRID TOWELS",
+     "col": 5,
+     "truck": 81,
+     "qty": 2400,
+     "confidence": "high"
+    },
+    {
+     "item": "PREM TOWELS",
+     "col": 7,
+     "truck": 69,
+     "qty": 60,
+     "confidence": "high"
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 7,
+     "truck": 69,
+     "qty": 350,
+     "confidence": "low",
+     "note": "written as 'New 350'"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 3,
+     "truck": 94,
+     "qty": 600,
+     "confidence": "high"
+    },
+    {
+     "item": "2X3 ALL",
+     "col": 3,
+     "truck": 94,
+     "qty": 2,
+     "confidence": "low",
+     "note": "sits just under the 600, row attribution uncertain"
+    },
+    {
+     "item": "4X6 BROWN",
+     "col": 3,
+     "truck": 94,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLUE",
+     "col": 7,
+     "truck": 69,
+     "qty": 14,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLUE",
+     "col": 8,
+     "truck": 68,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 1,
+     "truck": 50,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 2,
+     "truck": 69,
+     "qty": 1,
+     "confidence": "low"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 4,
+     "truck": 93,
+     "qty": 5,
+     "confidence": "high"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 6,
+     "truck": 53,
+     "qty": 1,
+     "confidence": "high"
+    }
+   ]
+  },
+  {
+   "source_photo": "20260407_215632 - Copy.heic",
+   "date": "2026-04-07",
+   "route_day": 3,
+   "page": 2,
+   "template": "APRIL",
+   "_render_note": "First render clipped the left label column, hiding item names below 3X5 BLACK. Fixed by expanding the detected quad ~4.5% outward before warping (the contour traces the rules, but labels sit just outside them). Re-rendered and completed.",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 54,
+     "route": 54,
+     "initials": "KB"
+    },
+    {
+     "col": 2,
+     "truck": 20,
+     "route": 20,
+     "initials": null,
+     "confidence": "low"
+    },
+    {
+     "col": 3,
+     "truck": 86,
+     "route": 86,
+     "initials": "MC"
+    },
+    {
+     "col": 4,
+     "truck": 66,
+     "route": 66,
+     "initials": "AH"
+    },
+    {
+     "col": 5,
+     "truck": 57,
+     "route": 57,
+     "initials": "MG"
+    },
+    {
+     "col": 6,
+     "truck": 66,
+     "route": 66,
+     "initials": "AN",
+     "note": "truck 66 also in col 4"
+    },
+    {
+     "col": 7,
+     "truck": 61,
+     "route": 61,
+     "initials": "NC"
+    },
+    {
+     "col": 8,
+     "truck": 73,
+     "route": 73,
+     "initials": "MC"
+    },
+    {
+     "col": 9,
+     "truck": 85,
+     "route": 11,
+     "initials": "KB",
+     "note": "coverage: truck 85 ran route 11"
+    },
+    {
+     "col": 10,
+     "truck": 95,
+     "route": 95,
+     "initials": "NC"
+    },
+    {
+     "col": 11,
+     "truck": 55,
+     "route": 55,
+     "initials": "KB"
+    },
+    {
+     "col": 12,
+     "truck": 58,
+     "route": 58,
+     "initials": "MG"
+    },
+    {
+     "col": 13,
+     "truck": 67,
+     "route": 61,
+     "initials": "AH",
+     "confidence": "low",
+     "note": "truck/route disagree"
+    },
+    {
+     "col": 14,
+     "truck": 94,
+     "route": 97,
+     "initials": null,
+     "confidence": "low"
+    },
+    {
+     "col": 15,
+     "truck": 91,
+     "route": 91,
+     "initials": "AH"
+    },
+    {
+     "col": 16,
+     "truck": 4,
+     "route": 4,
+     "initials": "NC"
+    }
+   ],
+   "entries": [
+    {
+     "item": "DRC (AIRLAID) PAPER",
+     "col": 15,
+     "truck": 91,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V TP",
+     "col": 15,
+     "truck": 91,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V Z-FOLD",
+     "col": 5,
+     "truck": 57,
+     "qty": 3,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V Z-FOLD",
+     "col": 9,
+     "truck": 85,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "REG TOWELS",
+     "col": 12,
+     "truck": 58,
+     "qty": 50,
+     "confidence": "high"
+    },
+    {
+     "item": "MICRO BLUE",
+     "col": 9,
+     "truck": 85,
+     "qty": 20,
+     "confidence": "high"
+    },
+    {
+     "item": "20\" GREY MOP",
+     "col": 3,
+     "truck": 86,
+     "qty": 10,
+     "confidence": "high"
+    },
+    {
+     "item": "20\" GREY MOP",
+     "col": 12,
+     "truck": 58,
+     "qty": 20,
+     "confidence": "high"
+    },
+    {
+     "item": "60\" DUST",
+     "col": 5,
+     "truck": 57,
+     "qty": 2,
+     "confidence": "low"
+    },
+    {
+     "item": "SMALL INK TOWELS",
+     "col": 8,
+     "truck": 73,
+     "qty": 1450,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 7,
+     "truck": 61,
+     "qty": 100,
+     "confidence": "low",
+     "note": "could be 100 or 160"
+    },
+    {
+     "item": "2X3 ALL",
+     "col": 5,
+     "truck": 57,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "2X3 ALL",
+     "col": 6,
+     "truck": 66,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "3X5 BROWN",
+     "col": 6,
+     "truck": 66,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLUE",
+     "col": 7,
+     "truck": 61,
+     "qty": 1,
+     "confidence": "low",
+     "note": "mark in the lower band; could be a tick rather than a 1"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 5,
+     "truck": 57,
+     "qty": 2,
+     "confidence": "low",
+     "note": "bottom row, sheet skewed away at this corner"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 12,
+     "truck": 58,
+     "qty": null,
+     "confidence": "low",
+     "note": "mark present, digit not legible"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 13,
+     "truck": 67,
+     "qty": 1,
+     "confidence": "low"
+    },
+    {
+     "item": "LOGO MATS",
+     "col": 14,
+     "truck": 94,
+     "qty": null,
+     "confidence": "low",
+     "note": "mark present, digit not legible"
+    }
+   ]
+  },
+  {
+   "source_photo": "20260408_223748 - Copy.heic",
+   "date": "2026-04-08",
+   "route_day": 4,
+   "page": 1,
+   "template": "APRIL_WIDE",
+   "_template_note": "A THIRD layout, one day after the APRIL sheet. ~20 columns whose ROUTE numbers are PREPRINTED (4, 7, 50..67) with trucks written in above, and a SPECIAL REQUESTS block at the foot. Item order matches the later CURRENT form (mats first) rather than the APRIL form (paper first), so the item list changed between 04-07 and 04-08.",
+   "date_written_on_sheet": "4-8-26",
+   "columns_note": "Routes are preprinted and sequential; only trucks are handwritten and several are illegible. Entries below are keyed to the preprinted ROUTE, which is the reliable identifier on this variant.",
+   "columns": [
+    {
+     "col": 1,
+     "route": 4
+    },
+    {
+     "col": 2,
+     "route": 7
+    },
+    {
+     "col": 3,
+     "route": 50
+    },
+    {
+     "col": 4,
+     "route": 51
+    },
+    {
+     "col": 5,
+     "route": 52
+    },
+    {
+     "col": 6,
+     "route": 53
+    },
+    {
+     "col": 7,
+     "route": 54
+    },
+    {
+     "col": 8,
+     "route": 55
+    },
+    {
+     "col": 9,
+     "route": 56
+    },
+    {
+     "col": 10,
+     "route": 57
+    },
+    {
+     "col": 11,
+     "route": 58
+    },
+    {
+     "col": 12,
+     "route": 59
+    },
+    {
+     "col": 13,
+     "route": 60
+    },
+    {
+     "col": 14,
+     "route": 61
+    },
+    {
+     "col": 15,
+     "route": 62
+    },
+    {
+     "col": 16,
+     "route": 63
+    },
+    {
+     "col": 17,
+     "route": 64
+    },
+    {
+     "col": 18,
+     "route": 65
+    },
+    {
+     "col": 19,
+     "route": 66
+    },
+    {
+     "col": 20,
+     "route": 67
+    }
+   ],
+   "entries": [
+    {
+     "item": "3X10 ONYX",
+     "col": 12,
+     "route": 59,
+     "qty": 7,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 ONYX",
+     "col": 15,
+     "route": 62,
+     "qty": 24,
+     "confidence": "low"
+    },
+    {
+     "item": "3X10 COPPER",
+     "col": 15,
+     "route": 62,
+     "qty": 3,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 INDIGO",
+     "col": 5,
+     "route": 52,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 INDIGO",
+     "col": 7,
+     "route": 54,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 1,
+     "route": 4,
+     "qty": 30,
+     "confidence": "high"
+    },
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 5,
+     "route": 52,
+     "qty": 50,
+     "confidence": "high"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 4,
+     "route": 51,
+     "qty": 540,
+     "confidence": "low",
+     "note": "540 or 510"
+    },
+    {
+     "item": "20\" GREY MOP - x7540",
+     "col": 4,
+     "route": 51,
+     "qty": 12,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 4,
+     "route": 51,
+     "qty": 50,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 14,
+     "route": 61,
+     "qty": 50,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 15,
+     "route": 62,
+     "qty": 1450,
+     "confidence": "low",
+     "note": "a struck-through 500 with 1450 written under it"
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 5,
+     "route": 52,
+     "qty": 3,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 1,
+     "route": 4,
+     "qty": 6,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 4,
+     "route": 51,
+     "qty": 4,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 5,
+     "route": 52,
+     "qty": 6,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 7,
+     "route": 54,
+     "qty": 24,
+     "confidence": "low"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 9,
+     "route": 56,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 11,
+     "route": 58,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 15,
+     "route": 62,
+     "qty": 6,
+     "confidence": "high"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 14,
+     "route": 61,
+     "qty": 10,
+     "confidence": "high"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 19,
+     "route": 66,
+     "qty": 6,
+     "confidence": "high"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 4,
+     "route": 51,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "B&V Z-FOLD -x45695",
+     "col": 1,
+     "route": 4,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "SIG SERIES TP -x27083",
+     "col": 1,
+     "route": 4,
+     "qty": 2,
+     "confidence": "low"
+    },
+    {
+     "item": "SIG SERIES TP -x27083",
+     "col": 5,
+     "route": 52,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 4,
+     "route": 51,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 12,
+     "route": 59,
+     "qty": 9,
+     "confidence": "high"
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 15,
+     "route": 62,
+     "qty": 9,
+     "confidence": "high"
+    }
+   ]
+  },
+  {
+   "source_photo": "20260501_215525.heic",
+   "date": "2026-05-01",
+   "page": 1,
+   "template": "CURRENT",
+   "_header_note": "The header appears filled ONE ROW HIGH: numbers occupy the DATE row and the TRUCK row, and initials sit in the ROUTE row, leaving the INITIALS row holding a second set of initials. Read as: DATE-row numbers = TRUCK, TRUCK-row numbers = ROUTE. Flagged rather than silently re-aligned.",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 62,
+     "route": 62,
+     "initials": "MG"
+    },
+    {
+     "col": 2,
+     "truck": 61,
+     "route": 61,
+     "initials": "MC"
+    },
+    {
+     "col": 3,
+     "truck": 60,
+     "route": 66,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route disagree"
+    },
+    {
+     "col": 4,
+     "truck": 4,
+     "route": 4,
+     "initials": "PB",
+     "confidence": "low"
+    },
+    {
+     "col": 5,
+     "truck": 55,
+     "route": 68,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route disagree"
+    },
+    {
+     "col": 6,
+     "truck": 62,
+     "route": 62,
+     "initials": "PB",
+     "note": "truck 62 also in col 1"
+    },
+    {
+     "col": 7,
+     "truck": 64,
+     "route": 64,
+     "initials": "AU"
+    },
+    {
+     "col": 8,
+     "truck": 84,
+     "route": 84,
+     "initials": "MC"
+    },
+    {
+     "col": 9,
+     "truck": 50,
+     "route": 58,
+     "initials": "WC",
+     "confidence": "low",
+     "note": "truck/route disagree"
+    },
+    {
+     "col": 10,
+     "truck": 7,
+     "route": 7,
+     "initials": "PB"
+    },
+    {
+     "col": 11,
+     "truck": 88,
+     "route": 58,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route disagree"
+    },
+    {
+     "col": 12,
+     "truck": 16,
+     "route": 65,
+     "initials": "MC",
+     "confidence": "low",
+     "note": "truck/route disagree"
+    },
+    {
+     "col": 13,
+     "truck": 75,
+     "route": 75,
+     "initials": "PB"
+    },
+    {
+     "col": 14,
+     "truck": 54,
+     "route": 54,
+     "initials": "MC"
+    },
+    {
+     "col": 15,
+     "truck": 55,
+     "route": 55,
+     "initials": "PB",
+     "note": "truck 55 also in col 5"
+    }
+   ],
+   "entries": [
+    {
+     "item": "GLASS TOWELS - x2964",
+     "col": 8,
+     "truck": 84,
+     "qty": 200,
+     "confidence": "high"
+    },
+    {
+     "item": "GLASS TOWELS - x2964",
+     "col": 13,
+     "truck": 75,
+     "qty": 100,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 1,
+     "truck": 62,
+     "qty": 50,
+     "confidence": "low",
+     "note": "partly off the left edge"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 2,
+     "truck": 61,
+     "qty": 200,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 3,
+     "truck": 60,
+     "qty": 100,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 4,
+     "truck": 4,
+     "qty": 100,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 7,
+     "truck": 64,
+     "qty": 150,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 9,
+     "truck": 50,
+     "qty": 300,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 10,
+     "truck": 7,
+     "qty": 600,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 14,
+     "truck": 54,
+     "qty": 100,
+     "confidence": "high"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 15,
+     "truck": 55,
+     "qty": 550,
+     "confidence": "high"
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 15,
+     "truck": 55,
+     "qty": 350,
+     "confidence": "low",
+     "note": "written below the 550, may belong to WHITE SHOP TOWELS"
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 16,
+     "truck": null,
+     "qty": 1600,
+     "confidence": "low",
+     "note": "column beyond the last header entry"
+    },
+    {
+     "item": "LARGE INK TOWELS",
+     "col": 9,
+     "truck": 50,
+     "qty": 80,
+     "confidence": "low",
+     "note": "80 or 30"
+    }
+   ],
+   "footer_note": "SPECIAL REQUESTS block: 'Ink Towels Needed: 50'"
+  },
+  {
+   "source_photo": "20260506_215515 - Copy.heic",
+   "date": "2026-05-06",
+   "page": 1,
+   "template": "CURRENT",
+   "_note": "3X10 band reads ONYX, COPPER, INDIGO, BLACK on this sheet (the other of the two printed orders).",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 94,
+     "route": 94,
+     "initials": "PB"
+    },
+    {
+     "col": 2,
+     "truck": 56,
+     "route": 56,
+     "initials": "PB"
+    },
+    {
+     "col": 3,
+     "truck": 82,
+     "route": 2,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "route reads 02; truck/route disagree"
+    },
+    {
+     "col": 4,
+     "truck": 61,
+     "route": 61,
+     "initials": "PB"
+    },
+    {
+     "col": 5,
+     "truck": 91,
+     "route": 91,
+     "initials": "AA"
+    },
+    {
+     "col": 6,
+     "truck": null,
+     "route": null,
+     "initials": null,
+     "note": "struck through in the header but carries quantities below"
+    },
+    {
+     "col": 7,
+     "truck": 70,
+     "route": 70,
+     "initials": "PB"
+    },
+    {
+     "col": 8,
+     "truck": 88,
+     "route": 88,
+     "initials": "PB"
+    },
+    {
+     "col": 9,
+     "truck": 57,
+     "route": 58,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route disagree"
+    },
+    {
+     "col": 10,
+     "truck": 73,
+     "route": 73,
+     "initials": "PB"
+    },
+    {
+     "col": 11,
+     "truck": 50,
+     "route": 50,
+     "initials": "PB"
+    },
+    {
+     "col": 12,
+     "truck": 51,
+     "route": 51,
+     "initials": "WC"
+    },
+    {
+     "col": 13,
+     "truck": 62,
+     "route": 62,
+     "initials": "DB"
+    },
+    {
+     "col": 14,
+     "truck": 83,
+     "route": 83,
+     "initials": "NC"
+    }
+   ],
+   "entries": [
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 2,
+     "truck": 56,
+     "qty": 60,
+     "confidence": "high"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 6,
+     "truck": null,
+     "qty": 60,
+     "confidence": "high"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 8,
+     "truck": 88,
+     "qty": 200,
+     "confidence": "high"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 11,
+     "truck": 50,
+     "qty": 520,
+     "confidence": "high"
+    },
+    {
+     "item": "MICRO WHITE - x7717",
+     "col": 3,
+     "truck": 82,
+     "qty": 480,
+     "confidence": "low",
+     "note": "480 or 400, overwritten"
+    },
+    {
+     "item": "MICRO WHITE - x7717",
+     "col": 14,
+     "truck": 83,
+     "qty": 80,
+     "confidence": "high"
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 3,
+     "truck": 82,
+     "qty": 520,
+     "confidence": "low",
+     "note": "overwritten, could be 320"
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 8,
+     "truck": 88,
+     "qty": 740,
+     "confidence": "high"
+    },
+    {
+     "item": "FENDER COVERS -x2191",
+     "col": 12,
+     "truck": 51,
+     "qty": 30,
+     "confidence": "high"
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 14,
+     "truck": 83,
+     "qty": null,
+     "confidence": "low",
+     "note": "reads like 5/6 written over something"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 5,
+     "truck": 91,
+     "qty": 12,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 6,
+     "truck": null,
+     "qty": 12,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 11,
+     "truck": 50,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 12,
+     "truck": 51,
+     "qty": 6,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 14,
+     "truck": 83,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 12,
+     "truck": 51,
+     "qty": 11,
+     "confidence": "high"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 1,
+     "truck": 94,
+     "qty": 4,
+     "confidence": "high"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 11,
+     "truck": 50,
+     "qty": 1,
+     "confidence": "high"
+    },
+    {
+     "item": "SIG SERIES TP -x27083",
+     "col": 14,
+     "truck": 83,
+     "qty": 71,
+     "confidence": "low",
+     "note": "71 or 7l"
+    },
+    {
+     "item": "SIG SOAP -x27070",
+     "col": 7,
+     "truck": 70,
+     "qty": 11,
+     "confidence": "low",
+     "note": "reads as two vertical strokes"
+    }
+   ]
+  },
+  {
+   "source_photo": "20260506_215522 - Copy.heic",
+   "date": "2026-05-06",
+   "page": 2,
+   "template": "CURRENT",
+   "note": "15 handwritten columns total (14 with legible-ish headers plus column 15, whose header band is cut off by the right edge of the photo although its body cells are fully visible). Row-label order on THIS sheet: 3X10 group reads BLACK, COPPER, INDIGO, ONYX (top to bottom); the 3X5 group reads BLACK, ONYX, COPPER, INDIGO; the 4X6 group reads BLACK, ONYX, COPPER, INDIGO. The printed DATE: field was left blank - the date given here comes from the filename. Two stray handwritten marks sit in the DATE row (the band above TRUCK): a short stroke above column 5 and a 24/84-looking mark above column 11; the truck/route/initials rows themselves are NOT shifted, they are filled on their correct printed rows. Column 10's truck and route cells are struck through with a heavy scribble and are unreadable, but that column still carries a real quantity (SOAKER PADS 50). Column 13's route cell is an illegible overwritten blob. The sheet is strongly slanted in the photo (rows drop roughly one full row height from the left label strip across to the right edge), so visual left-to-right alignment against the printed labels is misleading; every entry above was assigned by counting printed rows down from the nearest heavy group-separator line at the same x-position. A vertical fold/crease runs down the sheet through roughly columns 9-10 and shows up as a dark line, not ink. Below the grid in the SPECIAL block: \"Soaker Pads Needed: 66\" is handwritten; \"Dust Routes w/ Uniforms:\" and \"Ink Towels Needed:\" are both blank. Whole rows in the 3X10, apron/towel/mop/dust, fender/shop-towel, 3X5, 4X6, mats, traffic and SIG SOAP blocks are otherwise empty.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 7,
+     "route": 7,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "written as 07 / 07"
+    },
+    {
+     "col": 2,
+     "truck": 84,
+     "route": 84,
+     "initials": "ML",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 3,
+     "truck": 69,
+     "route": 69,
+     "initials": "AH",
+     "confidence": "high",
+     "note": "route digit written with an open 6, could read C9"
+    },
+    {
+     "col": 4,
+     "truck": 75,
+     "route": 75,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 5,
+     "truck": 4,
+     "route": 4,
+     "initials": "ML",
+     "confidence": "high",
+     "note": "single digit 4 in both truck and route; an extra small stray stroke sits in the DATE row directly above this column"
+    },
+    {
+     "col": 6,
+     "truck": 98,
+     "route": 42,
+     "initials": "ML",
+     "confidence": "low",
+     "note": "truck reads 98 but second digit could be 2 (i.e. 92); route reads 42. Only column on the sheet where truck and route differ noticeably"
+    },
+    {
+     "col": 7,
+     "truck": 60,
+     "route": 60,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 8,
+     "truck": 54,
+     "route": 54,
+     "initials": "MO",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 53,
+     "route": 53,
+     "initials": "MG",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 10,
+     "truck": null,
+     "route": null,
+     "initials": "MC",
+     "confidence": "low",
+     "note": "truck and route cells are heavily overwritten/struck through with a large diagonal scribble; possibly 46 / 46 but not legible. Column still holds a real quantity (SOAKER PADS 50)"
+    },
+    {
+     "col": 11,
+     "truck": 55,
+     "route": 48,
+     "initials": "ML",
+     "confidence": "low",
+     "note": "truck 55 (could be 35); route 48. An extra handwritten mark that looks like 24 or 84 is written in the DATE row directly above this column"
+    },
+    {
+     "col": 12,
+     "truck": 59,
+     "route": 59,
+     "initials": "MG",
+     "confidence": "high",
+     "note": "initials could be MO"
+    },
+    {
+     "col": 13,
+     "truck": 16,
+     "route": null,
+     "initials": "MO",
+     "confidence": "low",
+     "note": "truck reads 16; the route cell is a dense overwritten blob (possibly 05 or 85 written over an earlier value) and is not legible"
+    },
+    {
+     "col": 14,
+     "truck": 52,
+     "route": 52,
+     "initials": "PS",
+     "confidence": "high",
+     "note": "initials could be AS/MS"
+    },
+    {
+     "col": 15,
+     "truck": null,
+     "route": null,
+     "initials": null,
+     "confidence": "low",
+     "note": "rightmost column: its header cells are cut off by the right edge of the photo (only stroke fragments visible - a diagonal in the truck row, an 8-like glyph in the route row, an A/N-like glyph in the initials row). The body cells of this column ARE fully visible further down the sheet and carry quantities"
+    }
+   ],
+   "entries": [
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 3,
+     "qty": 60,
+     "truck": 69,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 6,
+     "qty": 1340,
+     "truck": 98,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 2,
+     "qty": 4,
+     "truck": 84,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 2,
+     "qty": 6,
+     "truck": 84,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 2,
+     "qty": 3,
+     "truck": 84,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC AIRLAID PAPER - x9511",
+     "col": 4,
+     "qty": 6,
+     "truck": 75,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 4,
+     "qty": 1,
+     "truck": 75,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 6,
+     "qty": 7,
+     "truck": 98,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 7,
+     "qty": 7,
+     "truck": 60,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 8,
+     "qty": 36,
+     "truck": 54,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 8,
+     "qty": 1,
+     "truck": 54,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 13,
+     "qty": 7,
+     "truck": 16,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 14,
+     "qty": 6,
+     "truck": 52,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 15,
+     "qty": 3,
+     "truck": null,
+     "confidence": "high",
+     "note": "column header is cut off at the right edge of the photo, but the cell and row are unambiguous"
+    },
+    {
+     "item": "SIG SERIES TP -x27083",
+     "col": 15,
+     "qty": 2,
+     "truck": null,
+     "confidence": "low",
+     "note": "single looped cursive glyph read as 2; a small entry stroke to its left could make it 52. Row verified as SIG SERIES TP (8th row of the paper block), the bottom loop just touches the line into B&V TP"
+    },
+    {
+     "item": "SMALL INK TOWELS",
+     "col": 4,
+     "qty": 10000,
+     "truck": 75,
+     "confidence": "low",
+     "note": "five glyphs read as 1-0-0-0-0; the third loop is narrow so 1000 is a plausible alternative"
+    },
+    {
+     "item": "SOAKER PADS",
+     "col": 10,
+     "qty": 50,
+     "truck": null,
+     "confidence": "high",
+     "note": "the long vertical stroke immediately left of the digits is the paper fold/crease, not ink. Column 10 is the column with the struck-through header"
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 0,
+    "summary": "Independent re-read agrees fully. I rebuilt the grid geometry numerically (grid-line profiles per column x-band, 11 heavy group separators giving 53 rows matching the 53 printed labels; column lines measured at the y of each mark) and ran a per-cell ink sweep over all 15x53 cells plus wide visual sweeps of every band. Same 17 entries, same items, same columns, same quantities. Row-label check on the variable band: this sheet reads 3X10 BLACK, COPPER, INDIGO, ONYX top-to-bottom (all four rows empty). Confirmed specifics: 60 is on PREM TOWELS x5857 col3 (row band 1345-1402); 1340 is on GRID TOWELS x1936 col6 (row band 1694-1749, digits x1447-1560 inside col6 1427-1566); col2's 4/6/3 fall in BROWN HW (2661-2716), C-PULL (2716-2770), SIG SERIES Z-FOLD (2824-2879); col15's lower glyph spans y3001-3059 and is centered in the SIG SERIES TP band (3001-3055), tail only grazing B&V TP, so SIG SERIES TP 2 is right; 10000 spans x1121-1233 against col4 = 1101-1239 at y3745, so SMALL INK TOWELS col4; 50 spans x1927-2019 against the measured col9/10 boundary at x1918 (y3920), so SOAKER PADS col10. The vertical dark line through cols 9-10 is a crease, not ink, and is correctly excluded. 15 handwritten columns confirmed; col10's truck/route are scribbled out and col15's header is cut off at the photo edge. Only near-miss: col12's initials look marginally more like MO than MG to me, but that is a coin flip on this hand and the first reader already noted the alternative, so I am not calling it a correction."
+   }
+  },
+  {
+   "source_photo": "20260508_220352 - Copy.heic",
+   "date": "2026-05-08",
+   "page": 2,
+   "template": "CURRENT",
+   "note": "16 handwritten columns. Header is NOT offset: truck numbers sit in the TRUCK row, route numbers in the ROUTE row, initials in the INITIALS row. The 3X10 band prints ONYX, COPPER, INDIGO, BLACK on this sheet (read off the paper). Only six cells in the whole grid carry a quantity; everything else is blank. Long wavy vertical pen lines run the full height of the sheet through columns 1-5 and along the column 7/8 boundary - they are strike/tick marks, not quantities. Column 1's header is struck through. Column 11's TRUCK cell is obscured by a tear/fold shadow. A handwritten date-like mark (illegible, possibly \"5/8\") sits in the DATE row above column 4; the DATE row is otherwise empty. Faint grey smudges in column 16 on the MICRO GREY / MICRO WHITE rows are paper dirt, not ink.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 52,
+     "route": 52,
+     "initials": "KB",
+     "confidence": "low",
+     "note": "header cells are struck through with a heavy scrawl and a wavy pen line runs down this column the full height of the sheet; digits read 52/52, initials read KB"
+    },
+    {
+     "col": 2,
+     "truck": 61,
+     "route": 61,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 3,
+     "truck": 59,
+     "route": 59,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 55,
+     "route": 68,
+     "initials": "MC",
+     "confidence": "high",
+     "note": "truck and route disagree (coverage); an illegible handwritten date-like mark sits in the DATE row above this column"
+    },
+    {
+     "col": 5,
+     "truck": 73,
+     "route": 73,
+     "initials": null,
+     "confidence": "low",
+     "note": "initials cell illegible - a wavy pen line runs through it; numbers are clear"
+    },
+    {
+     "col": 6,
+     "truck": 66,
+     "route": 66,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 7,
+     "truck": 54,
+     "route": 54,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 8,
+     "truck": 70,
+     "route": 75,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "truck written with a slashed zero (70); truck and route disagree"
+    },
+    {
+     "col": 9,
+     "truck": 50,
+     "route": 58,
+     "initials": "AH",
+     "confidence": "high",
+     "note": "truck and route disagree"
+    },
+    {
+     "col": 10,
+     "truck": 16,
+     "route": 65,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "truck and route disagree"
+    },
+    {
+     "col": 11,
+     "truck": null,
+     "route": 83,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "TRUCK cell obscured by a tear/fold shadow; the visible marks read like '12-' or '2-' but the leading digit cannot be seen, so no truck recorded. Route 83 and initials NC are clear"
+    },
+    {
+     "col": 12,
+     "truck": 64,
+     "route": 64,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "numbers unambiguous; initials read NC but could be NP"
+    },
+    {
+     "col": 13,
+     "truck": 7,
+     "route": 7,
+     "initials": "AH",
+     "confidence": "high",
+     "note": "written as 07 / 07"
+    },
+    {
+     "col": 14,
+     "truck": 70,
+     "route": 70,
+     "initials": "AH",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 81,
+     "route": 81,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "both cells read 81 at high zoom; at lower zoom the route cell can look like 88 - alternative reading route 88"
+    },
+    {
+     "col": 16,
+     "truck": 4,
+     "route": 4,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "written as 04 / 04"
+    }
+   ],
+   "entries": [
+    {
+     "item": "48\" DUST - x2604",
+     "col": 10,
+     "truck": 16,
+     "qty": 2,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 6,
+     "truck": 66,
+     "qty": 700,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 9,
+     "truck": 50,
+     "qty": 300,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 13,
+     "truck": 7,
+     "qty": 100,
+     "confidence": "high",
+     "note": "zeros written loosely but the digits are 1-0-0"
+    },
+    {
+     "item": "SMALL INK TOWELS",
+     "col": 9,
+     "truck": 50,
+     "qty": 60,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "LARGE INK TOWELS",
+     "col": 9,
+     "truck": 50,
+     "qty": 200,
+     "confidence": "high",
+     "note": "zeros written loosely but the digits are 2-0-0"
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 0,
+    "summary": "Independent re-read agrees with the first reader on all 16 column headers and all 6 quantities; no corrections.\n\nVerifications performed:\n- Column count/indexing: detected 17 vertical grid lines (x approx 580, 709, 840, 969, 1100, 1230, 1360, 1491, 1623, 1755, 1887, 2020, 2154, 2290, 2429, 2568, 2708) = exactly 16 handwritten columns, matching the first reader.\n- Header offset: traced the DATE/TRUCK, TRUCK/ROUTE, ROUTE/INITIALS and bottom separators across the full width (they rise ~60px to the right). With those lines overlaid, the DATE row is empty for every column except the illegible date-like scrawl above column 4; the numbers sit in TRUCK and ROUTE and the initials in INITIALS. Header is NOT offset - first reader correct. (Checked explicitly at cols 13, 15, 16 where the skew is worst and where a naive read could shift everything up one row.)\n- 3X10 band: printed labels on THIS sheet read top-to-bottom ONYX, COPPER, INDIGO, BLACK - exactly as the first reader stated. No quantities in that band anyway. (3X5 band reads BLACK, ONYX, COPPER, INDIGO; 4X6 reads BLACK, ONYX, COPPER, INDIGO - also empty.)\n- Entry rows/columns re-derived from traced grid lines rather than eyeballed: the \"2\" falls in the row spanning y1924-1983 at the left grid edge, whose printed label centre is 48\" DUST - x2604, and in x1750-1882 = col 10. The three shop-towel numbers all sit on WHITE SHOP TOWELS at x1264 (col 6), x1667 (col 9), x2208 (col 13). The \"60\" sits in the SMALL INK TOWELS band (y3677-3735 at col 9) and the \"200\" in LARGE INK TOWELS (y3735-3793), both col 9.\n- Digit checks at 8x: the col-6 value is a clear 7 with a flag-and-stem (700), distinct from the col-13 value which is a plain 1 plus a run-together double zero (100); col 9 is 300. Col 15 reads 81/81 at high zoom (I share the first reader's 88 alternative but 81 is the better read).\n- Full-grid ink sweep (visual strip-by-strip plus a per-cell dark-pixel scan): no cell other than those six carries pen. The long wavy vertical strokes through cols 1-5 and the col 7/8 boundary, the diagonal stroke crossing cols 10-12 in the 3X10 band, and the faint grey marks in col 16 on MICRO GREY / MICRO WHITE are all non-quantity marks, as the first reader described.\n- Column 11's TRUCK cell is genuinely obscured by the fold shadow (visible marks resemble \"12-\" or \"82-\"); leaving it null is the right call. Column 12 initials are ambiguous NC/NP; column 1 header is struck through and its initials are ambiguous; column 5 initials are illegible. All already flagged low-confidence."
+   }
+  },
+  {
+   "source_photo": "20260511_215612 - Copy (2).heic",
+   "date": "2026-05-11",
+   "page": 1,
+   "template": "CURRENT",
+   "note": "Seven handwritten columns; columns 8 and right are completely blank (header and body). 3X10 band prints top-to-bottom as BLACK, COPPER, INDIGO, ONYX on this sheet. Header is NOT row-offset - TRUCK/ROUTE/INITIALS rows are filled correctly; the DATE cell holds only a partial scrawl over column 4 that reads like \"0.6\" and is not a usable date, so the date comes from the filename. IMPORTANT PHOTO SKEW: the printed left label strip sits about 25-32 px (roughly half a row) HIGHER than the grid rows on the right side of the same sheet - the same thick separator line is ~32 px higher at x~300 than at x~1350. Reading a quantity straight across to the left label therefore lands one row too low. Rows here were assigned by counting grid rows from the top of the grid and cross-checking against the thick group separators (which fall after 3X10 ONYX, 60\" DUST, RED SHOP TOWELS, 3X5 INDIGO, B&V TP, 4X6 INDIGO, TOILET MATS, 4x6 TRAFFIC and SIG SOAP exactly as the printed label list predicts). Two long curved pen/crease lines run the full height of the sheet through columns 1-2; they are not quantities. A large loose pen flourish crosses the URINAL MATS / TOILET MATS separator out in the far-right unheaded columns (around columns 10-11) - a stray mark, not a quantity, so it is not recorded. All INITIALS cells are scrawled and only partly legible. SPECIAL REQUESTS block at the foot is blank (and cropped mid-\"Misc:\").",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 64,
+     "route": 64,
+     "initials": "MM",
+     "confidence": "high",
+     "note": "truck/route digits clear; initials are a scrawl, read as MM but uncertain"
+    },
+    {
+     "col": 2,
+     "truck": 59,
+     "route": 59,
+     "initials": "NW",
+     "confidence": "high",
+     "note": "truck/route digits clear; initials scrawled, could be NM/NW"
+    },
+    {
+     "col": 3,
+     "truck": 49,
+     "route": 49,
+     "initials": "NV",
+     "confidence": "low",
+     "note": "truck digits written high, straddling the DATE/TRUCK line and cramped; route reads 49 clearly. Initials scrawled with a long diagonal slash through the cell"
+    },
+    {
+     "col": 4,
+     "truck": 55,
+     "route": 68,
+     "initials": "PD",
+     "confidence": "low",
+     "note": "coverage: truck 55 on route 69. Route second digit is a closed loop with a descending tail - read as 9 (matches this writer's 9 in 59/49); alternatives 8 or 4. Initials read PD, could be PB; readers disagreed on route: first 69, second 68 - Second digit is an 8, not a 9. At 9x magnification the character is two closed loops - a small triangular upper loop over a small lower loop - with no descender. This writer's 9 (col 2 '59' in both rows, col 3 '49') is a single small top loop with a long straight tail dropping well below the baseline; nothing like that here. It matches the 8 forms in col 5 '81' and col 7 '68'. So col 4 is truck 55 on route 68, not 69. Note this makes route 68 appear twice if col 7 is also 68/68; col 7's route cell is genuinely ambiguous between 68 and 60 (big open oval, partly overrun by the initials scrawl below), so I am not correcting col 7 - but the pairing is worth a human glance."
+    },
+    {
+     "col": 5,
+     "truck": 81,
+     "route": 81,
+     "initials": "NU",
+     "confidence": "high",
+     "note": "truck/route clear; initials scrawled"
+    },
+    {
+     "col": 6,
+     "truck": 43,
+     "route": 43,
+     "initials": "DC",
+     "confidence": "low",
+     "note": "truck cell is blotted/overwritten - only the trailing 3 is readable; read 43 to match the route directly below. Initials scrawled"
+    },
+    {
+     "col": 7,
+     "truck": 68,
+     "route": 68,
+     "initials": null,
+     "confidence": "low",
+     "note": "both cells read 68 but the strokes are looped and overlap; initials illegible (overlapping strokes plus a diagonal slash)"
+    }
+   ],
+   "entries": [
+    {
+     "item": "GLASS TOWELS - x2964",
+     "col": 6,
+     "truck": 43,
+     "qty": 580,
+     "confidence": "low",
+     "note": "digits and column are unambiguous (580, column 6). Row is the uncertain part: counting grid rows from the top of the grid puts this cell on GLASS TOWELS, but because the printed label strip is skewed ~30 px above the grid on this photo it visually lines up with the MICRO BLUE label. Flagging for review"
+    },
+    {
+     "item": "24\" DUST - x2570",
+     "col": 3,
+     "truck": 49,
+     "qty": 6,
+     "confidence": "high",
+     "note": "row verified by counting up three rows from the thick 60\" DUST / FENDER COVERS separator"
+    },
+    {
+     "item": "60\" DUST - x2610",
+     "col": 6,
+     "truck": 43,
+     "qty": null,
+     "confidence": "low",
+     "note": "a mark is definitely present in the cell immediately above the thick 60\" DUST separator, but it is written low and its lower half is swallowed by that printed black line. Visible: a '1'-like stroke with a top flag, a slanted stroke, and a small hook - possibly 12 or 1/2, not readable with confidence"
+    },
+    {
+     "item": "SIG SOAP -x27070",
+     "col": 5,
+     "truck": 81,
+     "qty": 4,
+     "confidence": "high",
+     "note": "row is unambiguous - the cell sits between the two thick separators that bracket the single SIG SOAP row; digit is this writer's u-with-stem 4"
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 1,
+    "summary": "Independent read agrees with all four quantity entries (580 / GLASS TOWELS x2964 / col 6; 6 / 24\" DUST x2570 / col 3; unreadable mark / 60\" DUST x2610 / col 6, qty null; 4 / SIG SOAP x27070 / col 5), with the same rows, columns and digits, and agrees that nothing else on the sheet is a quantity. I verified rows by counting grid lines from the thick group separators rather than reading straight across to the skewed label strip; the resulting row map matches the printed label list exactly (4+19+3+4+9+4+2+3+1+4 = 53 rows), which independently confirms GLASS TOWELS (not MICRO BLUE) for the 580 and 24\" DUST for the 6. Confirmed the 3X10 band prints BLACK, COPPER, INDIGO, ONYX top-to-bottom on this sheet, and all four of those rows are empty. Confirmed seven handwritten columns with columns 8 and right blank in both header and body. Only difference: col 4 route reads 68, not 69."
+   }
+  },
+  {
+   "source_photo": "20260731_213102.heic",
+   "date": "2026-07-31",
+   "page": 1,
+   "columns": [
+    {
+     "col": 1,
+     "truck": 73,
+     "route": 73,
+     "initials": "PD"
+    },
+    {
+     "col": 2,
+     "truck": 55,
+     "route": 55,
+     "initials": "PD"
+    },
+    {
+     "col": 3,
+     "truck": 83,
+     "route": 83,
+     "initials": "NC"
+    },
+    {
+     "col": 4,
+     "truck": 7,
+     "route": 7,
+     "initials": "PD"
+    },
+    {
+     "col": 5,
+     "truck": 11,
+     "route": 4,
+     "initials": "PD",
+     "note": "coverage: truck 11 ran route 4"
+    },
+    {
+     "col": 6,
+     "truck": 62,
+     "route": 62,
+     "initials": "MD"
+    },
+    {
+     "col": 7,
+     "truck": 92,
+     "route": 92,
+     "initials": "NC",
+     "note": "truck cell overwritten/struck through"
+    },
+    {
+     "col": 8,
+     "truck": 60,
+     "route": 60,
+     "initials": "NC"
+    },
+    {
+     "col": 9,
+     "truck": 81,
+     "route": 81,
+     "initials": "NC"
+    },
+    {
+     "col": 10,
+     "truck": null,
+     "route": null,
+     "initials": null,
+     "note": "header blank but a quantity is written in this column below"
+    },
+    {
+     "col": 11,
+     "truck": 75,
+     "route": 75,
+     "initials": "ANC"
+    },
+    {
+     "col": 12,
+     "truck": 84,
+     "route": 84,
+     "initials": "WC"
+    },
+    {
+     "col": 13,
+     "truck": 88,
+     "route": 89,
+     "initials": "AC",
+     "note": "truck/route disagree; both cells overwritten"
+    }
+   ],
+   "entries": [
+    {
+     "item": "3X10 COPPER",
+     "col": 3,
+     "truck": 83,
+     "qty": 4,
+     "confidence": "low",
+     "note": "value sits between the ONYX and COPPER label lines"
+    },
+    {
+     "item": "3X10 COPPER",
+     "col": 5,
+     "truck": 11,
+     "qty": 13,
+     "confidence": "low"
+    },
+    {
+     "item": "3X10 COPPER",
+     "col": 8,
+     "truck": 60,
+     "qty": 33,
+     "confidence": "low"
+    },
+    {
+     "item": "3X10 COPPER",
+     "col": 9,
+     "truck": 81,
+     "qty": null,
+     "confidence": "low",
+     "note": "struck through, illegible"
+    },
+    {
+     "item": "3X10 COPPER",
+     "col": 10,
+     "truck": null,
+     "qty": 4,
+     "confidence": "low",
+     "note": "column has no truck in the header"
+    },
+    {
+     "item": "3X10 COPPER",
+     "col": 11,
+     "truck": 75,
+     "qty": 3,
+     "confidence": "low"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 1,
+     "truck": 73,
+     "qty": 12,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 3,
+     "truck": 83,
+     "qty": 4,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 4,
+     "truck": 7,
+     "qty": 10,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 5,
+     "truck": 11,
+     "qty": 14,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 6,
+     "truck": 62,
+     "qty": 7,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 7,
+     "truck": 92,
+     "qty": 8,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 8,
+     "truck": 60,
+     "qty": 5,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 9,
+     "truck": 81,
+     "qty": 20,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 11,
+     "truck": 75,
+     "qty": 10,
+     "confidence": "high"
+    },
+    {
+     "item": "3X10 BLACK",
+     "col": 13,
+     "truck": 88,
+     "qty": 11,
+     "confidence": "high"
+    },
+    {
+     "item": "36\" DUST - x2590",
+     "col": 11,
+     "truck": 75,
+     "qty": 3,
+     "confidence": "low",
+     "note": "isolated value, row attribution uncertain"
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 11,
+     "truck": 75,
+     "qty": 50,
+     "confidence": "high"
+    },
+    {
+     "item": "3X5 BLACK",
+     "col": 4,
+     "truck": 7,
+     "qty": 4,
+     "confidence": "high"
+    },
+    {
+     "item": "3X5 BLACK",
+     "col": 6,
+     "truck": 62,
+     "qty": 7,
+     "confidence": "high"
+    },
+    {
+     "item": "3X5 BLACK",
+     "col": 13,
+     "truck": 88,
+     "qty": 3,
+     "confidence": "high"
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 1,
+     "truck": 73,
+     "qty": 3,
+     "confidence": "high"
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 6,
+     "truck": 62,
+     "qty": 3,
+     "confidence": "high"
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 11,
+     "truck": 75,
+     "qty": 9,
+     "confidence": "high"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 4,
+     "truck": 7,
+     "qty": 13,
+     "confidence": "high"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 6,
+     "truck": 62,
+     "qty": null,
+     "confidence": "low",
+     "note": "mark present, not a legible digit"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 7,
+     "truck": 92,
+     "qty": 2,
+     "confidence": "high"
+    },
+    {
+     "item": "3x10 TRAFFIC",
+     "col": 7,
+     "truck": 92,
+     "qty": 5,
+     "confidence": "high"
+    },
+    {
+     "item": "3x5 TRAFFIC",
+     "col": 12,
+     "truck": 84,
+     "qty": 8,
+     "confidence": "low",
+     "note": "could be 8 or 2; overlaps the row below"
+    },
+    {
+     "item": "4x6 TRAFFIC",
+     "col": 12,
+     "truck": 84,
+     "qty": 2,
+     "confidence": "low"
+    },
+    {
+     "item": "4x6 TRAFFIC",
+     "col": 13,
+     "truck": 88,
+     "qty": 1,
+     "confidence": "low"
+    }
+   ]
+  },
+  {
+   "source_photo": "20260731_213110.heic",
+   "date": "2026-07-31",
+   "page": 2,
+   "_note": "Full 16 columns, but almost nothing logged against them.",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 66,
+     "route": 66,
+     "initials": "PB"
+    },
+    {
+     "col": 2,
+     "truck": 59,
+     "route": 59,
+     "initials": "PB"
+    },
+    {
+     "col": 3,
+     "truck": 68,
+     "route": 68,
+     "initials": "mm"
+    },
+    {
+     "col": 4,
+     "truck": 54,
+     "route": 54,
+     "initials": "mm"
+    },
+    {
+     "col": 5,
+     "truck": 94,
+     "route": 94,
+     "initials": "mm",
+     "confidence": "low",
+     "note": "could read 54 or 94"
+    },
+    {
+     "col": 6,
+     "truck": 99,
+     "route": 99,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "could read 94 or 99"
+    },
+    {
+     "col": 7,
+     "truck": 70,
+     "route": 70,
+     "initials": "M"
+    },
+    {
+     "col": 8,
+     "truck": 65,
+     "route": 65,
+     "initials": "PB"
+    },
+    {
+     "col": 9,
+     "truck": 86,
+     "route": 86,
+     "initials": "PB"
+    },
+    {
+     "col": 10,
+     "truck": 58,
+     "route": 58,
+     "initials": "NC"
+    },
+    {
+     "col": 11,
+     "truck": 61,
+     "route": 61,
+     "initials": "NC"
+    },
+    {
+     "col": 12,
+     "truck": 80,
+     "route": 80,
+     "initials": "LC"
+    },
+    {
+     "col": 13,
+     "truck": 57,
+     "route": 57,
+     "initials": "PB"
+    },
+    {
+     "col": 14,
+     "truck": 52,
+     "route": 52,
+     "initials": "PB"
+    },
+    {
+     "col": 15,
+     "truck": 43,
+     "route": 43,
+     "initials": "mm"
+    },
+    {
+     "col": 16,
+     "truck": 64,
+     "route": 64,
+     "initials": "M"
+    }
+   ],
+   "entries": [
+    {
+     "item": "3X10 ONYX",
+     "col": 15,
+     "truck": 43,
+     "qty": 4,
+     "confidence": "low",
+     "note": "isolated mark high in the band"
+    },
+    {
+     "item": "4X6 INDIGO",
+     "col": 10,
+     "truck": 58,
+     "qty": 3,
+     "confidence": "low"
+    },
+    {
+     "item": "3x5 TRAFFIC",
+     "col": 15,
+     "truck": 43,
+     "qty": 13,
+     "confidence": "low",
+     "note": "13 or 15"
+    }
+   ],
+   "footer_note": "handwritten below the table: '6/.. 400 (a) ink towels' - not transcribed into entries"
+  }
+ ],
+ "_duplicates": "The archive holds byte-identical copies: 1000036270.jpg == 1000036272.jpg == 5-Photo-5.jpg, and '20260508_220352 - Copy.heic' == '20260508_220352 - Copy (2).heic'. Only one of each is recorded, so a sheet is not double-weighted. A ' - Copy (2)' suffix is a Windows duplication artifact and does NOT mean a second page; distinct pages have distinct timestamps.",
+ "_reader_reliability": "Measured accidentally, before dedup was known: the 20260508_220352 pair was transcribed twice, fully independently, from the same image. The two runs agreed on 16/16 columns and 6/6 quantities exactly (48\" DUST 2; WHITE SHOP TOWELS 700/300/100; SMALL INK TOWELS 60; LARGE INK TOWELS 200). They disagreed only on illegible driver initials (col1 KB vs unreadable, col12 NC vs NP, col13 AH vs AA). Quantities - the actual training signal - are read reliably; initials are the noisy field and should be treated as weak labels.",
+ "_verification": "From 2026-05-06 p2 onward every sheet is read twice by independent readers. Where they disagree the entry is stored with confidence 'low' and BOTH readings in the note, rather than a winner being picked. _verification.agreement/disputes on each sheet records the outcome."
 }
