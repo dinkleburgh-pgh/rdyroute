@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
-import { useUpsertTruckState } from "../../api/hooks";
+import { useClearNextUp, useNextUp, useSetNextUp, useUpsertTruckState } from "../../api/hooks";
 import { fmtCountdown } from "./useOutsideTimer";
 import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, statusStampFields } from "./constants";
 import CoverageTag from "../../components/CoverageTag";
@@ -64,6 +64,10 @@ export default function FleetMobileActionSheet({
   onClearArrived: () => void;
 }) {
   const upsert = useUpsertTruckState();
+  const { data: nextUp } = useNextUp(runDate);
+  const setNextUp = useSetNextUp(runDate);
+  const clearNextUp = useClearNextUp(runDate);
+  const isNextUp = nextUp === truck.truck_number;
   const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
   const isHold = truck.state?.priority_hold === true;
   const arrivedActive = typeof arrivedAt === "number" && Number.isFinite(arrivedAt);
@@ -183,6 +187,22 @@ export default function FleetMobileActionSheet({
                   : "rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"}
               >
                 {needsChecked ? "✅ Clear Checked" : "🔍 Needs Checked"}
+              </button>
+              {/* Sits with Needs Checked so the fleet sheet can queue the next
+                  load without going to the load display's own picker. */}
+              <button
+                type="button"
+                disabled={setNextUp.isPending || clearNextUp.isPending}
+                onClick={() => {
+                  if (isNextUp) clearNextUp.mutate();
+                  else setNextUp.mutate(truck.truck_number);
+                  onClose();
+                }}
+                className={isNextUp
+                  ? "rounded-md border border-sky-600/50 bg-sky-900/40 px-3 py-2 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-900/60"
+                  : "rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"}
+              >
+                {isNextUp ? "✕ Clear Next Up" : "⏭ Set Next Up"}
               </button>
               {arrivedEnabled && arrivedActive && (
                 <div className="flex items-center gap-2 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-3 py-2 text-xs font-semibold text-emerald-300">

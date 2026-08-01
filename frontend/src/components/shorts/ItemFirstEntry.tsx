@@ -27,12 +27,24 @@ import type { Shortage, TruckWithState } from "../../types";
 import AnimateCard from "../AnimateCard";
 import HierarchyPicker, {
   DEFAULT_TRACKED_ITEMS,
+  MAT_SIZES_S,
+  colorWordClass,
   findTrackedItem,
   itemTileClass,
   qtyWithUnit,
   useCategoryPalette,
 } from "./HierarchyPicker";
 import { truckTypeLabel } from "../../utils/truckType";
+
+/**
+ * Idle time before a batch posts itself.
+ *
+ * Deliberately longer than the per-truck picker's 1.2s: the rhythm here is
+ * tap-truck → type-qty → tap-next-truck, and a short timer would fire in the
+ * gap where someone is reading the next line off the paper sheet, splitting one
+ * item's batch across several posts.
+ */
+const AUTO_LOG_MS = 2500;
 
 interface SessionBatch {
   /** `${category}||${detail}` — one box per ITEM, merged across submits. */
@@ -71,6 +83,9 @@ export default function ItemFirstEntry({
   const [sessionLog, setSessionLog] = useState<SessionBatch[]>([]);
   const [pickerResetKey, setPickerResetKey] = useState(0);
   const lastAddedRef = useRef<number | null>(null);
+  const [autoArmed, setAutoArmed] = useState(false);
+  /** Set when a post fails, so the idle timer stops retrying the same payload. */
+  const autoBlockedRef = useRef(false);
 
   // Changing the run date invalidates everything in-flight on screen.
   useEffect(() => {
@@ -106,16 +121,29 @@ export default function ItemFirstEntry({
     ? findTrackedItem(items, selectedItem.category, selectedItem.detail)
     : undefined;
 
+  // Mirror the picker button the user just tapped. It renders "Black Aprons"
+  // (ItemGrid's colour-word suffix rule), while this read "Aprons Black" — the
+  // same colour-first/item-last mismatch as the audit log. Mats keep size first
+  // ("4x6 Black"); anything that isn't a colour word keeps category first.
   const itemLabel = selectedItem
-    ? (selectedItem.detail ? `${selectedItem.category} ${selectedItem.detail}` : selectedItem.category)
+    ? !selectedItem.detail
+      ? selectedItem.category
+      : MAT_SIZES_S.has(selectedItem.category)
+        ? `${selectedItem.category} ${selectedItem.detail}`
+        : colorWordClass(selectedItem.detail)
+          ? `${selectedItem.detail} ${selectedItem.category}`
+          : `${selectedItem.category} ${selectedItem.detail}`
     : "";
 
   function pickItem(category: string, detail: string) {
+    autoBlockedRef.current = false;
     setSelectedItem({ category, detail });
     setQtyByTruck(new Map());
   }
 
   function toggleTruck(n: number) {
+    // Any deliberate interaction re-enables auto-log after a failed post.
+    autoBlockedRef.current = false;
     setQtyByTruck((prev) => {
       const next = new Map(prev);
       if (next.has(n)) {
@@ -172,10 +200,34 @@ export default function ItemFirstEntry({
       setSelectedItem(null);
       setPickerResetKey((k) => k + 1);
     } catch (error: unknown) {
+      // The rows are still on screen, so without this the idle timer would
+      // re-fire against the same failing payload forever. Any further tap or
+      // keystroke clears the block and lets it try again.
+      autoBlockedRef.current = true;
+      setAutoArmed(false);
       const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       toast.error(typeof detail === "string" ? detail : `Could not log ${label}.`);
     }
   }
+
+  // Post the batch once entry goes quiet, so transcribing a sheet is
+  // tap-trucks → next item, with no Log press between them. Re-running on every
+  // qtyByTruck change means the cleanup cancels the previous timer, so the clock
+  // restarts on each tap or keystroke and only a real pause commits.
+  const submitRef = useRef(submit);
+  submitRef.current = submit;
+  useEffect(() => {
+    if (qtyByTruck.size === 0 || bulk.isPending || autoBlockedRef.current) {
+      setAutoArmed(false);
+      return;
+    }
+    setAutoArmed(true);
+    const t = window.setTimeout(() => {
+      setAutoArmed(false);
+      void submitRef.current();
+    }, AUTO_LOG_MS);
+    return () => window.clearTimeout(t);
+  }, [qtyByTruck, bulk.isPending]);
 
   // Resolve each box's live rows and drop boxes whose rows were all undone
   // (an emptied box used to linger with no chips).
@@ -331,10 +383,18 @@ export default function ItemFirstEntry({
                             lastAddedRef.current = null;
                           }
                         }}
-                        onChange={(e) =>
-                          setQtyByTruck((prev) => new Map(prev).set(n, e.target.value))
-                        }
-                        onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); }}
+                        onChange={(e) => {
+                          autoBlockedRef.current = false;
+                          setQtyByTruck((prev) => new Map(prev).set(n, e.target.value));
+                        }}
+                        // Enter commits the whole batch now rather than waiting
+                        // out the idle timer.
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") {
+                            (e.target as HTMLInputElement).blur();
+                            void submit();
+                          }
+                        }}
                       />
                       {packSize ? (
                         <span className="shrink-0 text-[10px] text-slate-500">= {raw * packSize} pcs</span>
@@ -351,16 +411,23 @@ export default function ItemFirstEntry({
                   );
                 })}
               </div>
+              {/* Kept alongside the idle auto-log so a batch can be committed
+                  the instant it is complete instead of waiting out the timer. */}
               <button
                 type="button"
-                onClick={submit}
+                onClick={() => void submit()}
                 disabled={bulk.isPending || qtyByTruck.size === 0}
                 className="w-full rounded-xl bg-amber-600 px-4 py-3 text-base font-black text-white shadow transition hover:bg-amber-500 active:scale-[0.99] disabled:opacity-50"
               >
                 {bulk.isPending
                   ? "Logging…"
-                  : `Log ${qtyByTruck.size} truck${qtyByTruck.size !== 1 ? "s" : ""}`}
+                  : `Log ${qtyByTruck.size} truck${qtyByTruck.size !== 1 ? "s" : ""} now`}
               </button>
+              <p className="text-center text-[11px] text-slate-500">
+                {autoArmed
+                  ? "Logs automatically when you stop entering…"
+                  : "Keep tapping trucks — this logs itself once you pause."}
+              </p>
             </div>
           )}
         </>

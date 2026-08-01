@@ -4,7 +4,7 @@
  */
 import clsx from "clsx";
 import type { TruckStatus, TruckWithState } from "../../types";
-import { useUpsertTruckState } from "../../api/hooks";
+import { useClearNextUp, useNextUp, useSetNextUp, useUpsertTruckState } from "../../api/hooks";
 import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, STATUS_OPTIONS, statusStampFields } from "./constants";
 
 export default function StatusEditor({
@@ -17,6 +17,13 @@ export default function StatusEditor({
   status: TruckStatus;
 }) {
   const upsert = useUpsertTruckState();
+  // Next Up was only settable from the load display's own picker, which means
+  // it could not be queued from the truck you happened to be looking at.
+  const { data: nextUp } = useNextUp(runDate);
+  const setNextUp = useSetNextUp(runDate);
+  const clearNextUp = useClearNextUp(runDate);
+  const isNextUp = nextUp === truck.truck_number;
+  const nextUpBusy = setNextUp.isPending || clearNextUp.isPending;
   return (
     <section className="rounded-md border border-slate-800 bg-slate-950/40 p-3">
       <label className="label">Status</label>
@@ -88,6 +95,34 @@ export default function StatusEditor({
           }
         >
           {truck.state?.needs_checked ? "Checked flag on" : "Mark needs checked"}
+        </button>
+      </div>
+      <div className="mt-2 flex items-center justify-between gap-2 rounded-md border border-sky-700/30 bg-sky-950/20 px-3 py-2">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-sky-300">Next up</p>
+          <p className="text-[11px] text-slate-400">
+            {isNextUp
+              ? "Queued as the next truck to load."
+              : nextUp != null
+                ? `Currently #${nextUp} — setting this replaces it.`
+                : "Queue this truck as the next one to load."}
+          </p>
+        </div>
+        <button
+          type="button"
+          disabled={nextUpBusy}
+          className={clsx(
+            "shrink-0 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50",
+            isNextUp
+              ? "bg-sky-600 text-slate-950 hover:bg-sky-500"
+              : "bg-slate-800 text-slate-200 hover:bg-slate-700",
+          )}
+          onClick={() => {
+            if (isNextUp) clearNextUp.mutate();
+            else setNextUp.mutate(truck.truck_number);
+          }}
+        >
+          {isNextUp ? "Next up ✕" : "Set next up"}
         </button>
       </div>
     </section>
