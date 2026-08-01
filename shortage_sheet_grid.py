@@ -332,7 +332,11 @@ def locate_cells(content: bytes, *, ink_cutoff: float = 0.12) -> tuple[Image.Ima
             # it, and those were the false positives in the empty right columns.
             if not ink_cutoff <= density <= 0.55:
                 continue
-            read = (max(0, int(columns[ci] - pitch_x * 0.40)), max(0, y0 + pad_y),
+            # Widen leftwards for overrunning handwriting, but never past the
+            # first column: the printed label block is solid black and dragging
+            # it into the crop produced cells that were nothing but a dark bar.
+            read_left = max(int(columns[0]), int(columns[ci] - pitch_x * 0.40))
+            read = (max(0, read_left), max(0, y0 + pad_y),
                     min(width, int(columns[ci + 1] + pitch_x * 0.12)), min(height, y1 - pad_y))
             cells.append(SheetCell(ri, ci, tuple(int(v * scale) for v in read), round(density, 3)))
     return full, cells
