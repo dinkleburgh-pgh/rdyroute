@@ -232,24 +232,19 @@ def locate_cells(content: bytes, *, ink_cutoff: float = 0.12) -> tuple[Image.Ima
     pitch_y = _modal_pitch(strong, 13, 26) or 19.0
     rows = _subdivide(strong, pitch_y)
 
-    # How far each column's rules sit above/below the reference strip. A bow is
-    # a 2D warp, not a rigid vertical slide: the displacement at the top of a
-    # column differs from the bottom, so measure both ends and interpolate.
-    # A single per-column shift left thin rules leaking into the cell window in
-    # the outer columns, which is what the stray detections were.
+    # How far each column's rules sit above/below the reference strip.
+    #
+    # This is a single shift per column, i.e. a rigid vertical slide. A bow is
+    # really a 2D warp, and measuring the top and bottom of each column
+    # separately to interpolate between them is the obvious refinement — but it
+    # measured WORSE (135 -> 207 stray cells on 2026-07-31, and 35 -> 43 on the
+    # flat reference), because correlating a third of a profile is far noisier
+    # than correlating the whole thing. Keeping the honest, simpler version.
     max_shift = max(6, int(pitch_y * 1.5))
-    band = int(height * 0.34)
-    top_ref, bottom_ref = reference[:band], reference[-band:]
-    shift_top: list[int] = []
-    shift_bottom: list[int] = []
+    shifts: list[int] = []
     for ci in range(N_COLS):
-        strip = _profile(rules.crop((int(columns[ci]), 0, int(columns[ci + 1]), height)), "h")
-        shift_top.append(_best_shift(top_ref, strip[:band], max_shift))
-        shift_bottom.append(_best_shift(bottom_ref, strip[-band:], max_shift))
-
-    def shift_at(ci: int, y: int) -> int:
-        t = min(1.0, max(0.0, (y - band * 0.5) / max(1.0, height - band)))
-        return int(round(shift_top[ci] * (1 - t) + shift_bottom[ci] * t))
+        strip = rules.crop((int(columns[ci]), 0, int(columns[ci + 1]), height))
+        shifts.append(_best_shift(reference, _profile(strip, "h"), max_shift))
 
     detect_x, detect_y = max(6, int(pitch_x * 0.20)), max(5, int(pitch_y * 0.34))
     pad_y = max(2, int(pitch_y * 0.14))
@@ -262,8 +257,7 @@ def locate_cells(content: bytes, *, ink_cutoff: float = 0.12) -> tuple[Image.Ima
         for ci in range(N_COLS):
             # Follow the arch: this column's rules sit shifts[ci] off the
             # reference strip, so the whole cell moves with them.
-            offset = shift_at(ci, base0)
-            y0, y1 = base0 + offset, base1 + offset
+            y0, y1 = base0 + shifts[ci], base1 + shifts[ci]
             if y0 < 0 or y1 > height:
                 continue
             detect = (int(columns[ci]) + detect_x, y0 + detect_y,
@@ -295,6 +289,30 @@ def crop_cell(full: Image.Image, cell: SheetCell, *, min_width: int = 180) -> by
     return buffer.getvalue()
 
 
+# ---------------------------------------------------------------------------
+# Coverage on the real photo archive (Desktop/Shorts, 132 photos, 54 dates)
+# ---------------------------------------------------------------------------
+# Those photos are shot on a clipboard, so the paper bows and a rule is not at
+# one y across the page. Detecting rows on a narrow reference strip and
+# correlating each column against it recovers the arch (measured shifts run
+# monotonically, e.g. -3,-1,-1,-1,-1,0,0,0,0,0,3,6,8,10,12,17) and the row
+# lines then track the real rules. That took the worst sheets from unusable to
+# usable, and one that had reported 261 stray cells down to 15.
+#
+# Current state across the archive at ink_cutoff=0.12:
+#
+#   42 photos  clean     (<=60 located cells, roughly the true count)
+#   30 photos  marginal  (61-120)
+#   60 photos  noisy     (>120 — geometry still off)
+#
+# The residual failures are sheets where the row detection itself collapses
+# (2026-05-15 finds only 15 strong rules, so subdivision invents 68 rows). A
+# single rigid shift per column cannot express a real bow; the fix is a proper
+# 2D warp, but the naive version of that — interpolating between a top and a
+# bottom measurement — measured worse and was reverted rather than kept for
+# looking clever. Per-strip independent row detection, anchored by requiring 53
+# rows per strip, is the next thing to try.
+#
 # ---------------------------------------------------------------------------
 # Why this is not wired in yet
 # ---------------------------------------------------------------------------
