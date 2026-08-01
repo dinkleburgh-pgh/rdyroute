@@ -44,11 +44,21 @@ bounds, which means the fit found nothing real). Splitting the archive by form
 revision did not explain it either: within one revision the ratio is still 0.06.
 The detected table quad simply covers a slightly different region on each photo.
 
-What has NOT been tried, and is the standard tool for this exact problem, is
-feature-based registration — ORB/SIFT keypoints matched between a reference
-sheet and each photo, solving for a homography. That aligns on real image
-structure rather than 1D projections, and it is how form registration is
-normally done. Everything above aligns on profiles, which is markedly weaker.
+Feature-based registration was then tried — ORB keypoints matched against a
+reference sheet, homography by RANSAC, the standard tool for registering a
+photographed form. It fails completely: 0 of 40 photos registered, inlier
+ratios 0.06-0.17 against a 0.30 threshold, despite 250-300 raw matches on some
+sheets. The cause is inherent rather than a tuning problem — the sheet is a
+regular grid, so descriptors at rule intersections are nearly identical and the
+matcher cannot tell one intersection from another. Repetitive structure is the
+documented failure case for feature matching.
+
+CONCLUSION: automatic cell extraction from this archive is not working, across
+per-sheet grid detection, dewarp plus grid, a shared canonical canvas, profile
+registration and feature registration. The dewarp above is genuinely useful and
+worth keeping — it makes a bowed clipboard photo flat and readable — but the
+step from a flat sheet to correctly located cells is unsolved here. Transcribing
+the dewarped sheets by reading them is the route that actually yields data.
 """
 import sys
 
