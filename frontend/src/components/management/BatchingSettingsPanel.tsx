@@ -10,6 +10,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useUpsertSetting } from "../../api/hooks";
 import { asBool, FieldRow, SaveButton } from "./shared";
 import BatchingPanel from "./BatchingPanel";
+import BatchingQuickEntry from "./BatchingQuickEntry";
 
 export default function BatchingSettingsPanel({ map }: { map: Map<string, unknown> }) {
   const upsert = useUpsertSetting();
@@ -97,6 +98,10 @@ export default function BatchingSettingsPanel({ map }: { map: Map<string, unknow
         <SaveButton dirty={dirty} saving={upsert.isPending} onSave={save} onRevert={() => setForm(initial)} />
       </div>
 
+      {/* Type-through entry first: it is the fastest way in when you are working
+          from the paper sheet. The full grid below stays for reviewing and
+          fixing what is already assigned. */}
+      <BatchingQuickEntry />
       <BatchingPanel />
     </div>
   );
