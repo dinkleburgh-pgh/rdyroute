@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
-from models import AppSetting, Batch, BatchHistory, TruckState, TruckStateSource, TruckStatus, User
+from models import AppSetting, Batch, BatchHistory, RouteSwapLog, TruckState, TruckStateSource, TruckStatus, User
 from routers.auth import get_current_user, require_non_guest
 from schemas import BatchAssign, BatchHistoryCreate, BatchHistoryOut, BatchOut, BatchSummary, BatchTruck
 from ws_manager import manager
@@ -126,6 +126,27 @@ def get_batch(
     ).all()
 
 
+def _is_prev_day_split_helper(db: Session, run_date: date, truck_number: int) -> bool:
+    """Did this truck carry another route's SPLIT overflow on the previous
+    operating day — i.e. is the load it brought back part of a route that also
+    ran itself and is already counted in full?
+
+    "Previous operating day" is max(TruckState.run_date < run_date), the same
+    signal day-init and the frontend's prev-operating-day endpoint use, so a
+    mid-week holiday cannot shift it onto a day that never ran.
+    """
+    prev = db.scalar(select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date))
+    if prev is None:
+        return False
+    return db.scalars(
+        select(RouteSwapLog).where(
+            RouteSwapLog.run_date == prev,
+            RouteSwapLog.is_split.is_(True),
+            RouteSwapLog.load_on_truck == truck_number,
+        )
+    ).first() is not None
+
+
 @router.post("/assign", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
 def assign_truck_to_batch(
     payload: BatchAssign,
@@ -140,6 +161,16 @@ def assign_truck_to_batch(
     Enforces V1's BATCH_CAP=400 wearers per batch.
     """
     _validate_batch_number(payload.batch_number)
+
+    # A split means ONE route's load came back on two trucks. Both get batched,
+    # but the wearers belong to the route and are counted in full on its own
+    # assignment — charging the helper as well counts the same garments twice.
+    # Enforced here rather than only in the pickers because three surfaces write
+    # this (wizard, Batches page, Management panel) and the last has a free-text
+    # wearers box with no split awareness.
+    effective_wearers = payload.wearers
+    if _is_prev_day_split_helper(db, payload.run_date, payload.truck_number):
+        effective_wearers = 0
 
     existing_assignment = db.scalars(
         select(Batch).where(
@@ -166,12 +197,12 @@ def assign_truck_to_batch(
     no_cap_setting = db.get(AppSetting, "batch_no_cap")
     no_cap = no_cap_setting is not None and no_cap_setting.value is True
     cap = _wearer_cap(db)
-    if not no_cap and current_total + payload.wearers > cap:
+    if not no_cap and current_total + effective_wearers > cap:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=(
                 f"Batch {payload.batch_number} cap of {cap} wearers exceeded "
-                f"(current {current_total} + new {payload.wearers})."
+                f"(current {current_total} + new {effective_wearers})."
             ),
         )
 
@@ -179,7 +210,7 @@ def assign_truck_to_batch(
         run_date=payload.run_date,
         batch_number=payload.batch_number,
         truck_number=payload.truck_number,
-        wearers=payload.wearers,
+        wearers=effective_wearers,
     )
     db.add(row)
 
@@ -198,7 +229,7 @@ def assign_truck_to_batch(
             truck_number=payload.truck_number,
             run_date=payload.run_date,
             status=TruckStatus.unloaded,
-            wearers=payload.wearers,
+            wearers=effective_wearers,
             batch_id=payload.batch_number,
             state_source=TruckStateSource.workflow.value,
         )
@@ -206,7 +237,7 @@ def assign_truck_to_batch(
     else:
         if state.status == TruckStatus.dirty:
             state.status = TruckStatus.unloaded
-        state.wearers = payload.wearers
+        state.wearers = effective_wearers
         state.batch_id = payload.batch_number
         state.state_source = TruckStateSource.workflow.value
 
