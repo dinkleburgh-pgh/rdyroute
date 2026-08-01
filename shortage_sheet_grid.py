@@ -71,10 +71,29 @@ def _load(content: bytes, max_side: int | None) -> Image.Image:
         return im.copy()
 
 
-def _adaptive_ink(im: Image.Image, radius: int = 25, delta: int = 50) -> Image.Image:
-    """255 where a pixel is `delta` darker than its own neighbourhood."""
-    background = im.filter(ImageFilter.GaussianBlur(radius=radius))
-    return ImageChops.subtract(background, im).point(lambda p: 255 if p > delta else 0)
+def _cell_ink(crop: Image.Image, drop: int = 55) -> float:
+    """Fraction of pixels far darker than THIS cell's own paper tone.
+
+    A global (or even locally-blurred) threshold cannot separate writing from
+    the grey shaded rows on the later form revision: printed grey is a halftone
+    dot pattern, and a blur wide enough to span a 20px band averages grey and
+    white together so whole bands read as "darker than background". Judging each
+    cell against its own median makes the paper tone irrelevant — the cell is
+    written in only if it holds pixels much darker than its own background.
+    """
+    histogram = crop.histogram()
+    total = sum(histogram)
+    if not total:
+        return 0.0
+    acc = 0
+    median = 255
+    for value, count in enumerate(histogram):
+        acc += count
+        if acc >= total * 0.55:
+            median = value
+            break
+    cutoff = max(0, median - drop)
+    return sum(histogram[: cutoff + 1]) / total
 
 
 def _profile(im: Image.Image, axis: str) -> list[int]:
@@ -103,6 +122,29 @@ def _ridges(values: list[int], cutoff: float, min_gap: int, offset: int = 0) -> 
         else:
             merged.append(p)
     return [p + offset for p in merged]
+
+
+def _best_shift(reference: list[int], other: list[int], max_shift: int, step: int = 2) -> int:
+    """Vertical displacement of `other` against `reference`, by correlation.
+
+    Sheets photographed on a clipboard bow, so a rule is not at one y across the
+    whole page — it arches. Correlating each column strip's profile against a
+    reference strip measures that displacement directly, which is far more
+    robust than trying to fit the curve analytically.
+    """
+    n = min(len(reference), len(other))
+    best_shift, best_score = 0, -1.0
+    for shift in range(-max_shift, max_shift + 1):
+        lo = max(0, -shift)
+        hi = min(n, n - shift)
+        if hi - lo < n // 3:
+            continue
+        score = 0
+        for i in range(lo, hi, step):
+            score += reference[i] * other[i + shift]
+        if score > best_score:
+            best_score, best_shift = float(score), shift
+    return best_shift
 
 
 def _modal_pitch(lines: list[int], lo: int, hi: int) -> float | None:
@@ -159,7 +201,6 @@ def locate_cells(content: bytes, *, ink_cutoff: float = 0.12) -> tuple[Image.Ima
             global_cut = max(60, min(180, i))
             break
     rules = small.point(lambda p: 255 if p < global_cut else 0)
-    ink = _adaptive_ink(small)
 
     # The printed label block is solid black; its right edge anchors the data area.
     left = rules.crop((0, int(height * 0.10), int(width * 0.40), int(height * 0.85)))
@@ -179,28 +220,62 @@ def locate_cells(content: bytes, *, ink_cutoff: float = 0.12) -> tuple[Image.Ima
     pitch_x = _modal_pitch(v_rules, 25, 60) or 41.0
     columns = [label_edge + pitch_x * i for i in range(N_COLS + 1)]
 
-    data = rules.crop((label_edge + 4, 0, int(columns[-1]) - 2, height))
-    horizontal = _profile(data, "h")
-    strong = [y for y in _ridges(horizontal, max(horizontal) * 0.22, 8)
+    # Rows are found on a NARROW reference strip, not the full width: across a
+    # bowed page the rules are at different heights in different columns, so a
+    # full-width profile smears them together and most simply vanish under the
+    # threshold (38 of 54 found, on the clipboard photos).
+    ref_lo = int(columns[0] + (columns[-1] - columns[0]) * 0.34)
+    ref_hi = int(columns[0] + (columns[-1] - columns[0]) * 0.60)
+    reference = _profile(rules.crop((ref_lo, 0, ref_hi, height)), "h")
+    strong = [y for y in _ridges(reference, max(reference) * 0.22, 8)
               if int(height * 0.088) < y < int(height * 0.88)]
     pitch_y = _modal_pitch(strong, 13, 26) or 19.0
     rows = _subdivide(strong, pitch_y)
+
+    # How far each column's rules sit above/below the reference strip. A bow is
+    # a 2D warp, not a rigid vertical slide: the displacement at the top of a
+    # column differs from the bottom, so measure both ends and interpolate.
+    # A single per-column shift left thin rules leaking into the cell window in
+    # the outer columns, which is what the stray detections were.
+    max_shift = max(6, int(pitch_y * 1.5))
+    band = int(height * 0.34)
+    top_ref, bottom_ref = reference[:band], reference[-band:]
+    shift_top: list[int] = []
+    shift_bottom: list[int] = []
+    for ci in range(N_COLS):
+        strip = _profile(rules.crop((int(columns[ci]), 0, int(columns[ci + 1]), height)), "h")
+        shift_top.append(_best_shift(top_ref, strip[:band], max_shift))
+        shift_bottom.append(_best_shift(bottom_ref, strip[-band:], max_shift))
+
+    def shift_at(ci: int, y: int) -> int:
+        t = min(1.0, max(0.0, (y - band * 0.5) / max(1.0, height - band)))
+        return int(round(shift_top[ci] * (1 - t) + shift_bottom[ci] * t))
 
     detect_x, detect_y = max(6, int(pitch_x * 0.20)), max(5, int(pitch_y * 0.34))
     pad_y = max(2, int(pitch_y * 0.14))
 
     cells: list[SheetCell] = []
     for ri in range(len(rows) - 1):
-        y0, y1 = rows[ri], rows[ri + 1]
-        if not (10 <= y1 - y0 <= pitch_y * 1.6):
+        base0, base1 = rows[ri], rows[ri + 1]
+        if not (10 <= base1 - base0 <= pitch_y * 1.6):
             continue
         for ci in range(N_COLS):
+            # Follow the arch: this column's rules sit shifts[ci] off the
+            # reference strip, so the whole cell moves with them.
+            offset = shift_at(ci, base0)
+            y0, y1 = base0 + offset, base1 + offset
+            if y0 < 0 or y1 > height:
+                continue
             detect = (int(columns[ci]) + detect_x, y0 + detect_y,
                       int(columns[ci + 1]) - detect_x, y1 - detect_y)
             if detect[2] <= detect[0] or detect[3] <= detect[1]:
                 continue
-            density = ink.crop(detect).resize((1, 1), Image.Resampling.BOX).getpixel((0, 0)) / 255.0
-            if density < ink_cutoff:
+            density = _cell_ink(small.crop(detect))
+            # Upper bound as well as lower: a cell that is nearly solid dark is
+            # a band separator or a rule the shift pushed us onto, not writing.
+            # Handwriting covers roughly 10-35% of a cell; a band covers most of
+            # it, and those were the false positives in the empty right columns.
+            if not ink_cutoff <= density <= 0.55:
                 continue
             read = (max(0, int(columns[ci] - pitch_x * 0.40)), max(0, y0 + pad_y),
                     min(width, int(columns[ci + 1] + pitch_x * 0.12)), min(height, y1 - pad_y))

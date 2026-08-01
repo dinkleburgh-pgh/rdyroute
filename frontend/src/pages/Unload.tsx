@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
-import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
+import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadDayTemplate,
+  useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import CoverageCards from "../components/CoverageCards";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { todayIso } from "../api/client";
@@ -160,6 +161,8 @@ export default function Unload() {
   // show fewer trucks than the denominator counts; page-specific inclusions
   // are strictly ADDITIVE on top.
   const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
+  // Standing wearer counts for this unload day, off the printed sheet.
+  const dayTemplate = useUnloadDayTemplate(unloadsDay);
   const unloadCtx = useMemo(
     () => buildOperationalDayContext(data ?? [], unloadsDay, holidayUnload ?? false, false, "unload", prevSplitHelpers),
     [data, unloadsDay, holidayUnload, prevSplitHelpers],
@@ -357,16 +360,34 @@ export default function Unload() {
     }
   }
 
+  /**
+   * The wearers to open the batch panel with. Same resolution the wizard and
+   * the Batches page use, so batching a truck here fills in the standing number
+   * off the day sheet instead of starting at 0 and asking the crew to remember
+   * it. Order matters:
+   *   1. a split helper contributes 0 — its load is part of a route counted in
+   *      full on that route's own card (the server enforces this on assign too);
+   *   2. a number already on the truck wins — someone set it deliberately;
+   *   3. otherwise the sheet, resolved THROUGH coverage: a carrier is unloading
+   *      the covered route's freight, so it takes that route's line, not its own.
+   */
+  function defaultWearersFor(t: TruckWithState): number {
+    if (isSplitHelper(t)) return 0;
+    const live = t.state?.wearers ?? 0;
+    if (live > 0) return live;
+    return dayTemplate.wearers[prevCoverOf(t) ?? t.truck_number] ?? 0;
+  }
+
   function openTruckMenu(t: TruckWithState) {
     setBatchNum(String(t.state?.batch_id ?? 1));
-    setWearers(String(t.state?.wearers ?? 0));
+    setWearers(String(defaultWearersFor(t)));
     setMenuTruck(t);
   }
   function toggleBatch(t: TruckWithState) {
     const isOpen = batchOpen === t.truck_number;
     setBatchOpen(isOpen ? null : t.truck_number);
     setBatchNum(String(t.state?.batch_id ?? 1));
-    setWearers(String(t.state?.wearers ?? 0));
+    setWearers(String(defaultWearersFor(t)));
     setOverflowOpen(null);
   }
   function toggleOverflow(truckNumber: number) {
