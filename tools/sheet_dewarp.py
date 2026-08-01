@@ -31,10 +31,24 @@ downstream row-boundary detection picks the wrong phase, landing boundaries at
 the middle of each printed row instead of on the rules, so cells straddle a
 rule and whole bands of empty cells register as inked.
 
-Detecting the grid per sheet is the wrong idea now that dewarp exists. Every
-photo is the SAME printed form warped onto the same fixed canvas, so the cell
-geometry should be defined once against that canvas and reused, rather than
-re-derived (and re-broken) for each image. That is the next thing to build.
+Detecting the grid per sheet looked like the wrong idea once dewarp existed:
+every photo is the same printed form on the same canvas, so the geometry should
+be measurable once and reused. That was tried and it does not work, because the
+dewarp is not repeatable enough to register against.
+
+Averaging 39 dewarped sheets gives a Laplacian variance ratio of 0.09 against a
+single sheet — the printed rules blur away, so the sheets are not landing on top
+of each other. Correcting per-axis scale and offset by correlating rule profiles
+did not recover it (0.02 -> 0.02, with the fitted scales running to the search
+bounds, which means the fit found nothing real). Splitting the archive by form
+revision did not explain it either: within one revision the ratio is still 0.06.
+The detected table quad simply covers a slightly different region on each photo.
+
+What has NOT been tried, and is the standard tool for this exact problem, is
+feature-based registration — ORB/SIFT keypoints matched between a reference
+sheet and each photo, solving for a homography. That aligns on real image
+structure rather than 1D projections, and it is how form registration is
+normally done. Everything above aligns on profiles, which is markedly weaker.
 """
 import sys
 
