@@ -1,0 +1,242 @@
+"""Geometric cell extraction for the V1A shortage sheet.
+
+NOT WIRED INTO THE IMPORT PIPELINE YET — see the accuracy note at the bottom.
+
+The sheet is a rigid printed form: 53 item rows x 16 truck columns, ~848 cells,
+of which a typical day has around 20 written in. `shortage_sheet_ocr` currently
+hands whole regions to the model and asks it to both FIND and READ the numbers,
+using fixed fractional crops that assume a squared-up scan. This module does the
+finding geometrically instead, so the model only ever sees one number at a time.
+
+Measured on .data/shortage_sheet_photos/2026-06-11 (7 photos):
+
+  * grid detection lands 848 cells (53 x 16) — the exact template shape
+  * empty cells measure 0.000 ink, so the ~20 written cells separate cleanly
+
+Three things mattered, each found by looking at the failures:
+
+1. Thin item rules are far fainter than the band separators. Thresholding low
+   enough to catch them re-admits noise, so instead detect the strong rules and
+   subdivide any gap that is a multiple of the modal pitch. 39 detected rules
+   become the correct 54 that way.
+2. A single global ink threshold fails on a hand-held photo — the shaded half
+   of the page reads as ink everywhere (276 false "filled" cells against ~20).
+   Compare each pixel to a locally blurred background instead.
+3. Handwriting overruns the cell it belongs to, and any small offset in the
+   derived column grid clips the same side of every entry (960 read as 60, 200
+   as 0). The window used to DECIDE a cell is written in must therefore be
+   tight, while the window CROPPED for the model is deliberately wider.
+
+Pure Pillow, no numpy/OpenCV: profiles are taken by resizing to a 1px strip,
+which pushes the per-pixel work into Pillow's C resampler and keeps the backend
+image dependency exactly as it is today.
+"""
+from __future__ import annotations
+
+import io
+from collections import Counter
+from dataclasses import dataclass
+
+from PIL import Image, ImageChops, ImageFilter, ImageOps
+
+try:
+    from pillow_heif import register_heif_opener
+
+    register_heif_opener()
+except ImportError:  # pragma: no cover - optional codec dependency
+    pass
+
+N_COLS = 16
+DETECT_SIDE = 1600
+
+
+@dataclass(frozen=True)
+class SheetCell:
+    """One located cell. `box` indexes the FULL-RESOLUTION image."""
+
+    row_index: int
+    column_index: int
+    box: tuple[int, int, int, int]
+    ink: float
+
+
+def _load(content: bytes, max_side: int | None) -> Image.Image:
+    with Image.open(io.BytesIO(content)) as im:
+        im = ImageOps.exif_transpose(im).convert("L")
+        if max_side:
+            scale = min(1.0, max_side / max(im.size))
+            if scale < 1.0:
+                im = im.resize((int(im.width * scale), int(im.height * scale)),
+                               Image.Resampling.LANCZOS)
+        return im.copy()
+
+
+def _adaptive_ink(im: Image.Image, radius: int = 25, delta: int = 50) -> Image.Image:
+    """255 where a pixel is `delta` darker than its own neighbourhood."""
+    background = im.filter(ImageFilter.GaussianBlur(radius=radius))
+    return ImageChops.subtract(background, im).point(lambda p: 255 if p > delta else 0)
+
+
+def _profile(im: Image.Image, axis: str) -> list[int]:
+    if axis == "h":
+        strip = im.resize((1, im.height), Image.Resampling.BOX)
+        return [strip.getpixel((0, y)) for y in range(im.height)]
+    strip = im.resize((im.width, 1), Image.Resampling.BOX)
+    return [strip.getpixel((x, 0)) for x in range(im.width)]
+
+
+def _ridges(values: list[int], cutoff: float, min_gap: int, offset: int = 0) -> list[int]:
+    found: list[int] = []
+    run: list[int] = []
+    for i, v in enumerate(values):
+        if v >= cutoff:
+            run.append(i)
+        elif run:
+            found.append(sum(run) // len(run))
+            run = []
+    if run:
+        found.append(sum(run) // len(run))
+    merged: list[int] = []
+    for p in found:
+        if merged and p - merged[-1] < min_gap:
+            merged[-1] = (merged[-1] + p) // 2
+        else:
+            merged.append(p)
+    return [p + offset for p in merged]
+
+
+def _modal_pitch(lines: list[int], lo: int, hi: int) -> float | None:
+    gaps = [lines[i + 1] - lines[i] for i in range(len(lines) - 1)]
+    usable = [g for g in gaps if lo <= g <= hi]
+    if not usable:
+        return None
+    mode = Counter(usable).most_common(1)[0][0]
+    near = [g for g in usable if abs(g - mode) <= 3]
+    return sum(near) / len(near) if near else float(mode)
+
+
+def _subdivide(lines: list[int], pitch: float, tol: float = 0.34) -> list[int]:
+    """Insert the faint rules that thresholding missed."""
+    out: list[int] = []
+    for i in range(len(lines) - 1):
+        a, b = lines[i], lines[i + 1]
+        out.append(a)
+        k = round((b - a) / pitch)
+        if k >= 2 and abs((b - a) / pitch - k) < tol * k:
+            step = (b - a) / k
+            out.extend(int(round(a + step * j)) for j in range(1, k))
+    out.append(lines[-1])
+    return out
+
+
+def locate_cells(content: bytes, *, ink_cutoff: float = 0.12) -> tuple[Image.Image, list[SheetCell]]:
+    """Return the full-resolution image plus every cell that has writing in it.
+
+    Geometry is derived on a downscaled copy (cheap, and the rules are heavy
+    enough to survive) while the returned boxes index the original, because a
+    3000x4000 photo downscaled to 1800 leaves ~26px rows and a digit that small
+    cannot be identified no matter how far it is upscaled afterwards.
+    """
+    small = _load(content, DETECT_SIDE)
+    full = _load(content, None)
+    # A truncated upload (one 1x1 PNG exists in .data) would otherwise blow up
+    # deep in the profiling with an opaque "height and width must be > 0".
+    if small.width < 400 or small.height < 500:
+        raise ValueError(
+            f"image is {small.width}x{small.height}; a shortage sheet needs to be at "
+            "least 400x500 for the grid rules to be resolvable"
+        )
+    scale = full.width / small.width
+    width, height = small.size
+
+    histogram = small.histogram()
+    total = sum(histogram)
+    acc = 0
+    global_cut = 120
+    for i, count in enumerate(histogram):
+        acc += count
+        if acc > total * 0.18:
+            global_cut = max(60, min(180, i))
+            break
+    rules = small.point(lambda p: 255 if p < global_cut else 0)
+    ink = _adaptive_ink(small)
+
+    # The printed label block is solid black; its right edge anchors the data area.
+    left = rules.crop((0, int(height * 0.10), int(width * 0.40), int(height * 0.85)))
+    left_profile = _profile(left, "v")
+    darkest = max(range(len(left_profile)), key=lambda i: left_profile[i])
+    label_edge = next(
+        (x for x in range(darkest, len(left_profile))
+         if left_profile[x] < left_profile[darkest] * 0.35),
+        darkest,
+    )
+
+    body = rules.crop((label_edge, int(height * 0.12), width, int(height * 0.82)))
+    vertical = _profile(body, "v")
+    v_rules = _ridges(vertical, max(vertical) * 0.28, 12, offset=label_edge)
+    # Derive columns from the pitch, never from the rightmost dark pixel — the
+    # page edge and its shadow sit outside the table and would stretch the grid.
+    pitch_x = _modal_pitch(v_rules, 25, 60) or 41.0
+    columns = [label_edge + pitch_x * i for i in range(N_COLS + 1)]
+
+    data = rules.crop((label_edge + 4, 0, int(columns[-1]) - 2, height))
+    horizontal = _profile(data, "h")
+    strong = [y for y in _ridges(horizontal, max(horizontal) * 0.22, 8)
+              if int(height * 0.088) < y < int(height * 0.88)]
+    pitch_y = _modal_pitch(strong, 13, 26) or 19.0
+    rows = _subdivide(strong, pitch_y)
+
+    detect_x, detect_y = max(6, int(pitch_x * 0.20)), max(5, int(pitch_y * 0.34))
+    pad_y = max(2, int(pitch_y * 0.14))
+
+    cells: list[SheetCell] = []
+    for ri in range(len(rows) - 1):
+        y0, y1 = rows[ri], rows[ri + 1]
+        if not (10 <= y1 - y0 <= pitch_y * 1.6):
+            continue
+        for ci in range(N_COLS):
+            detect = (int(columns[ci]) + detect_x, y0 + detect_y,
+                      int(columns[ci + 1]) - detect_x, y1 - detect_y)
+            if detect[2] <= detect[0] or detect[3] <= detect[1]:
+                continue
+            density = ink.crop(detect).resize((1, 1), Image.Resampling.BOX).getpixel((0, 0)) / 255.0
+            if density < ink_cutoff:
+                continue
+            read = (max(0, int(columns[ci] - pitch_x * 0.40)), max(0, y0 + pad_y),
+                    min(width, int(columns[ci + 1] + pitch_x * 0.12)), min(height, y1 - pad_y))
+            cells.append(SheetCell(ri, ci, tuple(int(v * scale) for v in read), round(density, 3)))
+    return full, cells
+
+
+def crop_cell(full: Image.Image, cell: SheetCell, *, min_width: int = 180) -> bytes:
+    """PNG bytes for one cell, contrast-stretched and never below `min_width`."""
+    crop = ImageOps.autocontrast(full.crop(cell.box))
+    if crop.width < min_width:
+        scale = min_width / crop.width
+        crop = crop.resize((int(crop.width * scale), int(crop.height * scale)),
+                           Image.Resampling.LANCZOS)
+    buffer = io.BytesIO()
+    crop.save(buffer, format="PNG", optimize=True)
+    return buffer.getvalue()
+
+
+# ---------------------------------------------------------------------------
+# Why this is not wired in yet
+# ---------------------------------------------------------------------------
+# Localisation is solved; RECOGNITION is not, and it is not a prompt problem.
+# Reading the located cells one at a time, against the 2026-06-11 sheet:
+#
+#   minicpm-v:latest   ~9/18 correct   11s/sheet
+#   qwen2.5vl:7b       ~8/18 correct   52s/sheet
+#
+# Both are general 7-8B VLMs and both drop or invent digits on this
+# handwriting; the stronger, slower model was not the better one. They do fail
+# on DIFFERENT cells, so agreement between two models is a usable confidence
+# signal — auto-fill where they agree, queue the rest for review — but neither
+# is trustworthy alone, and nothing here should write to a sheet unreviewed.
+#
+# The durable fix is a small recogniser trained on these crops, which is well
+# within a 3060 Ti. That needs labelled examples, and production currently has
+# none (0 imports, 0 photos). This module is what produces them: it reliably
+# reduces a sheet to ~20 clean single-number crops, so every human correction
+# in the existing review flow becomes one training pair.
