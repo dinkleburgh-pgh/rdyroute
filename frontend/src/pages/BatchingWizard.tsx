@@ -19,6 +19,7 @@ import {
   useBoard,
   useHolidayUnload,
   usePrevDayCarriers,
+  usePrevDaySplitHelpers,
   useRemoveTruckFromBatch,
   useSettings,
   useUnloadsDayOverride,
@@ -94,6 +95,8 @@ export default function BatchingWizard() {
   // Without this the roster shows #11 with no wearers and no clue which line of
   // the sheet it is, while #4 (which never left the yard) looks unbatched.
   const prevCarriers = usePrevDayCarriers(runDate, board);
+  // Trucks that carried another route's SPLIT overflow yesterday.
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const routeByCarrier = useMemo(() => {
     const m = new Map<number, number>();
     for (const [route, carrier] of prevCarriers) m.set(carrier.truck_number, route);
@@ -112,8 +115,18 @@ export default function BatchingWizard() {
    * forgotten number from a real zero.
    */
   const templateEntryFor = useCallback(
-    (truckNumber: number): number | undefined => dayTemplate.wearers[sheetRouteFor(truckNumber)],
-    [dayTemplate, sheetRouteFor],
+    (truckNumber: number): number | undefined => {
+      // A SPLIT helper carried the overflow of a route that also ran itself.
+      // Both trucks come back and both need batching, but the garments are one
+      // route's — already counted in full on that route's own card. Charging
+      // the helper its own sheet line (a route it did not run) added a second
+      // route's worth of wearers to the batch for a single route's freight.
+      // A real 0, not undefined: it ran, it just carries no count of its own,
+      // so Review must not flag it as a forgotten number.
+      if (prevSplitHelpers.has(truckNumber)) return 0;
+      return dayTemplate.wearers[sheetRouteFor(truckNumber)];
+    },
+    [dayTemplate, sheetRouteFor, prevSplitHelpers],
   );
 
   // Which batch each truck currently sits in (from the live summary).
@@ -187,6 +200,13 @@ export default function BatchingWizard() {
   // is confirming a number rather than typing one.
   function draftWearers(truckNumber: number): string {
     if (wearerDrafts[truckNumber] != null) return wearerDrafts[truckNumber];
+    // Split helpers are checked BEFORE the live value. Day setup stamps every
+    // truck its sheet number, so the helper arrives carrying a full route's
+    // worth of wearers for a load that is only the overflow of a route already
+    // counted in full on its own card — that stored number is a default nobody
+    // chose, not a deliberate entry, and taking it added the same garments to
+    // the batch twice. Anything typed this session still wins (checked above).
+    if (prevSplitHelpers.has(truckNumber)) return "0";
     const live = boardByNum.get(truckNumber)?.state?.wearers ?? 0;
     if (live > 0) return String(live);
     return String(templateEntryFor(truckNumber) ?? 0);
@@ -195,6 +215,8 @@ export default function BatchingWizard() {
   /** True when the shown value came from the day sheet, not from tonight's board. */
   function wearersFromTemplate(truckNumber: number): boolean {
     if (wearerDrafts[truckNumber] != null) return false;
+    // A helper's 0 is a deliberate rule, not a sheet number worth badging.
+    if (prevSplitHelpers.has(truckNumber)) return false;
     const live = boardByNum.get(truckNumber)?.state?.wearers ?? 0;
     return live === 0 && (templateEntryFor(truckNumber) ?? 0) > 0;
   }

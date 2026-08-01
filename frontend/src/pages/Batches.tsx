@@ -7,6 +7,7 @@ import {
   useBatchSummary,
   useBoard,
   usePrevDayCarriers,
+  usePrevDaySplitHelpers,
   useSettings,
   useUnloadDayTemplate,
   useUnloadsDayOverride,
@@ -209,15 +210,20 @@ export default function Batches() {
   const unloadsDay = unloadsOverride ?? workdayNumbers(new Date(uy, um - 1, ud, 12)).unloadsDay;
   const dayTemplate = useUnloadDayTemplate(unloadsDay);
   const prevCarriers = usePrevDayCarriers(runDate, board);
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const defaultWearers = useMemo(() => {
     const n = Number(truck);
     if (!Number.isFinite(n) || n <= 0) return undefined;
+    // A split helper's load is part of a route that also ran and is counted in
+    // full on that route — prefilling the helper's own sheet line would add the
+    // same garments to the batch a second time. Same rule as the wizard.
+    if (prevSplitHelpers.has(n)) return 0;
     let route = n;
     for (const [r, carrier] of prevCarriers) {
       if (carrier.truck_number === n) { route = r; break; }
     }
     return dayTemplate.wearers[route];
-  }, [truck, prevCarriers, dayTemplate]);
+  }, [truck, prevCarriers, prevSplitHelpers, dayTemplate]);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
   const source = params.get("source");
   const navigate = useNavigate();
