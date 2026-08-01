@@ -1,5 +1,8 @@
 /**
- * Workflow toggles panel (batching, outside timer, note cards). Extracted from Settings.tsx.
+ * Workflow toggles panel — timers, tracking, notes, quick actions and day
+ * rollover, grouped under sub-headings rather than one flat wall of twelve
+ * checkboxes. The batching toggles moved to Operations -> Batching, next to
+ * the screen they actually govern.
  */
 import { useEffect, useMemo, useState } from "react";
 import { useUpsertSetting } from "../../api/hooks";
@@ -9,10 +12,6 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
   const upsert = useUpsertSetting();
   const initial = useMemo(
     () => ({
-      batching_disabled: asBool(map.get("batching_disabled"), false),
-      batch_no_cap: asBool(map.get("batch_no_cap"), false),
-      prebatch_mode: asBool(map.get("prebatch_mode"), false),
-      wearer_cap: Number(map.get("wearer_cap") ?? 1800),
       outside_timer_enabled: asBool(map.get("outside_timer_enabled"), false),
       outside_timer_minutes: Number(map.get("outside_timer_minutes") ?? 20),
       paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
@@ -43,6 +42,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
 
   return (
     <div className="card">
+      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Display</p>
       <FieldRow
         label="Style — Unload page"
         hint="Unload List = one row per truck with inline actions. Fleet Grid = compact fleet-style cards; tapping a truck opens an action menu (Mark Unloaded, Batch, Unfinished)."
@@ -64,60 +64,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           </button>
         </div>
       </FieldRow>
-      <FieldRow
-        label="Batching disabled"
-        hint="Hide the Batches workflow entirely (mirrors V1 batching_disabled)."
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.batching_disabled}
-            onChange={(e) => setForm({ ...form, batching_disabled: e.target.checked })}
-          />
-          Hide Batches
-        </label>
-      </FieldRow>
-      <FieldRow
-        label="Pre-batch mode"
-        hint="Assigning a batch records the batch only — it no longer marks the truck unloaded. For transcribing the paper batch sheet ahead of the unload. Trucks stay Dirty until someone taps Mark Unloaded, so unload progress stays honest. Turn OFF while the crew is working: a Dirty truck does not appear in Ready to load."
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.prebatch_mode}
-            onChange={(e) => setForm({ ...form, prebatch_mode: e.target.checked })}
-          />
-          Batch without unloading
-        </label>
-      </FieldRow>
-      <FieldRow
-        label="No wearer cap"
-        hint="Remove the per-batch wearer capacity limit. Useful for holiday or overflow loads."
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={form.batch_no_cap}
-            onChange={(e) => setForm({ ...form, batch_no_cap: e.target.checked })}
-          />
-          No limit
-        </label>
-      </FieldRow>
-      <FieldRow
-        label="Wearers cap"
-        hint="Maximum total wearers allowed per batch during unload. Ignored when 'No wearer cap' is on."
-      >
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="number"
-            min={1}
-            value={form.wearer_cap}
-            onChange={(e) => setForm({ ...form, wearer_cap: Number(e.target.value) || 1800 })}
-            className="input w-24"
-          />
-          <span className="text-xs text-slate-500">wearers</span>
-        </label>
-      </FieldRow>
+      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Timers</p>
       <FieldRow
         label="Outside timer"
         hint="Lets fleet mark a truck as 'Outside' — a countdown that auto-transitions to Unloaded."
@@ -162,6 +109,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           <span className="text-xs text-slate-500">min</span>
         </label>
       </FieldRow>
+      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Tracking</p>
       <FieldRow
         label="Arrived tracking"
         hint="Records when each truck parks back in the yard — auto-captured when unloading starts, or tap 'Mark Arrived' on a dirty truck to log the exact time earlier."
@@ -175,6 +123,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           Enable Arrived quick action
         </label>
       </FieldRow>
+      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Notes</p>
       <FieldRow
         label="Note Cards"
         hint="Shows a persistent Note Cards drawer on the fleet board, displaying all active truck notes in compact card rectangles."
@@ -203,6 +152,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       {/* Pop-up alerts moved to their own Operations → Pop-ups tab, where each
           kind gets its own dwell time. One switch in one place. */}
+      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Quick actions</p>
       <FieldRow
         label="Calendar FAB"
         hint="Show a floating calendar button that opens the Fleet Schedule page."
@@ -229,6 +179,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           Enable calculator
         </label>
       </FieldRow>
+      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Day rollover</p>
       <FieldRow
         label="Auto-unload all trucks (end of day)"
         hint="When enabled, every truck is treated as Unloaded at the end of each run day, so the next day starts clean — dirty/unfinished trucks are cleared. OOS and shop trucks are left as-is."

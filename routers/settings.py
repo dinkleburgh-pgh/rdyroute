@@ -49,6 +49,16 @@ KNOWN_KEYS = {
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
     "unload_page_style",
+    # These five are written by the Management UI and read by the app, but were
+    # never registered — so list_settings filtered them out for every non-admin
+    # role (lead / atl / guest) and those sessions silently fell back to the
+    # hardcoded client defaults: the floor saw a 1800 wearer cap whatever it was
+    # set to, and timer countdowns that disagreed with a supervisor's.
+    "wearer_cap",
+    "shift_notes_enabled",
+    "outside_timer_minutes",
+    "paper_bay_timer_minutes",
+    "recurring_route_swaps",
     "communications_censor_words",
     "ollama_base_url",
     "shortage_sheet_ollama_model",
@@ -99,6 +109,13 @@ _USER_READABLE_KEYS = {
     "calendar_fab_enabled",
     "force_unloaded_on_new_day",
     "unload_page_style",
+    # Every one of these drives behaviour on a floor surface, so the roles
+    # actually working the floor have to receive them.
+    "wearer_cap",
+    "shift_notes_enabled",
+    "outside_timer_minutes",
+    "paper_bay_timer_minutes",
+    "recurring_route_swaps",
 }
 
 # Keys any authenticated user may write to (e.g. personal notes)

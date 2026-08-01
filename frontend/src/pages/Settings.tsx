@@ -11,6 +11,7 @@ import RoleAccessPanel from "../components/management/RoleAccessPanel";
 import ActivityPanel from "../components/management/ActivityPanel";
 import ColorsPanel from "../components/management/ColorsPanel";
 import WorkflowsPanel from "../components/management/WorkflowsPanel";
+import BatchingSettingsPanel from "../components/management/BatchingSettingsPanel";
 import ToastsPanel from "../components/management/ToastsPanel";
 import CommunicationsPanel from "../components/management/CommunicationsPanel";
 import AdvancedPanel from "../components/management/AdvancedPanel";
@@ -63,7 +64,7 @@ type Category =
   | "prev_entry";
 
 // Two-level navigation: Cards (groups) → Tabs (sub-categories)
-type GroupId = "app" | "users" | "items" | "fleet" | "comms" | "ops" | "advanced" | "data" | "shortages";
+type GroupId = "users" | "items" | "fleet" | "comms" | "ops" | "advanced" | "data";
 
 interface CardGroup {
   id: GroupId;
@@ -80,17 +81,6 @@ interface CardGroup {
 
 const CARD_GROUPS: CardGroup[] = [
   {
-    id: "app",
-    label: "App Settings",
-    desc: "Status badge colors",
-    mobileDesc: "Badge colors",
-    borderColor: "border-l-sky-500",
-    bgTint: "bg-sky-950/35",
-    tabs: [
-      { id: "colors", label: "Badge Colors" },
-    ],
-  },
-  {
     id: "users",
     label: "Users & Access",
     desc: "Manage users, pending requests, and role reference",
@@ -106,25 +96,18 @@ const CARD_GROUPS: CardGroup[] = [
     ],
   },
   {
+    // Items and Shortages were a single-tab card each, side by side, and both
+    // are shortage-catalog config — one card, two tabs.
     id: "items",
-    label: "Items",
-    desc: "Configure item catalog, pack sizes, and unit types",
-    mobileDesc: "Item catalog",
+    label: "Items & Shortages",
+    desc: "Item catalog, pack sizes, and short sheet photo imports",
+    mobileDesc: "Catalog and sheet imports",
     borderColor: "border-l-yellow-500",
     bgTint: "bg-yellow-950/35",
-    adminOnly: true,
     tabs: [
-      { id: "configure_items", label: "Configure Items" },
+      { id: "configure_items", label: "Configure Items", adminOnly: true },
+      { id: "short_imports", label: "Sheet Imports" },
     ],
-  },
-  {
-    id: "shortages",
-    label: "Shortages",
-    desc: "Short sheet photo imports and review queue",
-    mobileDesc: "Sheet imports",
-    borderColor: "border-l-cyan-500",
-    bgTint: "bg-cyan-950/35",
-    tabs: [{ id: "short_imports", label: "Sheet Imports" }],
   },
   {
     id: "fleet",
@@ -162,23 +145,32 @@ const CARD_GROUPS: CardGroup[] = [
     bgTint: "bg-orange-950/35",
     tabs: [
       { id: "workflows",    label: "Workflows" },
+      // Batching settings + the assignment screen. The category id existed here
+      // with nothing wired to it; the screen lived two groups away under
+      // Data & Reports while its toggles sat in Workflows.
+      { id: "batching",     label: "Batching" },
       { id: "toasts",       label: "Pop-ups" },
       { id: "recovery",     label: "Recovery" },
       { id: "resets",       label: "Resets" },
     ],
   },
   {
+    // Was "Advanced — Raw key/value settings editor", but it also held
+    // Connections (database health + OCR runtime), which is the first thing you
+    // open when something is broken and is not a raw editor. Renamed to match
+    // its contents, with Connections first and Badge Colors folded in from its
+    // own single-tab card.
     id: "advanced",
-    label: "Advanced",
-    desc: "Raw key/value settings editor",
-    mobileDesc: "Raw settings editor",
+    label: "System",
+    desc: "Connections and health, appearance, and the raw settings editor",
+    mobileDesc: "Health, appearance, raw settings",
     borderColor: "border-l-red-500",
     bgTint: "bg-red-950/35",
-    adminOnly: true,
     tabs: [
-      { id: "advanced",     label: "Advanced" },
-      { id: "development",  label: "Development" },
-      { id: "connections",  label: "Connections" },
+      { id: "connections",  label: "Connections", adminOnly: true },
+      { id: "colors",       label: "Badge Colors" },
+      { id: "advanced",     label: "Raw Settings", adminOnly: true },
+      { id: "development",  label: "Development", adminOnly: true },
     ],
   },
   {
@@ -285,6 +277,7 @@ export default function Management() {
     switch (activeTab) {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
+      case "batching":       return <BatchingSettingsPanel map={map} />;
       case "toasts":         return <ToastsPanel map={map} />;
       case "advanced":       return <AdvancedPanel settings={data ?? []} />;
       case "development":    return <DevelopmentPanel />;

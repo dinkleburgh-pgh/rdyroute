@@ -5,9 +5,8 @@
  * for shortage entry.
  */
 import { Link } from "react-router-dom";
-import { ClipboardList } from "lucide-react";
+import { ClipboardList, Layers } from "lucide-react";
 import PrevDayCoveragePanel from "./PrevDayCoveragePanel";
-import BatchingPanel from "./BatchingPanel";
 
 export default function PreviousDataEntryPanel() {
   return (
@@ -33,10 +32,24 @@ export default function PreviousDataEntryPanel() {
         <PrevDayCoveragePanel />
       </section>
 
-      <section className="space-y-3 border-t border-slate-800 pt-5">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Batching</h3>
-        <BatchingPanel />
-      </section>
+      {/* Batching moved to Operations → Batching, alongside the settings that
+          govern it. Left as a pointer because this is the tab someone lands on
+          when back-filling a previous day, and batching is part of that job. */}
+      <Link
+        to="/management?group=ops&tab=batching"
+        className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 transition-colors hover:bg-slate-800/60"
+      >
+        <div className="flex min-w-0 items-center gap-3">
+          <Layers className="h-5 w-5 shrink-0 text-slate-400" />
+          <div className="min-w-0">
+            <p className="text-sm font-semibold text-slate-300">Batching</p>
+            <p className="text-xs text-slate-500">
+              Assign trucks to batches for any run date — now under Operations, with its settings.
+            </p>
+          </div>
+        </div>
+        <span className="shrink-0 text-sm font-semibold text-slate-400">Open →</span>
+      </Link>
     </div>
   );
 }
