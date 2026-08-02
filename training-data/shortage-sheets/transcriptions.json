@@ -899,6 +899,14 @@
      "route": 55,
      "initials": "PB",
      "note": "truck 55 also in col 5"
+    },
+    {
+     "col": 16,
+     "truck": null,
+     "route": null,
+     "initials": null,
+     "confidence": "low",
+     "note": "no header was written for this column; a quantity appears beneath it, so the column is recorded to keep that entry attributable"
     }
    ],
    "entries": [
@@ -1824,6 +1832,1697 @@
    }
   },
   {
+   "source_photo": "20260511_215619 - Copy (2).heic",
+   "date": "2026-05-11",
+   "page": 2,
+   "template": "CURRENT",
+   "note": "Seven handwritten header columns, all left-of-centre; columns 8 and beyond are completely blank including the ROUTE DAY field. Header is NOT offset - TRUCK, ROUTE and INITIALS each sit on their own printed row. The DATE field contains only an illegible two-circle scrawl, so the date is taken from the filename prefix. On THIS sheet the four 3X10 rows read, top to bottom: BLACK, COPPER, INDIGO, ONYX (the 3X5 block reads BLACK, ONYX, COPPER, INDIGO and the 4X6 block reads BLACK, ONYX, COPPER, INDIGO). No 3X10, 3X5 or 4X6 row carries any quantity. Only four cells on the entire sheet carry a handwritten quantity. Two long wobbly vertical pen lines run the full height of the body through columns 1-2; they are stray strokes, not grid lines or values. A faint two-row scribble (open loop plus a diagonal) sits around the 4X6 INDIGO / URINAL MATS rows in an unheaded far-right column (roughly column 10) and spans two cells - it is not a quantity and was not recorded. A small paper tear/crease flap appears at the far right of the 3X10 BLACK/COPPER rows. The SPECIAL REQUESTS block (Dust Routes w/ Uniforms, Soaker Pads Needed, Ink Towels Needed, Installs, Misc) is entirely blank. Driver initials are near-universally illegible; only column 4 (PB) could be read with confidence.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 64,
+     "route": 64,
+     "initials": null,
+     "confidence": "high",
+     "note": "Truck and route digits both clearly 64. Initials cell holds an illegible cursive scrawl (M/AD-like); not transcribed."
+    },
+    {
+     "col": 2,
+     "truck": 59,
+     "route": 59,
+     "initials": null,
+     "confidence": "high",
+     "note": "Truck and route both 59. Initials illegible, possibly NL or NV followed by a slash."
+    },
+    {
+     "col": 3,
+     "truck": 49,
+     "route": 49,
+     "initials": null,
+     "confidence": "high",
+     "note": "Both entries written high and right-aligned in the cell; the truck '49' rides up over the rule into the DATE row. Initials illegible (K/R-like letter with a long trailing slash)."
+    },
+    {
+     "col": 4,
+     "truck": 55,
+     "route": 68,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "Truck (55) and route (68) genuinely differ on the paper; recorded as written. Initials PB are legible."
+    },
+    {
+     "col": 5,
+     "truck": 81,
+     "route": 81,
+     "initials": null,
+     "confidence": "low",
+     "note": "Both cells read the same glyph pair; leading digit is drawn as two stacked angular loops, most consistent with 8 but 3 cannot be excluded. Initials illegible."
+    },
+    {
+     "col": 6,
+     "truck": 93,
+     "route": 93,
+     "initials": null,
+     "confidence": "low",
+     "note": "Route cell reads 93 clearly; the truck cell is heavily overwritten/scribbled over the leading digit but resolves to the same 93. Initials illegible."
+    },
+    {
+     "col": 7,
+     "truck": 60,
+     "route": 60,
+     "initials": null,
+     "confidence": "high",
+     "note": "Both cells read 60 (6 followed by a looped 0). Initials illegible."
+    }
+   ],
+   "entries": [
+    {
+     "item": "GLASS TOWELS - x2964",
+     "col": 6,
+     "truck": 93,
+     "qty": 580,
+     "confidence": "high",
+     "note": "Bold, unambiguous 580; sits squarely inside column 6 (grid lines at both sides verified against the header band)."
+    },
+    {
+     "item": "24\" DUST - x2570",
+     "col": 3,
+     "truck": 49,
+     "qty": 6,
+     "confidence": "high",
+     "note": "Single digit 6 in column 3, aligned with the 24\" DUST row label."
+    },
+    {
+     "item": "60\" DUST - x2610",
+     "col": 6,
+     "truck": 93,
+     "qty": 12,
+     "confidence": "low",
+     "note": "Mark sits on the 60\" DUST row in column 6 but the bottoms of the digits are swallowed by the thick printed section rule below. Best read is 12; 112 is a remote alternative."
+    },
+    {
+     "item": "SIG SOAP -x27070",
+     "col": 5,
+     "truck": 81,
+     "qty": 4,
+     "confidence": "high",
+     "note": "Handwritten 4 (u-shape with descending stem) centred in column 5 on the SIG SOAP row."
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   }
+  },
+  {
+   "source_photo": "20260511_215627 - Copy (2).heic",
+   "date": "2026-05-11",
+   "page": 3,
+   "template": "CURRENT",
+   "note": "Header is correctly aligned - truck numbers in the TRUCK row, route numbers in the ROUTE row, initials in the INITIALS row; no offset. The DATE: and ROUTE DAY: fields are both left blank, so the date comes from the filename. 16 handwritten columns; truck number equals route number in every column. The four 3X10 rows print on this sheet in the order ONYX, COPPER, INDIGO, BLACK (top to bottom); the 3X5 block prints BLACK, ONYX, COPPER, INDIGO. Three long freehand vertical pen lines run the full height of the sheet (near the col 2/3 boundary, down through col 11, and near the col 13/14 boundary) - these are grouping/separator strokes, not quantities. Column 14's TRUCK cell is heavily overwritten. Every row below 60\" DUST - x2610 (fender covers, shop towels, 3X5, paper/HW, 4X6, urinal/toilet mats, traffic, soap, ink towels, raz mats, soaker pads) is completely blank.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 51,
+     "route": 51,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 53,
+     "route": 53,
+     "initials": "MG",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 3,
+     "truck": 75,
+     "route": 75,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 56,
+     "route": 56,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 5,
+     "truck": 69,
+     "route": 69,
+     "initials": "MC",
+     "confidence": "high",
+     "note": "initials written cursively, could also read MW"
+    },
+    {
+     "col": 6,
+     "truck": 57,
+     "route": 57,
+     "initials": "NP",
+     "confidence": "low",
+     "note": "numbers are clear (57/57); initials are a cursive scrawl with a trailing slash - NP is a best guess, could be NC or NPL"
+    },
+    {
+     "col": 7,
+     "truck": 7,
+     "route": 7,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "written as 07 in both the truck and route rows"
+    },
+    {
+     "col": 8,
+     "truck": 91,
+     "route": 91,
+     "initials": "MG",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 50,
+     "route": 50,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "the 66 of column 10 is written large and overhangs slightly into this column's cells"
+    },
+    {
+     "col": 10,
+     "truck": 66,
+     "route": 66,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 11,
+     "truck": 61,
+     "route": 61,
+     "initials": "RC",
+     "confidence": "low",
+     "note": "numbers read 61/61; initials are an unreadable cursive scrawl with a long trailing stroke - could be RC, NC or KC"
+    },
+    {
+     "col": 12,
+     "truck": 52,
+     "route": 52,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 13,
+     "truck": 62,
+     "route": 62,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 14,
+     "truck": 65,
+     "route": 65,
+     "initials": "AH",
+     "confidence": "low",
+     "note": "the TRUCK cell is heavily overwritten/scribbled; the ROUTE cell below it reads 65 fairly clearly, so 65 is carried into the truck field - alternatives are 85 or 86"
+    },
+    {
+     "col": 15,
+     "truck": 92,
+     "route": 92,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 16,
+     "truck": 88,
+     "route": 88,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    }
+   ],
+   "entries": [
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 3,
+     "truck": 75,
+     "qty": 50,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 5,
+     "truck": 69,
+     "qty": 300,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 6,
+     "truck": 57,
+     "qty": 600,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "24\" DUST - x2570",
+     "col": 5,
+     "truck": 69,
+     "qty": 4,
+     "confidence": "low",
+     "note": "the mark looks like a capital H at first glance; it is almost certainly an open-top handwritten 4 (slanted downstroke, crossbar, vertical that overshoots above and below)"
+    },
+    {
+     "item": "24\" DUST - x2570",
+     "col": 10,
+     "truck": 66,
+     "qty": 3,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "60\" DUST - x2610",
+     "col": 8,
+     "truck": 91,
+     "qty": 23,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "60\" DUST - x2610",
+     "col": 10,
+     "truck": 66,
+     "qty": 1,
+     "confidence": "low",
+     "note": "a single thick vertical stroke sitting right-of-centre in the cell; reads as 1 but is close to the col 10/11 boundary"
+    },
+    {
+     "item": "60\" DUST - x2610",
+     "col": 13,
+     "truck": 62,
+     "qty": 6,
+     "confidence": "high",
+     "note": "the loop of the 6 is left slightly open at the top but matches this writer's 6 elsewhere on the sheet"
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   }
+  },
+  {
+   "source_photo": "20260515_215955.heic",
+   "date": "2026-05-15",
+   "page": 1,
+   "template": "CURRENT",
+   "note": "Header is NOT offset: the printed DATE row is left blank in every column, and the handwriting sits correctly in TRUCK / ROUTE / INITIALS (verified by tracing the printed row rules from the label block into the data grid). 8 handwritten columns total (cols 1-8); columns 9-15 are completely blank with no header and no marks, and none are struck through. Printed 3X10 order on THIS sheet is BLACK, COPPER, INDIGO, ONYX (all four rows empty). Column 4 header is messy: TRUCK reads like \"48\" (clear 4-shape first glyph) while ROUTE reads \"88\" - recorded as written rather than forced to match. Column 8 header is a single scrawl: an 8 in TRUCK, an 8 in ROUTE, and one long vertical stroke spanning both rows, read as 81/81. Initials in cols 4 and 7 are \"NC\" followed by a long slash. IMPORTANT skew warning: the paper is strongly curved, so at the far-right columns a row sits roughly 40-60 px HIGHER than the same row's printed label at the left edge; naive eyeballing misassigns several entries one row up (e.g. the 300 in col 7 looks like RED APRON but is REG TOWELS, the 100/60 look like MICRO BLUE but are MICRO ORANGE, and the 1200 looks like WHITE SHOP TOWELS but is RED SHOP TOWELS). Row attributions above were established by counting grid rules within each column from the thick group separators (19 rows between the 3X10 separator and the FENDER COVERS separator, matching the 19 printed labels). One additional stray mark: a tiny (~8x20 px) pen tick in column 3 sitting on the bottom rule of the REG TOWELS - x2720 row; far too small to be a digit and treated as an incidental pen rest, so no entry was created for it. The photograph is cropped mid-row at \"LARGE INK TOWELS\"; any rows below that are not visible. All visible cells from the 3X5 group downward are empty.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 93,
+     "route": 93,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 57,
+     "route": 57,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 3,
+     "truck": 70,
+     "route": 70,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 48,
+     "route": 88,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "TRUCK cell first glyph is clearly a 4 (angular top plus crossing descender), giving 48, while the ROUTE cell below is 88; recorded exactly as written. Alternative reading of TRUCK is 88. Initials NC followed by a long diagonal slash."
+    },
+    {
+     "col": 5,
+     "truck": 60,
+     "route": 60,
+     "initials": "PR",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 6,
+     "truck": 62,
+     "route": 62,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 7,
+     "truck": 94,
+     "route": 94,
+     "initials": "NC",
+     "confidence": "high",
+     "note": "Initials written cursively as nc with a trailing slash."
+    },
+    {
+     "col": 8,
+     "truck": 81,
+     "route": 81,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "One 8 in the TRUCK cell, one 8 in the ROUTE cell, and a single long vertical stroke drawn once across both rows; read as 81 / 81. Could also be 8 / 8 with a stray stroke, or 87."
+    }
+   ],
+   "entries": [
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 4,
+     "qty": 140,
+     "truck": 48,
+     "confidence": "high",
+     "note": "First row below the thick 3X10 group separator."
+    },
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 7,
+     "qty": 30,
+     "truck": 94,
+     "confidence": "high",
+     "note": "First glyph matches the writer's 3 as seen in the 300 lower in the same column (distinct from the 5 in col 8)."
+    },
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 8,
+     "qty": 50,
+     "truck": 81,
+     "confidence": "high",
+     "note": "Digits sag slightly across the lower rule but the mark belongs to the BLACK APRON row."
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 7,
+     "qty": 20,
+     "truck": 94,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 7,
+     "qty": 300,
+     "truck": 94,
+     "confidence": "high",
+     "note": "Row 4 of the apron/towel group; the RED APRON row directly above it is empty. Looks like RED APRON by eye because of sheet skew."
+    },
+    {
+     "item": "MICRO ORANGE - x7433",
+     "col": 5,
+     "qty": 100,
+     "truck": 60,
+     "confidence": "high",
+     "note": "Row 8 of the group; MICRO BLUE above is empty."
+    },
+    {
+     "item": "MICRO ORANGE - x7433",
+     "col": 7,
+     "qty": 60,
+     "truck": 94,
+     "confidence": "high",
+     "note": "Zero drawn with an entering diagonal stroke."
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 7,
+     "qty": 200,
+     "truck": 94,
+     "confidence": "high",
+     "note": "Row 9 of the group, directly below the 60."
+    },
+    {
+     "item": "MICRO TUBE MOP - x8020",
+     "col": 5,
+     "qty": 241,
+     "truck": 60,
+     "confidence": "low",
+     "note": "Reads 2, 4, then a long vertical stroke that runs from above the top rule to below the bottom rule. Best read 241; alternative is 24 with a stray stroke. Row 13 of the group; WET MOP above is empty."
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 5,
+     "qty": 1200,
+     "truck": 60,
+     "confidence": "low",
+     "note": "Third and last row of the FENDER COVERS / WHITE SHOP TOWELS / RED SHOP TOWELS group. Final glyph is a teardrop loop with a tail matching this writer's zeros, so 1200; alternative reading 1209."
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   }
+  },
+  {
+   "source_photo": "20260515_220002.heic",
+   "date": "2026-05-15",
+   "page": 2,
+   "template": "CURRENT",
+   "note": "16 handwritten columns, all with legible-to-partly-overwritten headers; none blank or fully struck out. Header is NOT row-offset: TRUCK, ROUTE and INITIALS each sit in their own printed row, and the DATE cell holds only a tiny illegible scrawl (date taken from the filename). ROUTE DAY is blank. 3X10 rows print on THIS sheet in the order ONYX, COPPER, INDIGO, BLACK (top to bottom) and are all empty; 3X5 and 4X6 blocks print BLACK, ONYX, COPPER, INDIGO and are also empty. Truck and route match in every column except col 4 (55/68) and col 16 (51/63). A stray vertical pen line runs the full height of the sheet through the col 3 and col 6 area, and there are paper creases/specks in the WET MOP col 15 and 4X6 col 10 cells - none of these are quantities. All entries cluster in the apron, micro-grey, shop-towel and ink-towel rows; every other row is empty. Bottom of the form (\"Dust Routes w/ Uniforms:\" / a second Soaker Pads section) is cut off by the photo edge, but the main grid ends at SOAKER PADS, which is empty.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 61,
+     "route": 61,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 59,
+     "route": 59,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "whole column header is scribbled/overwritten; TRUCK cell is 5 followed by a blotted digit, read 59 from the clearer ROUTE cell; initials are a heavy scrawl, best read NC"
+    },
+    {
+     "col": 3,
+     "truck": 52,
+     "route": 52,
+     "initials": "MG",
+     "confidence": "low",
+     "note": "TRUCK cell is faint/traced over; ROUTE reads 52 clearly"
+    },
+    {
+     "col": 4,
+     "truck": 55,
+     "route": 68,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "truck and route genuinely differ (55 / 68)"
+    },
+    {
+     "col": 5,
+     "truck": 85,
+     "route": 88,
+     "initials": "NU",
+     "confidence": "low",
+     "note": "TRUCK first digit is a solid ink blot written over; second digit clearly 5. ROUTE reads 88 but second char could be 3. Initials NU could be NV or NC"
+    },
+    {
+     "col": 6,
+     "truck": 4,
+     "route": 4,
+     "initials": "MG",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 7,
+     "truck": 7,
+     "route": 7,
+     "initials": "MG",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 8,
+     "truck": 75,
+     "route": 75,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 54,
+     "route": 54,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 10,
+     "truck": 55,
+     "route": 55,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 11,
+     "truck": 64,
+     "route": 64,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 12,
+     "truck": 66,
+     "route": 66,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "both TRUCK and ROUTE cells are written over / struck with extra strokes; digits read as a doubled 6"
+    },
+    {
+     "col": 13,
+     "truck": 58,
+     "route": 58,
+     "initials": "MC",
+     "confidence": "low",
+     "note": "TRUCK second digit is a solid overwritten blob; taken as 8 from the ROUTE cell (58)"
+    },
+    {
+     "col": 14,
+     "truck": 89,
+     "route": 89,
+     "initials": "WC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 73,
+     "route": 73,
+     "initials": "WC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 16,
+     "truck": 51,
+     "route": 63,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "truck and route genuinely differ (51 / 63)"
+    }
+   ],
+   "entries": [
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 14,
+     "qty": 600,
+     "truck": 89,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 2,
+     "qty": 20,
+     "truck": 59,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 9,
+     "qty": 10,
+     "truck": 54,
+     "confidence": "high",
+     "note": "written in a finer pen than the surrounding entries"
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 14,
+     "qty": 20,
+     "truck": 89,
+     "confidence": "high",
+     "note": "the 2 has a long descending flourish that crosses the cell; same hand/style as the 20 in col 2"
+    },
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 14,
+     "qty": 70,
+     "truck": 89,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 7,
+     "qty": 20,
+     "truck": 7,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 10,
+     "qty": 80,
+     "truck": 55,
+     "confidence": "low",
+     "note": "both digits are overwritten/retraced; best read 80, alternative 40"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 14,
+     "qty": 100,
+     "truck": 89,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 15,
+     "qty": 20,
+     "truck": 73,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 15,
+     "qty": 200,
+     "truck": 73,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "LARGE INK TOWELS",
+     "col": 2,
+     "qty": 40,
+     "truck": 59,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "LARGE INK TOWELS",
+     "col": 13,
+     "qty": 200,
+     "truck": 58,
+     "confidence": "high",
+     "note": "finer pen; first digit is the writer's cursive 2 (not 3)"
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   }
+  },
+  {
+   "source_photo": "20260515_220221.heic",
+   "date": "2026-05-15",
+   "page": 3,
+   "template": "CURRENT",
+   "note": "Eight handwritten columns, all with legible headers; nothing struck through. Header is NOT offset: the printed DATE: cell is left blank and the numbers sit correctly in the TRUCK and ROUTE rows with initials below. Truck and route are identical in every column. The 3X10 rows on this sheet print top-to-bottom as BLACK, COPPER, INDIGO, ONYX (verified against the printed labels) and all four are empty. Col 8's header number is written oversized across the TRUCK/ROUTE row boundary instead of twice. Handwriting is heavy felt-tip and several digits blot together, hence the low-confidence flags. Everything from the 3X5 block downward (3X5, paper/HW/TP block, 4X6, urinal/toilet mats, traffic mats, SIG SOAP, ink towels, RAZ MATS, SOAKER PADS) is blank, as are all printed columns to the right of col 8 and the SPECIAL REQUESTS box.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 93,
+     "route": 93,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 57,
+     "route": 57,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 3,
+     "truck": 70,
+     "route": 70,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 88,
+     "route": 88,
+     "initials": "NC",
+     "confidence": "high",
+     "note": "TRUCK-row 88 is scrawled; ROUTE-row 88 is clean"
+    },
+    {
+     "col": 5,
+     "truck": 60,
+     "route": 60,
+     "initials": "PR",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 6,
+     "truck": 62,
+     "route": 62,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "TRUCK-row 62 starts left of the column rule and overhangs into col 5's cell edge"
+    },
+    {
+     "col": 7,
+     "truck": 94,
+     "route": 94,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 8,
+     "truck": 81,
+     "route": 81,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "number written once, oversized, straddling the TRUCK and ROUTE rows rather than once per row; reads 81 but the leading digit is scrawled and could be 8 alone with a stray vertical stroke"
+    }
+   ],
+   "entries": [
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 4,
+     "qty": 140,
+     "truck": 88,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 7,
+     "qty": 30,
+     "truck": 94,
+     "confidence": "low",
+     "note": "leading digit overwritten/crossed; reads 3 but could be 5, i.e. 30 or 50"
+    },
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 8,
+     "qty": 50,
+     "truck": 81,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 7,
+     "qty": 20,
+     "truck": 94,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 3,
+     "qty": null,
+     "truck": 70,
+     "confidence": "low",
+     "note": "single tiny faint pen mark in the cell, far smaller and lighter than every other entry on the sheet; no readable digit - most likely a stray pen touch rather than a quantity"
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 7,
+     "qty": 300,
+     "truck": 94,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO ORANGE - x7433",
+     "col": 5,
+     "qty": 100,
+     "truck": 60,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO ORANGE - x7433",
+     "col": 7,
+     "qty": 60,
+     "truck": 94,
+     "confidence": "high",
+     "note": "the 0 is written with a diagonal slash through it (slashed zero) unlike the writer's other zeros"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 7,
+     "qty": 200,
+     "truck": 94,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO TUBE MOP - x8020",
+     "col": 5,
+     "qty": 241,
+     "truck": 60,
+     "confidence": "low",
+     "note": "reads 2-4-1; the trailing tall vertical stroke runs well below the row line, so it could instead be 24 followed by a stray stroke"
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 5,
+     "qty": 1209,
+     "truck": 60,
+     "confidence": "low",
+     "note": "final digit ambiguous - the glyph has a descending tail, so the value is either 1200 or 1209; readers disagreed: first read 1200, second read 1209 - Final glyph is a 9, not a 0. At high magnification it is a closed loop with a long tail sweeping down-left below the baseline - the same shape as the 9 in the col-7 header '94'. Every other zero this writer makes on this sheet (100, 200, 300, and the middle 0 of this very number) is a small closed loop with no tail. Digits read 1 - 2 - 0 - 9. First reader flagged the ambiguity and chose 1200; I read 1209."
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 1,
+    "summary": "Independent read agrees with the first reader on all 8 column headers (93/93 PB, 57/57 PB, 70/70 PB, 88/88 NC, 60/60 PR, 62/62 PB, 94/94 NC, 81/81 NC), on the header NOT being row-offset (DATE cell blank), on there being exactly 8 handwritten columns with none struck through, and on all 11 entries' items and columns. I independently verified the printed 3X10 band order on this sheet reads BLACK, COPPER, INDIGO, ONYX top-to-bottom and that all four rows are empty. Verified column x-boundaries by grid-line detection (638/771/905/1041/1177/1313/1451/1589/1727) and confirmed every recorded mark falls inside the claimed column. Also confirmed the ink-count scan finds no unrecorded marks anywhere in columns 1-8, and that everything from the 3X5 block downward plus all printed columns right of col 8 are blank. Two notes rather than corrections: (1) the 206-pixel ink smudge in col 5 on the 20\" BLUE MOP row is only the descenders of the 241 above it, correctly not recorded as an entry; (2) the ink in col 8 on the WHITE/RED APRON rows is only the bottom of the oversized 50 loop bleeding across the rule, also correctly not recorded. The only substantive difference is the last digit of the RED SHOP TOWELS quantity."
+   }
+  },
+  {
+   "source_photo": "20260515_220225.heic",
+   "date": "2026-05-15",
+   "page": 4,
+   "template": "CURRENT",
+   "note": "16 handwritten columns, all with legible headers; none struck through. Header is NOT offset - DATE row holds a date scrawl, TRUCK row truck numbers, ROUTE row route numbers, INITIALS row initials. The four 3X10 rows on THIS sheet print in the order ONYX, COPPER, INDIGO, BLACK (top to bottom); all four are empty. 3X5 order is BLACK, ONYX, COPPER, INDIGO; 4X6 order is BLACK, ONYX, COPPER, INDIGO; all empty. The DATE cell contains an illegible 3-glyph scrawl (roughly '8|3' or '613'), so the date was taken from the filename prefix. ROUTE DAY cell is blank. A long stray pen line runs vertically down the whole sheet through the col5/col6 boundary and another shorter one near col3 - these are not quantities. The lower third of the photo (roughly the SIG SOAP row downward) is in shadow and lower contrast. Several header digits are over-inked/corrected (cols 2, 5, 12, 13) - see per-column notes. Template guess CURRENT is based on layout + the May date; I have no reference to distinguish it from the APRIL variants with certainty.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 61,
+     "route": 61,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 59,
+     "route": 59,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "TRUCK cell is heavily over-inked: reads '5' + a solid blotted loop. Best read 59 (matches the clear ROUTE 59); the second digit could be another digit written over."
+    },
+    {
+     "col": 3,
+     "truck": 52,
+     "route": 52,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 55,
+     "route": 68,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "Truck and route genuinely differ (55 vs 68) - recorded as written."
+    },
+    {
+     "col": 5,
+     "truck": 85,
+     "route": 83,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "TRUCK first digit is a scribbled/over-written blob followed by a clear '5' -> best read 85. ROUTE reads 83 but the second glyph could be another 8 (i.e. 88)."
+    },
+    {
+     "col": 6,
+     "truck": 4,
+     "route": 4,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 7,
+     "truck": 7,
+     "route": 7,
+     "initials": "MC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 8,
+     "truck": 75,
+     "route": 75,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 54,
+     "route": 54,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 10,
+     "truck": 55,
+     "route": 55,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 11,
+     "truck": 64,
+     "route": 64,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 12,
+     "truck": 66,
+     "route": 66,
+     "initials": "RP",
+     "confidence": "low",
+     "note": "Truck/route 66 are clear. Initials are a bold over-inked scrawl, best read 'RP' (could be 'AP')."
+    },
+    {
+     "col": 13,
+     "truck": 50,
+     "route": 58,
+     "initials": "MC",
+     "confidence": "low",
+     "note": "TRUCK second digit is a heavily re-traced solid oval; best read 50, but it may be 58 (matching the clear ROUTE 58)."
+    },
+    {
+     "col": 14,
+     "truck": 84,
+     "route": 89,
+     "initials": "WC",
+     "confidence": "low",
+     "note": "TRUCK second glyph is an open-top '4'; ROUTE second glyph is a looped '9'. Recorded as written (84 / 89) even though they differ. Initials read 'WC' (lowercase-looking w)."
+    },
+    {
+     "col": 15,
+     "truck": 73,
+     "route": 73,
+     "initials": "KW",
+     "confidence": "low",
+     "note": "Truck/route 73 are clear. Initials are cursive and ambiguous, best read 'KW' (could be 'NW' or 'KM')."
+    },
+    {
+     "col": 16,
+     "truck": 51,
+     "route": 62,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "Truck and route genuinely differ (51 vs 62) - recorded as written."
+    }
+   ],
+   "entries": [
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 14,
+     "qty": 600,
+     "truck": 84,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 2,
+     "qty": 20,
+     "truck": 59,
+     "confidence": "high",
+     "note": "The '2' descends into the RED APRON row below; the mark belongs to WHITE APRON."
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 9,
+     "qty": 10,
+     "truck": 54,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "WHITE APRON -x2864",
+     "col": 14,
+     "qty": 20,
+     "truck": 84,
+     "confidence": "high",
+     "note": "Written large, crowding the '600' in the BLACK APRON row above."
+    },
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 14,
+     "qty": 70,
+     "truck": 84,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 7,
+     "qty": 20,
+     "truck": 7,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 10,
+     "qty": 80,
+     "truck": 55,
+     "confidence": "low",
+     "note": "First digit is a looped two-lobe glyph; best read '8' (matching this writer's 8 in the header), giving 80. Could conceivably be a looped '4' (40)."
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 14,
+     "qty": 100,
+     "truck": 84,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 15,
+     "qty": 20,
+     "truck": 73,
+     "confidence": "high",
+     "note": "The '2' rises into the MICRO ORANGE row above; the mark belongs to MICRO GREY."
+    },
+    {
+     "item": "WHITE SHOP TOWELS",
+     "col": 15,
+     "qty": 200,
+     "truck": 73,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "LARGE INK TOWELS",
+     "col": 2,
+     "qty": 40,
+     "truck": 59,
+     "confidence": "high",
+     "note": "Two glyphs only ('4' + a large '0'); the 4's descender dips into the RAZ MATS row below."
+    },
+    {
+     "item": "LARGE INK TOWELS",
+     "col": 13,
+     "qty": 200,
+     "truck": 50,
+     "confidence": "high",
+     "note": "In a shadowed part of the photo; resolved to 200 after local-contrast enhancement (first glyph is a '2', no lower loop, so not 800)."
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   }
+  },
+  {
+   "source_photo": "20260518_220408.heic",
+   "date": "2026-05-18",
+   "page": 1,
+   "template": "CURRENT",
+   "note": "MAJOR DEFECT - RE-SHOOT NEEDED: the photograph is framed too far right, so the printed item-name column (the row labels with product codes) is entirely outside the frame. Only a 20-25px sliver of that column survives at the extreme left edge, behind the thick printed border/shadow, and nothing in it is readable even after local contrast normalisation. Every quantity below is therefore recorded with the row label marked illegible and a precise grid locator in its note (body section = block between thick rules, plus absolute body-row index counting every grid row below the initials row). The body grid has 53 rows in 10 thick-rule sections, in order: 4, 19, 3, 4, 9, 4, 2, 3, 1, 4 rows. Because no printed labels are visible I could NOT check the 3X10 row order (BLACK/COPPER/INDIGO/ONYX vs ONYX/COPPER/INDIGO/BLACK) on this sheet, and I could not confirm the template - \"CURRENT\" is inferred only from the sheet date (May) and the visible grid/heading layout, not from the row labels. Header: the DATE: and ROUTE DAY: cells are both blank (date taken from the filename). No row offset - the header block has exactly three handwritten rows below the DATE band and they are filled in their proper TRUCK / ROUTE / INITIALS positions. There are 9 handwritten columns; all grid columns to their right (roughly 6 more up to the right edge of the sheet) are completely blank and were not numbered. Truck and route numbers match in every column except col 8 (96 / 95). Col 4's truck cell contains a scribbled-out entry before the 63. A capital \"W\" glyph appears next to two quantities (col 8 row 1 of section 2, col 9 row 3 of section 3) and is treated as an annotation rather than a digit. Only 12 cells in the whole body carry handwriting; the rest of the grid is genuinely empty (verified by an automated per-cell ink scan as well as visually).",
+   "legibility": "poor",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 50,
+     "route": 50,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "clear"
+    },
+    {
+     "col": 2,
+     "truck": 91,
+     "route": 91,
+     "initials": "AB",
+     "confidence": "low",
+     "note": "initials read AB (first letter is two parallel diagonals with no bowl); could be a sloppy PB like cols 1/3"
+    },
+    {
+     "col": 3,
+     "truck": 94,
+     "route": 94,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "clear"
+    },
+    {
+     "col": 4,
+     "truck": 63,
+     "route": 63,
+     "initials": "RS",
+     "confidence": "low",
+     "note": "truck cell has a scribbled-out earlier entry immediately left of the 63; the 63 itself is legible. Initials read RS, possibly PS"
+    },
+    {
+     "col": 5,
+     "truck": 61,
+     "route": 61,
+     "initials": "DC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 6,
+     "truck": 70,
+     "route": 70,
+     "initials": "AB",
+     "confidence": "low",
+     "note": "same initials glyph as col 2; AB or a sloppy PB"
+    },
+    {
+     "col": 7,
+     "truck": 64,
+     "route": 64,
+     "initials": null,
+     "confidence": "low",
+     "note": "numbers 64/64 are clear; initials are written very lightly and are illegible - possibly NC or MJ followed by a slash"
+    },
+    {
+     "col": 8,
+     "truck": 96,
+     "route": 95,
+     "initials": "WC",
+     "confidence": "high",
+     "note": "truck (96) and route (95) genuinely differ on this column - recorded as written"
+    },
+    {
+     "col": 9,
+     "truck": 60,
+     "route": 60,
+     "initials": "WC",
+     "confidence": "low",
+     "note": "route row clearly 60; truck row same glyph but with a crossing stroke, could read 40. Initials WC, written faintly"
+    }
+   ],
+   "entries": [
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 4,
+     "truck": 63,
+     "qty": 140,
+     "confidence": "low",
+     "note": "digits '140' unambiguous and column attribution unambiguous; confidence lowered only because the printed row label is not visible. Position: body section 2 (the long 19-row block), row 1 of that section = absolute body row 5"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 5,
+     "truck": 61,
+     "qty": 50,
+     "confidence": "low",
+     "note": "written as 5 + slashed zero. The large '25' written in the row below overlaps these strokes, so it is possible the 50 was struck out and replaced by the 25 rather than being a separate quantity. Position: section 2 row 1 = absolute body row 5"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 5,
+     "truck": 61,
+     "qty": 25,
+     "confidence": "low",
+     "note": "digits read 25; strokes are oversized and run up into the row above. Position: section 2 row 2 = absolute body row 6"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 7,
+     "truck": 64,
+     "qty": 10,
+     "confidence": "low",
+     "note": "'1' + slashed zero, digits clear; row label not visible. Position: section 2 row 1 = absolute body row 5"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 8,
+     "truck": 96,
+     "qty": 22,
+     "confidence": "low",
+     "note": "cell reads '22' followed by a clearly formed capital W (two joined V strokes) - taken as an annotation, not a digit. If the W is meant as a digit the value would be different (e.g. 224/2240). Position: section 2 row 1 = absolute body row 5"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 8,
+     "truck": 96,
+     "qty": null,
+     "confidence": "low",
+     "note": "two glyphs: a clear '1' followed by a large slanted oval with an internal hook - either a slashed zero (10) or an 8 (18). Cannot decide, so no value recorded. Position: section 2 row 2 = absolute body row 6"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 9,
+     "truck": 60,
+     "qty": 300,
+     "confidence": "low",
+     "note": "digits '300' clear; row label not visible. Position: section 2 row 4 = absolute body row 8"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 2,
+     "truck": 91,
+     "qty": 600,
+     "confidence": "low",
+     "note": "digits '600' clear; row label not visible. Position: body section 3 (3-row block), row 3 = absolute body row 26"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 7,
+     "truck": 64,
+     "qty": 200,
+     "confidence": "low",
+     "note": "one connected scribble spanning two rows: a heavy X-shaped cross-out sitting in section 3 row 2 (absolute row 25) and digits that read '200' in section 3 row 3 (absolute row 26). Value and row both uncertain because of the overwriting"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 9,
+     "truck": 60,
+     "qty": 50,
+     "confidence": "low",
+     "note": "cell reads capital W followed by '50' (the same W glyph appears with the col-8 entry); if the W were a digit the value could be 450. Position: section 3 row 3 = absolute body row 26, same row as the 600 in col 2"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 7,
+     "truck": 64,
+     "qty": null,
+     "confidence": "low",
+     "note": "two-digit mark whose top is swallowed by the thick section rule; reads as either 12 or 17 - could not decide, so no value recorded. Position: body section 5 (9-row block), row 1 = absolute body row 31"
+    },
+    {
+     "item": "[ILLEGIBLE ROW LABEL - printed item-name column is outside the photo frame]",
+     "col": 7,
+     "truck": 64,
+     "qty": null,
+     "confidence": "low",
+     "note": "a short thick vertical ink tick/blot only - no readable digits; may be a stray pen mark or a bare '1'. Position: body section 6 (4-row block), row 3 = absolute body row 42"
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   },
+   "usable": false,
+   "defect": "Photo framed too far right: the printed item-name column is entirely outside the frame, so no row label is readable. Quantities and columns are sound; each entry's note carries a grid locator (body section + absolute row index) instead of a label. RE-SHOOT to recover. Template 'CURRENT' is inferred from the date, not verified, and the 3X10 row order could not be checked."
+  },
+  {
+   "source_photo": "20260518_220415.heic",
+   "date": "2026-05-18",
+   "page": 2,
+   "template": "CURRENT",
+   "note": "CROP PROBLEM, NOT A PAPER PROBLEM - the composed image is missing the TRUCK row entirely. The \"top strip\" half of this composite is mis-registered: it does not show the TRUCK/ROUTE/INITIALS band at all, it is simply a duplicate of the body starting partway through the INITIALS row (its rows are 3X10 ONYX/COPPER/INDIGO/BLACK, same scale as the body), so it contributes no header information. In the body half the sheet begins at y~304 with the ROUTE row already clipped; because the sheet tilts upward to the right, the clipping worsens left-to-right - columns 1-5 keep most of their route digits, columns 6-16 retain only the bottom sliver of the route digits and are not safely readable, so route is left null there rather than guessed. Every column therefore has truck = null. Recommend re-shooting / re-composing this sheet to capture the full header band. 3X10 block on THIS sheet reads top-to-bottom ONYX, COPPER, INDIGO, BLACK (verified from the printed labels); no entries fall in those rows. 16 handwritten columns, bounded left by the item-label column and right by the table border; none is struck through. A hand-drawn vertical pen line runs the full height of the sheet near the right edge of column 8 (x approx 1590-1640), drifting slightly right as it goes down - it is a divider stroke, not a strike-through, and it crosses no quantity. Only four handwritten quantities exist in the whole grid; all other cells are blank. Separately, in the free-text footer below the table (\"Dust Routes w/ Uniforms:\") the line \"Soaker Pads\" carries a handwritten \"7\" - that is not a column cell so it is not recorded as an entry.",
+   "legibility": "poor",
+   "columns": [
+    {
+     "col": 1,
+     "truck": null,
+     "route": 56,
+     "initials": "DC",
+     "confidence": "high",
+     "note": "TRUCK row absent from image. Route digits slightly clipped at top but read clearly as 56. Initials scrawled, best read DC."
+    },
+    {
+     "col": 2,
+     "truck": null,
+     "route": 55,
+     "initials": "DM",
+     "confidence": "high",
+     "note": "TRUCK row absent. Route reads 55 (second digit could conceivably be 3). Initials uncertain."
+    },
+    {
+     "col": 3,
+     "truck": null,
+     "route": 42,
+     "initials": "B",
+     "confidence": "high",
+     "note": "TRUCK row absent. Route 42 clear. Single-letter initial, best read B."
+    },
+    {
+     "col": 4,
+     "truck": null,
+     "route": 68,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "TRUCK row absent. Route digits clipped at top; best read 68, alternatives 48 or 69."
+    },
+    {
+     "col": 5,
+     "truck": null,
+     "route": 4,
+     "initials": "N",
+     "confidence": "low",
+     "note": "TRUCK row absent. Written as \"04\"; leading zero stripped. Digits partly clipped."
+    },
+    {
+     "col": 6,
+     "truck": null,
+     "route": null,
+     "initials": "M",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off by the crop - only a bottom sliver of a single glyph survives, not readable. Initials scrawl, best read M."
+    },
+    {
+     "col": 7,
+     "truck": null,
+     "route": null,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off by the crop, unreadable. Initials read PB fairly clearly. This is the column carrying the qty 30."
+    },
+    {
+     "col": 8,
+     "truck": null,
+     "route": null,
+     "initials": "N",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials uncertain."
+    },
+    {
+     "col": 9,
+     "truck": null,
+     "route": null,
+     "initials": "DB",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials uncertain."
+    },
+    {
+     "col": 10,
+     "truck": null,
+     "route": null,
+     "initials": null,
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials present but reduced to faint strokes - not legible enough to transcribe. This is the column carrying the qty 50."
+    },
+    {
+     "col": 11,
+     "truck": null,
+     "route": null,
+     "initials": "BR",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials heavily inked, best read BR. This column carries both the qty 80 and the qty 150."
+    },
+    {
+     "col": 12,
+     "truck": null,
+     "route": null,
+     "initials": "DB",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials uncertain."
+    },
+    {
+     "col": 13,
+     "truck": null,
+     "route": null,
+     "initials": "PR",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials read PR fairly clearly."
+    },
+    {
+     "col": 14,
+     "truck": null,
+     "route": null,
+     "initials": "AB",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials uncertain."
+    },
+    {
+     "col": 15,
+     "truck": null,
+     "route": null,
+     "initials": "MB",
+     "confidence": "low",
+     "note": "TRUCK row absent; ROUTE digits clipped off, unreadable. Initials uncertain."
+    },
+    {
+     "col": 16,
+     "truck": null,
+     "route": null,
+     "initials": "MB",
+     "confidence": "low",
+     "note": "Last column before the table's right border. TRUCK row absent; ROUTE digits clipped off, unreadable. Initials uncertain."
+    }
+   ],
+   "entries": [
+    {
+     "item": "RED APRON - x2861",
+     "col": 10,
+     "qty": 50,
+     "truck": null,
+     "confidence": "high",
+     "note": "Digits clear; sits squarely in the RED APRON row and inside column 10."
+    },
+    {
+     "item": "RED APRON - x2861",
+     "col": 11,
+     "qty": 80,
+     "truck": null,
+     "confidence": "low",
+     "note": "Reads 80 - the first glyph has a closed upper loop plus a lower bowl (an 8), unlike this writer's 5 which has an open flag top. Alternative read is 50. Column attribution (11) and row (RED APRON) are unambiguous; it has a long descending tail flourish that crosses into the row below but the body of the number is in RED APRON."
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 7,
+     "qty": 30,
+     "truck": null,
+     "confidence": "high",
+     "note": "Clear 30, centred in column 7 in the REG TOWELS row."
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 11,
+     "qty": 150,
+     "truck": null,
+     "confidence": "high",
+     "note": "Clear 150 in column 11, third row of the FENDER COVERS / WHITE SHOP TOWELS / RED SHOP TOWELS block. Printed label has no product code."
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   }
+  },
+  {
+   "source_photo": "20260522_220204.heic",
+   "date": "2026-05-22",
+   "page": 1,
+   "template": "CURRENT",
+   "note": "15 handwritten columns total (counting the struck/scribbled one as col 11). Header is NOT offset: the merged printed DATE / ROUTE DAY band is empty and the three handwritten rows line up correctly with the printed TRUCK, ROUTE and INITIALS labels. No date is written anywhere on the sheet, so the date comes from the filename. Printed 3X10 row order on THIS sheet, top to bottom: 3X10 BLACK, 3X10 COPPER, 3X10 INDIGO, 3X10 ONYX. The 3X5 and 4X6 groups both read BLACK, ONYX, COPPER, INDIGO. Column 11's header is scribbled out with a heavy black blob over the truck cell and overwriting in the route cell, yet two real quantities (REG TOWELS 40, MICRO GREY 60) are written in that column's body cells. Body quantities are dark and unambiguous; the header numbers are much lighter, heavily slanted and in several columns hard to resolve (cols 4, 5, 7, 9, 12, 15 marked low). Sheet is warped/creased so grid rows tilt slightly toward the right edge; every entry's row and column was re-verified against the local grid lines. The SPECIAL REQUESTS block (Dust Routes w/ Uniforms, Soaker Pads Needed, Ink Towels Needed, Installs, Misc) is entirely blank. All other cells in the grid are empty.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 51,
+     "route": 51,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 7,
+     "route": 7,
+     "initials": "JS",
+     "confidence": "high",
+     "note": "written as \"07\" in both the truck and route rows"
+    },
+    {
+     "col": 3,
+     "truck": 58,
+     "route": 58,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 15,
+     "route": 83,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck could be 16; route first digit could be 6 rather than 8 (63)"
+    },
+    {
+     "col": 5,
+     "truck": 53,
+     "route": 63,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route differ by first digit; route could also read 53"
+    },
+    {
+     "col": 6,
+     "truck": 66,
+     "route": 66,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 7,
+     "truck": 87,
+     "route": 89,
+     "initials": "JS",
+     "confidence": "low",
+     "note": "truck second digit 7 vs 9 ambiguous; leading digit read as 8 in both rows"
+    },
+    {
+     "col": 8,
+     "truck": 62,
+     "route": 62,
+     "initials": "JM",
+     "confidence": "low",
+     "note": "numbers clear; initials uncertain (JM / IM / M)"
+    },
+    {
+     "col": 9,
+     "truck": 55,
+     "route": 68,
+     "initials": "JS",
+     "confidence": "low",
+     "note": "truck strokes very light; route second digit could be 4 instead of 8"
+    },
+    {
+     "col": 10,
+     "truck": 91,
+     "route": 91,
+     "initials": "WC",
+     "confidence": "low",
+     "note": "numbers clear; initials could be JC"
+    },
+    {
+     "col": 11,
+     "truck": null,
+     "route": null,
+     "initials": null,
+     "confidence": "low",
+     "note": "header truck cell is scribbled out with a heavy black blob and the route cell is overwritten on top of it; nothing legible. Initials cell may read JS. Body cells under this column still carry real quantities (REG TOWELS 40, MICRO GREY 60)."
+    },
+    {
+     "col": 12,
+     "truck": 11,
+     "route": 62,
+     "initials": "JS",
+     "confidence": "low",
+     "note": "truck read as two vertical strokes (11); route reads 62 but is faint"
+    },
+    {
+     "col": 13,
+     "truck": 70,
+     "route": 70,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 14,
+     "truck": 60,
+     "route": 60,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 27,
+     "route": 97,
+     "initials": "LC",
+     "confidence": "low",
+     "note": "very light, slanted writing running into the right border; truck could be 21/97, route could be 27"
+    }
+   ],
+   "entries": [
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 11,
+     "qty": 40,
+     "truck": null,
+     "confidence": "high",
+     "note": "digits clear (4 matches the writer's 4 elsewhere on the sheet, e.g. the 4 in 4X6 ONYX col 8); alternative read 90. Column 11's header truck/route is scribbled out, so no truck can be attached."
+    },
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 7,
+     "qty": 2,
+     "truck": 87,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 11,
+     "qty": 60,
+     "truck": null,
+     "confidence": "high",
+     "note": "column 11 header scribbled out, so no truck can be attached"
+    },
+    {
+     "item": "3X5 BLACK",
+     "col": 15,
+     "qty": 5,
+     "truck": 27,
+     "confidence": "high",
+     "note": "digit sits in the first row directly under the group divider, i.e. 3X5 BLACK; truck number for this column is a low-confidence read"
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 10,
+     "qty": 6,
+     "truck": 91,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES TP -x27083",
+     "col": 7,
+     "qty": 6,
+     "truck": 87,
+     "confidence": "high",
+     "note": "second-to-last row of the paper group; verified against local grid lines"
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 8,
+     "qty": 4,
+     "truck": 62,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 10,
+     "qty": 19,
+     "truck": 91,
+     "confidence": "high",
+     "note": null
+    }
+   ],
+   "_verification": {
+    "agreement": "unverified",
+    "disputes": 0,
+    "summary": "second reader did not return"
+   }
+  },
+  {
    "source_photo": "20260731_213102.heic",
    "date": "2026-07-31",
    "page": 1,
@@ -2274,5 +3973,6 @@
  ],
  "_duplicates": "The archive holds byte-identical copies: 1000036270.jpg == 1000036272.jpg == 5-Photo-5.jpg, and '20260508_220352 - Copy.heic' == '20260508_220352 - Copy (2).heic'. Only one of each is recorded, so a sheet is not double-weighted. A ' - Copy (2)' suffix is a Windows duplication artifact and does NOT mean a second page; distinct pages have distinct timestamps.",
  "_reader_reliability": "Measured accidentally, before dedup was known: the 20260508_220352 pair was transcribed twice, fully independently, from the same image. The two runs agreed on 16/16 columns and 6/6 quantities exactly (48\" DUST 2; WHITE SHOP TOWELS 700/300/100; SMALL INK TOWELS 60; LARGE INK TOWELS 200). They disagreed only on illegible driver initials (col1 KB vs unreadable, col12 NC vs NP, col13 AH vs AA). Quantities - the actual training signal - are read reliably; initials are the noisy field and should be treated as weak labels.",
- "_verification": "From 2026-05-06 p2 onward every sheet is read twice by independent readers. Where they disagree the entry is stored with confidence 'low' and BOTH readings in the note, rather than a winner being picked. _verification.agreement/disputes on each sheet records the outcome."
+ "_verification": "From 2026-05-06 p2 onward sheets are read twice by independent readers. Where they disagree the entry is stored with confidence 'low' and BOTH readings in the note, rather than a winner being picked. Each sheet's _verification.agreement records the outcome. IMPORTANT: agreement 'unverified' means ONLY the first reader ran - the second was killed by a session limit mid-batch. Those sheets are single-read and are NOT held to the same standard as the double-read ones; treat them as provisional and re-verify before relying on them.",
+ "_usable_flag": "A sheet with usable=false has a photographic defect that makes its ITEM LABELS unrecoverable - not merely hard to read. Its quantities and column attributions are still sound and its entries carry precise grid locators in their notes, so the sheet is kept, but it must NEVER be used as labelled item training data. Re-shoot the paper to recover it."
 }
