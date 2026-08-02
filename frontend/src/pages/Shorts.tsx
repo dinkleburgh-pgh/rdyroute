@@ -13,6 +13,7 @@ import {
   useTrackedItems,
   useShortages,
   useShortageDates,
+  useShortageSheetImports,
   useCreateShortage,
   useUpdateShortage,
   useDeleteShortage,
@@ -431,7 +432,22 @@ export function ShortsWorkspace() {
   const [viewMode, setViewMode] = useState<ViewMode>("byItem");
   const [searchParams]               = useSearchParams();
 
-  const { data: shortDates = [] } = useShortageDates();
+  const { data: loggedDates = [] } = useShortageDates();
+  const { data: sheetImports = [] } = useShortageSheetImports();
+
+  // A day whose sheet photo is uploaded but whose quantities aren't typed yet
+  // has no shortages, so it never appeared in the logged-date list — which made
+  // the photo unreachable from the editor that exists to transcribe it. Offer
+  // both, newest first, so "upload the sheet, then type it in" can actually be
+  // done in that order.
+  const shortDates = useMemo(() => {
+    const merged = new Set<string>(loggedDates);
+    for (const imp of sheetImports) {
+      if (imp.photo_count > 0) merged.add(imp.run_date);
+    }
+    merged.delete(todayIso());
+    return [...merged].sort().reverse();
+  }, [loggedDates, sheetImports]);
 
   const { data: board  = [] } = useBoard(runDate);
   const { data: shorts = [] } = useShortages(runDate);
@@ -580,7 +596,14 @@ export function ShortsWorkspace() {
           <ShortageImportPanel defaultRunDate={runDate} lockedRunDate />
         </div>
       ) : viewMode === "sheet" ? (
-        <ShortSheetEditor shorts={shorts} board={board} runDate={runDate} loadDay={loadDay} holiday={holiday} />
+        <ShortSheetEditor
+          shorts={shorts}
+          board={board}
+          runDate={runDate}
+          loadDay={loadDay}
+          holiday={holiday}
+          onOpenImports={() => setViewMode("imports")}
+        />
       ) : viewMode === "byItem" ? (
         <ItemFirstEntry
           runDate={runDate}

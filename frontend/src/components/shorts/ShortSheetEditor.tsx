@@ -27,6 +27,7 @@ import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
 import { isScheduledOff } from "../../utils/truckStatus";
 import ConfirmDialog from "../ConfirmDialog";
+import SheetPhotoPane from "./SheetPhotoPane";
 import ShortageSheetView from "./ShortageSheetView";
 import {
   buildCatalogRows,
@@ -51,12 +52,15 @@ export default function ShortSheetEditor({
   runDate,
   loadDay,
   holiday,
+  onOpenImports,
 }: {
   shorts: Shortage[];
   board: TruckWithState[];
   runDate: string;
   loadDay: number;
   holiday: boolean;
+  /** Jump to the Import sheets tab — offered when the day has no photo yet. */
+  onOpenImports?: () => void;
 }) {
   const qc = useQueryClient();
   const toast = useToast();
@@ -336,18 +340,28 @@ export default function ShortSheetEditor({
           onClearRow={(r) => setConfirmClear(r)}
         />
       ) : mode === "paper" ? (
-        <PaperMode
-          rows={paperRows}
-          columns={columns}
-          truckIdx={Math.min(paperTruckIdx, Math.max(0, columns.length - 1))}
-          setTruckIdx={setPaperTruckIdx}
-          cellDisplay={cellDisplay}
-          setDraft={setDraft}
-          saveCell={saveCell}
-          effectiveQty={effectiveQty}
-          colTotal={colTotal}
-          dotClass={palette.dotClass}
-        />
+        /* Paper mode is transcription: the page you are reading belongs next to
+           the cells you are typing into. The photo sticks while the row list
+           scrolls, so a long column never scrolls its own source out of view. */
+        <div className="grid gap-4 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1fr)] lg:items-start">
+          <SheetPhotoPane
+            runDate={runDate}
+            onOpenImports={onOpenImports}
+            className="lg:sticky lg:top-4"
+          />
+          <PaperMode
+            rows={paperRows}
+            columns={columns}
+            truckIdx={Math.min(paperTruckIdx, Math.max(0, columns.length - 1))}
+            setTruckIdx={setPaperTruckIdx}
+            cellDisplay={cellDisplay}
+            setDraft={setDraft}
+            saveCell={saveCell}
+            effectiveQty={effectiveQty}
+            colTotal={colTotal}
+            dotClass={palette.dotClass}
+          />
+        </div>
       ) : (
         <ShortageSheetView shorts={shorts} board={board} />
       )}
