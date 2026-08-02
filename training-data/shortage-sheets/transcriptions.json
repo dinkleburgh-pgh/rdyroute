@@ -3523,6 +3523,1683 @@
    }
   },
   {
+   "source_photo": "20260522_220217.heic",
+   "date": "2026-05-22",
+   "page": 2,
+   "template": "CURRENT",
+   "note": "15 handwritten columns, numbered left to right; column 11 is counted even though its TRUCK number is scribbled out. Header is NOT offset - truck numbers are in the TRUCK row and route numbers in the ROUTE row. The DATE field and the ROUTE DAY field are both blank on the paper; the date given comes from the filename. Printed row order on THIS sheet: 3X10 band reads BLACK, COPPER, INDIGO, ONYX (read off the labels, all four rows empty); 3X5 band reads BLACK, ONYX, COPPER, INDIGO; 4X6 band reads BLACK, ONYX, COPPER, INDIGO. Only 8 cells carry handwriting; the rest of the grid, the SPECIAL REQUESTS block (Dust Routes w/ Uniforms, Soaker Pads Needed, Ink Towels Needed, Installs, Misc) and all mat/traffic/ink-towel rows are empty. Two photographic artifacts must not be mistaken for entries: a long diagonal crease crossing columns 10-11 around the PREM TOWELS / GLASS TOWELS rows, a shorter crease over columns 12-13 near the 48in/60in DUST rows, and a dent in column 6 in the 4X6 BLACK row - none of them are ink. The label strip on the left prints slightly higher than the matching grid rows on the right side of the sheet (up to ~50px at 2x), so row attribution here was done by counting rows from the thick band separators inside each column, not by eyeballing the label against the mark.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 51,
+     "route": 51,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 7,
+     "route": 7,
+     "initials": "JS",
+     "confidence": "high",
+     "note": "written as 07 in both truck and route cells"
+    },
+    {
+     "col": 3,
+     "truck": 58,
+     "route": 58,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 15,
+     "route": 83,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 5,
+     "truck": 53,
+     "route": 53,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 6,
+     "truck": 66,
+     "route": 66,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "initials could also read PD; a stray diagonal pen stroke runs through the initials cell"
+    },
+    {
+     "col": 7,
+     "truck": 88,
+     "route": 89,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 8,
+     "truck": 62,
+     "route": 68,
+     "initials": "JM",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 55,
+     "route": 65,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 10,
+     "truck": 91,
+     "route": 91,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 11,
+     "truck": null,
+     "route": null,
+     "initials": "JS",
+     "confidence": "low",
+     "note": "truck cell is heavily scribbled out (ink also spills up into the DATE row above it); the route cell holds an overwritten number that may be 84 but is not readable with confidence. Initials JS are legible. Quantities under this column (REG TOWELS 40, MICRO GREY 60) are clear and are recorded."
+    },
+    {
+     "col": 12,
+     "truck": 17,
+     "route": 65,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 13,
+     "truck": 70,
+     "route": 70,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 14,
+     "truck": 60,
+     "route": 60,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 87,
+     "route": 97,
+     "initials": "AC",
+     "confidence": "low",
+     "note": "last column, tight against the right border; digits are loopy - truck reads 87 and route 97 but the leading digits are smudged (route first digit could be 8 or 5)"
+    }
+   ],
+   "entries": [
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 11,
+     "qty": 40,
+     "truck": null,
+     "confidence": "high",
+     "note": "digits sit entirely inside the cell; column is the struck-out header column 11"
+    },
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 7,
+     "qty": 2,
+     "truck": 88,
+     "confidence": "low",
+     "note": "single ambiguous glyph - looped top, mid-height horizontal bar and a bottom curl. Best read is 2; a crossed 7 is a plausible alternative. Row attribution (PREM TOWELS) is solid; the value is not."
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 11,
+     "qty": 60,
+     "truck": null,
+     "confidence": "high",
+     "note": "digits sit entirely inside the cell, 5 rows below the REG TOWELS entry in the same struck-out column"
+    },
+    {
+     "item": "3X5 BLACK",
+     "col": 15,
+     "qty": 5,
+     "truck": 87,
+     "confidence": "high",
+     "note": "first of the four 3X5 rows on this sheet (printed order BLACK, ONYX, COPPER, INDIGO)"
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 10,
+     "qty": 6,
+     "truck": 91,
+     "confidence": "high",
+     "note": "second of the four 3X5 rows"
+    },
+    {
+     "item": "SIG SERIES TP -x27083",
+     "col": 7,
+     "qty": 6,
+     "truck": 88,
+     "confidence": "low",
+     "note": "the 6 is written large - its loop starts just under the SIG SERIES TP top rule and its tail crosses the rule into B&V TP -x45697. About 80 percent of the glyph is in SIG SERIES TP, so that is the read, but B&V TP cannot be ruled out from the paper."
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 8,
+     "qty": 4,
+     "truck": 62,
+     "confidence": "high",
+     "note": "second of the four 4X6 rows (printed order BLACK, ONYX, COPPER, INDIGO); the 4 just clips the row rule below it"
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 10,
+     "qty": 19,
+     "truck": 91,
+     "confidence": "high",
+     "note": "sits entirely inside the cell, same row as the col-8 entry"
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 0,
+    "summary": "Full independent re-read agrees with the first transcription on all 8 entries, all 15 column headers, and the sheet-level notes. Verified by measurement rather than eyeballing: column x-boundaries from vertical-rule detection (col 11 = 1975-2118, col 7 = 1422-1558, col 10 = 1834-1975, col 15 = 2566-2721) and row indices counted from the thick band separators inside each column, which defeats the label-strip skew. Printed labels read off THIS sheet: 3X10 = BLACK, COPPER, INDIGO, ONYX (all four rows empty); 3X5 = BLACK, ONYX, COPPER, INDIGO; 4X6 = BLACK, ONYX, COPPER, INDIGO. Confirmed REG TOWELS 40 and MICRO GREY 60 are rows 4 and 9 of the apron/towel block in col 11; the col 15 \"5\" is 3X5 row 1 (BLACK) and the col 10 \"6\" is 3X5 row 2 (ONYX) - they only appear level because of the sheet's right-downward skew. The col 7 \"6\" straddles a rule but ~75% lies above it, and this writer consistently overshoots the bottom rule (the 4, 5 and 60 all do), so SIG SERIES TP is right. An automated ink-blob sweep of the entire grid found exactly 8 marks, so nothing is missed and nothing is spurious; all other dark blobs were grid rules, the right paper border, and printed SPECIAL REQUESTS text (that block is empty). Col 5 first digit has a flat top bar, so 53 not 63. Col 11 truck is unrecoverable and its route is an unreadable overwrite - leaving both null is the correct conservative call. The col 7 PREM TOWELS glyph is genuinely ambiguous between 2 and a crossed 7; the first reader's low confidence and stated alternative already capture that, so no correction."
+   }
+  },
+  {
+   "source_photo": "20260522_220227.heic",
+   "date": "2026-05-22",
+   "page": 3,
+   "template": "CURRENT",
+   "note": "3X10 ROW ORDER ON THIS SHEET, read off the printed labels: 3X10 ONYX, 3X10 COPPER, 3X10 INDIGO, 3X10 BLACK (top to bottom). All four 3X10 rows are empty here, so nothing depends on it, but this contradicts the _3x10_order_warning note in transcriptions.json, which lists 05-22 among the BLACK-first sheets - that entry should be re-checked against this photo. Header is NOT offset: truck numbers are in the TRUCK row and route numbers in the ROUTE row, and on every column the two match. The printed DATE: and ROUTE DAY: fields are both blank on the paper, so the date comes from the filename only. 16 handwritten columns, all with legible headers except col 3 (retraced digits) and col 7 (blotted ink). The sheet is very sparse: only four handwritten quantities in the whole grid, all in columns 3 and 12, confirmed against a background-subtracted ink mask of the full body - every other cell is empty. A hair or thread lies across the photo running vertically down through columns 7-8 from the header to the bottom of the grid; it is an artifact, not ink. Body rows below the last item are \\\"Dust Routes w/ Uniforms:\\\" / \\\"Soaker Pads\\\" and carry no marks.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 92,
+     "route": 92,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 94,
+     "route": 94,
+     "initials": "DB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 3,
+     "truck": 42,
+     "route": 42,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "both TRUCK and ROUTE digits are heavily retraced/written over, giving a struck-through look; the ink stays inside the digits and does not run to the cell edges, so it reads as overwriting rather than a cross-out. Best read 82/82; 42 or 48 cannot be ruled out. This column carries two of the four quantities on the sheet.; readers disagreed on truck: first 82, second 42 - First reader read 82 (low confidence, listing 42/48 as alternatives). At native photo resolution the overwriting resolves: the leading digit is this writer's closed-triangle 4 with a descending stem, the same construction as the 4 in col 2 (94) and col 4 (04). His 8 is a cursive stacked figure-eight (col 12, 81), which this is not. Second digit is a 2 written with a looped-closed top, then diagonal down-left and a horizontal foot to the right - same skeleton as the 2 in 92/52, just retraced at the top. Reading 42.; readers disagreed on route: first 82, second 42 - Same as the TRUCK cell in this column: 42, not 82. The ROUTE cell shows the same closed-triangle 4 plus looped-top 2 and is if anything cleaner than the TRUCK cell."
+    },
+    {
+     "col": 4,
+     "truck": 4,
+     "route": 4,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "written on the paper as \"04\" in both TRUCK and ROUTE"
+    },
+    {
+     "col": 5,
+     "truck": 52,
+     "route": 52,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 6,
+     "truck": 54,
+     "route": 54,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 7,
+     "truck": 69,
+     "route": 69,
+     "initials": "MD",
+     "confidence": "low",
+     "note": "ink is blotted/smeared in both TRUCK and ROUTE; reads 69 but the second digit is soft. Initials read MD (could be AD/ND)."
+    },
+    {
+     "col": 8,
+     "truck": 61,
+     "route": 61,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 56,
+     "route": 56,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "readers disagreed on truck: first 36, second 56 - First reader read 36 with high confidence. The leading digit has a straight horizontal top bar ending in an upward tick, with a rounded bowl beneath - this writer's 5 (compare col 10 truck/route 50, col 14 truck 57, col 5 52). His 3 is an open two-bump form with no top bar, clearly visible in col 13 (73) and in the 320 quantity in col 3. Reading 56.; readers disagreed on route: first 36, second 56 - Same as the TRUCK cell in this column: 56, not 36. The ROUTE cell's leading digit is the same top-bar-plus-bowl 5 and sits directly beside col 10's 50, whose 5 is formed identically."
+    },
+    {
+     "col": 10,
+     "truck": 50,
+     "route": 50,
+     "initials": "PD",
+     "confidence": "high",
+     "note": "initials PD (second letter a single closed loop, not the two-lobed B used elsewhere)"
+    },
+    {
+     "col": 11,
+     "truck": 64,
+     "route": 64,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 12,
+     "truck": 81,
+     "route": 81,
+     "initials": "MC",
+     "confidence": "high",
+     "note": "initials MC written with a long flourish that runs into col 13; carries two of the four quantities on the sheet"
+    },
+    {
+     "col": 13,
+     "truck": 73,
+     "route": 73,
+     "initials": "JS",
+     "confidence": "high",
+     "note": "the 7 in the TRUCK cell is retraced/inked over itself; the ROUTE cell is clean 73"
+    },
+    {
+     "col": 14,
+     "truck": 57,
+     "route": 57,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 59,
+     "route": 59,
+     "initials": "PD",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 16,
+     "truck": 75,
+     "route": 75,
+     "initials": "JS",
+     "confidence": "high",
+     "note": "last handwritten column; grid ends here"
+    }
+   ],
+   "entries": [
+    {
+     "item": "PREM TOWELS -x5857",
+     "col": 3,
+     "qty": 40,
+     "truck": 82,
+     "confidence": "low",
+     "note": "digits straddle the printed rule between REG TOWELS - x2720 and PREM TOWELS -x5857: the \"4\" sits wholly inside the PREM TOWELS band and the \"0\" is centred on the line, roughly half in each. Read as PREM TOWELS because the ink centroid and the baseline are below the rule, but REG TOWELS is a live alternative. Column truck number is itself uncertain (see col 3 note)."
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 3,
+     "qty": 320,
+     "truck": 82,
+     "confidence": "high",
+     "note": "sits cleanly inside the MICRO GREY band; column truck number is itself uncertain (see col 3 note)"
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 12,
+     "qty": 40,
+     "truck": 81,
+     "confidence": "high",
+     "note": "4th row below the thick rule under the 3X10 block, confirmed by row counting and by aligning against the printed labels"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 12,
+     "qty": 120,
+     "truck": 81,
+     "confidence": "high",
+     "note": "first digit is a 1 with a small entry flag, not a 7"
+    }
+   ],
+   "_verification": {
+    "agreement": "partial",
+    "disputes": 4,
+    "summary": "Entries: full agreement. My independent ink-mask pass over the whole grid (run on both the dewarped compose and on the original 3000x4000 photo) finds exactly four handwritten quantities, and I read the same four: col 3 PREM TOWELS 40, col 3 MICRO GREY 320, col 12 REG TOWELS 40, col 12 MICRO GREY 120. Row assignments confirmed by aligning the label column against the same dewarped rows: col 12's 40 sits squarely in the REG TOWELS - x2720 band, and both 120 and 320 sit in MICRO GREY - x7540. I also agree with the first reader's low-confidence call on the col-3 \"40\": the digits straddle the REG/PREM rule, but the \"4\" is wholly below the rule and only the \"0\" straddles, so PREM TOWELS - x5857 is the better read (REG TOWELS remains a live alternative). 3X10 order confirmed as ONYX, COPPER, INDIGO, BLACK, all four rows empty. 16 handwritten columns, header not row-offset, DATE and ROUTE DAY blank. The vertical line through cols 7-8 is a hair, not ink.\n\nHeaders: two columns differ. Col 3 is 42/42, not 82/82 - at native resolution the retracing resolves and the first digit is unmistakably this writer's closed-triangle \"4\" (identical construction to the 4 in col 2's 94 and col 4's 04); an 8 in this hand is a cursive stacked figure-eight (see col 12's 81), which this is not. The second digit is a looped-top 2. Col 9 is 56/56, not 36/36 - the first digit has a straight top bar with an upward tick and a closed bowl, matching this writer's 5 (cf. col 10's 50, col 14's 57); his 3 is an open two-bump form with no top bar (cf. col 13's 73 and the 320 quantity), which this is not.\n\nConsequence for the entries: the two col-3 quantities carry truck 82 in the first reader's entry records; those should read truck 42. The quantities and column indices themselves are correct, so I have not listed them under \"wrong\".\n\nI did not dispute any initials - col 3 (NC vs DC), col 7 (MD vs AD), col 12 (MC vs NC) and the PD reads on cols 10/15 are all genuinely ambiguous and the first reader's choices are defensible."
+   }
+  },
+  {
+   "source_photo": "20260526_220253.jpg",
+   "date": "2026-05-26",
+   "page": 1,
+   "template": "CURRENT",
+   "note": "15 handwritten columns, numbered left to right. Column 7's TRUCK cell is completely scribbled out (truck set to null); its ROUTE (56) and initials (JS) are legible and its quantities are recorded. Header is NOT offset: the printed DATE row is blank and TRUCK / ROUTE / INITIALS are each filled on their own row (no date written on the sheet; date taken from the filename). Row order on THIS sheet: 3X10 block reads BLACK, COPPER, INDIGO, ONYX top to bottom; the 3X5 block reads BLACK, ONYX, COPPER, INDIGO; the 4X6 block reads BLACK, ONYX, COPPER, INDIGO. All four 3X10 rows are empty. The paper is slightly curved so rows rise toward the right edge; row attribution for the right-hand columns was checked against the local grid lines (e.g. the 59 in column 15 is one row above the 16/5/9 run, in 3X5 BLACK). Header numbers in columns 3 and 5 are the messiest on the sheet (long overlapping 4-stems in col 3; loop-style 6/8 digits in col 5). Outside the grid, the SPECIAL REQUESTS block has \"Ink Towels Needed: 73\" written in; Dust Routes w/ Uniforms, Soaker Pads Needed, Installs and Misc are blank.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 84,
+     "route": 84,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 17,
+     "route": 65,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 3,
+     "truck": 44,
+     "route": 44,
+     "initials": "MB",
+     "confidence": "low",
+     "note": "Header cell is heavily overwritten by the long descending stems of the writer's 4s; both rows read as two 4-shaped glyphs. Route could alternatively read 64."
+    },
+    {
+     "col": 4,
+     "truck": 70,
+     "route": 70,
+     "initials": "MB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 5,
+     "truck": 68,
+     "route": 86,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "Truck digits are loop-style; first glyph is clearly 6, second has an extra top loop so read as 8. Truck could be 66 or 88. Route reads 86 (first glyph is a two-loop 8, second a closed-loop 6)."
+    },
+    {
+     "col": 6,
+     "truck": 73,
+     "route": 73,
+     "initials": "MB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 7,
+     "truck": null,
+     "route": 56,
+     "initials": "JS",
+     "confidence": "low",
+     "note": "TRUCK cell is scribbled out with heavy overstrikes and is unreadable; ROUTE 56 and initials JS are legible. Quantities under this column are still real."
+    },
+    {
+     "col": 8,
+     "truck": 12,
+     "route": 95,
+     "initials": "AB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 50,
+     "route": 50,
+     "initials": "MB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 10,
+     "truck": 53,
+     "route": 53,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 11,
+     "truck": 91,
+     "route": 91,
+     "initials": "MB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 12,
+     "truck": 62,
+     "route": 62,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 13,
+     "truck": 51,
+     "route": 51,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 14,
+     "truck": 69,
+     "route": 69,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 60,
+     "route": 60,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    }
+   ],
+   "entries": [
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 12,
+     "qty": 30,
+     "truck": 62,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 15,
+     "qty": 300,
+     "truck": 60,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GLASS TOWELS - x2964",
+     "col": 14,
+     "qty": 60,
+     "truck": 69,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO BLUE - x7432",
+     "col": 5,
+     "qty": 40,
+     "truck": 68,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO BLUE - x7432",
+     "col": 6,
+     "qty": 120,
+     "truck": 73,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "20\" GREY MOP - x7540",
+     "col": 10,
+     "qty": 10,
+     "truck": 53,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "36\" DUST - x2590",
+     "col": 3,
+     "qty": 19,
+     "truck": 44,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "36\" DUST - x2590",
+     "col": 4,
+     "qty": 14,
+     "truck": 70,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "36\" DUST - x2590",
+     "col": 12,
+     "qty": 2,
+     "truck": 62,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 7,
+     "qty": 100,
+     "truck": null,
+     "confidence": "high",
+     "note": "Column 7 truck number is scribbled out; route 56 / JS."
+    },
+    {
+     "item": "3X5 BLACK",
+     "col": 15,
+     "qty": 59,
+     "truck": 60,
+     "confidence": "high",
+     "note": "Sits one row above the 16/5/9 run in the adjacent columns; clearly in the 3X5 BLACK band."
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 2,
+     "qty": 31,
+     "truck": 17,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 6,
+     "qty": 8,
+     "truck": 73,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 12,
+     "qty": 16,
+     "truck": 62,
+     "confidence": "high",
+     "note": "Second digit is a closed-loop 6 (writer's 5 has an open bottom); alternative read 15."
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 13,
+     "qty": 5,
+     "truck": 51,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 14,
+     "qty": 9,
+     "truck": 69,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 2,
+     "qty": 2,
+     "truck": 17,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 6,
+     "qty": 6,
+     "truck": 73,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 7,
+     "qty": 5,
+     "truck": null,
+     "confidence": "high",
+     "note": "Column 7 truck number is scribbled out; route 56 / JS."
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 9,
+     "qty": 6,
+     "truck": 50,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 12,
+     "qty": 5,
+     "truck": 62,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 13,
+     "qty": 3,
+     "truck": 51,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC AIRLAID PAPER - x9511",
+     "col": 3,
+     "qty": 54,
+     "truck": 44,
+     "confidence": "high",
+     "note": "The 4's stem runs up into the C-PULL PAPER row but the digit bodies sit in DRC AIRLAID."
+    },
+    {
+     "item": "DRC AIRLAID PAPER - x9511",
+     "col": 10,
+     "qty": 6,
+     "truck": 53,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 BLACK",
+     "col": 3,
+     "qty": 6,
+     "truck": 44,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 BLACK",
+     "col": 4,
+     "qty": 4,
+     "truck": 70,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 BLACK",
+     "col": 13,
+     "qty": 4,
+     "truck": 51,
+     "confidence": "low",
+     "note": "Two stacked 4s in column 13 (4X6 BLACK and 4X6 ONYX) with overlapping long stems; could alternatively be a single 4 with a very long descender."
+    },
+    {
+     "item": "4X6 BLACK",
+     "col": 14,
+     "qty": 6,
+     "truck": 69,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 12,
+     "qty": 8,
+     "truck": 62,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 13,
+     "qty": 4,
+     "truck": 51,
+     "confidence": "low",
+     "note": "Lower of the two overlapping 4-shaped marks in column 13; second crossbar is faint."
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 14,
+     "qty": 7,
+     "truck": 69,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 INDIGO",
+     "col": 10,
+     "qty": 2,
+     "truck": 53,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 INDIGO",
+     "col": 14,
+     "qty": 2,
+     "truck": 69,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SMALL INK TOWELS",
+     "col": 6,
+     "qty": 1400,
+     "truck": 73,
+     "confidence": "high",
+     "note": null
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 0,
+    "summary": "Independent re-read agrees with the first transcription on all 34 entries and all 15 column headers. Verified independently: 3X10 block on THIS sheet prints BLACK, COPPER, INDIGO, ONYX top-to-bottom and all four rows are empty; 3X5 block prints BLACK, ONYX, COPPER, INDIGO; 4X6 block prints BLACK, ONYX, COPPER, INDIGO. Column x-boundaries were measured off the header band and re-checked at each entry row: 30/300 (REG TOWELS, cols 12/15), 60 (GLASS, col 14), 40/120 (MICRO BLUE, cols 5/6), 10 (20\" GREY MOP, col 10), 19/14/2 (36\" DUST, cols 3/4/12), 100 (RED SHOP TOWELS, col 7), 59 (3X5 BLACK, col 15 - digit bodies sit above the BLACK/ONYX rule), 31/8/16/5/9 (3X5 ONYX, cols 2/6/12/13/14), 2/6/5/6/5/3 (SIG SERIES HW, cols 2/6/7/9/12/13), 54/6 (DRC AIRLAID, cols 3/10), 6/4/4/6 (4X6 BLACK, cols 3/4/13/14), 8/7 (4X6 ONYX, cols 12/14), 2/2 (4X6 INDIGO, cols 10/14), 1400 (SMALL INK TOWELS, col 6). Two observations that do not rise to reportable corrections: (1) The 4X6 col-13 stack is the one place I am not sure the first reader is right. Under threshold I see a single clear \"4\" in the 4X6 BLACK row whose stem descends unbroken through the whole ONYX row, plus a small extra tick of ink at the top of the ONYX cell. There is no visible second crossbar or second diagonal, so the ONYX \"4\" may be an artifact of the long descender - but there is genuinely extra ink there, so I am not confident enough to call it spurious. The first reader's low-confidence flag on both entries is the right handling. (2) The first reader's sheet note says \"the printed DATE row is blank\". It is not: there is a legible handwritten \"13\" in the DATE row directly above column 7, whose \"1\" stem runs down into column 7's scribbled-out TRUCK cell. It is plausible the writer started column 7's truck number one row high as \"13\" and then struck it out, but the truck cell itself is unreadable, so I agree with truck=null for column 7 - only the \"DATE row is blank\" claim is inaccurate. Header columns 3 and 5 remain the messiest; I reached the same primary reads (44/44 and 68/86) and would keep them at low confidence."
+   }
+  },
+  {
+   "source_photo": "20260526_220300.jpg",
+   "date": "2026-05-26",
+   "page": 2,
+   "template": "CURRENT",
+   "note": "16 handwritten columns, none struck through. DATE row is blank on this sheet except for column 6, where the truck number \"68\" is written oversized so its upper halves sit in the DATE row and its lower halves in the TRUCK row (at a glance the TRUCK cell can look like \"85\"); ROUTE cell for col 6 is a clean \"68\". No row offset otherwise - TRUCK/ROUTE/INITIALS are all filled on their own rows and truck == route in every column. 3X10 block on THIS sheet reads top-to-bottom ONYX, COPPER, INDIGO, BLACK (verified from the printed labels). 3X5 block reads BLACK, ONYX, COPPER, INDIGO. 4X6 block reads BLACK, ONYX, COPPER, INDIGO. Col 9's truck and route numbers (\"80\") are each written over an earlier attempt. A long vertical ink stroke runs down the whole sheet through columns 4-5 - it is not a quantity. The photo has residual perspective warp: the header band rises toward the right while body rows drift progressively lower toward the right (about 40 px by column 16), so column-16 marks were assigned by counting row lines within column 16 itself rather than by absolute y. Top-right paper corner is folded/torn over column 16's header, partly clipping those initials. All quantity cells were located by an automated dark-blob scan plus visual confirmation; every other cell on the sheet is blank.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 75,
+     "route": 75,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 4,
+     "route": 4,
+     "initials": "MD",
+     "confidence": "low",
+     "note": "numbers written \"04\" and clear; initials are a cursive scrawl, read as MD (could be MO/MB)"
+    },
+    {
+     "col": 3,
+     "truck": 92,
+     "route": 92,
+     "initials": "PD",
+     "confidence": "low",
+     "note": "numbers clear; initials read as PD but second letter could be B or S"
+    },
+    {
+     "col": 4,
+     "truck": 54,
+     "route": 54,
+     "initials": "CV",
+     "confidence": "low",
+     "note": "numbers clear; initials messy with a slash through them, read as CV"
+    },
+    {
+     "col": 5,
+     "truck": 7,
+     "route": 7,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "single-digit 7 in both truck and route"
+    },
+    {
+     "col": 6,
+     "truck": 68,
+     "route": 68,
+     "initials": "JS",
+     "confidence": "low",
+     "note": "truck number written oversized so its top half sits in the DATE row above; the part visible inside the TRUCK cell alone can read as 85. Route cell is a clean 68 and truck==route everywhere else on this sheet"
+    },
+    {
+     "col": 7,
+     "truck": 82,
+     "route": 82,
+     "initials": "JS",
+     "confidence": "high",
+     "note": "truck 8 is written sloppily and can look like a 3"
+    },
+    {
+     "col": 8,
+     "truck": 55,
+     "route": 55,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 9,
+     "truck": 80,
+     "route": 80,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "both truck and route cells are overwritten - 80 written twice with a slash through the 8"
+    },
+    {
+     "col": 10,
+     "truck": 59,
+     "route": 59,
+     "initials": "NC",
+     "confidence": "high",
+     "note": "a check/slash mark follows the initials"
+    },
+    {
+     "col": 11,
+     "truck": 57,
+     "route": 57,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 12,
+     "truck": 59,
+     "route": 59,
+     "initials": "MD",
+     "confidence": "low",
+     "note": "numbers clear; initials are an illegible cursive scrawl, read as MD (could be MS/PM)"
+    },
+    {
+     "col": 13,
+     "truck": 93,
+     "route": 93,
+     "initials": "MD",
+     "confidence": "low",
+     "note": "numbers clear; initials are the same illegible scrawl as col 12"
+    },
+    {
+     "col": 14,
+     "truck": 61,
+     "route": 61,
+     "initials": "SS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 89,
+     "route": 89,
+     "initials": "AB",
+     "confidence": "low",
+     "note": "numbers clear; initials read as AB but could be AS"
+    },
+    {
+     "col": 16,
+     "truck": 52,
+     "route": 52,
+     "initials": "NP",
+     "confidence": "low",
+     "note": "rightmost column; folded/torn paper corner overlaps this header. Truck and route both read 52 (route 2 has a loop and could be read 8); initials read NP"
+    }
+   ],
+   "entries": [
+    {
+     "item": "RED APRON - x2861",
+     "col": 16,
+     "qty": null,
+     "truck": 52,
+     "confidence": "low",
+     "note": "NOT an entry - listed only to record that nothing is written on this row; ignore; second reader saw no mark in this cell"
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 16,
+     "qty": 10,
+     "truck": 52,
+     "confidence": "high",
+     "note": "1 followed by a slashed 0. Row confirmed by counting grid lines down column 16 from the 3X10 block separator (it is the 4th row below that separator); because of sheet warp it visually appears to sit near the RED APRON row"
+    },
+    {
+     "item": "36\" DUST - x2590",
+     "col": 1,
+     "qty": 4,
+     "truck": 75,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "36\" DUST - x2590",
+     "col": 8,
+     "qty": 11,
+     "truck": 55,
+     "confidence": "low",
+     "note": "two bare vertical strokes, the second hooking at the bottom; read as 11 but the digit forms are not clearly closed"
+    },
+    {
+     "item": "36\" DUST - x2590",
+     "col": 11,
+     "qty": 1,
+     "truck": 57,
+     "confidence": "low",
+     "note": "a single short, very heavy vertical stroke filling the cell; read as 1 but it may be an overwritten digit"
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 1,
+     "qty": 10,
+     "truck": 75,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 2,
+     "qty": 8,
+     "truck": 4,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 11,
+     "qty": 9,
+     "truck": 57,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 16,
+     "qty": 1,
+     "truck": 52,
+     "confidence": "high",
+     "note": "thin vertical stroke; row confirmed by line-counting within column 16"
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 3,
+     "qty": 30,
+     "truck": 92,
+     "confidence": "high",
+     "note": "the 0 is traced over twice"
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 7,
+     "qty": 6,
+     "truck": 82,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 9,
+     "qty": 16,
+     "truck": 80,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 8,
+     "qty": 7,
+     "truck": 55,
+     "confidence": "high",
+     "note": "large 7 whose tail crosses down into the DRC row below, but the digit body sits in C-PULL"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 4,
+     "qty": 12,
+     "truck": 54,
+     "confidence": "low",
+     "note": "loopy overwritten scrawl crossed by the long vertical ink line; best read 12, could be 120"
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 9,
+     "qty": 6,
+     "truck": 80,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 11,
+     "qty": 18,
+     "truck": 57,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 16,
+     "qty": 1,
+     "truck": 52,
+     "confidence": "high",
+     "note": "thin vertical stroke; row confirmed by line-counting within column 16"
+    },
+    {
+     "item": "4X6 BLACK",
+     "col": 1,
+     "qty": 2,
+     "truck": 75,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 BLACK",
+     "col": 2,
+     "qty": 3,
+     "truck": 4,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 1,
+     "qty": 3,
+     "truck": 75,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 2,
+     "qty": 14,
+     "truck": 4,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 16,
+     "qty": 1,
+     "truck": 52,
+     "confidence": "high",
+     "note": "thin vertical stroke; row confirmed by line-counting within column 16"
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 1,
+    "summary": "Independent second read agrees with the first reader on everything substantive. Verified point by point: (1) 3X10 block on this sheet reads top-to-bottom ONYX, COPPER, INDIGO, BLACK from the printed labels - correct as transcribed, and no marks anywhere in that block; 3X5 reads BLACK, ONYX, COPPER, INDIGO and 4X6 reads BLACK, ONYX, COPPER, INDIGO, also correct. (2) All 16 headers re-read at high zoom: 75/75 PB, 04/04 MD-scrawl, 92/92 PD, 54/54 CV, 7/7 PB, 68/68 JS, 82/82 JS, 55/55 JS, 80/80 NC, 59/59 NC, 57/57 PB, 59/59 scrawl, 93/93 scrawl, 61/61 SS, 89/89 AB, 52/52 N?. DATE row is blank across the whole sheet (the ROUTE DAY box row); the three filled header rows are TRUCK/ROUTE/INITIALS with no offset. Column 6's oversized 68 spilling up into the DATE row is described correctly. (3) All 21 quantities confirmed by measured pixel geometry against the derived column grid (boundaries at x=578+131n) and by counting row lines inside the marked column: 36\" DUST 4/c1, 11/c8, 1/c11; 3X5 ONYX 10/c1, 8/c2, 9/c11, 1/c16; SIG SERIES HW 30/c3, 6/c7, 16/c9; C-PULL PAPER 7/c8 (digit body sits in C-PULL, only the tail crosses into DRC); DRC 12/c4, 6/c9, 18/c11, 1/c16; 4X6 BLACK 2/c1, 3/c2; 4X6 ONYX 3/c1, 14/c2, 1/c16; REG TOWELS 10/c16. (4) The REG TOWELS / column 16 \"10\" is genuinely on the REG TOWELS row - independently confirmed at 3x zoom, the mark occupies the 4th cell below the 3X10 separator (y 1110-1167), so the first reader's warp-corrected row assignment is right and it should NOT be moved up to RED APRON. (5) Whole-sheet sweep in nine horizontal bands at 1.4-1.6x plus an eroded ink-blob scan found no additional handwriting; the footer (\"Dust Routes w/ Uniforms\" / \"Soaker Pads\") is blank, and the long vertical stroke through columns 4-5 is correctly treated as non-data. Only change recommended: drop the placeholder RED APRON/col-16 record from the entries array."
+   }
+  },
+  {
+   "source_photo": "20260527_180552.heic",
+   "date": "2026-05-27",
+   "page": 1,
+   "template": "CURRENT",
+   "note": "16 handwritten columns, all with legible truck+route numbers; none struck through or blank. Header is NOT offset: the TRUCK row holds truck numbers, the ROUTE row route numbers, the INITIALS row initials. The DATE cell is blank (date taken from the filename). A handwritten capital 'W' is scrawled over the printed 'ROUTE DAY:' label (2026-05-27 was a Wednesday). Truck and route differ in col 12 (15/83), col 13 (55/68) and col 15 (69/64); all other columns repeat the same number in both rows. ROW ORDER ON THIS SHEET (read off the printed labels): the 3X10 block runs ONYX, COPPER, INDIGO, BLACK top-to-bottom; the 3X5 block runs BLACK, ONYX, COPPER, INDIGO; the 4X6 block runs BLACK, ONYX, COPPER, INDIGO. The only 3X10 entries are on the COPPER row (2nd row of that block) and the only 3X5/4X6 entries are on their ONYX rows (2nd row of each block). Whole sheet is blank from FENDER COVERS/WHITE SHOP TOWELS through the mop/dust rows, and from URINAL MATS down through SOAKER PADS. The 'Dust Routes w/ Uniforms:' footer is cropped off and carries nothing. One tiny pen speck sits in the DRC (AIRLAID) row of col 9 - too small to be a digit, not recorded as an entry.",
+   "legibility": "fair",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 92,
+     "route": 92,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "truck/route clear; initials very faint, read as NC"
+    },
+    {
+     "col": 2,
+     "truck": 82,
+     "route": 82,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route clear; initials are a dark blot, best read PB (could be AB)"
+    },
+    {
+     "col": 3,
+     "truck": 89,
+     "route": 89,
+     "initials": "JS",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 4,
+     "truck": 66,
+     "route": 66,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 5,
+     "truck": 75,
+     "route": 75,
+     "initials": "AB",
+     "confidence": "low",
+     "note": "truck/route clear (75/75); initials illegible scrawl, could be AB or MB"
+    },
+    {
+     "col": 6,
+     "truck": 86,
+     "route": 86,
+     "initials": "RS",
+     "confidence": "low",
+     "note": "truck/route clear (86/86); initials could be RS or RG"
+    },
+    {
+     "col": 7,
+     "truck": 7,
+     "route": 7,
+     "initials": "BB",
+     "confidence": "low",
+     "note": "truck/route written as 07/07; initials two loops, could be BB or AB. A hand-drawn vertical line sits just right of this column's truck/route cells"
+    },
+    {
+     "col": 8,
+     "truck": 57,
+     "route": 57,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route clear (57/57); initials could be PB or PD"
+    },
+    {
+     "col": 9,
+     "truck": 55,
+     "route": 55,
+     "initials": "NC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 10,
+     "truck": 80,
+     "route": 80,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route clear (80/80); initials a heavy blot, best read PB"
+    },
+    {
+     "col": 11,
+     "truck": 61,
+     "route": 61,
+     "initials": "DC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 12,
+     "truck": 15,
+     "route": 83,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "truck and route differ: TRUCK 15, ROUTE 83"
+    },
+    {
+     "col": 13,
+     "truck": 55,
+     "route": 68,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "truck and route differ: TRUCK 55, ROUTE 68"
+    },
+    {
+     "col": 14,
+     "truck": 59,
+     "route": 59,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 15,
+     "truck": 64,
+     "route": 64,
+     "initials": "NC",
+     "confidence": "low",
+     "note": "TRUCK cell reads 69, ROUTE cell reads 64 and looks overwritten/retraced; both digits pairs are 6x so the second digit is the uncertain one; readers disagreed on truck: first 69, second 64 - TRUCK cell reads 64, not 69. Binarized at 9x the second glyph is an open-top 4 (down-left diagonal, horizontal bar, separate long slanted stroke crossing it) - structurally identical to the 4 in this column's ROUTE cell directly below. This writer's 9 (col 14 '59', col 16 '93', col 1 '92') is a CLOSED oval bowl with a straight right-hand descender that does not cross the bowl; that shape is absent here. Consequence: col 15 truck and route do NOT differ - both are 64 - so the sheet-level note listing col 15 as a truck/route mismatch (69/64) should be dropped, leaving only col 12 (15/83) and col 13 (55/68) as genuine mismatches. Entries attributed to col 15 (3X5 ONYX 46, DRC 18, SIG Z-FOLD 3, 4X6 ONYX 11) keep their column but carry truck 64."
+    },
+    {
+     "col": 16,
+     "truck": 93,
+     "route": 93,
+     "initials": "JS",
+     "confidence": "low",
+     "note": "TRUCK reads 93 clearly; ROUTE cell is written oddly, first character looks like an open 'a' - read as 93"
+    }
+   ],
+   "entries": [
+    {
+     "item": "3X10 COPPER",
+     "col": 13,
+     "truck": 55,
+     "qty": 4,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X10 COPPER",
+     "col": 14,
+     "truck": 59,
+     "qty": 2,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "REG TOWELS - x2720",
+     "col": 11,
+     "truck": 61,
+     "qty": 10,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 7,
+     "truck": 7,
+     "qty": 350,
+     "confidence": "low",
+     "note": "middle digit has an extra loop where it overlaps the 0; could be 380. Matches the shape of the clear 350 in col 9"
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 9,
+     "truck": 55,
+     "qty": 350,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 11,
+     "truck": 61,
+     "qty": 300,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 13,
+     "truck": 55,
+     "qty": 350,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "RED SHOP TOWELS",
+     "col": 14,
+     "truck": 59,
+     "qty": 500,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 11,
+     "truck": 61,
+     "qty": 2,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "3X5 ONYX",
+     "col": 15,
+     "truck": 69,
+     "qty": 46,
+     "confidence": "low",
+     "note": "a 4 and a 6 whose strokes collide (the 6's ascender crosses the 4's crossbar); could instead be a 4 corrected/struck to 6, i.e. qty 6"
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 1,
+     "truck": 92,
+     "qty": 13,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 2,
+     "truck": 82,
+     "qty": 53,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 3,
+     "truck": 89,
+     "qty": 26,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 6,
+     "truck": 86,
+     "qty": 20,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 7,
+     "truck": 7,
+     "qty": 16,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 9,
+     "truck": 55,
+     "qty": 4,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 12,
+     "truck": 15,
+     "qty": 18,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 14,
+     "truck": 59,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW -x20023",
+     "col": 16,
+     "truck": 93,
+     "qty": 8,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 1,
+     "truck": 92,
+     "qty": 6,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 2,
+     "truck": 82,
+     "qty": 6,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 3,
+     "truck": 89,
+     "qty": 6,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 4,
+     "truck": 66,
+     "qty": 7,
+     "confidence": "low",
+     "note": "single looped glyph with a horizontal crossbar; best read as a crossed 7, but could be 2 (or 12 if the left downstroke is a separate 1)"
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 5,
+     "truck": 75,
+     "qty": 2,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 7,
+     "truck": 7,
+     "qty": 6,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "BROWN HW - x9173",
+     "col": 12,
+     "truck": 15,
+     "qty": 13,
+     "confidence": "high",
+     "note": "a stray vertical stroke trails down from the 13 into the C-PULL row below"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 5,
+     "truck": 75,
+     "qty": 20,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 7,
+     "truck": 7,
+     "qty": 9,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 9,
+     "truck": 55,
+     "qty": 7,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 11,
+     "truck": 61,
+     "qty": 8,
+     "confidence": "low",
+     "note": "the 8 straddles the BROWN HW / C-PULL PAPER rule line; its vertical extent matches the neighbouring C-PULL entries, so assigned to C-PULL, but BROWN HW is possible"
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 12,
+     "truck": 15,
+     "qty": 4,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "C-PULL PAPER -x9025",
+     "col": 14,
+     "truck": 59,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 5,
+     "truck": 75,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 8,
+     "truck": 57,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 10,
+     "truck": 80,
+     "qty": 6,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 13,
+     "truck": 55,
+     "qty": 5,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "DRC (AIRLAID) PAPER - x9511",
+     "col": 15,
+     "truck": 69,
+     "qty": 18,
+     "confidence": "low",
+     "note": "second digit has a crossing/second loop so read as 8, but it is large and open and could be 0, i.e. qty 10"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 1,
+     "truck": 92,
+     "qty": 6,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 2,
+     "truck": 82,
+     "qty": 14,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 3,
+     "truck": 89,
+     "qty": 7,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 6,
+     "truck": 86,
+     "qty": 10,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 7,
+     "truck": 7,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 8,
+     "truck": 57,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 12,
+     "truck": 15,
+     "qty": 7,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 15,
+     "truck": 69,
+     "qty": 3,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "B&V Z-FOLD -x45695",
+     "col": 8,
+     "truck": 57,
+     "qty": 3,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "B&V Z-FOLD -x45695",
+     "col": 16,
+     "truck": 93,
+     "qty": 3,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "B&V TP -x45697",
+     "col": 6,
+     "truck": 86,
+     "qty": 4,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "B&V TP -x45697",
+     "col": 7,
+     "truck": 7,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 4,
+     "truck": 66,
+     "qty": 6,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 5,
+     "truck": 75,
+     "qty": 1,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 8,
+     "truck": 57,
+     "qty": 24,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "4X6 ONYX",
+     "col": 15,
+     "truck": 69,
+     "qty": 11,
+     "confidence": "high",
+     "note": null
+    }
+   ],
+   "_verification": {
+    "agreement": "partial",
+    "disputes": 1,
+    "summary": "Independent read agrees with the first reader on all 52 quantity entries - same items, same columns, same values - and on 15 of 16 column headers. Verified the variable-order bands by their printed labels on THIS sheet: 3X10 runs ONYX, COPPER, INDIGO, BLACK (the 4 in col 13 and 2 in col 14 are on the COPPER row, second from top); 3X5 runs BLACK, ONYX, COPPER, INDIGO; 4X6 runs BLACK, ONYX, COPPER, INDIGO - so the 3X5 (2 in col 11, 46 in col 15) and 4X6 (6/1/24/11) marks are correctly on their ONYX rows. Column x-boundaries were derived from the printed grid rules (570/705/841/976/1108/1240/1372/1503/1635/1768/1903/2039/2176/2316/2457/2600/2743) and overlaid on each row band; every attribution checked out, including the three that straddle rules: RED SHOP TOWELS 300 sits inside col 11, 350/500 in cols 13/14, and the 8 that crosses the BROWN HW / C-PULL rule in col 11 is vertically centred with the other C-PULL entries, so C-PULL is the better read. Only difference found is col 15's TRUCK number. Ambiguities I re-examined and where I concur with the first reader's low-confidence reads rather than overriding them: RED SHOP TOWELS col 7 (350, middle digit overwrites the 0), BROWN HW col 4 (single looped glyph with a crossbar, best read 7), 3X5 ONYX col 15 (colliding 4 and 6, read 46 with 6 as the alternative), DRC col 15 (18 - the second digit binarizes to two closed loops, so 8 not 0), and all the initials. Blank regions confirmed blank: aprons through the mop/dust block except REG TOWELS col 11 = 10; FENDER COVERS and WHITE SHOP TOWELS; JRT/SIG SERIES TP; and everything from URINAL MATS down through SOAKER PADS. Header is not row-offset and no column is struck through."
+   }
+  },
+  {
    "source_photo": "20260731_213102.heic",
    "date": "2026-07-31",
    "page": 1,
@@ -3969,6 +5646,335 @@
     }
    ],
    "footer_note": "handwritten below the table: '6/.. 400 (a) ink towels' - not transcribed into entries"
+  },
+  {
+   "source_photo": "1000036270.jpg",
+   "date": null,
+   "page": 1,
+   "template": "CURRENT",
+   "note": "16 handwritten columns. DATE: and ROUTE DAY: fields are both blank. Header is NOT offset - truck numbers sit in the TRUCK row, route numbers in the ROUTE row, initials in the INITIALS row. Column 3 is struck through: a large X/scribble runs over the truck cell and a vertical scrawl continues down through the route and initials cells; a \"05\" is still partly visible under the cross-out in the route cell, but per rule the truck/route are recorded as null. Quantities written under column 3 (GRID TOWELS 2560, 20\" BLUE MOP 50) are real and are recorded. Columns 5 and 8 both read truck 54 / route 54 - recorded as written. On THIS sheet the 3X10 rows print in the order ONYX, COPPER, INDIGO, BLACK (top to bottom); all four 3X10 rows are empty. The 3X5 and 4X6 blocks are entirely empty. Ink-density noise along the right edge and the curled bottom edge of the photo was checked cell-by-cell and is paper shadow, not handwriting.",
+   "legibility": "good",
+   "columns": [
+    {
+     "col": 1,
+     "truck": 62,
+     "route": 62,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 2,
+     "truck": 88,
+     "route": 88,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "truck digits are faint but match the route cell"
+    },
+    {
+     "col": 3,
+     "truck": null,
+     "route": null,
+     "initials": null,
+     "confidence": "low",
+     "note": "header struck through with an X over the truck cell and a vertical scrawl through route/initials; a '05' appears under the cross-out in the route cell. Quantities in this column are still legible and recorded."
+    },
+    {
+     "col": 4,
+     "truck": 69,
+     "route": 69,
+     "initials": "NE",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 5,
+     "truck": 54,
+     "route": 4,
+     "initials": "PB",
+     "confidence": "low",
+     "note": "truck/route unambiguous (54/54); initials are a scrawl read as PB. Same truck/route as column 8.; readers disagreed on route: first 54, second 4 - First reader recorded route 54 and called it unambiguous. I read the route cell as \"04\": the first glyph is a narrow closed oval identical to the 0 in col 11's \"07\" (this writer prefixes single-digit routes with 0), with no top bar and no open belly. Compare col 8's route \"54\" and col 13's \"58\" at the same scale - those 5s have a clear top stroke and open left side. The TRUCK cell for col 5 is unambiguously 54, so as written this column is truck 54 / route 04, i.e. a truck/route mismatch unlike every other column on the sheet. Not certain - the cell is a genuinely sloppy scrawl and a badly formed 5 cannot be fully excluded; keep confidence low either way."
+    },
+    {
+     "col": 6,
+     "truck": 60,
+     "route": 60,
+     "initials": "NL",
+     "confidence": "high",
+     "note": "initials could be ML"
+    },
+    {
+     "col": 7,
+     "truck": 82,
+     "route": 82,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 8,
+     "truck": 54,
+     "route": 54,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "duplicates the truck/route of column 5"
+    },
+    {
+     "col": 9,
+     "truck": 70,
+     "route": 70,
+     "initials": "DC",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 10,
+     "truck": 65,
+     "route": 65,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 11,
+     "truck": 7,
+     "route": 7,
+     "initials": "PB",
+     "confidence": "high",
+     "note": "written as 07 in both the truck and route cells"
+    },
+    {
+     "col": 12,
+     "truck": 66,
+     "route": 66,
+     "initials": "NL",
+     "confidence": "high",
+     "note": "initials could be ML"
+    },
+    {
+     "col": 13,
+     "truck": 58,
+     "route": 58,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 14,
+     "truck": 53,
+     "route": 53,
+     "initials": "SC",
+     "confidence": "low",
+     "note": "truck/route clear (53/53); initials are an illegible scrawl, best read SC"
+    },
+    {
+     "col": 15,
+     "truck": 94,
+     "route": 94,
+     "initials": "PB",
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "col": 16,
+     "truck": 52,
+     "route": 52,
+     "initials": "PR",
+     "confidence": "low",
+     "note": "truck/route clear (52/52); initials read PR but could be FR/PK"
+    }
+   ],
+   "entries": [
+    {
+     "item": "BLACK APRON - x2873",
+     "col": 5,
+     "qty": 30,
+     "truck": 54,
+     "confidence": "high",
+     "note": "leading digit is a stylized cursive 3"
+    },
+    {
+     "item": "RED APRON - x2861",
+     "col": 5,
+     "qty": 70,
+     "truck": 54,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO ORANGE - x7433",
+     "col": 15,
+     "qty": 100,
+     "truck": 94,
+     "confidence": "high",
+     "note": "sits clearly above the MICRO ORANGE/MICRO GREY rule line; verified against the printed label band"
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 6,
+     "qty": 200,
+     "truck": 60,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 9,
+     "qty": 60,
+     "truck": 70,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "MICRO GREY - x7540",
+     "col": 13,
+     "qty": 220,
+     "truck": 58,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 3,
+     "qty": 2560,
+     "truck": null,
+     "confidence": "high",
+     "note": "digits clear; column header is struck through"
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 4,
+     "qty": 280,
+     "truck": 69,
+     "confidence": "high",
+     "note": "last digit is the writer's teardrop 0 (matches the 0 in the col 9 '20'), not a 9"
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 5,
+     "qty": 3100,
+     "truck": 54,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 6,
+     "qty": 40,
+     "truck": 60,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 9,
+     "qty": 20,
+     "truck": 70,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 15,
+     "qty": 960,
+     "truck": 94,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "GRID TOWELS - x1936",
+     "col": 16,
+     "qty": 500,
+     "truck": 52,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "20\" BLUE MOP - x7000",
+     "col": 3,
+     "qty": 50,
+     "truck": null,
+     "confidence": "high",
+     "note": "column header is struck through"
+    },
+    {
+     "item": "20\" BLUE MOP - x7000",
+     "col": 5,
+     "qty": 10,
+     "truck": 54,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "20\" BLUE MOP - x7000",
+     "col": 13,
+     "qty": 50,
+     "truck": 58,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "20\" BLUE MOP - x7000",
+     "col": 15,
+     "qty": 15,
+     "truck": 94,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW - x20023",
+     "col": 1,
+     "qty": 11,
+     "truck": 62,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW - x20023",
+     "col": 3,
+     "qty": 3,
+     "truck": null,
+     "confidence": "high",
+     "note": "column header is struck through"
+    },
+    {
+     "item": "SIG SERIES HW - x20023",
+     "col": 5,
+     "qty": 4,
+     "truck": 54,
+     "confidence": "high",
+     "note": null
+    },
+    {
+     "item": "SIG SERIES HW - x20023",
+     "col": 14,
+     "qty": 9,
+     "truck": 53,
+     "confidence": "high",
+     "note": "loop-plus-descender 9, matching the 9 in the col 15 '960'; not the angular 4 used in col 5"
+    },
+    {
+     "item": "SIG SERIES Z-FOLD - x27012",
+     "col": 6,
+     "qty": 1,
+     "truck": 60,
+     "confidence": "high",
+     "note": "single vertical stroke, same form as the strokes in the col 1 '11'"
+    },
+    {
+     "item": "SOAKER PADS",
+     "col": 12,
+     "qty": 50,
+     "truck": 66,
+     "confidence": "high",
+     "note": "bottom row of the sheet, below RAZ MATS; verified against the printed label band"
+    }
+   ],
+   "_verification": {
+    "agreement": "high",
+    "disputes": 1,
+    "summary": "Independent re-read agrees with the first reader on all 23 handwritten quantities - same items, same columns, same values - and on the 3X10 print order (ONYX, COPPER, INDIGO, BLACK, all empty). A blob scan of the whole grid found no additional ink and no phantom entries, so nothing missed and nothing spurious. Grid-line measurement confirms the three row assignments most at risk: MICRO ORANGE 100 (col 15), MICRO GREY 220 (col 13), and SOAKER PADS 50 (col 12, not RAZ MATS). Digit re-checks confirm 280/20 end in the writer's teardrop 0 (not 9), and the col-14 SIG SERIES HW mark is a 9 (not the vertical-stem 4 used in col 5). Single disagreement: column 5's route reads 04 to me, not 54."
+   }
   }
  ],
  "_duplicates": "The archive holds byte-identical copies: 1000036270.jpg == 1000036272.jpg == 5-Photo-5.jpg, and '20260508_220352 - Copy.heic' == '20260508_220352 - Copy (2).heic'. Only one of each is recorded, so a sheet is not double-weighted. A ' - Copy (2)' suffix is a Windows duplication artifact and does NOT mean a second page; distinct pages have distinct timestamps.",
