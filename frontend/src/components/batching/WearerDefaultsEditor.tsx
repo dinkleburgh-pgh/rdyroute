@@ -3,10 +3,19 @@ import { createPortal } from "react-dom";
 import clsx from "clsx";
 import {
   unloadDayWearersKey,
+  useAssignBatch,
+  useBatchSummary,
+  useBoard,
   useFleet,
+  usePrevDayCarriers,
+  usePrevDaySplitHelpers,
   useSettings,
+  useUnloadsDayOverride,
   useUpsertSetting,
 } from "../../api/hooks";
+import { todayIso } from "../../api/client";
+import { workdayNumbers } from "../Clock";
+import ConfirmDialog from "../ConfirmDialog";
 import { truckTypeLabel } from "../../utils/truckType";
 import { isScheduledOff } from "../../utils/truckStatus";
 
@@ -52,15 +61,32 @@ export default function WearerDefaultsEditor({
   open,
   initialDay,
   onClose,
+  runDate = todayIso(),
 }: {
   open: boolean;
   /** Opens on the day being batched, since that's usually the one in question. */
   initialDay: number;
   onClose: () => void;
+  /** The run date whose live batch numbers the "apply now" prompt targets. */
+  runDate?: string;
 }) {
   const { data: settings = [] } = useSettings();
   const { data: trucks = [] } = useFleet();
   const upsert = useUpsertSetting();
+
+  // Saving a sheet only rewrites the STANDING numbers. Anything already batched
+  // today keeps whatever it was assigned with, which is right when the sheet is
+  // being corrected after the fact and wrong when it is being corrected because
+  // today's numbers came out of a stale sheet. The app cannot tell those apart,
+  // so it asks — but only when a live assignment would actually change.
+  const { data: board = [] } = useBoard(runDate);
+  const { data: batches = [] } = useBatchSummary(runDate);
+  const { data: unloadsOverride } = useUnloadsDayOverride(runDate);
+  const prevCarriers = usePrevDayCarriers(runDate, board);
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
+  const assign = useAssignBatch();
+  const [applyOpen, setApplyOpen] = useState(false);
+  const [applying, setApplying] = useState(false);
 
   const [day, setDay] = useState(initialDay);
   const [drafts, setDrafts] = useState<Drafts>({});
@@ -151,11 +177,78 @@ export default function WearerDefaultsEditor({
     // payloadFor reads `drafts`, which is the real dependency here.
   }, [drafts, stored, open]);
 
+  /** The unload day `runDate` actually works — the only sheet whose numbers
+   *  govern what is batched right now. */
+  const liveDay = useMemo(() => {
+    const [y, m, dd] = runDate.split("-").map(Number);
+    return unloadsOverride ?? workdayNumbers(new Date(y, m - 1, dd, 12)).unloadsDay;
+  }, [runDate, unloadsOverride]);
+
+  const routeByCarrier = useMemo(() => {
+    const map = new Map<number, number>();
+    for (const [route, carrier] of prevCarriers) map.set(carrier.truck_number, route);
+    return map;
+  }, [prevCarriers]);
+
+  /**
+   * Trucks batched on `runDate` whose assigned wearers disagree with what the
+   * just-saved sheet says they should be. Resolved exactly the way every
+   * batching surface resolves a prefill — a carrier takes the route it carried,
+   * and a split helper is 0 — so "what it would become" is genuinely what the
+   * app would have filled in.
+   */
+  function pendingChanges(): { truck: number; batch: number; from: number; to: number }[] {
+    const sheet = payloadFor(liveDay);
+    const out: { truck: number; batch: number; from: number; to: number }[] = [];
+    for (const b of batches) {
+      for (const t of b.trucks) {
+        const to = prevSplitHelpers.has(t.truck_number)
+          ? 0
+          : sheet[String(routeByCarrier.get(t.truck_number) ?? t.truck_number)];
+        // Not on the sheet -> the sheet has no opinion, so leave it alone.
+        if (to == null) continue;
+        if (to !== t.wearers) out.push({ truck: t.truck_number, batch: b.batch_number, from: t.wearers, to });
+      }
+    }
+    return out.sort((a, b) => a.truck - b.truck);
+  }
+
+  const [pending, setPending] = useState<{ truck: number; batch: number; from: number; to: number }[]>([]);
+
   async function save() {
     for (const d of changedDays) {
       await upsert.mutateAsync({ key: unloadDayWearersKey(d), value: payloadFor(d) });
     }
     setSaved(true);
+    // Only worth asking when TODAY's sheet moved and something live disagrees.
+    if (changedDays.some((d) => d === liveDay)) {
+      const diffs = pendingChanges();
+      if (diffs.length > 0) {
+        setPending(diffs);
+        setApplyOpen(true);
+      }
+    }
+  }
+
+  /** Re-assign each affected truck to the batch it is already in, with the new
+   *  number. Reuses the normal assign path so the cap check, the split-helper
+   *  rule and the activity log all behave as if a person had typed it. */
+  async function applyToCurrent() {
+    setApplying(true);
+    try {
+      for (const c of pending) {
+        await assign.mutateAsync({
+          run_date: runDate,
+          batch_number: c.batch,
+          truck_number: c.truck,
+          wearers: c.to,
+        });
+      }
+      setApplyOpen(false);
+      setPending([]);
+    } finally {
+      setApplying(false);
+    }
   }
 
   function setCell(num: number, value: string) {
@@ -284,6 +377,22 @@ export default function WearerDefaultsEditor({
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={applyOpen}
+        title="Update current batching numbers?"
+        description={
+          `Day ${liveDay}'s sheet changed. ${pending.length} truck${pending.length === 1 ? "" : "s"} already ` +
+          `batched on ${runDate} ${pending.length === 1 ? "has" : "have"} a different number:\n\n` +
+          pending.slice(0, 8).map((c) => `  #${c.truck} (batch ${c.batch})  ${c.from} → ${c.to}`).join("\n") +
+          (pending.length > 8 ? `\n  …and ${pending.length - 8} more` : "") +
+          `\n\nSaving the sheet on its own leaves today's batches as they are.`
+        }
+        confirmLabel={applying ? "Updating…" : "Update them"}
+        cancelLabel="Leave as they are"
+        onConfirm={() => void applyToCurrent()}
+        onCancel={() => { setApplyOpen(false); setPending([]); }}
+      />
     </div>,
     document.body,
   );
