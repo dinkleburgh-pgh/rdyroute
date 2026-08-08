@@ -782,8 +782,19 @@ function ReviewStep({
   }).sort((a, b) => a.truck - b.truck);
 
   // Every truck working today that hasn't landed in a batch.
+  //
+  // A covered route and the truck that carried it are ONE thing to batch: the
+  // freight came back on the carrier, so batching either satisfies the pair.
+  // Without this the sheet could never come out clean — batch the route off the
+  // paper and the carrier was flagged as missing; batch the carrier and the
+  // route was. Route 4 covered by #11 is the standing example: it read as two
+  // separate jobs when there was only ever one load.
   const unbatched = rosterTrucks
-    .filter((t) => !batchByTruck.has(t.truck_number))
+    .filter((t) => {
+      if (batchByTruck.has(t.truck_number)) return false;
+      const carried = sheetRouteFor(t.truck_number);
+      return !(carried !== t.truck_number && batchByTruck.has(carried));
+    })
     .map((t) => t.truck_number)
     .sort((a, b) => a - b);
 
