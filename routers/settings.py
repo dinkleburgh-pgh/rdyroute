@@ -132,6 +132,9 @@ _OPTIONAL_DEFAULT_PREFIXES: tuple[tuple[str, object], ...] = (
     # Next Up is unset on most days and the load timers poll it every ~10s, so
     # leaving it out produced a steady stream of 404s in the client log.
     ("runday_next_up_", None),
+    # A corrected load order only exists for days someone actually fixed, so
+    # the common case is "no override" rather than an error.
+    ("load_order_", None),
 )
 
 # Per-run-date operational keys any authenticated session may READ. These are
@@ -151,6 +154,9 @@ _USER_READABLE_PREFIXES: tuple[str, ...] = (
     "unloads_day_override_",
     "runday_next_up_",
     "day_setup_source_",
+    # Read so any surface can show the corrected order; WRITING still needs an
+    # admin role, which is what makes this supervisor-only.
+    "load_order_",
     # Standing per-workday notes and the batching wearer sheets. These drive
     # what the Unload, Batching and Load surfaces render for everyone, so
     # withholding them from non-admins meant a lead saw no sheet notes and no

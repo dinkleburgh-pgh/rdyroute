@@ -7,6 +7,7 @@
 import { Link } from "react-router-dom";
 import { ClipboardList, Layers } from "lucide-react";
 import PrevDayCoveragePanel from "./PrevDayCoveragePanel";
+import LoadOrderPanel from "./LoadOrderPanel";
 
 export default function PreviousDataEntryPanel() {
   return (
@@ -30,6 +31,10 @@ export default function PreviousDataEntryPanel() {
       <section className="space-y-3">
         <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Previous Day Coverage</h3>
         <PrevDayCoveragePanel />
+      </section>
+
+      <section className="space-y-3 border-t border-slate-800 pt-5">
+        <LoadOrderPanel />
       </section>
 
       {/* Batching moved to Operations → Batching, alongside the settings that

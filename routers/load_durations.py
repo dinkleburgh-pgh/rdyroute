@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from database import get_db
 from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import MAX_LOAD_SECONDS, MIN_LOAD_SECONDS, window_bounds
-from models import LoadDuration, TruckState, User
+from models import AppSetting, LoadDuration, TruckState, User
 from schemas import LoadDurationCreate, LoadDurationOut, PaceDailyPoint
 
 router = APIRouter(prefix="/load-durations", tags=["load-durations"])
@@ -172,9 +172,33 @@ def sequence_suggestions(
         if r.unloaded_at is not None:
             by_date_unload.setdefault(r.run_date, []).append(r)
 
+    # A supervisor can correct a finished day's load order (Management → Data &
+    # Reports → Previous Data Entry). The correction is stored separately rather
+    # than by rewriting load_finish_time, because those stamps are measurements:
+    # moving them to reorder a day would corrupt load_duration_seconds and the
+    # pace metrics derived from it. Where a correction exists it wins; trucks it
+    # does not mention keep their timestamp order, after the listed ones.
+    overrides: dict[date, list[int]] = {}
+    for s in db.scalars(select(AppSetting).where(AppSetting.key.like("load_order_%"))).all():
+        try:
+            d = date.fromisoformat(s.key[len("load_order_"):])
+        except ValueError:
+            continue
+        if isinstance(s.value, list):
+            overrides[d] = [int(n) for n in s.value if isinstance(n, (int, float, str)) and str(n).isdigit()]
+
     load_pos: dict[int, list[int]] = {}
-    for lst in by_date_load.values():
-        for i, r in enumerate(sorted(lst, key=lambda x: x.load_finish_time), start=1):
+    for run_date, lst in by_date_load.items():
+        order = overrides.get(run_date)
+        if order:
+            rank = {n: i for i, n in enumerate(order)}
+            ordered = sorted(
+                lst,
+                key=lambda x: (rank.get(x.truck_number, len(rank)), x.load_finish_time),
+            )
+        else:
+            ordered = sorted(lst, key=lambda x: x.load_finish_time)
+        for i, r in enumerate(ordered, start=1):
             load_pos.setdefault(r.truck_number, []).append(i)
     unload_pos: dict[int, list[int]] = {}
     for lst in by_date_unload.values():
