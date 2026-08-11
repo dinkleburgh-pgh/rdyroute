@@ -20,7 +20,8 @@ export type PermissionAction =
   | "load:trucks"
   | "unload:trucks"
   | "edit:notes"
-  | "delete:messages";
+  | "delete:messages"
+  | "edit:wearer-defaults";
 
 /** Roles that are considered elevated "manager-level" operators. */
 const MANAGER_ROLES: AuthRole[] = ["admin", "fleet", "atl", "supervisor", "lead"];
@@ -37,6 +38,10 @@ const ACTION_ROLES: Record<PermissionAction, AuthRole[]> = {
   "unload:trucks": ["admin", "fleet", "atl", "supervisor", "lead", "unloader"],
   "edit:notes": MANAGER_ROLES,
   "delete:messages": ["admin", "fleet", "atl", "supervisor"],
+  // Deliberately NOT MANAGER_ROLES: PUT /settings/{key} gates on the backend's
+  // _ADMIN_ROLES = {admin, fleet, supervisor}, so offering the editor to atl or
+  // lead would let them transcribe five sheets and then eat a 403 on save.
+  "edit:wearer-defaults": ["admin", "fleet", "supervisor"],
 };
 
 /** Returns true if `role` is permitted to perform `action`. */

@@ -6,6 +6,7 @@ value stored under a string key. The React frontend and other routers can
 read/write settings via these endpoints.
 """
 
+import re
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 
@@ -65,7 +66,17 @@ KNOWN_KEYS = {
     "shortage_sheet_ollama_timeout_seconds",
     "shortage_sheet_llm_low_confidence_threshold",
     "shortage_sheet_preprocess_max_image_side",
+    # Who last confirmed the monthly wearer sheets, and for which month. Written
+    # only through PUT /settings/wearer_defaults_review, which stamps the actor
+    # server-side — see _stamp_wearer_defaults_review.
+    "wearer_defaults_review",
 }
+
+# The monthly wearer-sheet review marker. Its value is server-stamped rather
+# than taken from the client, so it lives behind its own constant and is
+# refused by the bulk endpoint.
+WEARER_DEFAULTS_REVIEW_KEY = "wearer_defaults_review"
+_PERIOD_RE = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 _CLEAR_TO_EMPTY_SETTING_FACTORIES: dict[str, Callable[[], dict[str, object]]] = {
     "shortage_sheet_ocr_correction_memory": lambda: {
@@ -116,6 +127,14 @@ _USER_READABLE_KEYS = {
     "outside_timer_minutes",
     "paper_bay_timer_minutes",
     "recurring_route_swaps",
+    # Named by hand rather than by prefix, so widening who can see which member
+    # of staff transcribed the sheets is a deliberate choice and not a
+    # prefix-match accident. The sheet NUMBERS are already readable by every
+    # authenticated role via the "unload_day_wearers_" entry in
+    # _USER_READABLE_PREFIXES below; naming their author is the same class of
+    # information the app already shows on notes and document uploads. Writing
+    # is still admin/fleet/supervisor via the _ADMIN_ROLES check on PUT.
+    "wearer_defaults_review",
 }
 
 # Keys any authenticated user may write to (e.g. personal notes)
@@ -200,6 +219,63 @@ def _is_user_writable(key: str, user: User) -> bool:
     return False
 
 
+def _stamp_wearer_defaults_review(before: object, payload_value: object, user: User) -> dict:
+    """Build the wearer-sheet review marker, with the actor stamped server-side.
+
+    The client sends only `period` and `changed_days`; everything identifying
+    WHO confirmed is taken from the authenticated user here, so the identity
+    cannot be forged through the generic PUT the way a client-supplied name
+    could be.
+
+    Two things about the return value are load-bearing:
+
+    1. It must be a BRAND-NEW dict, never a mutation of `before`. AppSetting.value
+       is a plain JSON column, not a MutableDict, so SQLAlchemy only notices a
+       reassignment — an in-place edit would be silently dropped on flush.
+    2. `confirmed_at` moves on every call, which is what makes the row dirty even
+       when not a single wearer number changed. That is the entire monthly
+       mechanic: "I checked August, nothing moved" has to be recordable, and
+       today it is unrepresentable because an identical value writes nothing.
+    """
+    if not isinstance(payload_value, dict):
+        raise HTTPException(status_code=422, detail="Expected an object")
+    period = str(payload_value.get("period") or "")
+    if not _PERIOD_RE.match(period):
+        raise HTTPException(status_code=422, detail="period must be YYYY-MM")
+
+    changed_days = sorted({
+        int(d) for d in (payload_value.get("changed_days") or [])
+        if isinstance(d, (int, str)) and str(d).isdigit() and 1 <= int(d) <= 5
+    })
+
+    prior = before if isinstance(before, dict) else {}
+    prior_days = prior.get("days")
+    # display_name is non-nullable with a "" default, so coalesce the same way
+    # activity_log does rather than rendering an empty byline.
+    stamp = {
+        "period": period,
+        "at": datetime.now(UTC).isoformat(),
+        "by": user.username,
+        "by_display": user.display_name or user.username,
+    }
+    return {
+        "version": 1,
+        "period": period,
+        "confirmed_at": stamp["at"],
+        "confirmed_by": stamp["by"],
+        "confirmed_by_display": stamp["by_display"],
+        "confirmed_by_role": getattr(user.role, "value", user.role),
+        "changed_days": changed_days,
+        # Per-day authorship is only credited for days that actually changed —
+        # confirming a month you didn't retype shouldn't put your name on all
+        # five sheets. Older entries carry forward.
+        "days": {
+            **(dict(prior_days) if isinstance(prior_days, dict) else {}),
+            **{str(d): stamp for d in changed_days},
+        },
+    }
+
+
 def _setting_activity_payload(key: str, before: object, after: object) -> dict[str, object] | None:
     run_date_value = None
     for prefix in (
@@ -216,11 +292,16 @@ def _setting_activity_payload(key: str, before: object, after: object) -> dict[s
                 run_date_value = None
             break
 
+    # "actor" decides whether the event is attributed to the signed-in user or
+    # to the system. The three keys below stay "system" deliberately: they are
+    # written by day rollover off a plain GET /trucks/board, so the "actor"
+    # would be whoever happened to load the board first — worse than "System".
     if key.startswith("day_setup_source_"):
         return {
             "event_family": "setup",
             "event_type": "day_setup_source_changed",
             "run_date": run_date_value,
+            "actor": "system",
             "summary": f"Setup source for {run_date_value or key} set to {after}",
         }
     if key.startswith("wizard_completed_"):
@@ -228,6 +309,7 @@ def _setting_activity_payload(key: str, before: object, after: object) -> dict[s
             "event_family": "setup",
             "event_type": "setup_day_completion_changed",
             "run_date": run_date_value,
+            "actor": "system",
             "summary": (
                 f"Setup Day marked complete for {run_date_value or key}"
                 if after is True else
@@ -239,7 +321,28 @@ def _setting_activity_payload(key: str, before: object, after: object) -> dict[s
             "event_family": "setup",
             "event_type": "holiday_flag_changed",
             "run_date": run_date_value,
+            "actor": "system",
             "summary": f"{key.split('_')[0].capitalize()} flag updated for {run_date_value or key}",
+        }
+    if key == WEARER_DEFAULTS_REVIEW_KEY and isinstance(after, dict):
+        changed = after.get("changed_days") or []
+        return {
+            # "batch" rather than "setup" because of the actor rule above: a
+            # "setup" family event is recorded as System, which would reproduce
+            # the exact missing-"who" this feature exists to fix. "batch" is
+            # already in the ActivityEventFamily literal and already has a badge
+            # colour and a filter chip, so nothing else has to change.
+            "event_family": "batch",
+            "event_type": "wearer_defaults_confirmed",
+            "run_date": None,
+            "actor": "user",
+            "summary": (
+                f"Wearer sheets confirmed for {after.get('period')} — "
+                + (
+                    f"days {', '.join(str(d) for d in changed)} updated"
+                    if changed else "no changes"
+                )
+            ),
         }
     return None
 
@@ -291,22 +394,32 @@ def upsert_setting(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     setting = db.get(AppSetting, key)
     before_value = setting.value if setting is not None else None
+
+    # Server-stamped keys ignore most of what the client sent. Everything below
+    # writes new_value, never payload.value.
+    new_value = payload.value
+    if key == WEARER_DEFAULTS_REVIEW_KEY:
+        new_value = _stamp_wearer_defaults_review(before_value, payload.value, current_user)
+
     if setting is None:
-        setting = AppSetting(key=key, value=payload.value)
+        setting = AppSetting(key=key, value=new_value)
         db.add(setting)
     else:
-        setting.value = payload.value
-    activity_payload = _setting_activity_payload(key, before_value, payload.value)
-    if activity_payload is not None and before_value != payload.value:
-        is_setup = activity_payload.get("event_family") == "setup"
+        setting.value = new_value
+    activity_payload = _setting_activity_payload(key, before_value, new_value)
+    if activity_payload is not None and before_value != new_value:
+        # Was `event_family == "setup"`, which every branch returned — so the
+        # user arm was unreachable and every setting change in the app logged as
+        # System. Attribution is now stated per payload instead of inferred.
+        actor = activity_payload.get("actor", "system")
         append_activity_event(
             db,
-            actor_user=None if is_setup else current_user,
+            actor_user=current_user if actor == "user" else None,
             event_family=str(activity_payload["event_family"]),
             event_type=str(activity_payload["event_type"]),
             run_date=activity_payload.get("run_date"),
             summary=str(activity_payload["summary"]),
-            diff_json={"setting_key": key, "before": before_value, "after": payload.value},
+            diff_json={"setting_key": key, "before": before_value, "after": new_value},
             context_json={"setting_key": key},
         )
     db.commit()
@@ -363,6 +476,13 @@ def bulk_upsert_settings(
     """
     results = []
     for key, value in payload.items():
+        if key == WEARER_DEFAULTS_REVIEW_KEY:
+            # This key's whole point is that the server stamps who confirmed.
+            # Letting it through here would accept a forged confirmed_by.
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Managed key — use PUT /settings/{WEARER_DEFAULTS_REVIEW_KEY}",
+            )
         setting = db.get(AppSetting, key)
         if setting is None:
             setting = AppSetting(key=key, value=value)

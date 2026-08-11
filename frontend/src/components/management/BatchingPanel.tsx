@@ -25,6 +25,9 @@ import ConfirmDialog from "../ConfirmDialog";
 import OverbatchedChip from "../OverbatchedChip";
 import { FieldRow } from "./shared";
 import WearerDefaultsEditor from "../batching/WearerDefaultsEditor";
+import WearerSheetStatus from "../batching/WearerSheetStatus";
+import { useAuth } from "../../contexts/AuthContext";
+import { can } from "../../utils/permissions";
 import type { TruckWithState } from "../../types";
 
 const BATCH_NUMBERS = [1, 2, 3, 4, 5, 6];
@@ -47,6 +50,8 @@ export default function BatchingPanel() {
   const [confirmClear, setConfirmClear] = useState<number | null>(null);
   const [busyTruck, setBusyTruck] = useState<number | null>(null);
   const [defaultsOpen, setDefaultsOpen] = useState(false);
+  const { user } = useAuth();
+  const canEditDefaults = can(user?.role, "edit:wearer-defaults");
 
   const { data: board = [] } = useBoard(runDate);
   const { data: batches = [] } = useBatchSummary(runDate);
@@ -171,15 +176,26 @@ export default function BatchingPanel() {
                 date. The standing per-unload-day numbers off the paper sheets
                 are a different thing, and this was the one batching surface
                 with no way to reach them — the editor was reachable only from
-                the wizard. It carries its own Day 1-5 tabs. */}
-            <button
-              className="btn-ghost whitespace-nowrap text-xs"
-              onClick={() => setDefaultsOpen(true)}
-              title="Standing wearer counts per unload day, from the printed sheets"
-            >
-              Wearer defaults (by day)
-            </button>
+                the wizard. It carries its own Day 1-5 tabs.
+
+                Role-gated to match the server: Management is reachable by lead
+                and atl, but writing a setting is not, so without this a lead
+                could transcribe all five sheets and only find out at save. The
+                wizard's copy of this button already got that right. */}
+            {canEditDefaults && (
+              <button
+                className="btn-ghost whitespace-nowrap text-xs"
+                onClick={() => setDefaultsOpen(true)}
+                title="Standing wearer counts per unload day, from the printed sheets"
+              >
+                Wearer defaults (by day)
+              </button>
+            )}
           </div>
+        </div>
+
+        <div>
+          <WearerSheetStatus onOpen={canEditDefaults ? () => setDefaultsOpen(true) : undefined} />
         </div>
 
         <FieldRow label="Run date">
@@ -354,7 +370,7 @@ export default function BatchingPanel() {
 
       {/* Opens on the day this run date unloads, but every day is a tab away. */}
       <WearerDefaultsEditor
-        open={defaultsOpen}
+        open={defaultsOpen && canEditDefaults}
         initialDay={unloadsDay}
         onClose={() => setDefaultsOpen(false)}
       />

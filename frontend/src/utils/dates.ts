@@ -49,3 +49,49 @@ export function formatRunDate(iso?: string | null): string {
   const [, y, mo, d] = m;
   return `${MONTHS[Number(mo) - 1]} ${Number(d)}, ${y}`;
 }
+
+// ---------------------------------------------------------------------------
+// Service months ("YYYY-MM")
+//
+// The wearer sheets arrive as a monthly artifact, so the month itself is a
+// value the app stores and compares. Built on easternNow() so the month
+// boundary lands where every other date in the app does, whatever the device
+// timezone says.
+// ---------------------------------------------------------------------------
+
+const MONTHS_LONG = [
+  "January", "February", "March", "April", "May", "June",
+  "July", "August", "September", "October", "November", "December",
+];
+
+const PERIOD_RE = /^(\d{4})-(0[1-9]|1[0-2])$/;
+
+/** The current service month in Eastern, as "YYYY-MM". */
+export function currentSheetPeriod(): string {
+  const d = easternNow();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
+/** "2026-08" → "August 2026". Returns the input unchanged if it isn't a period. */
+export function formatSheetPeriod(period?: string | null): string {
+  if (!period) return "";
+  const m = PERIOD_RE.exec(period);
+  if (!m) return period;
+  return `${MONTHS_LONG[Number(m[2]) - 1]} ${m[1]}`;
+}
+
+/**
+ * How many whole calendar months `period` is behind now — 0 for the current
+ * month, 1 the day the month rolls over. Null when the period is missing or
+ * malformed.
+ *
+ * Whole months on purpose. Sheets arrive on no fixed date, so any "N days old"
+ * rule fires while the paper is still in transit, which is how you train people
+ * to ignore a warning.
+ */
+export function monthsBehind(period?: string | null, now: Date = easternNow()): number | null {
+  if (!period) return null;
+  const m = PERIOD_RE.exec(period);
+  if (!m) return null;
+  return (now.getFullYear() * 12 + now.getMonth() + 1) - (Number(m[1]) * 12 + Number(m[2]));
+}

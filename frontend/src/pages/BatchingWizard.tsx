@@ -36,6 +36,8 @@ import ConfirmDialog from "../components/ConfirmDialog";
 import { AlertTriangleIcon, DustGarmentIcon } from "../components/icons";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import PreBatchBanner from "../components/PreBatchBanner";
+import WearerSheetStatus from "../components/batching/WearerSheetStatus";
+import { can } from "../utils/permissions";
 import WearerDefaultsEditor from "../components/batching/WearerDefaultsEditor";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckWithState } from "../types";
@@ -278,7 +280,7 @@ export default function BatchingWizard() {
   // to roles that can actually save — a button that always 403s is worse than
   // no button.
   const { user } = useAuth();
-  const canEditDefaults = ["admin", "fleet", "supervisor"].includes(user?.role ?? "");
+  const canEditDefaults = can(user?.role, "edit:wearer-defaults");
 
   return (
     <div className="space-y-4 p-3 md:p-6">
@@ -292,6 +294,10 @@ export default function BatchingWizard() {
           batch"), so they belong in front of whoever is batching. */}
       <PreBatchBanner />
       <WorkflowDayNotes scope="unload" day={unloadsDay} />
+      {/* This is where the sheet numbers actually get used, so it is where
+          naming their month and their author earns its keep. Self-gating: one
+          quiet line on a current month, amber only when it has fallen behind. */}
+      <WearerSheetStatus onOpen={() => setDefaultsOpen(true)} />
 
       {/* Run date + roster scope */}
       <div className="card flex flex-wrap items-center justify-between gap-3">

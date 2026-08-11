@@ -428,12 +428,22 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
             key = str(item.get("key") or "").strip()
             if not key:
                 continue
+            # The exporter writes updated_at, but restoring only key+value meant
+            # every backup import re-stamped every setting in the app to the
+            # moment of the restore — so "last changed" read as "just now" for
+            # settings nobody had touched in months.
+            stamped_at = _parse_datetime(item.get("updated_at"))
             existing = None if replace_existing else db.get(AppSetting, key)
             if existing is None:
-                db.add(AppSetting(key=key, value=item.get("value")))
+                row = AppSetting(key=key, value=item.get("value"))
+                if stamped_at is not None:
+                    row.updated_at = stamped_at
+                db.add(row)
                 imported += 1
             else:
                 existing.value = item.get("value")
+                if stamped_at is not None:
+                    existing.updated_at = stamped_at
                 updated += 1
         db.flush()
         summary["app_settings_imported"] = imported

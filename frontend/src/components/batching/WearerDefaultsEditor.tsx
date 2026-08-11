@@ -10,14 +10,20 @@ import {
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
   useSettings,
+  useSettingUpdatedAt,
   useUnloadsDayOverride,
   useUpsertSetting,
+  useWearerDefaultsReview,
 } from "../../api/hooks";
 import { todayIso } from "../../api/client";
 import { workdayNumbers } from "../Clock";
 import ConfirmDialog from "../ConfirmDialog";
 import { truckTypeLabel } from "../../utils/truckType";
 import { isScheduledOff } from "../../utils/truckStatus";
+import { currentSheetPeriod, formatSheetPeriod } from "../../utils/dates";
+import { WEARER_DEFAULTS_REVIEW_KEY } from "../../utils/wearerDefaults";
+import { useToast } from "../../contexts/ToastContext";
+import { format, parseISO } from "date-fns";
 
 /**
  * Editor for the standing per-unload-day wearer counts.
@@ -36,6 +42,16 @@ import { isScheduledOff } from "../../utils/truckStatus";
  * 0 are therefore different answers — "no number for this truck" versus "the
  * number is none" — and only the first should make the wizard ask.
  */
+
+/** An instant, in the reader's locale. Not formatRunDate — that slices the date
+ *  off the front of the string, dropping the time and the UTC offset with it. */
+function fmtStamp(iso: string): string {
+  try {
+    return format(parseISO(iso), "PPp");
+  } catch {
+    return iso;
+  }
+}
 
 const DAYS = [1, 2, 3, 4, 5] as const;
 const DAY_NAMES: Record<number, string> = {
@@ -92,6 +108,17 @@ export default function WearerDefaultsEditor({
   const [drafts, setDrafts] = useState<Drafts>({});
   const [saved, setSaved] = useState(false);
 
+  // Which month these sheets are FOR, and who last said so.
+  //
+  // A selector rather than a label because September's sheets genuinely arrive
+  // in late August, and the person transcribing them has to be able to say so.
+  // `period` (which month) and `confirmed_at` (when they said it) are separate
+  // for exactly that reason — they are allowed to disagree.
+  const toast = useToast();
+  const review = useWearerDefaultsReview();
+  const [period, setPeriod] = useState(currentSheetPeriod());
+  const confirmedThisPeriod = review?.period === period;
+
   const stored = useMemo(() => {
     const out: Record<number, Record<number, number>> = {};
     for (const d of DAYS) out[d] = readStored(settings, d);
@@ -119,6 +146,7 @@ export default function WearerDefaultsEditor({
       setDrafts(draftsFromStored());
       setDay(initialDay);
       setSaved(false);
+      setPeriod(currentSheetPeriod());
     }
     wasOpen.current = open;
   });
@@ -155,6 +183,36 @@ export default function WearerDefaultsEditor({
     [dayDrafts],
   );
 
+  /**
+   * "Last changed" for the open day, best source first:
+   *   1. the review marker, which knows WHO
+   *   2. the row's own updated_at, which knows only WHEN — this covers every
+   *      sheet written before this feature existed, i.e. all of them on day one
+   *   3. nothing
+   *
+   * If the row moved after the last confirmation, something rewrote the numbers
+   * outside the editor (a bulk write, a backup restore) and the confirmation no
+   * longer describes what is stored — worth saying so.
+   */
+  const dayUpdatedAt = useSettingUpdatedAt(unloadDayWearersKey(day));
+  const dayProvenance = useMemo(() => {
+    const stamp = review?.days?.[String(day)];
+    if (stamp) {
+      const drifted =
+        dayUpdatedAt != null &&
+        review != null &&
+        new Date(dayUpdatedAt).getTime() > new Date(review.confirmed_at).getTime() + 1000;
+      return (
+        <>
+          {`last changed ${fmtStamp(stamp.at)} by ${stamp.by_display || stamp.by}`}
+          {drifted && <span className="text-amber-400"> · updated after this confirmation</span>}
+        </>
+      );
+    }
+    if (dayUpdatedAt) return `last changed ${fmtStamp(dayUpdatedAt)} · author unknown`;
+    return "never saved";
+  }, [review, day, dayUpdatedAt]);
+
   /** Normalised payload for a day: every filled cell, keyed by truck. Blanks
    *  drop out; an explicit 0 is a real value and stays. */
   function payloadFor(d: number): Record<string, number> {
@@ -176,6 +234,10 @@ export default function WearerDefaultsEditor({
     });
     // payloadFor reads `drafts`, which is the real dependency here.
   }, [drafts, stored, open]);
+
+  /** Save is reachable with zero edits — confirming an unchanged month is the
+   *  point, and is the one thing the old button could never express. */
+  const canSave = changedDays.length > 0 || !confirmedThisPeriod;
 
   /** The unload day `runDate` actually works — the only sheet whose numbers
    *  govern what is batched right now. */
@@ -216,8 +278,25 @@ export default function WearerDefaultsEditor({
   const [pending, setPending] = useState<{ truck: number; batch: number; from: number; to: number }[]>([]);
 
   async function save() {
-    for (const d of changedDays) {
-      await upsert.mutateAsync({ key: unloadDayWearersKey(d), value: payloadFor(d) });
+    try {
+      for (const d of changedDays) {
+        await upsert.mutateAsync({ key: unloadDayWearersKey(d), value: payloadFor(d) });
+      }
+      // Unconditional, and last. This is the whole monthly mechanic: it is the
+      // only write that still happens when nothing changed, which is what makes
+      // "I checked August, nothing moved" recordable at all. The server stamps
+      // who and when — the client only says which month.
+      await upsert.mutateAsync({
+        key: WEARER_DEFAULTS_REVIEW_KEY,
+        value: { period, changed_days: changedDays },
+      });
+    } catch {
+      // The loop had no handler at all before, so a mid-save failure left a
+      // partial write and a modal that just looked stuck. It matters more now
+      // that the confirm write is last: failing silently there would leave the
+      // UI claiming a confirmation that never landed.
+      toast.error("Couldn't save the sheets — anything after the first failure was not written.");
+      return;
     }
     setSaved(true);
     // Only worth asking when TODAY's sheet moved and something live disagrees.
@@ -270,6 +349,14 @@ export default function WearerDefaultsEditor({
               The standing count for each truck, from the monthly sheets. Batching prefills
               from these, so a truck can be batched in one tap.
             </p>
+            {/* Read from the live query, never from `stored` — that snapshot is
+                frozen on the open transition, so it would keep showing the
+                pre-save value immediately after saving. */}
+            <p className="mt-1 text-[11px] text-slate-500">
+              {review
+                ? `Sheets on file: ${formatSheetPeriod(review.period)} · confirmed by ${review.confirmed_by_display || "unknown"} on ${fmtStamp(review.confirmed_at)}`
+                : "Sheets on file: never confirmed — nobody has checked these against a paper sheet yet."}
+            </p>
           </div>
           <button className="btn-ghost shrink-0" onClick={onClose}>Close</button>
         </div>
@@ -307,6 +394,7 @@ export default function WearerDefaultsEditor({
         <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-700 bg-slate-950/40 px-4 py-2 text-xs">
           <span className="text-slate-400">
             Day {day}{DAY_NAMES[day] ? ` · ${DAY_NAMES[day]}` : ""}
+            <span className="mt-0.5 block text-[10px] text-slate-500">{dayProvenance}</span>
           </span>
           {/* Reconcile against the paper before saving. */}
           <span className="text-slate-400">
@@ -356,16 +444,31 @@ export default function WearerDefaultsEditor({
           </p>
         </div>
 
-        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-700 px-4 py-3">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-t border-slate-700 px-4 py-3">
           <span className="text-xs text-slate-500">
             {changedDays.length === 0
-              ? saved ? "Saved." : "No changes."
+              ? saved
+                ? "Saved."
+                : confirmedThisPeriod
+                  ? "No changes."
+                  : `No changes — confirming marks these as ${formatSheetPeriod(period)}'s numbers.`
               : `Unsaved: ${changedDays.map((d) => `Day ${d}`).join(", ")}`}
           </span>
-          <div className="flex gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+              Sheet month
+              <input
+                type="month"
+                className="input px-2 py-1 text-xs"
+                value={period}
+                onChange={(e) => { setSaved(false); setPeriod(e.target.value); }}
+              />
+            </label>
             <button
               type="button"
               className="btn-ghost"
+              // Nothing to revert on a bare confirmation, so this stays keyed to
+              // real edits rather than following canSave.
               disabled={changedDays.length === 0 || upsert.isPending}
               onClick={() => setDrafts(draftsFromStored())}
             >
@@ -374,10 +477,16 @@ export default function WearerDefaultsEditor({
             <button
               type="button"
               className="btn-primary font-semibold"
-              disabled={changedDays.length === 0 || upsert.isPending}
+              disabled={!canSave || !period || upsert.isPending}
               onClick={save}
             >
-              {upsert.isPending ? "Saving…" : "Save defaults"}
+              {upsert.isPending
+                ? "Saving…"
+                : changedDays.length > 0
+                  ? `Save & confirm ${formatSheetPeriod(period)}`
+                  : confirmedThisPeriod
+                    ? `Confirmed for ${formatSheetPeriod(period)}`
+                    : `Confirm ${formatSheetPeriod(period)}`}
             </button>
           </div>
         </div>

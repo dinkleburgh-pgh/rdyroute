@@ -5,6 +5,11 @@ import { api, todayIso } from "./client";
 import * as offlineQueue from "./offlineQueue";
 import { logDebug } from "../utils/debugLog";
 import { buildCoverageList, buildPrevDayCoverage, resolvePrevRunDate, type CoverageEntry } from "../utils/truckStatus";
+import {
+  WEARER_DEFAULTS_REVIEW_KEY,
+  parseWearerDefaultsReview,
+  type WearerDefaultsReview,
+} from "../utils/wearerDefaults";
 import type {
   AppSetting,
   ActivityEventPage,
@@ -1186,6 +1191,33 @@ export function useUnloadDayTemplate(day: number | null | undefined): UnloadDayT
     const notesRaw = settings.find((s) => s.key === unloadDayNotesKey(day))?.value;
     return { wearers, notes: typeof notesRaw === "string" ? notesRaw : "" };
   }, [settings, day]);
+}
+
+/**
+ * Who last confirmed the monthly wearer sheets, and for which service month.
+ * Null until someone confirms for the first time.
+ */
+export function useWearerDefaultsReview(): WearerDefaultsReview | null {
+  const { data: settings = [] } = useSettings();
+  return useMemo(
+    () => parseWearerDefaultsReview(
+      settings.find((s) => s.key === WEARER_DEFAULTS_REVIEW_KEY)?.value,
+    ),
+    [settings],
+  );
+}
+
+/**
+ * A setting row's own `updated_at`, which the API already ships.
+ *
+ * This is the fallback for per-day "last changed" on sheets written before
+ * anyone confirmed — it has a timestamp but no author. Note it only moves when
+ * the VALUE actually changed: re-saving identical numbers is not an UPDATE, so
+ * this answers "last changed", never "last checked".
+ */
+export function useSettingUpdatedAt(key: string): string | null {
+  const { data: settings = [] } = useSettings();
+  return useMemo(() => settings.find((s) => s.key === key)?.updated_at ?? null, [settings, key]);
 }
 
 // ---------------------------------------------------------------------------
