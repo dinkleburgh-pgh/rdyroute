@@ -263,7 +263,7 @@ export default function WearerDefaultsEditor({
   return createPortal(
     <div className="fixed inset-0 z-40 flex items-end justify-center bg-black/70 p-0 sm:items-center sm:p-4">
       <div className="flex max-h-[92vh] w-full max-w-3xl flex-col overflow-hidden rounded-t-2xl border border-slate-700 bg-slate-900 shadow-2xl sm:rounded-2xl">
-        <div className="flex items-start justify-between gap-3 border-b border-slate-700 px-4 py-3">
+        <div className="flex shrink-0 items-start justify-between gap-3 border-b border-slate-700 px-4 py-3">
           <div>
             <h2 className="text-base font-bold text-slate-100">Wearer defaults</h2>
             <p className="mt-0.5 text-xs text-slate-400">
@@ -274,8 +274,13 @@ export default function WearerDefaultsEditor({
           <button className="btn-ghost shrink-0" onClick={onClose}>Close</button>
         </div>
 
-        {/* Day tabs — the month arrives as five sheets, so all five live here. */}
-        <div className="flex gap-1.5 overflow-x-auto border-b border-slate-700 px-4 py-2">
+        {/* Day tabs — the month arrives as five sheets, so all five live here.
+            Every fixed row in this modal carries shrink-0: the dialog is a
+            flex column capped at 92vh, so without it flexbox squeezed the
+            header, tabs and footer instead of letting the scrollable grid
+            absorb the overflow — which clipped the "N trucks" subtitle and
+            the header description on a short viewport. */}
+        <div className="flex shrink-0 gap-1.5 overflow-x-auto border-b border-slate-700 px-4 py-2">
           {DAYS.map((d) => {
             const count = Object.values(drafts[d] ?? {}).filter((v) => String(v).trim() !== "").length;
             const dirty = changedDays.includes(d);
@@ -285,21 +290,21 @@ export default function WearerDefaultsEditor({
                 type="button"
                 onClick={() => setDay(d)}
                 className={clsx(
-                  "relative flex min-w-[68px] flex-col items-center rounded-lg border px-2.5 py-1.5 transition-colors",
+                  "relative flex min-w-[72px] shrink-0 flex-col items-center whitespace-nowrap rounded-lg border px-2.5 py-1.5 leading-tight transition-colors",
                   day === d
                     ? "border-blue-500 bg-blue-950/40"
                     : "border-slate-700 bg-slate-900/60 hover:border-slate-600",
                 )}
               >
                 {dirty && <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-amber-400" />}
-                <span className="text-xs font-bold text-slate-200">Day {d}</span>
-                <span className="text-[10px] text-slate-500">{count} trucks</span>
+                <span className="text-xs font-bold leading-tight text-slate-200">Day {d}</span>
+                <span className="mt-0.5 text-[10px] leading-tight text-slate-500">{count} trucks</span>
               </button>
             );
           })}
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-b border-slate-700 bg-slate-950/40 px-4 py-2 text-xs">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-b border-slate-700 bg-slate-950/40 px-4 py-2 text-xs">
           <span className="text-slate-400">
             Day {day}{DAY_NAMES[day] ? ` · ${DAY_NAMES[day]}` : ""}
           </span>
@@ -351,7 +356,7 @@ export default function WearerDefaultsEditor({
           </p>
         </div>
 
-        <div className="flex items-center justify-between gap-3 border-t border-slate-700 px-4 py-3">
+        <div className="flex shrink-0 items-center justify-between gap-3 border-t border-slate-700 px-4 py-3">
           <span className="text-xs text-slate-500">
             {changedDays.length === 0
               ? saved ? "Saved." : "No changes."
