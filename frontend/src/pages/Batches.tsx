@@ -142,16 +142,16 @@ function BatchCard({
         {batch.trucks.map((t) => (
           <span
             key={t.truck_number}
-            className="inline-flex items-center gap-0.5 rounded-full bg-slate-700 px-1.5 py-0.5 text-xs font-medium md:gap-1 md:px-2.5 md:text-sm"
+            className="inline-flex items-baseline gap-1 rounded-full bg-slate-700 px-2 py-0.5 md:px-2.5"
           >
-            #{t.truck_number}
-            {t.wearers > 0 && <span className="text-slate-400">({t.wearers})</span>}
+            <span className="text-base font-black tabular-nums text-white md:text-lg">#{t.truck_number}</span>
+            {t.wearers > 0 && <span className="text-[11px] text-slate-400 md:text-xs">({t.wearers})</span>}
           </span>
         ))}
         {truckNumber && (
-          <span className="inline-flex items-center gap-0.5 rounded-full border border-dashed border-blue-400 bg-blue-900/30 px-1.5 py-0.5 text-xs font-medium text-blue-300 md:gap-1 md:px-2.5 md:text-sm">
-            #{truckNumber}
-            {previewWearers > 0 && <span className="text-blue-400">({previewWearers})</span>}
+          <span className="inline-flex items-baseline gap-1 rounded-full border border-dashed border-blue-400 bg-blue-900/30 px-2 py-0.5 text-blue-300 md:px-2.5">
+            <span className="text-base font-black tabular-nums md:text-lg">#{truckNumber}</span>
+            {previewWearers > 0 && <span className="text-[11px] text-blue-400 md:text-xs">({previewWearers})</span>}
           </span>
         )}
       </div>

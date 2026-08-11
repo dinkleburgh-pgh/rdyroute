@@ -86,6 +86,12 @@ export default function ItemFirstEntry({
   const [autoArmed, setAutoArmed] = useState(false);
   /** Set when a post fails, so the idle timer stops retrying the same payload. */
   const autoBlockedRef = useRef(false);
+  /**
+   * Render-visible mirror of the ref above. There is no manual Log button any
+   * more, so a blocked batch would otherwise sit on screen with nothing to send
+   * it — this is what surfaces the Retry.
+   */
+  const [autoFailed, setAutoFailed] = useState(false);
 
   // Changing the run date invalidates everything in-flight on screen.
   useEffect(() => {
@@ -144,6 +150,7 @@ export default function ItemFirstEntry({
   function toggleTruck(n: number) {
     // Any deliberate interaction re-enables auto-log after a failed post.
     autoBlockedRef.current = false;
+    setAutoFailed(false);
     setQtyByTruck((prev) => {
       const next = new Map(prev);
       if (next.has(n)) {
@@ -199,11 +206,14 @@ export default function ItemFirstEntry({
       setQtyByTruck(new Map());
       setSelectedItem(null);
       setPickerResetKey((k) => k + 1);
+      setAutoFailed(false);
     } catch (error: unknown) {
       // The rows are still on screen, so without this the idle timer would
       // re-fire against the same failing payload forever. Any further tap or
-      // keystroke clears the block and lets it try again.
+      // keystroke clears the block and lets it try again — as does the Retry
+      // button this puts on screen.
       autoBlockedRef.current = true;
+      setAutoFailed(true);
       setAutoArmed(false);
       const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       toast.error(typeof detail === "string" ? detail : `Could not log ${label}.`);
@@ -385,6 +395,7 @@ export default function ItemFirstEntry({
                         }}
                         onChange={(e) => {
                           autoBlockedRef.current = false;
+                          setAutoFailed(false);
                           setQtyByTruck((prev) => new Map(prev).set(n, e.target.value));
                         }}
                         // Enter commits the whole batch now rather than waiting
@@ -411,23 +422,41 @@ export default function ItemFirstEntry({
                   );
                 })}
               </div>
-              {/* Kept alongside the idle auto-log so a batch can be committed
-                  the instant it is complete instead of waiting out the timer. */}
-              <button
-                type="button"
-                onClick={() => void submit()}
-                disabled={bulk.isPending || qtyByTruck.size === 0}
-                className="w-full rounded-xl bg-amber-600 px-4 py-3 text-base font-black text-white shadow transition hover:bg-amber-500 active:scale-[0.99] disabled:opacity-50"
-              >
-                {bulk.isPending
-                  ? "Logging…"
-                  : `Log ${qtyByTruck.size} truck${qtyByTruck.size !== 1 ? "s" : ""} now`}
-              </button>
-              <p className="text-center text-[11px] text-slate-500">
-                {autoArmed
-                  ? "Logs automatically when you stop entering…"
-                  : "Keep tapping trucks — this logs itself once you pause."}
-              </p>
+              {/* No manual Log button: the batch posts itself once entry goes
+                  quiet (and Enter commits immediately), so a confirm tap between
+                  every item was pure friction while transcribing a sheet. The
+                  only case that still needs a tap is a post that failed — the
+                  idle timer deliberately stops retrying a payload the server
+                  rejected, so Retry is the way back. */}
+              {autoFailed ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    autoBlockedRef.current = false;
+                    setAutoFailed(false);
+                    void submit();
+                  }}
+                  disabled={bulk.isPending}
+                  className="w-full rounded-xl bg-red-700 px-4 py-3 text-base font-black text-white shadow transition hover:bg-red-600 active:scale-[0.99] disabled:opacity-50"
+                >
+                  {bulk.isPending
+                    ? "Logging…"
+                    : `Retry — ${qtyByTruck.size} truck${qtyByTruck.size !== 1 ? "s" : ""} not logged`}
+                </button>
+              ) : (
+                <p className="flex items-center justify-center gap-1.5 py-2 text-center text-xs font-semibold text-amber-300">
+                  {bulk.isPending ? (
+                    "Logging…"
+                  ) : autoArmed ? (
+                    <>
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" />
+                      Saving…
+                    </>
+                  ) : (
+                    <span className="text-slate-500">Keep tapping trucks — this logs itself once you pause.</span>
+                  )}
+                </p>
+              )}
             </div>
           )}
         </>

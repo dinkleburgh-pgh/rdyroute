@@ -166,9 +166,13 @@ h2 { font-size: 14px; font-weight: 700; margin: 1px 0 6px; }
 .bar-track { height: 6px; border-radius: 999px; border: 1px solid rgba(255,255,255,0.06);
              background: #111722; margin: 6px 0; overflow: hidden; }
 .bar-fill { height: 100%; border-radius: 999px; }
-.chips { line-height: 1.8; }
+.chips { line-height: 1.9; }
+/* The truck number is the datum on a batch card — it has to be readable at
+   arm's length on a printed sheet. The wearer count stays subordinate. */
 .chip { display: inline-block; background: #141a27; border-radius: 6px; padding: 1px 6px;
-        margin: 0 3px 0 0; font-size: 9px; }
+        margin: 0 3px 3px 0; font-size: 9px; }
+.chip .mono { font-size: 12px; font-weight: 700; color: #e8eef8; }
+.chip .dim { font-size: 9px; }
 .pill { display: inline-block; border-radius: 6px; padding: 0 5px; margin-left: 5px;
         font-size: 8px; font-weight: 700; background: #141a27; color: #8a96a8; }
 .pill.rec, .pill.over { background: rgba(245,158,11,0.20); color: #fcd34d; }

@@ -275,7 +275,7 @@ export default function BatchingPanel() {
                     current != null ? "border-slate-800 bg-slate-900/40" : "border-amber-800/50 bg-amber-950/20",
                   )}
                 >
-                  <span className="w-12 shrink-0 text-base font-extrabold tabular-nums text-white">
+                  <span className="w-12 shrink-0 text-lg font-black tabular-nums text-white">
                     #{t.truck_number}
                   </span>
                   <span className="w-20 shrink-0 text-xs capitalize text-slate-500">

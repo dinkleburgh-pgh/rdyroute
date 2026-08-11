@@ -583,7 +583,7 @@ function BatchStep({
                     busy && "opacity-50",
                   )}
                 >
-                  <span className="tabular-nums">#{t.truck_number}</span>
+                  <span className="text-base font-black tabular-nums">#{t.truck_number}</span>
                   {/* Carrying someone else's route: the sheet says that route's
                       number, so show it or the operator can't match the line. */}
                   {sheetRouteFor(t.truck_number) !== t.truck_number && (
@@ -949,13 +949,13 @@ function ReviewStep({
                             : "bg-slate-800 text-slate-300",
                         )}
                       >
-                        #{t.truck_number}
+                        <span className="text-sm font-black tabular-nums">#{t.truck_number}</span>
                         {isDust(boardByNum.get(t.truck_number)) && (
                           <DustGarmentIcon className="h-3 w-3 text-amber-400" />
                         )}
                         <span
                           className={clsx(
-                            "tabular-nums",
+                            "text-[11px] tabular-nums",
                             noWearers ? "font-bold text-amber-300" : "text-slate-500",
                           )}
                         >

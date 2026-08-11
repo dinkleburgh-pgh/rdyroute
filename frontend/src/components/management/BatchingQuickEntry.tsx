@@ -316,10 +316,10 @@ export default function BatchingQuickEntry() {
             {current!.trucks.map((t) => (
               <span
                 key={t.truck_number}
-                className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-200"
+                className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-slate-200"
               >
-                #{t.truck_number}
-                <span className="text-slate-400">({t.wearers})</span>
+                <span className="text-sm font-black tabular-nums text-white">#{t.truck_number}</span>
+                <span className="text-[11px] text-slate-400">({t.wearers})</span>
                 <button
                   type="button"
                   onClick={() => void undo(t.truck_number)}

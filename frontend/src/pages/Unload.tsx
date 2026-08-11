@@ -684,7 +684,14 @@ export default function Unload() {
                     {b.trucks.length === 0 ? (
                       <span className="text-xs text-ink-muted">No trucks</span>
                     ) : (
-                      b.trucks.map((t) => <span key={t.truck_number} className="badge bg-track text-ink-soft">#{t.truck_number}</span>)
+                      b.trucks.map((t) => (
+                        <span
+                          key={t.truck_number}
+                          className="badge bg-track font-mono text-base font-black tabular-nums text-ink"
+                        >
+                          #{t.truck_number}
+                        </span>
+                      ))
                     )}
                   </div>
                 </AnimateCard>

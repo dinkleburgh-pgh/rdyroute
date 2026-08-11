@@ -166,9 +166,9 @@ function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number
       ) : (
         <div className="flex flex-wrap gap-1">
           {batch.trucks.map((t) => (
-            <span key={t.truck_number} className="inline-flex items-center gap-1 rounded-md bg-surface-2 px-1.5 py-0.5 text-[11px]">
-              <span className="font-mono font-bold tabular-nums text-ink">#{t.truck_number}</span>
-              <span className="text-ink-faint">({t.wearers})</span>
+            <span key={t.truck_number} className="inline-flex items-baseline gap-1 rounded-md bg-surface-2 px-2 py-0.5">
+              <span className="font-mono text-base font-black tabular-nums text-ink">#{t.truck_number}</span>
+              <span className="text-[11px] text-ink-faint">({t.wearers})</span>
             </span>
           ))}
         </div>
