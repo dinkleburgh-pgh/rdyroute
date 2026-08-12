@@ -92,12 +92,23 @@ export default function ItemFirstEntry({
    * it — this is what surfaces the Retry.
    */
   const [autoFailed, setAutoFailed] = useState(false);
+  /**
+   * Trucks committed for the CURRENT item during this visit, truck -> qty sent.
+   *
+   * The bulk mutation deliberately doesn't invalidate the shortages query — it
+   * waits on a WebSocket broadcast, with a 30s staleTime as the fallback. Since
+   * a commit no longer takes you off the item, without this the tiles would
+   * simply deselect and sit there looking untouched, which reads as "nothing
+   * happened" and invites re-tapping the same truck into a duplicate row.
+   */
+  const [justLogged, setJustLogged] = useState<Map<number, number>>(new Map());
 
   // Changing the run date invalidates everything in-flight on screen.
   useEffect(() => {
     setSelectedItem(null);
     setQtyByTruck(new Map());
     setSessionLog([]);
+    setJustLogged(new Map());
     setPickerResetKey((k) => k + 1);
   }, [runDate]);
 
@@ -120,6 +131,18 @@ export default function ItemFirstEntry({
     }
     return map;
   }, [shorts, selectedItem]);
+
+  /**
+   * What the grid actually paints as "already has this item", server truth
+   * first. Once the refetch lands the server row is authoritative and the local
+   * echo is ignored, so a truck's count is never double-counted — it is only
+   * ever momentarily behind.
+   */
+  const loggedQty = useMemo(() => {
+    const map = new Map(alreadyLoggedQty);
+    for (const [n, q] of justLogged) if (!map.has(n)) map.set(n, q);
+    return map;
+  }, [alreadyLoggedQty, justLogged]);
 
   // Robust lookup shared with the per-truck picker — resolves the item no
   // matter which historical category shape ("Bulk"/"Towels"/"Bulk > Towels").
@@ -145,6 +168,7 @@ export default function ItemFirstEntry({
     autoBlockedRef.current = false;
     setSelectedItem({ category, detail });
     setQtyByTruck(new Map());
+    setJustLogged(new Map());
   }
 
   function toggleTruck(n: number) {
@@ -163,11 +187,16 @@ export default function ItemFirstEntry({
     });
   }
 
-  async function submit() {
-    if (!selectedItem || qtyByTruck.size === 0 || bulk.isPending) return;
+  /** Returns false only when a post was attempted and failed, so callers that
+   *  navigate away can stay put rather than discard the rows. */
+  async function submit(): Promise<boolean> {
+    if (!selectedItem || qtyByTruck.size === 0 || bulk.isPending) return true;
+    // Exactly what this post covers, snapshotted before the await. Nothing
+    // tapped after this point is part of this batch, and must survive it.
+    const sentRaw = new Map(qtyByTruck);
     // Quantities are stored as RAW UNITS exactly as typed (2 bags → 2);
     // the "= N pcs" hint is informational only.
-    const entries = [...qtyByTruck.entries()].map(([truck_number, rawStr]) => ({
+    const entries = [...sentRaw.entries()].map(([truck_number, rawStr]) => ({
       truck_number,
       quantity: Math.max(1, parseInt(rawStr, 10) || 1),
     }));
@@ -203,10 +232,35 @@ export default function ItemFirstEntry({
         setSessionLog((log) => merge(log, [], entries.length));
         toast.info(`Offline — ${entries.length} row${entries.length !== 1 ? "s" : ""} queued, will sync`);
       }
-      setQtyByTruck(new Map());
-      setSelectedItem(null);
-      setPickerResetKey((k) => k + 1);
+      // STAY on the item. The idle timer fires on any pause — including the one
+      // where you are reading the next line off the paper sheet — so bouncing
+      // back to the category grid here meant re-walking Mats → 3x5 → Black just
+      // to add the truck you were about to tap. You leave an item when you say
+      // so ("← Change item"), not when the timer happens to fire.
+      //
+      // Drop ONLY what this post covered. The grid stays live while a batch is
+      // in flight — that is the point of the flow — so a blanket reset here
+      // destroyed anything tapped during the round trip, silently, under a
+      // toast saying the save succeeded. The window is not small: a network
+      // error resolves as `{queued:true}` through this same branch, and the
+      // axios instance sets no timeout.
+      //
+      // A row whose value changed mid-flight is deliberately KEPT: it is a
+      // number the user typed that has not been sent, and on-screen input is
+      // never silently discarded. It re-arms the timer and posts as its own
+      // batch (the dupe warning covers the truck already having a row).
+      setQtyByTruck((prev) => {
+        const next = new Map(prev);
+        for (const [truck, raw] of sentRaw) if (next.get(truck) === raw) next.delete(truck);
+        return next;
+      });
+      setJustLogged((prev) => {
+        const next = new Map(prev);
+        for (const e of entries) next.set(e.truck_number, (next.get(e.truck_number) ?? 0) + e.quantity);
+        return next;
+      });
       setAutoFailed(false);
+      return true;
     } catch (error: unknown) {
       // The rows are still on screen, so without this the idle timer would
       // re-fire against the same failing payload forever. Any further tap or
@@ -217,13 +271,48 @@ export default function ItemFirstEntry({
       setAutoArmed(false);
       const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
       toast.error(typeof detail === "string" ? detail : `Could not log ${label}.`);
+      return false;
     }
   }
 
-  // Post the batch once entry goes quiet, so transcribing a sheet is
-  // tap-trucks → next item, with no Log press between them. Re-running on every
-  // qtyByTruck change means the cleanup cancels the previous timer, so the clock
-  // restarts on each tap or keystroke and only a real pause commits.
+  /**
+   * Leave the current item, committing anything still pending on the way out.
+   *
+   * Without the flush this silently threw away whatever was typed but not yet
+   * committed — harmless when there was a Log button to press first, a quiet
+   * data-loss path once the only commit is a timer you can beat by tapping.
+   */
+  /**
+   * Undo one logged row, retiring its local echo along with it.
+   *
+   * justLogged only tracked writes. Undoing a row it had echoed left the tile
+   * amber and the dupe warning firing for a row that no longer existed —
+   * telling the user not to re-log something they had just deliberately
+   * removed. The echo has to expire in both directions.
+   */
+  function undoRow(s: Shortage) {
+    remove.mutate(s.id);
+    if (selectedItem && s.item_category === selectedItem.category && s.item_detail === selectedItem.detail) {
+      setJustLogged((prev) => {
+        const next = new Map(prev);
+        next.delete(s.truck_number);
+        return next;
+      });
+    }
+  }
+
+  async function changeItem() {
+    if (qtyByTruck.size > 0 && !(await submit())) return; // post failed — stay put
+    setSelectedItem(null);
+    setQtyByTruck(new Map());
+    setJustLogged(new Map());
+    setPickerResetKey((k) => k + 1);
+  }
+
+  // Post the batch once entry goes quiet, so transcribing a sheet needs no Log
+  // press at all. Re-running on every qtyByTruck change means the cleanup
+  // cancels the previous timer, so the clock restarts on each tap or keystroke
+  // and only a real pause commits.
   const submitRef = useRef(submit);
   submitRef.current = submit;
   useEffect(() => {
@@ -250,7 +339,9 @@ export default function ItemFirstEntry({
 
   const packSize = selTracked?.pack_size;
   const unitLabel = selTracked?.unit_label;
-  const dupeSelected = [...qtyByTruck.keys()].filter((n) => alreadyLoggedQty.has(n));
+  // Reads the merged map so re-tapping a truck you logged seconds ago warns
+  // immediately, rather than only after the socket catches up.
+  const dupeSelected = [...qtyByTruck.keys()].filter((n) => loggedQty.has(n));
 
   const itemChipTile = selectedItem
     ? itemTileClass(selTracked, selectedItem.detail, palette.tileClass(selectedItem.category))
@@ -305,13 +396,23 @@ export default function ItemFirstEntry({
             </span>
             <button
               type="button"
-              onClick={() => { setSelectedItem(null); setQtyByTruck(new Map()); }}
-              className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700"
+              onClick={() => void changeItem()}
+              disabled={bulk.isPending}
+              className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700 disabled:opacity-50"
             >
               ← Change item
             </button>
+            {/* A running count for THIS item, because staying put after a
+                commit means the only other confirmation is a toast that has
+                already faded. */}
+            {justLogged.size > 0 && (
+              <span className="rounded-lg bg-emerald-900/40 px-3 py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-700/50">
+                ✓ {justLogged.size} truck{justLogged.size !== 1 ? "s" : ""} logged
+              </span>
+            )}
             <p className="w-full text-xs text-slate-500 sm:w-auto">
               Tap every truck that was short this item{packSize ? ` · qty in ${unitLabel ?? "pack"}s, ×${packSize} pieces` : ""}
+              {justLogged.size > 0 ? " · keep going, or Change item when done" : ""}
             </p>
           </div>
 
@@ -321,7 +422,7 @@ export default function ItemFirstEntry({
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12">
               {running.map((t, i) => {
                 const sel = qtyByTruck.has(t.truck_number);
-                const had = alreadyLoggedQty.get(t.truck_number);
+                const had = loggedQty.get(t.truck_number);
                 return (
                   <motion.button
                     key={t.truck_number}
@@ -484,7 +585,7 @@ export default function ItemFirstEntry({
                     {rows.length > 1 && (
                       <button
                         type="button"
-                        onClick={() => rows.forEach((s) => remove.mutate(s.id))}
+                        onClick={() => rows.forEach(undoRow)}
                         disabled={remove.isPending}
                         className="ml-auto rounded-lg bg-red-900/60 px-2.5 py-1 text-xs font-semibold text-red-300 transition hover:bg-red-800/60 disabled:opacity-50"
                       >
@@ -502,7 +603,7 @@ export default function ItemFirstEntry({
                           #{s.truck_number} ×{qtyWithUnit(items, s.item_category, s.item_detail, s.quantity)}
                           <button
                             type="button"
-                            onClick={() => remove.mutate(s.id)}
+                            onClick={() => undoRow(s)}
                             disabled={remove.isPending}
                             className="text-slate-400 transition hover:text-red-300 disabled:opacity-50"
                             title="Undo this row"
