@@ -18,6 +18,7 @@ import clsx from "clsx";
 import {
   useBulkCreateShortages,
   useDeleteShortage,
+  useUpdateShortage,
   useTrackedItems,
 } from "../../api/hooks";
 import { useAuth } from "../../contexts/AuthContext";
@@ -73,6 +74,7 @@ export default function ItemFirstEntry({
   const toast = useToast();
   const bulk = useBulkCreateShortages();
   const remove = useDeleteShortage();
+  const update = useUpdateShortage();
   const { data: trackedRaw = [] } = useTrackedItems();
   const palette = useCategoryPalette();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
@@ -93,22 +95,27 @@ export default function ItemFirstEntry({
    */
   const [autoFailed, setAutoFailed] = useState(false);
   /**
-   * Trucks committed for the CURRENT item during this visit, truck -> qty sent.
+   * Rows already committed for the CURRENT item: truck -> {id, raw}.
    *
-   * The bulk mutation deliberately doesn't invalidate the shortages query — it
-   * waits on a WebSocket broadcast, with a 30s staleTime as the fallback. Since
-   * a commit no longer takes you off the item, without this the tiles would
-   * simply deselect and sit there looking untouched, which reads as "nothing
-   * happened" and invites re-tapping the same truck into a duplicate row.
+   * `raw` is the exact string that was sent, which is what makes a row saved
+   * versus edited-since-saved detectable — and therefore what lets the entry
+   * list survive a save instead of being emptied by it. Saving used to clear
+   * qtyByTruck outright, which tore the whole quantities panel off the screen
+   * mid-transcription: the numbers you had just read off the paper vanished and
+   * the input you were tabbing through stopped existing.
+   *
+   * It doubles as the local echo the tiles read, because the bulk mutation
+   * deliberately doesn't invalidate the shortages query — it waits on a
+   * WebSocket broadcast with a 30s staleTime fallback.
    */
-  const [justLogged, setJustLogged] = useState<Map<number, number>>(new Map());
+  const [saved, setSaved] = useState<Map<number, { id: number | null; raw: string }>>(new Map());
 
   // Changing the run date invalidates everything in-flight on screen.
   useEffect(() => {
     setSelectedItem(null);
     setQtyByTruck(new Map());
     setSessionLog([]);
-    setJustLogged(new Map());
+    setSaved(new Map());
     setPickerResetKey((k) => k + 1);
   }, [runDate]);
 
@@ -140,9 +147,19 @@ export default function ItemFirstEntry({
    */
   const loggedQty = useMemo(() => {
     const map = new Map(alreadyLoggedQty);
-    for (const [n, q] of justLogged) if (!map.has(n)) map.set(n, q);
+    for (const [n, s] of saved) if (!map.has(n)) map.set(n, Math.max(1, parseInt(s.raw, 10) || 1));
     return map;
-  }, [alreadyLoggedQty, justLogged]);
+  }, [alreadyLoggedQty, saved]);
+
+  /**
+   * Rows on screen that the server has not got, or no longer matches. This —
+   * not "is the list non-empty" — is what arms the idle timer and what a
+   * commit sends, so a saved row can sit in the list without being re-sent.
+   */
+  const unsent = useMemo(
+    () => [...qtyByTruck.entries()].filter(([n, raw]) => saved.get(n)?.raw !== raw),
+    [qtyByTruck, saved],
+  );
 
   // Robust lookup shared with the per-truck picker — resolves the item no
   // matter which historical category shape ("Bulk"/"Towels"/"Bulk > Towels").
@@ -168,7 +185,7 @@ export default function ItemFirstEntry({
     autoBlockedRef.current = false;
     setSelectedItem({ category, detail });
     setQtyByTruck(new Map());
-    setJustLogged(new Map());
+    setSaved(new Map());
   }
 
   function toggleTruck(n: number) {
@@ -180,7 +197,9 @@ export default function ItemFirstEntry({
       if (next.has(n)) {
         next.delete(n);
       } else {
-        next.set(n, String(selTracked?.qty_default ?? 1));
+        // Restore the number this truck was saved with, so taking a row off the
+        // list and putting it back doesn't post a second row for the same truck.
+        next.set(n, saved.get(n)?.raw ?? String(selTracked?.qty_default ?? 1));
         lastAddedRef.current = n;
       }
       return next;
@@ -190,19 +209,38 @@ export default function ItemFirstEntry({
   /** Returns false only when a post was attempted and failed, so callers that
    *  navigate away can stay put rather than discard the rows. */
   async function submit(): Promise<boolean> {
-    if (!selectedItem || qtyByTruck.size === 0 || bulk.isPending) return true;
+    if (!selectedItem || bulk.isPending) return true;
     // Exactly what this post covers, snapshotted before the await. Nothing
-    // tapped after this point is part of this batch, and must survive it.
-    const sentRaw = new Map(qtyByTruck);
+    // tapped or retyped after this point belongs to this batch.
+    const sentRaw = new Map(unsent);
+    if (sentRaw.size === 0) return true;
+
+    // A row the server already has, whose number has since been retyped, is an
+    // EDIT — patch it in place rather than posting a second row for the same
+    // truck. (A row queued offline has no id yet; correcting one of those before
+    // the queue drains re-posts, which the dupe warning covers.)
+    const edits = [...sentRaw.keys()]
+      .map((n) => ({ n, id: saved.get(n)?.id ?? null }))
+      .filter((e): e is { n: number; id: number } => e.id != null);
+    const editSet = new Set(edits.map((e) => e.n));
+
     // Quantities are stored as RAW UNITS exactly as typed (2 bags → 2);
     // the "= N pcs" hint is informational only.
-    const entries = [...sentRaw.entries()].map(([truck_number, rawStr]) => ({
-      truck_number,
-      quantity: Math.max(1, parseInt(rawStr, 10) || 1),
-    }));
+    const entries = [...sentRaw.entries()]
+      .filter(([truck_number]) => !editSet.has(truck_number))
+      .map(([truck_number, rawStr]) => ({
+        truck_number,
+        quantity: Math.max(1, parseInt(rawStr, 10) || 1),
+      }));
     const label = itemLabel;
     try {
-      const result = await bulk.mutateAsync({
+      for (const e of edits) {
+        await update.mutateAsync({
+          id: e.id,
+          quantity: Math.max(1, parseInt(sentRaw.get(e.n) ?? "1", 10) || 1),
+        });
+      }
+      const result = entries.length === 0 ? [] : await bulk.mutateAsync({
         run_date: runDate,
         item_category: selectedItem.category,
         item_detail: selectedItem.detail,
@@ -225,9 +263,18 @@ export default function ItemFirstEntry({
           ...rest,
         ];
       };
+      // truck -> new shortage id, for the rows this post created.
+      const newIds = new Map<number, number>();
       if (Array.isArray(result)) {
-        setSessionLog((log) => merge(log, result.map((r) => r.id), 0));
-        toast.success(`Logged ${label} for ${entries.length} truck${entries.length !== 1 ? "s" : ""}`);
+        for (const r of result) newIds.set(r.truck_number, r.id);
+        if (entries.length > 0) {
+          setSessionLog((log) => merge(log, result.map((r) => r.id), 0));
+        }
+        const parts = [
+          entries.length > 0 ? `Logged ${label} for ${entries.length} truck${entries.length !== 1 ? "s" : ""}` : "",
+          edits.length > 0 ? `${entries.length > 0 ? " · " : ""}updated ${edits.length}` : "",
+        ].join("");
+        if (parts) toast.success(parts);
       } else {
         setSessionLog((log) => merge(log, [], entries.length));
         toast.info(`Offline — ${entries.length} row${entries.length !== 1 ? "s" : ""} queued, will sync`);
@@ -245,18 +292,21 @@ export default function ItemFirstEntry({
       // error resolves as `{queued:true}` through this same branch, and the
       // axios instance sets no timeout.
       //
-      // A row whose value changed mid-flight is deliberately KEPT: it is a
-      // number the user typed that has not been sent, and on-screen input is
-      // never silently discarded. It re-arms the timer and posts as its own
-      // batch (the dupe warning covers the truck already having a row).
-      setQtyByTruck((prev) => {
+      // And STAY IN THE LIST. qtyByTruck is untouched here: saving marks rows
+      // done, it does not consume them. Emptying it tore the whole quantities
+      // panel off the screen mid-transcription — the numbers just read off the
+      // paper disappeared and the input being tabbed through stopped existing.
+      // Rows now carry a ✓ and you keep going down the sheet.
+      //
+      // Recording the raw string that was sent is what keeps this honest: a row
+      // retyped during the round trip does NOT match, so it stays unsent and
+      // the timer re-arms for it rather than being marked saved on a value the
+      // server never received.
+      setSaved((prev) => {
         const next = new Map(prev);
-        for (const [truck, raw] of sentRaw) if (next.get(truck) === raw) next.delete(truck);
-        return next;
-      });
-      setJustLogged((prev) => {
-        const next = new Map(prev);
-        for (const e of entries) next.set(e.truck_number, (next.get(e.truck_number) ?? 0) + e.quantity);
+        for (const [truck, raw] of sentRaw) {
+          next.set(truck, { id: newIds.get(truck) ?? prev.get(truck)?.id ?? null, raw });
+        }
         return next;
       });
       setAutoFailed(false);
@@ -285,7 +335,7 @@ export default function ItemFirstEntry({
   /**
    * Undo one logged row, retiring its local echo along with it.
    *
-   * justLogged only tracked writes. Undoing a row it had echoed left the tile
+   * `saved` only tracked writes. Undoing a row it had echoed left the tile
    * amber and the dupe warning firing for a row that no longer existed —
    * telling the user not to re-log something they had just deliberately
    * removed. The echo has to expire in both directions.
@@ -293,7 +343,7 @@ export default function ItemFirstEntry({
   function undoRow(s: Shortage) {
     remove.mutate(s.id);
     if (selectedItem && s.item_category === selectedItem.category && s.item_detail === selectedItem.detail) {
-      setJustLogged((prev) => {
+      setSaved((prev) => {
         const next = new Map(prev);
         next.delete(s.truck_number);
         return next;
@@ -302,21 +352,23 @@ export default function ItemFirstEntry({
   }
 
   async function changeItem() {
-    if (qtyByTruck.size > 0 && !(await submit())) return; // post failed — stay put
+    if (unsent.length > 0 && !(await submit())) return; // post failed — stay put
     setSelectedItem(null);
     setQtyByTruck(new Map());
-    setJustLogged(new Map());
+    setSaved(new Map());
     setPickerResetKey((k) => k + 1);
   }
 
   // Post the batch once entry goes quiet, so transcribing a sheet needs no Log
-  // press at all. Re-running on every qtyByTruck change means the cleanup
-  // cancels the previous timer, so the clock restarts on each tap or keystroke
-  // and only a real pause commits.
+  // press at all. Re-running on every `unsent` change means the cleanup cancels
+  // the previous timer, so the clock restarts on each tap or keystroke and only
+  // a real pause commits. Keyed on `unsent` rather than qtyByTruck because the
+  // list no longer empties on save — after a commit only `saved` moves, and the
+  // timer has to disarm off that.
   const submitRef = useRef(submit);
   submitRef.current = submit;
   useEffect(() => {
-    if (qtyByTruck.size === 0 || bulk.isPending || autoBlockedRef.current) {
+    if (unsent.length === 0 || bulk.isPending || autoBlockedRef.current) {
       setAutoArmed(false);
       return;
     }
@@ -326,7 +378,7 @@ export default function ItemFirstEntry({
       void submitRef.current();
     }, AUTO_LOG_MS);
     return () => window.clearTimeout(t);
-  }, [qtyByTruck, bulk.isPending]);
+  }, [unsent, bulk.isPending]);
 
   // Resolve each box's live rows and drop boxes whose rows were all undone
   // (an emptied box used to linger with no chips).
@@ -394,25 +446,37 @@ export default function ItemFirstEntry({
             >
               {itemLabel}
             </span>
+            {/* One button, labelled for what it will actually do. It always
+                commits first; with rows pending that is the headline action, so
+                it reads as "log & next" and styles as primary. Calling it
+                "Change item" while it silently saved was the same affordance
+                wearing the wrong label. */}
             <button
               type="button"
               onClick={() => void changeItem()}
               disabled={bulk.isPending}
-              className="rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 transition hover:bg-slate-700 disabled:opacity-50"
+              className={clsx(
+                "rounded-lg px-4 py-2 text-sm font-semibold transition disabled:opacity-50",
+                unsent.length > 0
+                  ? "bg-amber-600 text-white shadow hover:bg-amber-500"
+                  : "bg-slate-800 text-slate-300 hover:bg-slate-700",
+              )}
             >
-              ← Change item
+              {unsent.length > 0
+                ? `Log ${unsent.length} & next item →`
+                : "← Change item"}
             </button>
             {/* A running count for THIS item, because staying put after a
                 commit means the only other confirmation is a toast that has
                 already faded. */}
-            {justLogged.size > 0 && (
+            {saved.size > 0 && (
               <span className="rounded-lg bg-emerald-900/40 px-3 py-1.5 text-xs font-bold text-emerald-300 ring-1 ring-emerald-700/50">
-                ✓ {justLogged.size} truck{justLogged.size !== 1 ? "s" : ""} logged
+                ✓ {saved.size} truck{saved.size !== 1 ? "s" : ""} logged
               </span>
             )}
             <p className="w-full text-xs text-slate-500 sm:w-auto">
               Tap every truck that was short this item{packSize ? ` · qty in ${unitLabel ?? "pack"}s, ×${packSize} pieces` : ""}
-              {justLogged.size > 0 ? " · keep going, or Change item when done" : ""}
+              {saved.size > 0 ? " · keep going, or Change item when done" : ""}
             </p>
           </div>
 
@@ -478,9 +542,27 @@ export default function ItemFirstEntry({
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
                 {[...qtyByTruck.entries()].map(([n, qty]) => {
                   const raw = Math.max(1, parseInt(qty, 10) || 1);
+                  // Saved rows stay in the list rather than vanishing, so the
+                  // row itself has to say which state it is in.
+                  const isSaved = saved.get(n)?.raw === qty;
                   return (
-                    <div key={n} className="flex items-center gap-2 rounded-xl bg-slate-800/70 px-3 py-2">
+                    <div
+                      key={n}
+                      className={clsx(
+                        "flex items-center gap-2 rounded-xl px-3 py-2 transition-colors",
+                        isSaved ? "bg-emerald-950/40 ring-1 ring-emerald-800/50" : "bg-slate-800/70",
+                      )}
+                    >
                       <span className="w-12 shrink-0 text-lg font-black tabular-nums text-white">#{n}</span>
+                      <span
+                        className={clsx(
+                          "shrink-0 text-sm font-bold",
+                          isSaved ? "text-emerald-400" : "text-slate-600",
+                        )}
+                        title={isSaved ? "Saved" : "Not saved yet"}
+                      >
+                        {isSaved ? "✓" : "•"}
+                      </span>
                       <input
                         type="number"
                         inputMode="numeric"
@@ -542,7 +624,7 @@ export default function ItemFirstEntry({
                 >
                   {bulk.isPending
                     ? "Logging…"
-                    : `Retry — ${qtyByTruck.size} truck${qtyByTruck.size !== 1 ? "s" : ""} not logged`}
+                    : `Retry — ${unsent.length} truck${unsent.length !== 1 ? "s" : ""} not logged`}
                 </button>
               ) : (
                 <p className="flex items-center justify-center gap-1.5 py-2 text-center text-xs font-semibold text-amber-300">
