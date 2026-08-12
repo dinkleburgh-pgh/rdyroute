@@ -181,11 +181,21 @@ export function useUpsertTruckState() {
       needs_checked?: boolean | null;
       crossload_to_truck?: number | null;
       arrived_at?: number | null;
+      /**
+       * The status this write assumed the truck was in. Filled in automatically
+       * by onMutate below from the pre-mutation cache; the server 409s if the
+       * committed row disagrees. Pass `null` explicitly to opt out (a write that
+       * genuinely does not care what it is overwriting).
+       */
+      expected_status?: TruckStatus | null;
     }) => {
-      const { truck_number, run_date, state_source, ...rest } = args;
+      const { truck_number, run_date, state_source, expected_status, ...rest } = args;
       const patch = {
         ...rest,
         state_source: state_source ?? "workflow",
+        // Omitted entirely when unknown, so the server skips the check rather
+        // than comparing against null.
+        ...(expected_status ? { expected_status } : {}),
       };
       // Try PUT first; if no row exists yet, create one
       try {
@@ -198,12 +208,17 @@ export function useUpsertTruckState() {
       } catch (err: unknown) {
         const e = err as { response?: { status?: number } };
         if (e?.response?.status === 404) {
+          // No row exists, so there is nothing to have a stale opinion about —
+          // and TruckStateCreate has no such field. Strip it.
+          const { expected_status: _drop, ...createBody } = patch as typeof patch & {
+            expected_status?: TruckStatus | null;
+          };
           const { data } = await api.post(`/trucks/${truck_number}/state`, {
             truck_number,
             run_date,
-            status: patch.status ?? "dirty",
-            wearers: patch.wearers ?? 0,
-            ...patch,
+            status: createBody.status ?? "dirty",
+            wearers: createBody.wearers ?? 0,
+            ...createBody,
           });
           return data;
         }
@@ -214,6 +229,16 @@ export function useUpsertTruckState() {
       // Cancel in-flight refetches so they don't stomp the optimistic update
       await qc.cancelQueries({ queryKey: ["board", vars.run_date] });
       const previous = qc.getQueryData(["board", vars.run_date]);
+      // Stamp the precondition from the PRE-mutation cache — the status this
+      // write is actually reacting to. React Query hands the same `vars` object
+      // to mutationFn, so doing it here covers every caller of this hook at
+      // once, and no future surface can forget it. It has to happen before the
+      // optimistic update below, which overwrites the very value we need.
+      if (vars.status !== undefined && vars.expected_status === undefined) {
+        const seen = (previous as import("../types").TruckWithState[] | undefined)
+          ?.find((t) => t.truck_number === vars.truck_number)?.state?.status;
+        if (seen) vars.expected_status = seen;
+      }
       // Immediately reflect the change so the dropdown doesn't snap back
       qc.setQueryData<import("../types").TruckWithState[]>(
         ["board", vars.run_date],

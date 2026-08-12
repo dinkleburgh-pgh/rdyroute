@@ -101,6 +101,12 @@ class TruckStateUpdate(BaseModel):
     crossload_to_truck: int | None = None
     arrived_at: float | None = None
     state_source: TruckStateSource | None = None
+    # Optimistic-concurrency precondition, NOT a column. The status the caller
+    # believed the row held when it decided to write. The handler compares it
+    # against the committed row and 409s on a mismatch — which is what stops a
+    # decision taken against a stale board from landing seconds later. It must
+    # be popped before the setattr loop; there is no such TruckState attribute.
+    expected_status: TruckStatus | None = None
 
 
 class TruckStateOut(_OrmBase):

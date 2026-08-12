@@ -26,6 +26,7 @@ import {
   useUpsertTruckState,
 } from "../../api/hooks";
 import { workdayNumbers } from "../../components/Clock";
+import { useToast } from "../../contexts/ToastContext";
 import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
 import { effectiveStatus, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
@@ -44,6 +45,7 @@ export default function RunDayWizard({
   onClose: () => void;
 }) {
   const [step, setStep] = useState(1);
+  const toast = useToast();
   const { data: holidayMode = false } = useHolidayMode(runDate);
   const setHolidayMode = useSetHolidayMode();
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
@@ -228,12 +230,24 @@ export default function RunDayWizard({
     for (const num of absentSelected) {
       const truck = specialTrucks.find((t) => t.truck_number === num);
       if (!truck) continue;
+      // A truck that has already been worked this shift keeps its status; only
+      // the needs-checked flag goes on. This branch used to downgrade
+      // unconditionally, and it really did destroy load work — truck 88 went
+      // loaded -> unloaded through here on 2026-07-16 and had to be set back by
+      // hand. Unlike the returning-truck path below, no staleness was involved:
+      // it simply never looked.
+      const worked = truck.state?.status === "loaded"
+        || truck.state?.status === "in_progress"
+        || truck.state?.status === "off"
+        || truck.state?.status === "oos";
       tasks.push(upsert.mutateAsync({
         truck_number: num,
         run_date: runDate,
         needs_checked: true,
-        status: truck.truck_type === "Spare" ? "spare" : "unloaded",
-        wearers: truck.state?.wearers ?? 0,
+        ...(worked ? {} : {
+          status: truck.truck_type === "Spare" ? "spare" : "unloaded",
+          wearers: truck.state?.wearers ?? 0,
+        }),
         state_source: "wizard",
       }));
     }
@@ -254,7 +268,17 @@ export default function RunDayWizard({
       }));
     }
 
-    await Promise.all(tasks);
+    // allSettled, not all: the server now rejects a wizard write that would undo
+    // load work, and one such 409 must not abort the rest of the step. A truck
+    // being skipped is the guard doing its job, so it is reported, not thrown.
+    const results = await Promise.allSettled(tasks);
+    const skipped = results.filter((r) => r.status === "rejected").length;
+    if (skipped > 0) {
+      toast.info(
+        `${skipped} truck${skipped === 1 ? "" : "s"} left as ${skipped === 1 ? "it is" : "they are"} — ` +
+        "already loaded or in progress for today.",
+      );
+    }
     setStep(5);
   }
 

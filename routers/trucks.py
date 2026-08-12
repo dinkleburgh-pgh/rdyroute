@@ -666,9 +666,58 @@ def update_truck_state(
     if "state_source" not in updates:
         updates["state_source"] = TruckStateSource.workflow.value
 
+    # ---- Optimistic concurrency -------------------------------------------
+    # This endpoint is a bare field-setter: whatever arrives is applied to
+    # whatever the row currently is. Every rule about "don't undo recorded load
+    # work" therefore lived in client code, checked against a board snapshot
+    # that refreshes every 5s — a check-then-act with the check on one device
+    # and the act on the server. That race really did destroy load work:
+    # trucks flipped loaded -> unloaded two seconds after being set loaded,
+    # because the writing view had not seen the change yet.
+    #
+    # The precondition closes it for EVERY caller at once, including ones that
+    # do not exist yet, and it deliberately does not judge the transition. A
+    # supervisor correcting a mis-tap sees "loaded" and chooses "unloaded" —
+    # their expectation matches, so it is allowed. The rejected case is only
+    # ever "you decided based on something that is no longer true".
+    expected = updates.pop("expected_status", None)
+    if expected is not None and row.status != expected:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Truck {truck_number} is {row.status.value} on {run_date}, not "
+                f"{getattr(expected, 'value', expected)} — your view was out of date. "
+                "Refresh and try again."
+            ),
+        )
+
     if updates.get("status") and updates["status"].value == "in_progress":
         _assert_no_other_in_progress(truck_number, run_date, db)
         _assert_spare_has_coverage(_assert_truck_exists(truck_number, db), run_date, db)
+
+    # Setup Day is a bulk pass over the roster; it is never the right surface for
+    # undoing one truck's load. Proven necessary: on 2026-07-16 the wizard's
+    # absent-truck branch wrote truck 88 from loaded to unloaded (event_family
+    # "setup", needs_checked false -> true), and the operator had to set it back
+    # 21 seconds later. That branch carried no staleness — it downgraded
+    # unconditionally, so the precondition above would not have caught it.
+    _LOAD_WORK_DONE = {TruckStatus.loaded, TruckStatus.in_progress}
+    _UNDOES_LOAD_WORK = {TruckStatus.dirty, TruckStatus.unloaded, TruckStatus.unfinished}
+    _new_status = updates.get("status")
+    _src = getattr(updates.get("state_source"), "value", updates.get("state_source"))
+    if (
+        _src == TruckStateSource.wizard.value
+        and _new_status is not None
+        and row.status in _LOAD_WORK_DONE
+        and _new_status in _UNDOES_LOAD_WORK
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Truck {truck_number} is already {row.status.value} for {run_date} — "
+                "Setup Day will not undo load work."
+            ),
+        )
 
     for field, value in updates.items():
         setattr(row, field, value)
