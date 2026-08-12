@@ -195,6 +195,15 @@ export default function ItemFirstEntry({
     setQtyByTruck((prev) => {
       const next = new Map(prev);
       if (next.has(n)) {
+        // A SAVED row is the logged shortage, and removing it now deletes that
+        // record — too destructive to hang off a big grid tile you tap dozens of
+        // times a sheet. Tapping one jumps to its number instead; deleting is
+        // the explicit ✕ on the row. An unsaved row has nothing behind it, so it
+        // still just comes off the list.
+        if (saved.get(n)?.raw === next.get(n)) {
+          lastAddedRef.current = n;
+          return next.size === prev.size ? new Map(next) : next; // re-render to move focus
+        }
         next.delete(n);
       } else {
         // Restore the number this truck was saved with, so taking a row off the
@@ -349,6 +358,35 @@ export default function ItemFirstEntry({
         return next;
       });
     }
+  }
+
+  /**
+   * ✕ on an entry row — deletes the logged shortage, not just the row.
+   *
+   * Once a row is saved it IS the shortage, so taking it off the list has to
+   * take the record with it; leaving one behind means the quantity is still
+   * counted with nothing on screen saying so. A row that was never sent has
+   * nothing to delete and just goes.
+   */
+  function removeRow(n: number) {
+    const row = saved.get(n);
+    if (row?.id != null) {
+      remove.mutate(row.id);
+    } else if (row) {
+      // Queued offline: there is no id to delete yet, and the queue will still
+      // replay it. Say so rather than implying the record is gone.
+      toast.info(`#${n} is still queued to sync — undo it from the session list once it lands.`);
+    }
+    setQtyByTruck((prev) => {
+      const next = new Map(prev);
+      next.delete(n);
+      return next;
+    });
+    setSaved((prev) => {
+      const next = new Map(prev);
+      next.delete(n);
+      return next;
+    });
   }
 
   async function changeItem() {
@@ -595,9 +633,10 @@ export default function ItemFirstEntry({
                       ) : null}
                       <button
                         type="button"
-                        onClick={() => toggleTruck(n)}
-                        className="shrink-0 rounded-lg bg-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:bg-red-900/60 hover:text-red-300"
-                        title="Remove truck"
+                        onClick={() => removeRow(n)}
+                        disabled={remove.isPending}
+                        className="shrink-0 rounded-lg bg-slate-700 px-2 py-1 text-xs text-slate-400 transition hover:bg-red-900/60 hover:text-red-300 disabled:opacity-50"
+                        title={isSaved ? `Delete #${n}'s logged shortage` : "Remove truck"}
                       >
                         ✕
                       </button>
