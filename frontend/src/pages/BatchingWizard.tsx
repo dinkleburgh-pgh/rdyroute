@@ -20,6 +20,7 @@ import {
   useHolidayUnload,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
+  usePrevDaySplitRoutes,
   useRemoveTruckFromBatch,
   useSettings,
   useUnloadsDayOverride,
@@ -100,16 +101,27 @@ export default function BatchingWizard() {
   const prevCarriers = usePrevDayCarriers(runDate, board);
   // Trucks that carried another route's SPLIT overflow yesterday.
   const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
+  // ...and which route each of them helped, so batching can credit it.
+  const prevSplitRoutes = usePrevDaySplitRoutes(runDate);
   const routeByCarrier = useMemo(() => {
     const m = new Map<number, number>();
     for (const [route, carrier] of prevCarriers) m.set(carrier.truck_number, route);
     return m;
   }, [prevCarriers]);
 
-  /** The sheet line a truck is unloading: the route it carried, else itself. */
+  /**
+   * The sheet line a truck is unloading: the route it carried, else itself.
+   *
+   * Split helpers resolve too. They are excluded from CARRIER credit on purpose
+   * (the route ran itself, so the helper's unload doesn't substitute for it) —
+   * but for BATCHING the helper is still working that route's sheet line, and
+   * the crew batches the route number off the paper. Without this the helper
+   * read as its own unbatched job next to a route that was already batched.
+   */
   const sheetRouteFor = useCallback(
-    (truckNumber: number) => routeByCarrier.get(truckNumber) ?? truckNumber,
-    [routeByCarrier],
+    (truckNumber: number) =>
+      routeByCarrier.get(truckNumber) ?? prevSplitRoutes.get(truckNumber) ?? truckNumber,
+    [routeByCarrier, prevSplitRoutes],
   );
   /**
    * The day sheet's entry for a truck, resolved through coverage.
@@ -157,13 +169,25 @@ export default function BatchingWizard() {
   // Mirrors BatchingPanel's rosterTrucks.
   const rosterTrucks = useMemo(() => {
     if (showAll) return [...board].sort((a, b) => a.truck_number - b.truck_number);
-    const ctx = buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload");
+    // Split helpers are extra unload slots the schedule cannot know about — the
+    // board carries no split marker the morning after, only the swap log does.
+    // Every other unload-role caller passes these; this one never did, so a
+    // helper got no batch card at all.
+    const ctx = buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload", prevSplitHelpers);
     const nums = new Set(ctx.activeTrucks.map((t) => t.truck_number));
+    // An ALREADY-BATCHED truck always stays on the roster, even if it is a
+    // covered route. The covered-route strip exists so the grid doesn't offer
+    // both #4 and its carrier #11 — but applied first it also evicted routes the
+    // crew had correctly batched off the paper, and everything evicted lands in
+    // strandedBatched reading "batched but didn't run — tap to remove". On
+    // 2026-08-13 that was routes 4, 66 and 75: three correct assignments, each
+    // one tap from being deleted.
     return board
-      .filter((t) => !coveredRoutes.has(t.truck_number))
-      .filter((t) => nums.has(t.truck_number) || batchByTruck.has(t.truck_number))
+      .filter((t) =>
+        batchByTruck.has(t.truck_number) ||
+        (!coveredRoutes.has(t.truck_number) && nums.has(t.truck_number)))
       .sort((a, b) => a.truck_number - b.truck_number);
-  }, [board, showAll, unloadsDay, holidayUnload, batchByTruck, coveredRoutes]);
+  }, [board, showAll, unloadsDay, holidayUnload, batchByTruck, coveredRoutes, prevSplitHelpers]);
 
   // Batched, but not something this day should be batching — a covered route
   // truck that never came back. Excluding it from the roster above stops it

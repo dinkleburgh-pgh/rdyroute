@@ -575,6 +575,24 @@ export function usePrevDaySplitHelpers(runDate: string): Set<number> {
 }
 
 /**
+ * Prev-day split helper -> the route whose overflow it carried.
+ *
+ * The same data as usePrevDaySplitHelpers, but keeping the route instead of
+ * discarding it. Batching needs the route: the helper is unloading THAT sheet
+ * line, so batching the route satisfies the helper. Without the route a split
+ * helper reads as its own unbatched job even though the crew batched the route
+ * off the paper exactly as they should have.
+ */
+export function usePrevDaySplitRoutes(runDate: string): Map<number, number> {
+  const { data: swapLog = [] } = useRouteSwapLog(14);
+  const { data: prevOp } = usePrevOperatingDay(runDate);
+  return useMemo(
+    () => buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp)).splitHelpers,
+    [swapLog, runDate, prevOp],
+  );
+}
+
+/**
  * The previous OPERATING run date from the server = max(run_date) with any
  * truck state before today — the exact signal day-init seeds from. Bridges
  * mid-week plant closures that a plain weekday-step (previousRunDate) skips, so
