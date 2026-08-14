@@ -123,6 +123,21 @@ export default function BatchingWizard() {
       routeByCarrier.get(truckNumber) ?? prevSplitRoutes.get(truckNumber) ?? truckNumber,
     [routeByCarrier, prevSplitRoutes],
   );
+
+  /**
+   * The route whose batch SATISFIES this truck — carriers only, never splits.
+   *
+   * Deliberately not sheetRouteFor. A carrier means ONE load came back, so
+   * batching either truck covers it. A SPLIT means TWO trucks came back, and
+   * both must be batched — the helper just contributes 0 wearers, which the
+   * server enforces (routers/batches.py: "Both get batched, but the wearers
+   * belong to the route"). Crediting a helper through its route made Review
+   * report "all batched" while the helper sat at the dock with no batch at all.
+   */
+  const carrierRouteFor = useCallback(
+    (truckNumber: number) => routeByCarrier.get(truckNumber) ?? truckNumber,
+    [routeByCarrier],
+  );
   /**
    * The day sheet's entry for a truck, resolved through coverage.
    * `undefined` means "not on this sheet" and is deliberately distinct from a
@@ -189,10 +204,10 @@ export default function BatchingWizard() {
       .sort((a, b) => a.truck_number - b.truck_number);
   }, [board, showAll, unloadsDay, holidayUnload, batchByTruck, coveredRoutes, prevSplitHelpers]);
 
-  // Batched, but not something this day should be batching — a covered route
-  // truck that never came back. Excluding it from the roster above stops it
-  // being picked again; surfacing it here stops the existing assignment going
-  // silently unnoticed.
+  // Batched, but no longer part of the active fleet at all. A batched truck now
+  // always stays on the roster (a covered route the crew batched off the paper
+  // is CORRECT), so the only thing that reaches this list is an assignment whose
+  // truck has since been deactivated — still worth surfacing, never routine.
   const strandedBatched = useMemo(() => {
     if (showAll) return [];
     const rosterNums = new Set(rosterTrucks.map((t) => t.truck_number));
@@ -448,6 +463,7 @@ export default function BatchingWizard() {
           batchByTruck={batchByTruck}
           templateEntryFor={templateEntryFor}
           sheetRouteFor={sheetRouteFor}
+          carrierRouteFor={carrierRouteFor}
           strandedBatched={strandedBatched}
           onRemoveStranded={(truck, batch) => setConfirmRemove({ truck, from: batch })}
           noCap={noCap}
@@ -779,6 +795,7 @@ function ReviewStep({
   batchByTruck,
   templateEntryFor,
   sheetRouteFor,
+  carrierRouteFor,
   strandedBatched,
   onRemoveStranded,
   noCap,
@@ -794,10 +811,15 @@ function ReviewStep({
   /** The day sheet's entry for a truck, resolved through coverage. `undefined`
    *  = not on the sheet, which is NOT the same as a stored 0 ("runs empty"). */
   templateEntryFor: (n: number) => number | undefined;
-  /** Route this truck is unloading; differs when it carried another's freight. */
+  /** LABEL only: the sheet line this truck is working — a carried route or a
+   *  split's route. Never use it to decide whether a batch is owed. */
   sheetRouteFor: (n: number) => number;
-  /** Batched trucks that aren't on today's roster — a covered route truck that
-   *  never came back, so its batch entry is wrong. */
+  /** CREDIT: the route whose batch satisfies this truck. Carriers only — a
+   *  split helper is owed its own batch and is never credited away. */
+  carrierRouteFor: (n: number) => number;
+  /** Batched trucks no longer on today's roster. Since an already-batched truck
+   *  now always stays on the roster, this is a truck that has left the active
+   *  fleet entirely — not a covered route. */
   strandedBatched: { truck: number; batch: number; carrier: number | null }[];
   onRemoveStranded: (truck: number, batch: number) => void;
   noCap: boolean;
@@ -837,7 +859,10 @@ function ReviewStep({
   const unbatched = rosterTrucks
     .filter((t) => {
       if (batchByTruck.has(t.truck_number)) return false;
-      const carried = sheetRouteFor(t.truck_number);
+      // Carrier credit only. A split helper physically came back as a SECOND
+      // truck and is owed its own batch (contributing 0 wearers), so it must
+      // not be waved through by its route's assignment.
+      const carried = carrierRouteFor(t.truck_number);
       return !(carried !== t.truck_number && batchByTruck.has(carried));
     })
     .map((t) => t.truck_number)
