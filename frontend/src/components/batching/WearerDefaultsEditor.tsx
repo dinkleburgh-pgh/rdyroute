@@ -20,8 +20,8 @@ import { workdayNumbers } from "../Clock";
 import ConfirmDialog from "../ConfirmDialog";
 import { truckTypeLabel } from "../../utils/truckType";
 import { isScheduledOff } from "../../utils/truckStatus";
-import { currentSheetPeriod, formatSheetPeriod } from "../../utils/dates";
-import { WEARER_DEFAULTS_REVIEW_KEY } from "../../utils/wearerDefaults";
+import { currentSheetPeriod, formatSheetPeriod, monthsBehind } from "../../utils/dates";
+import { STALE_MONTHS_BEHIND, WEARER_DEFAULTS_REVIEW_KEY } from "../../utils/wearerDefaults";
 import { useToast } from "../../contexts/ToastContext";
 import { format, parseISO } from "date-fns";
 
@@ -119,6 +119,20 @@ export default function WearerDefaultsEditor({
   const [period, setPeriod] = useState(currentSheetPeriod());
   const confirmedThisPeriod = review?.period === period;
 
+  /**
+   * The sheets on file are from a month that has already rolled over (or were
+   * never confirmed at all).
+   *
+   * The same test the Batching Wizard banner uses, repeated HERE because this
+   * is the screen where the fix happens — the wizard tells you the sheets are
+   * behind, then you open this editor and the warning disappears, which reads
+   * as "handled" when nothing has been done. Whole calendar months, never a day
+   * count: the paper arrives on no fixed date, so a day rule fires while it is
+   * still in transit.
+   */
+  const behind = monthsBehind(review?.period);
+  const sheetsStale = review == null || behind == null || behind >= STALE_MONTHS_BEHIND;
+
   const stored = useMemo(() => {
     const out: Record<number, Record<number, number>> = {};
     for (const d of DAYS) out[d] = readStored(settings, d);
@@ -204,13 +218,23 @@ export default function WearerDefaultsEditor({
         new Date(dayUpdatedAt).getTime() > new Date(review.confirmed_at).getTime() + 1000;
       return (
         <>
-          {`last changed ${fmtStamp(stamp.at)} by ${stamp.by_display || stamp.by}`}
+          last changed <span className="font-semibold text-slate-300">{fmtStamp(stamp.at)}</span>
+          {" by "}
+          <span className="font-semibold text-sky-300">{stamp.by_display || stamp.by}</span>
           {drifted && <span className="text-amber-400"> · updated after this confirmation</span>}
         </>
       );
     }
-    if (dayUpdatedAt) return `last changed ${fmtStamp(dayUpdatedAt)} · author unknown`;
-    return "never saved";
+    if (dayUpdatedAt) {
+      return (
+        <>
+          last changed <span className="font-semibold text-slate-300">{fmtStamp(dayUpdatedAt)}</span>
+          {" · "}
+          <span className="italic text-slate-500">author unknown</span>
+        </>
+      );
+    }
+    return <span className="italic text-slate-500">never saved</span>;
   }, [review, day, dayUpdatedAt]);
 
   /** Normalised payload for a day: every filled cell, keyed by truck. Blanks
@@ -358,13 +382,51 @@ export default function WearerDefaultsEditor({
                 frozen on the open transition, so it would keep showing the
                 pre-save value immediately after saving. */}
             <p className="mt-1 text-[11px] text-slate-500">
-              {review
-                ? `Sheets on file: ${formatSheetPeriod(review.period)} · confirmed by ${review.confirmed_by_display || "unknown"} on ${fmtStamp(review.confirmed_at)}`
-                : "Sheets on file: never confirmed — nobody has checked these against a paper sheet yet."}
+              {review ? (
+                <>
+                  Sheets on file:{" "}
+                  <span className={clsx("font-bold", sheetsStale ? "text-amber-300" : "text-slate-200")}>
+                    {formatSheetPeriod(review.period)}
+                  </span>
+                  {" · confirmed by "}
+                  <span className="font-semibold text-sky-300">
+                    {review.confirmed_by_display || "unknown"}
+                  </span>
+                  {" on "}
+                  <span className="font-semibold text-slate-300">{fmtStamp(review.confirmed_at)}</span>
+                </>
+              ) : (
+                <>
+                  Sheets on file:{" "}
+                  <span className="font-bold text-amber-300">never confirmed</span>
+                  {" — nobody has checked these against a paper sheet yet."}
+                </>
+              )}
             </p>
           </div>
           <button className="btn-ghost shrink-0" onClick={onClose}>Close</button>
         </div>
+
+        {/* The month has rolled over (or nothing was ever confirmed). Sits above
+            the tabs rather than in the header line so it survives being skimmed,
+            and states the action rather than just the fact. */}
+        {sheetsStale && (
+          <div className="flex shrink-0 flex-wrap items-center gap-x-2 gap-y-1 border-b border-amber-600/40 bg-amber-950/30 px-4 py-2">
+            <span className="rounded-pill bg-amber-500/20 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-300">
+              Needs updating
+            </span>
+            <span className="text-xs font-semibold text-amber-200">
+              {formatSheetPeriod(currentSheetPeriod())} sheets not confirmed.
+            </span>
+            <span className="text-xs text-amber-200/70">
+              {review
+                ? `On file: ${formatSheetPeriod(review.period)}` +
+                  (behind != null && behind > 1 ? ` — ${behind} months behind.` : ".") +
+                  " Enter this month's numbers, or confirm them if nothing changed."
+                : "Nobody has checked these against a paper sheet yet."}
+            </span>
+          </div>
+        )}
 
         {/* Day tabs — the month arrives as five sheets, so all five live here.
             Every fixed row in this modal carries shrink-0: the dialog is a

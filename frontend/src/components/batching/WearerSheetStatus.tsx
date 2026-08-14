@@ -41,13 +41,17 @@ export default function WearerSheetStatus({
   const behind = monthsBehind(review?.period);
   const stale = review == null || behind == null || behind >= STALE_MONTHS_BEHIND;
 
-  const confirmedLine = review
-    ? `${formatSheetPeriod(review.period)} sheets · confirmed ${fmt(review.confirmed_at)} by ${review.confirmed_by_display || "unknown"}`
-    : null;
-
-  if (!stale) {
+  if (!stale && review) {
+    // Current month: quiet line, but the month, the date and the name are the
+    // three things anyone actually reads off it, so they carry the colour.
     return (
-      <p className={className ?? "text-[11px] text-slate-500"}>{confirmedLine}</p>
+      <p className={className ?? "text-[11px] text-slate-500"}>
+        <span className="font-bold text-slate-200">{formatSheetPeriod(review.period)}</span>
+        {" sheets · confirmed "}
+        <span className="font-semibold text-slate-300">{fmt(review.confirmed_at)}</span>
+        {" by "}
+        <span className="font-semibold text-sky-300">{review.confirmed_by_display || "unknown"}</span>
+      </p>
     );
   }
 
