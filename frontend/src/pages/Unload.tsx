@@ -92,6 +92,18 @@ export default function Unload() {
   // or null. This — not today's assignment — is the coverage the unload
   // workflow cares about.
   const prevCoverOf = (t: TruckWithState): number | null => prevCoverage.byCover.get(t.truck_number) ?? null;
+  /**
+   * The route whose load this truck brought back last night — carriers only.
+   *
+   * Deliberately from prevDayCarriers, not prevCoverOf: byCover excludes splits
+   * but NOT two-way pairs, and in a two-way both trucks physically ran, so both
+   * still own their own batch card. Getting that wrong would hide a card that
+   * genuinely has to be filled.
+   */
+  const carriedRouteOf = (t: TruckWithState): number | null => {
+    for (const [route, c] of prevDayCarriers) if (c.truck_number === t.truck_number) return route;
+    return null;
+  };
   // Route whose SPLIT overflow this truck carried on the prev load day. A
   // split truck ran too, so it comes back dirty and needs calling out for the
   // route it helped — but the route ALSO ran itself (byCover excludes splits),
@@ -751,8 +763,15 @@ export default function Unload() {
                     )}
 
                     {/* Batching stays available: wearers and batch numbers are
-                        normally entered right after a truck is unloaded. */}
-                    {!batchingDisabled && (
+                        normally entered right after a truck is unloaded. One
+                        returned load gets ONE card, under the original route
+                        number — so a carrier shows where its card lives instead
+                        of offering a second one. */}
+                    {!batchingDisabled && carriedRouteOf(t) != null ? (
+                      <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs leading-snug text-slate-400">
+                        Batched as route <span className="font-bold text-slate-200">#{carriedRouteOf(t)}</span> — one card per load.
+                      </p>
+                    ) : !batchingDisabled && (
                       <section>
                         <p className="label">Batch</p>
                         <div className="grid grid-cols-6 gap-1.5">
@@ -786,7 +805,12 @@ export default function Unload() {
                       </button>
                     )}
 
-                    {!batchingDisabled && (
+                    {/* One returned load, one card, under the original route. */}
+                    {!batchingDisabled && carriedRouteOf(t) != null ? (
+                      <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs leading-snug text-slate-400">
+                        Batched as route <span className="font-bold text-slate-200">#{carriedRouteOf(t)}</span> — one card per load.
+                      </p>
+                    ) : !batchingDisabled && (
                       <section>
                         <p className="label">Batch</p>
                         <div className="grid grid-cols-6 gap-1.5">

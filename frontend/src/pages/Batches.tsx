@@ -6,7 +6,7 @@ import {
   useAssignBatch,
   useBatchSummary,
   useBoard,
-  usePrevDayCarriers,
+  useBatchUnit,
   usePrevDaySplitHelpers,
   useSettings,
   useUnloadDayTemplate,
@@ -210,7 +210,7 @@ export default function Batches() {
   const [uy, um, ud] = runDate.split("-").map(Number);
   const unloadsDay = unloadsOverride ?? workdayNumbers(new Date(uy, um - 1, ud, 12)).unloadsDay;
   const dayTemplate = useUnloadDayTemplate(unloadsDay);
-  const prevCarriers = usePrevDayCarriers(runDate, board);
+  const { prevCarriers, batchUnitFor, carrierOf } = useBatchUnit(runDate, board);
   const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const defaultWearers = useMemo(() => {
     const n = Number(truck);
@@ -219,12 +219,16 @@ export default function Batches() {
     // full on that route — prefilling the helper's own sheet line would add the
     // same garments to the batch a second time. Same rule as the wizard.
     if (prevSplitHelpers.has(n)) return 0;
-    let route = n;
-    for (const [r, carrier] of prevCarriers) {
-      if (carrier.truck_number === n) { route = r; break; }
-    }
-    return dayTemplate.wearers[route];
-  }, [truck, prevCarriers, prevSplitHelpers, dayTemplate]);
+    return dayTemplate.wearers[batchUnitFor(n)];
+  }, [truck, batchUnitFor, prevSplitHelpers, dayTemplate]);
+
+  /** Typed a carrier? The route it will be batched as. */
+  const redirectedTo = useMemo(() => {
+    const n = Number(truck);
+    if (!Number.isFinite(n) || n <= 0) return null;
+    const unit = batchUnitFor(n);
+    return unit !== n ? unit : null;
+  }, [truck, batchUnitFor]);
   const [isDesktop, setIsDesktop] = useState(() => window.matchMedia("(min-width: 768px)").matches);
   const source = params.get("source");
   const navigate = useNavigate();
@@ -283,6 +287,7 @@ export default function Batches() {
               </button>
             </>
           ) : (
+            <>
             <input
               className="input mt-1 w-32 text-center text-2xl font-bold"
               type="number"
@@ -290,7 +295,23 @@ export default function Batches() {
               placeholder="—"
               autoFocus
               onChange={(e) => setTruck(e.target.value)}
+              // A carrier owns no batch card — the route does. Correct it as
+              // soon as the number is committed, rather than letting the server
+              // 409 it after a batch has been picked.
+              onBlur={() => {
+                const n = Number(truck);
+                if (!Number.isFinite(n) || n <= 0) return;
+                const unit = batchUnitFor(n);
+                if (unit !== n) setTruck(String(unit));
+              }}
+              onKeyDown={(e) => { if (e.key === "Enter") e.currentTarget.blur(); }}
             />
+            {redirectedTo != null && (
+              <p className="mt-1 text-[11px] font-semibold text-amber-300">
+                #{truck} carried route {redirectedTo} — batching as #{redirectedTo}
+              </p>
+            )}
+            </>
           )}
         </div>
       </div>

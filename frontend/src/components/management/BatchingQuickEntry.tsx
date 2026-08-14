@@ -22,7 +22,7 @@ import {
   useBatchSummary,
   useBoard,
   useHolidayUnload,
-  usePrevDayCarriers,
+  useBatchUnit,
   usePrevDaySplitHelpers,
   useRemoveTruckFromBatch,
   useSettings,
@@ -68,7 +68,7 @@ export default function BatchingQuickEntry() {
   const [yr, mo, dy] = runDate.split("-").map(Number);
   const unloadsDay = unloadsOverride ?? workdayNumbers(new Date(yr, mo - 1, dy, 12)).unloadsDay;
   const dayTemplate = useUnloadDayTemplate(unloadsDay);
-  const prevCarriers = usePrevDayCarriers(runDate, board);
+  const { prevCarriers, batchUnitFor, carrierOf } = useBatchUnit(runDate, board);
   const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
 
   const routeByCarrier = useMemo(() => {
@@ -98,12 +98,17 @@ export default function BatchingQuickEntry() {
     return entry != null ? String(entry) : "";
   }
 
-  /** The sheet line this truck is being batched as, when it isn't its own. */
-  const coveredRoute = (() => {
+  /** If the typed number is a carrier, the route whose card it will become. */
+  const redirectedTo = (() => {
     const n = Number(truck);
     if (!Number.isFinite(n)) return null;
-    const r = routeByCarrier.get(n);
-    return r != null && r !== n ? r : null;
+    const unit = batchUnitFor(n);
+    return unit !== n ? unit : null;
+  })();
+  /** If the typed number IS a route that was covered, which truck brought it. */
+  const broughtBackBy = (() => {
+    const n = Number(truck);
+    return Number.isFinite(n) ? carrierOf(n) : null;
   })();
 
   const known = (() => {
@@ -121,7 +126,13 @@ export default function BatchingQuickEntry() {
       return;
     }
     setErr(null);
-    setWearers(defaultWearersFor(n));
+    // A carrier owns no card — the route does, and the crew types whichever
+    // number is in front of them. Redirect rather than reject: the server would
+    // 409 this on save, and an error at the end of a Enter-Enter rhythm is a
+    // worse place to learn it than the field correcting itself now.
+    const unit = batchUnitFor(n);
+    if (unit !== n) setTruck(String(unit));
+    setWearers(defaultWearersFor(unit));
     // The wearers input is always mounted, so focus can move now — no need to
     // wait on a render. Only the select() has to wait for React to paint the
     // prefilled value, and a timeout is used rather than requestAnimationFrame
@@ -293,9 +304,13 @@ export default function BatchingQuickEntry() {
       <div className="min-h-[1.25rem] text-xs">
         {err ? (
           <span className="font-semibold text-red-400">{err}</span>
-        ) : coveredRoute != null ? (
+        ) : redirectedTo != null ? (
           <span className="text-amber-300">
-            #{truck} carried route #{coveredRoute} — wearers come from that route's sheet line.
+            #{truck} carried route #{redirectedTo} — batching as #{redirectedTo} (one card per load).
+          </span>
+        ) : broughtBackBy != null ? (
+          <span className="text-slate-400">
+            Route #{truck} came back on #{broughtBackBy} — this is its one card.
           </span>
         ) : movingFrom != null && movingFrom !== batchNo ? (
           <span className="text-amber-300">#{truck} is in batch {movingFrom} — adding here moves it.</span>
