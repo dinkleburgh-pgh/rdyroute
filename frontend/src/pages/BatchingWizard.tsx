@@ -691,13 +691,28 @@ function BatchStep({
                         // Focusing the next field blurs this one, which saves it.
                         const nextNum = selectedNums[idx + 1];
                         const el = document.getElementById(`wearers-${step}-${nextNum}`) as HTMLInputElement | null;
-                        if (el) { el.focus(); el.select(); return; }
+                        if (el) {
+                          el.focus();
+                          // select() alone is unreliable on a touch keyboard —
+                          // the caret lands at the end and the typed digits get
+                          // APPENDED to the prefill (sheet says 403, you type 5,
+                          // you get 4035). Re-select after the keyboard settles
+                          // so the field is genuinely ready for a new number,
+                          // while the prefill stays visible for Enter-to-accept.
+                          el.select();
+                          window.setTimeout(() => el.select(), 0);
+                          return;
+                        }
                       }
                       // Last field: commit it, then move on to the next batch.
                       e.currentTarget.blur();
                       onNext();
                     }}
                     value={draftWearers(num)}
+                    // Tapping straight into a field (rather than arriving by
+                    // Enter) has to behave the same way, or half the fields
+                    // append and half replace depending on how you got there.
+                    onFocus={(e) => e.currentTarget.select()}
                     onChange={(e) => setWearerDrafts((d) => ({ ...d, [num]: e.target.value.replace(/\D/g, "") }))}
                     onBlur={() => {
                       const next = Number(draftWearers(num)) || 0;
