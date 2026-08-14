@@ -269,19 +269,14 @@ function NoteCard({ note, token }: { note: TruckNote; token: string }) {
  * landed. It is deliberately the whole screen — a driver uses this for five
  * seconds, in a yard, once a day, with no training and possibly gloves on.
  */
-function ArrivalLanding({
-  token,
-  truckNumber,
-  today,
-  noteCount,
-  onNotes,
-}: {
-  token: string;
-  truckNumber: number | null;
-  today: string;
-  noteCount: number;
-  onNotes: () => void;
-}) {
+/**
+ * The "I'm Back" action, sitting inline above the notes.
+ *
+ * Deliberately NOT a gate in front of the notes. A driver scans once, in a
+ * yard, with one hand: making them tap through to read a note that says "use
+ * the north gate" is a step that can only cost them.
+ */
+function ArrivalBlock({ token }: { token: string }) {
   const arrive = useDriverMarkArrived(token);
   const [done, setDone] = useState<{ at: number | null; already: boolean } | null>(null);
   const [err, setErr] = useState("");
@@ -304,16 +299,7 @@ function ArrivalLanding({
   const at = done?.at != null ? format(new Date(done.at * 1000), "h:mm a") : null;
 
   return (
-    <div className="flex min-h-svh flex-col bg-slate-950 px-5 py-8 text-slate-100">
-      <div className="text-center">
-        <p className="text-xs uppercase tracking-widest text-slate-500">ReadyRoute</p>
-        {/* Big, because scanning the wrong truck is the easiest mistake here
-            and the number is the only way a driver would catch it. */}
-        <h1 className="mt-2 text-6xl font-black tabular-nums">#{truckNumber ?? "…"}</h1>
-        <p className="mt-2 text-sm text-slate-400">{today}</p>
-      </div>
-
-      <div className="mx-auto mt-10 w-full max-w-sm space-y-4">
+    <div className="space-y-3">
         {done ? (
           <div className="rounded-2xl border border-emerald-700/50 bg-emerald-950/40 px-5 py-6 text-center">
             <p className="text-2xl font-bold text-emerald-300">
@@ -339,23 +325,6 @@ function ArrivalLanding({
           </p>
         )}
 
-        <button
-          type="button"
-          onClick={onNotes}
-          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-5 text-xl font-bold text-slate-200 active:scale-95"
-        >
-          Notes
-          {noteCount > 0 && (
-            <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-sm font-bold text-white">
-              {noteCount}
-            </span>
-          )}
-        </button>
-      </div>
-
-      <p className="mt-auto pt-10 text-center text-xs text-slate-700">
-        Scan the code in your truck any time to reopen this.
-      </p>
     </div>
   );
 }
@@ -365,7 +334,6 @@ export default function DriverNotes() {
   const { data: notes, isLoading, isError, error, fetchStatus, refetch } = useDriverNotes(token);
   const { data: truckInfo } = useDriverTruckInfo(token);
   const [adding, setAdding] = useState(false);
-  const [showNotes, setShowNotes] = useState(false);
 
   const today = format(new Date(), "EEEE, MMMM d");
 
@@ -423,18 +391,6 @@ export default function DriverNotes() {
     );
   }
 
-  if (!showNotes) {
-    return (
-      <ArrivalLanding
-        token={token}
-        truckNumber={truckNumber}
-        today={today}
-        noteCount={(notes ?? []).length}
-        onNotes={() => setShowNotes(true)}
-      />
-    );
-  }
-
   const staffNotes  = (notes ?? []).filter((n) => n.created_by !== "driver");
   const driverNotes = (notes ?? []).filter((n) => n.created_by === "driver");
 
@@ -443,13 +399,15 @@ export default function DriverNotes() {
       {/* Header */}
       <div className="mb-6 text-center">
         <p className="text-xs uppercase tracking-widest text-slate-500">ReadyRoute</p>
-        <h1 className="mt-1 text-3xl font-bold">
-          Route #{truckNumber ?? "…"}
-        </h1>
+        {/* Big: scanning the wrong truck is the easiest mistake a driver can
+            make here, and this number is the only thing that would catch it. */}
+        <h1 className="mt-1 text-5xl font-black tabular-nums">#{truckNumber ?? "…"}</h1>
         <p className="mt-1 text-sm text-slate-400">{today}</p>
       </div>
 
       <div className="mx-auto max-w-lg space-y-6">
+        <ArrivalBlock token={token} />
+
         {/* Add-note button / form */}
         {adding ? (
           <AddNoteForm token={token} onClose={() => setAdding(false)} />
