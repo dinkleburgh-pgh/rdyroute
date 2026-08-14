@@ -55,8 +55,12 @@ class TruckOut(_OrmBase):
     is_oos: bool
     uniform_size: str | None = None
     scheduled_off_days: list[int]
-    qr_token: str | None
     created_at: datetime
+    # qr_token is deliberately NOT here. It is the ONLY credential on the public
+    # /driver/{token} page, and this model is served by GET /fleet to every
+    # authenticated session — including the anonymous guest role, which needs no
+    # credentials at all. That made all 47 tokens harvestable by anyone who knew
+    # the hostname. Admins read them from GET /fleet/qr-tokens instead.
 
 
 # ---------------------------------------------------------------------------
@@ -142,7 +146,7 @@ class TruckWithState(_OrmBase):
     is_persistent_spare: bool
     is_oos: bool = False
     scheduled_off_days: list[int] = Field(default_factory=list)
-    qr_token: str | None = None
+    # See TruckOut: never expose the driver QR credential on a board payload.
     state: TruckStateOut | None = None
     route_swap_route: int | None = None  # set when this truck is the load_on_truck in a route swap
     route_swap_two_way: bool | None = None  # True = reciprocal swap (both trucks run); False = one-way (takeover)

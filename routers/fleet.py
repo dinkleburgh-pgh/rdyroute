@@ -30,6 +30,18 @@ def list_fleet(include_inactive: bool = False, db: Session = Depends(get_db), _u
     return db.scalars(q.order_by(Truck.truck_number)).all()
 
 
+@router.get("/qr-tokens")
+def list_qr_tokens(db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
+    """Driver QR tokens, admin only.
+
+    These are bearer credentials for the public /driver/{token} page, so they are
+    served from exactly one admin-gated place rather than riding along on every
+    fleet/board payload the way they used to.
+    """
+    rows = db.scalars(select(Truck).where(Truck.is_active == True)).all()
+    return {str(t.truck_number): t.qr_token for t in rows if t.qr_token}
+
+
 @router.post("", response_model=TruckOut, status_code=status.HTTP_201_CREATED)
 def add_truck(payload: TruckCreate, db: Session = Depends(get_db), _admin: User = Depends(require_admin)):
     existing = db.scalars(select(Truck).where(Truck.truck_number == payload.truck_number)).first()

@@ -4,11 +4,12 @@
  */
 import { useMemo, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { useFleet, useRegenerateQR } from "../../api/hooks";
+import { useFleet, useQrTokens, useRegenerateQR } from "../../api/hooks";
 import { publicBase } from "../../api/client";
 
 export default function DriverQRPanel() {
   const { data: trucks, isLoading } = useFleet(true);
+  const { data: qrTokens = {} } = useQrTokens();
   const regen = useRegenerateQR();
   const [search, setSearch] = useState("");
   const [copiedTruck, setCopiedTruck] = useState<number | null>(null);
@@ -50,8 +51,9 @@ export default function DriverQRPanel() {
 
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 md:grid-cols-3 print:grid-cols-3">
         {active.map((truck) => {
-          if (!truck.qr_token) return null;
-          const url = `${base}/driver/${truck.qr_token}`;
+          const token = qrTokens[String(truck.truck_number)];
+          if (!token) return null;
+          const url = `${base}/driver/${token}`;
           const isCopied   = copiedTruck === truck.truck_number;
           const isRegening = regen.isPending && regen.variables === truck.truck_number;
           return (
@@ -85,7 +87,7 @@ export default function DriverQRPanel() {
                 </button>
               </div>
               <p className="hidden text-center text-[10px] text-slate-600 print:block">
-                /driver/{truck.qr_token.slice(0, 8)}…
+                /driver/{token.slice(0, 8)}…
               </p>
             </div>
           );

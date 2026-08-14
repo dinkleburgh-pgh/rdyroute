@@ -589,6 +589,23 @@ export function usePrevDaySplitHelpers(runDate: string): Set<number> {
  *   - TWO-WAY swaps are excluded there, so both trucks physically ran and both
  *     keep their own card.
  */
+/**
+ * Driver QR tokens, admin only.
+ *
+ * Separate from useFleet because these are bearer credentials for the public
+ * /driver/{token} page — they used to ride along on every fleet/board payload,
+ * which meant any session (including the no-credentials guest role) could
+ * harvest all of them.
+ */
+export function useQrTokens(enabled = true) {
+  return useQuery({
+    queryKey: ["fleet", "qr-tokens"],
+    enabled,
+    queryFn: async () => (await api.get<Record<string, string>>("/fleet/qr-tokens")).data,
+    staleTime: 300_000,
+  });
+}
+
 export function useBatchUnit(runDate: string, board: TruckWithState[]) {
   const prevCarriers = usePrevDayCarriers(runDate, board);
   return useMemo(() => {

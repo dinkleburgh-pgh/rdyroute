@@ -11,7 +11,7 @@ import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import clsx from "clsx";
 import { QRCodeSVG } from "qrcode.react";
-import { useBoard } from "../api/hooks";
+import { useBoard, useQrTokens } from "../api/hooks";
 import { Truck } from "lucide-react";
 import { ChevronRightIcon } from "../components/icons";
 import {
@@ -436,6 +436,10 @@ function TruckNotePanel({
   const [adding, setAdding]     = useState(false);
   const [editing, setEditing]   = useState<TruckNote | null>(null);
   const [showQR, setShowQR]     = useState(false);
+  // Admin-only, and only fetched once the QR block is actually opened — the
+  // token is a credential for the public driver page, so it no longer rides
+  // along on the board payload every session can read.
+  const { data: qrTokens = {} } = useQrTokens(showQR);
 
   const visible = notes.filter(
     (n) => showArchived || (n.is_active && !isExpired(n)),
@@ -477,7 +481,7 @@ function TruckNotePanel({
       {showQR && (
         <TruckQRModal
           truckNumber={truck.truck_number}
-          qrToken={truck.qr_token}
+          qrToken={qrTokens[String(truck.truck_number)] ?? null}
           onClose={() => setShowQR(false)}
         />
       )}
