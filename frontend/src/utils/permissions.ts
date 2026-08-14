@@ -21,7 +21,8 @@ export type PermissionAction =
   | "unload:trucks"
   | "edit:notes"
   | "delete:messages"
-  | "edit:wearer-defaults";
+  | "edit:wearer-defaults"
+  | "edit:fleet-schedule";
 
 /** Roles that are considered elevated "manager-level" operators. */
 const MANAGER_ROLES: AuthRole[] = ["admin", "fleet", "atl", "supervisor", "lead"];
@@ -42,6 +43,11 @@ const ACTION_ROLES: Record<PermissionAction, AuthRole[]> = {
   // _ADMIN_ROLES = {admin, fleet, supervisor}, so offering the editor to atl or
   // lead would let them transcribe five sheets and then eat a 403 on save.
   "edit:wearer-defaults": ["admin", "fleet", "supervisor"],
+  // The Fleet Schedule page is visible to everyone including guests, but both
+  // things its edit mode writes — PUT /fleet/{n} for the off-days and
+  // PUT /route-drivers/{n} for the SSR — are require_admin. Arming edit mode
+  // for anyone else just produces a 403 per tap.
+  "edit:fleet-schedule": ["admin"],
 };
 
 /** Returns true if `role` is permitted to perform `action`. */

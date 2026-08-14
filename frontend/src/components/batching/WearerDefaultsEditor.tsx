@@ -264,6 +264,11 @@ export default function WearerDefaultsEditor({
     const out: { truck: number; batch: number; from: number; to: number }[] = [];
     for (const b of batches) {
       for (const t of b.trucks) {
+        // A carrier owns no batch card any more — the route does. Re-assigning
+        // one is now rejected server-side, and applyToCurrent loops mutateAsync
+        // with no per-row catch, so a single legacy carrier row left in the data
+        // would throw mid-loop and abandon every rewrite after it.
+        if (routeByCarrier.has(t.truck_number)) continue;
         const to = prevSplitHelpers.has(t.truck_number)
           ? 0
           : sheet[String(routeByCarrier.get(t.truck_number) ?? t.truck_number)];

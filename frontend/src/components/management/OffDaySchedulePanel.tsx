@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Lock, Pencil } from "lucide-react";
-import { useFleet, useHolidayLoad, useHolidayUnload, useRouteDrivers, useUpdateTruck } from "../../api/hooks";
+import { useFleet, useHolidayLoad, useHolidayUnload, useRouteDrivers, useUpdateTruck, useUpsertRouteDriver } from "../../api/hooks";
+import { useAuth } from "../../contexts/AuthContext";
+import { can } from "../../utils/permissions";
 import { isScheduledOff, previousWorkday } from "../../utils/truckStatus";
 import { TRUCK_TYPE_SHORT_LABEL } from "../../utils/truckType";
 import { workdayNumbers } from "../Clock";
@@ -25,12 +27,18 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
   // shouldn't sit armed).
   const RELOCK_MS = 2 * 60 * 1000;
   const [editing, setEditing] = useState(false);
+  // The page is visible to everyone including guests, but everything edit mode
+  // writes is admin-only server-side. Offering the toggle to anyone else armed
+  // a mode where every tap 403s.
+  const { user } = useAuth();
+  const canEdit = can(user?.role, "edit:fleet-schedule");
   const relockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   function armRelock() {
     if (relockTimer.current) clearTimeout(relockTimer.current);
     relockTimer.current = setTimeout(() => setEditing(false), RELOCK_MS);
   }
   function setEditingSafe(next: boolean) {
+    if (next && !canEdit) return;
     if (relockTimer.current) clearTimeout(relockTimer.current);
     if (next) armRelock();
     setEditing(next);
@@ -57,6 +65,30 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
     return m;
   }, [routeDrivers]);
   const hasDrivers = driverByRoute.size > 0;
+  // The column is hidden when no SSR has ever been captured — but then there is
+  // nowhere to type the first one, so edit mode always shows it.
+  const showDriverCol = hasDrivers || editing;
+  const upsertDriver = useUpsertRouteDriver();
+  // Per-route text drafts, so typing doesn't fight the 5-minute query cache.
+  // Cleared for a route once its save lands and the refetch agrees.
+  const [driverDrafts, setDriverDrafts] = useState<Record<number, string>>({});
+
+  async function commitDriver(routeNumber: number) {
+    const draft = driverDrafts[routeNumber];
+    if (draft === undefined) return;
+    const stored = driverByRoute.get(routeNumber) ?? "";
+    if (draft.trim() === stored) {
+      setDriverDrafts((d) => { const n = { ...d }; delete n[routeNumber]; return n; });
+      return;
+    }
+    armRelock();
+    try {
+      await upsertDriver.mutateAsync({ route_number: routeNumber, driver_name: draft.trim() });
+      setDriverDrafts((d) => { const n = { ...d }; delete n[routeNumber]; return n; });
+    } catch {
+      // Keep the draft on screen so the typed name isn't lost on a failed save.
+    }
+  }
 
   const { loadDay, unloadsDay } = workdayNumbers();
   const runDate = todayIso();
@@ -120,12 +152,15 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
     <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs text-ink-muted">
-          {editing
-            ? "Editing — click any cell to toggle that truck's off day. Changes save immediately. Auto-locks after 2 min of inactivity."
-            : "Schedule is locked so a stray tap can't change it. Tap Edit Schedule to make changes."}
+          {!canEdit
+            ? "Schedule is read-only for your role."
+            : editing
+              ? "Editing — click any cell to toggle that truck's off day, or type an SSR name. Changes save immediately. Auto-locks after 2 min of inactivity."
+              : "Schedule is locked so a stray tap can't change it. Tap Edit Schedule to make changes."}
         </p>
         <button
           type="button"
+          hidden={!canEdit}
           onClick={() => setEditingSafe(!editing)}
           className={clsx(
             "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors",
@@ -142,7 +177,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
         <table className="w-full text-sm">
           <thead>
             <tr className="bg-slate-800 text-left text-xs uppercase tracking-widest text-slate-400">
-              {hasDrivers && (
+              {showDriverCol && (
                 <th className="sticky left-0 z-10 hidden w-36 border border-slate-700/50 bg-slate-800 px-2 py-1.5 text-left sm:table-cell">
                   SSR
                 </th>
@@ -150,7 +185,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
               <th
                 className={clsx(
                   "sticky left-0 z-10 border border-slate-700/50 bg-slate-800 px-1 py-1.5 text-center",
-                  hasDrivers && "sm:left-36",
+                  showDriverCol && "sm:left-36",
                 )}
               >
                 Route
@@ -182,7 +217,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={hasDrivers ? 7 : 6} className="border border-slate-700/50 px-1 py-10 text-center text-xs text-slate-500">
+                <td colSpan={showDriverCol ? 7 : 6} className="border border-slate-700/50 px-1 py-10 text-center text-xs text-slate-500">
                   No active route trucks found.
                 </td>
               </tr>
@@ -192,7 +227,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                   key={t.truck_number}
                   className={clsx("transition-colors", i % 2 === 1 && "bg-slate-800/20")}
                 >
-                  {hasDrivers && (
+                  {showDriverCol && (
                     <td
                       className={clsx(
                         "sticky left-0 z-10 hidden w-36 truncate border border-slate-700/50 bg-slate-900 px-2 py-1.5 text-left text-xs text-slate-300 transition-colors sm:table-cell",
@@ -200,16 +235,44 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                       )}
                       onMouseEnter={() => setHoveredRow(t.truck_number)}
                       onMouseLeave={() => setHoveredRow(null)}
-                      onClick={() => togglePinRow(t.truck_number)}
+                      // Pinning a row is a read affordance; in edit mode the cell
+                      // belongs to the input, or every click into the field would
+                      // also toggle the pin.
+                      onClick={editing ? undefined : () => togglePinRow(t.truck_number)}
                       title={driverByRoute.get(t.truck_number) ?? undefined}
                     >
-                      {driverByRoute.get(t.truck_number) ?? <span className="text-slate-600">—</span>}
+                      {editing ? (
+                        <input
+                          className="w-full rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-100 outline-none focus:border-blue-500"
+                          value={driverDrafts[t.truck_number] ?? driverByRoute.get(t.truck_number) ?? ""}
+                          placeholder="—"
+                          maxLength={120}
+                          onChange={(e) =>
+                            setDriverDrafts((d) => ({ ...d, [t.truck_number]: e.target.value }))
+                          }
+                          // Saves on the way out, like the day cells save on tap.
+                          onBlur={() => void commitDriver(t.truck_number)}
+                          onKeyDown={(e) => {
+                            if (e.key === "Enter") e.currentTarget.blur();
+                            if (e.key === "Escape") {
+                              setDriverDrafts((d) => {
+                                const n = { ...d };
+                                delete n[t.truck_number];
+                                return n;
+                              });
+                              e.currentTarget.blur();
+                            }
+                          }}
+                        />
+                      ) : (
+                        driverByRoute.get(t.truck_number) ?? <span className="text-slate-600">—</span>
+                      )}
                     </td>
                   )}
                   <td
                     className={clsx(
                       "sticky left-0 z-10 border border-slate-700/50 bg-blue-900/30 px-1 py-1.5 text-center font-bold leading-5 text-slate-200 transition-colors cursor-pointer select-none",
-                      hasDrivers && "sm:left-36",
+                      showDriverCol && "sm:left-36",
                       activeRow === t.truck_number && "!bg-blue-800/40",
                     )}
                     onMouseEnter={() => setHoveredRow(t.truck_number)}
@@ -266,13 +329,13 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
           {rows.length > 0 && (
             <tfoot>
               <tr className="bg-slate-800/60 text-xs font-semibold uppercase tracking-wide text-slate-400">
-                {hasDrivers && (
+                {showDriverCol && (
                   <td className="sticky left-0 z-10 hidden w-36 border border-slate-700/50 bg-slate-800/80 px-2 py-1.5 sm:table-cell" />
                 )}
                 <td
                   className={clsx(
                     "sticky left-0 z-10 border border-slate-700/50 bg-slate-800/80 px-1 py-1.5 text-center text-[10px] text-slate-500",
-                    hasDrivers && "sm:left-36",
+                    showDriverCol && "sm:left-36",
                   )}
                 >
                   Total

@@ -575,6 +575,38 @@ export function usePrevDaySplitHelpers(runDate: string): Set<number> {
 }
 
 /**
+ * THE batching unit rule, in one place.
+ *
+ * One returned load gets exactly ONE batch card, filed under the ORIGINAL ROUTE
+ * number — which is what the crew writes on the paper sheet. When spare #11
+ * covers route #4 the team still calls it "4", so #4 owns the card and #11 is
+ * not separately batchable.
+ *
+ * Sourced from usePrevDayCarriers ONLY, and that choice is what protects the
+ * other two shapes for free:
+ *   - SPLITS are excluded there, so helper and route stay two independent
+ *     units, each owed its own card (the helper at 0 wearers).
+ *   - TWO-WAY swaps are excluded there, so both trucks physically ran and both
+ *     keep their own card.
+ */
+export function useBatchUnit(runDate: string, board: TruckWithState[]) {
+  const prevCarriers = usePrevDayCarriers(runDate, board);
+  return useMemo(() => {
+    const routeByCarrier = new Map<number, number>();
+    for (const [route, carrier] of prevCarriers) routeByCarrier.set(carrier.truck_number, route);
+    return {
+      prevCarriers,
+      /** The truck number that owns the batch card for the load this truck brought back. */
+      batchUnitFor: (n: number) => routeByCarrier.get(n) ?? n,
+      /** Which truck physically brought this route's freight back, if covered. */
+      carrierOf: (route: number) => prevCarriers.get(route)?.truck_number ?? null,
+      /** True when this truck carried someone else's route and so owns no card. */
+      isCarrier: (n: number) => routeByCarrier.has(n),
+    };
+  }, [prevCarriers]);
+}
+
+/**
  * Prev-day split helper -> the route whose overflow it carried.
  *
  * The same data as usePrevDaySplitHelpers, but keeping the route instead of
@@ -787,9 +819,10 @@ export interface RouteDriver {
 }
 
 /**
- * SSR (driver) assigned to each route, captured from the printed dock board.
- * Read-only and non-guest gated, so this 403s for guests — callers should
- * treat an empty map as "no names available" and render without them.
+ * SSR (driver) assigned to each route, seeded from the printed dock board and
+ * editable from the Fleet Schedule's Edit mode. Non-guest gated, so this 403s
+ * for guests — callers should treat an empty map as "no names available" and
+ * render without them.
  */
 export function useRouteDrivers(enabled = true) {
   return useQuery({
@@ -798,6 +831,17 @@ export function useRouteDrivers(enabled = true) {
     enabled,
     staleTime: 5 * 60_000,
     retry: false,
+  });
+}
+
+/** Set a route's SSR, or clear it with a blank name. Admin-only server-side. */
+export function useUpsertRouteDriver() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ route_number, driver_name }: { route_number: number; driver_name: string }) => {
+      await api.put(`/route-drivers/${route_number}`, { driver_name });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["route-drivers"] }),
   });
 }
 

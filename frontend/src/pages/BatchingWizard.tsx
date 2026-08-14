@@ -18,7 +18,7 @@ import {
   useBatchSummary,
   useBoard,
   useHolidayUnload,
-  usePrevDayCarriers,
+  useBatchUnit,
   usePrevDaySplitHelpers,
   usePrevDaySplitRoutes,
   useRemoveTruckFromBatch,
@@ -98,7 +98,7 @@ export default function BatchingWizard() {
   // the dock is #11 but the paper sheet — and the wearer template — say "4".
   // Without this the roster shows #11 with no wearers and no clue which line of
   // the sheet it is, while #4 (which never left the yard) looks unbatched.
-  const prevCarriers = usePrevDayCarriers(runDate, board);
+  const { prevCarriers, carrierOf, isCarrier } = useBatchUnit(runDate, board);
   // Trucks that carried another route's SPLIT overflow yesterday.
   const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   // ...and which route each of them helped, so batching can credit it.
@@ -124,20 +124,6 @@ export default function BatchingWizard() {
     [routeByCarrier, prevSplitRoutes],
   );
 
-  /**
-   * The route whose batch SATISFIES this truck — carriers only, never splits.
-   *
-   * Deliberately not sheetRouteFor. A carrier means ONE load came back, so
-   * batching either truck covers it. A SPLIT means TWO trucks came back, and
-   * both must be batched — the helper just contributes 0 wearers, which the
-   * server enforces (routers/batches.py: "Both get batched, but the wearers
-   * belong to the route"). Crediting a helper through its route made Review
-   * report "all batched" while the helper sat at the dock with no batch at all.
-   */
-  const carrierRouteFor = useCallback(
-    (truckNumber: number) => routeByCarrier.get(truckNumber) ?? truckNumber,
-    [routeByCarrier],
-  );
   /**
    * The day sheet's entry for a truck, resolved through coverage.
    * `undefined` means "not on this sheet" and is deliberately distinct from a
@@ -177,11 +163,8 @@ export default function BatchingWizard() {
   // for it and wears the "rt N" chip. Without this the grid offered both, and
   // the same route could be batched twice (#4 and #11 both showing under
   // Batch 2 on 2026-07-30).
-  const coveredRoutes = useMemo(() => new Set(prevCarriers.keys()), [prevCarriers]);
-
   // Roster = today's unload-day trucks, plus anything already batched (so a
   // stray assignment is always visible/fixable); entire fleet when "show all".
-  // Mirrors BatchingPanel's rosterTrucks.
   const rosterTrucks = useMemo(() => {
     if (showAll) return [...board].sort((a, b) => a.truck_number - b.truck_number);
     // Split helpers are extra unload slots the schedule cannot know about — the
@@ -190,19 +173,23 @@ export default function BatchingWizard() {
     // helper got no batch card at all.
     const ctx = buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload", prevSplitHelpers);
     const nums = new Set(ctx.activeTrucks.map((t) => t.truck_number));
-    // An ALREADY-BATCHED truck always stays on the roster, even if it is a
-    // covered route. The covered-route strip exists so the grid doesn't offer
-    // both #4 and its carrier #11 — but applied first it also evicted routes the
-    // crew had correctly batched off the paper, and everything evicted lands in
-    // strandedBatched reading "batched but didn't run — tap to remove". On
-    // 2026-08-13 that was routes 4, 66 and 75: three correct assignments, each
-    // one tap from being deleted.
+    // A route covered last night still had ONE load come back, and the crew
+    // batches it under its OWN number — so put it back explicitly. When the same
+    // cover is entered again for TONIGHT, buildOperationalDayContext drops the
+    // covered route and keeps the spare: right for tonight's load, wrong for
+    // last night's unload, which is what this page transcribes. If the marker is
+    // gone the route is already in nums and this is a no-op.
+    for (const route of prevCarriers.keys()) nums.add(route);
+    // The CARRIER is what disappears now, not the route. One returned load, one
+    // card, filed under the original route number — the team never calls it "the
+    // spare". Offering #11 alongside #4 is how #4 and #11 both ended up batched
+    // on 2026-08-13, the same 670 wearers counted twice.
     return board
       .filter((t) =>
         batchByTruck.has(t.truck_number) ||
-        (!coveredRoutes.has(t.truck_number) && nums.has(t.truck_number)))
+        (!isCarrier(t.truck_number) && nums.has(t.truck_number)))
       .sort((a, b) => a.truck_number - b.truck_number);
-  }, [board, showAll, unloadsDay, holidayUnload, batchByTruck, coveredRoutes, prevSplitHelpers]);
+  }, [board, showAll, unloadsDay, holidayUnload, batchByTruck, isCarrier, prevCarriers, prevSplitHelpers]);
 
   // Batched, but no longer part of the active fleet at all. A batched truck now
   // always stays on the roster (a covered route the crew batched off the paper
@@ -463,7 +450,9 @@ export default function BatchingWizard() {
           batchByTruck={batchByTruck}
           templateEntryFor={templateEntryFor}
           sheetRouteFor={sheetRouteFor}
-          carrierRouteFor={carrierRouteFor}
+          carrierOf={carrierOf}
+          prevSplitHelpers={prevSplitHelpers}
+          prevCarriers={prevCarriers}
           strandedBatched={strandedBatched}
           onRemoveStranded={(truck, batch) => setConfirmRemove({ truck, from: batch })}
           noCap={noCap}
@@ -795,7 +784,9 @@ function ReviewStep({
   batchByTruck,
   templateEntryFor,
   sheetRouteFor,
-  carrierRouteFor,
+  carrierOf,
+  prevSplitHelpers,
+  prevCarriers,
   strandedBatched,
   onRemoveStranded,
   noCap,
@@ -814,9 +805,12 @@ function ReviewStep({
   /** LABEL only: the sheet line this truck is working — a carried route or a
    *  split's route. Never use it to decide whether a batch is owed. */
   sheetRouteFor: (n: number) => number;
-  /** CREDIT: the route whose batch satisfies this truck. Carriers only — a
-   *  split helper is owed its own batch and is never credited away. */
-  carrierRouteFor: (n: number) => number;
+  /** Which truck physically brought a route's freight back, if it was covered. */
+  carrierOf: (route: number) => number | null;
+  /** Prev-day split helpers — owed their own card, never credited away. */
+  prevSplitHelpers: Set<number>;
+  /** route -> the truck that carried it last night. */
+  prevCarriers: Map<number, TruckWithState>;
   /** Batched trucks no longer on today's roster. Since an already-batched truck
    *  now always stays on the roster, this is a truck that has left the active
    *  fleet entirely — not a covered route. */
@@ -858,18 +852,43 @@ function ReviewStep({
   // separate jobs when there was only ever one load.
   const unbatched = rosterTrucks
     .filter((t) => {
-      if (batchByTruck.has(t.truck_number)) return false;
-      // Carrier credit only. A split helper physically came back as a SECOND
-      // truck and is owed its own batch (contributing 0 wearers), so it must
-      // not be waved through by its route's assignment.
-      const carried = carrierRouteFor(t.truck_number);
-      return !(carried !== t.truck_number && batchByTruck.has(carried));
+      const n = t.truck_number;
+      if (batchByTruck.has(n)) return false;
+      // A SPLIT is TWO trucks for ONE route's freight: both are owed a card (the
+      // helper at 0 wearers, server-enforced). Never credited away by its route.
+      // Checked first as insurance against stale swap data.
+      if (prevSplitHelpers.has(n)) return true;
+      // A covered route and its carrier are ONE load, filed under the ROUTE.
+      // Credit runs BOTH ways on purpose: the route canonically owns the card,
+      // but if a legacy carrier assignment is sitting there instead, demanding
+      // the route as well would be unresolvable from this screen — the carrier
+      // is no longer selectable, so nothing could ever clear the warning.
+      const carrier = carrierOf(n);
+      return !(carrier != null && batchByTruck.has(carrier));
     })
     .map((t) => t.truck_number)
     .sort((a, b) => a - b);
 
+  // The same load batched twice — once under its route and once under the truck
+  // that carried it. Built from prevCarriers, so splits are structurally out of
+  // it (a split really is two cards). This is what production hit on
+  // 2026-08-13: route 4 in batch 4 and carrier 11 in batch 1, the same 670
+  // wearers in the grand total twice. Neither shows as "unbatched" (both ARE
+  // batched) and neither is stranded, so nothing flagged it.
+  const duplicatePairs = [...prevCarriers.entries()]
+    .map(([route, c]) => ({ route, carrier: c.truck_number }))
+    .filter(({ route, carrier }) => batchByTruck.has(route) && batchByTruck.has(carrier))
+    .map(({ route, carrier }) => ({
+      route,
+      carrier,
+      routeBatch: batchByTruck.get(route)!,
+      carrierBatch: batchByTruck.get(carrier)!,
+    }))
+    .sort((a, b) => a.route - b.route);
+
   const clean =
-    missingWearers.length === 0 && unbatched.length === 0 && strandedBatched.length === 0;
+    missingWearers.length === 0 && unbatched.length === 0 && strandedBatched.length === 0 &&
+    duplicatePairs.length === 0;
 
   return (
     <div className="space-y-4">
@@ -893,6 +912,33 @@ function ReviewStep({
             <AlertTriangleIcon className="h-4 w-4 shrink-0" />
             Needs attention before this sheet is done
           </p>
+
+          {duplicatePairs.length > 0 && (
+            <div>
+              <p className="text-xs font-semibold text-amber-200">
+                {duplicatePairs.length} load{duplicatePairs.length === 1 ? "" : "s"} batched twice — remove the carrier
+              </p>
+              <p className="mt-0.5 text-[11px] text-amber-200/70">
+                One load, one card, under the route number. The carrier's entry counts the same
+                wearers a second time.
+              </p>
+              <div className="mt-1 flex flex-wrap gap-1">
+                {duplicatePairs.map(({ route, carrier, routeBatch, carrierBatch }) => (
+                  <button
+                    key={carrier}
+                    type="button"
+                    onClick={() => onRemoveStranded(carrier, carrierBatch)}
+                    className="inline-flex items-center gap-1 rounded-full border border-amber-600/50 bg-amber-900/30 px-2 py-0.5 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-800/40"
+                  >
+                    #{carrier}
+                    <span className="text-[10px] font-normal text-amber-300/80">
+                      batch {carrierBatch} · duplicate of route #{route} (batch {routeBatch})
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {strandedBatched.length > 0 && (
             <div>

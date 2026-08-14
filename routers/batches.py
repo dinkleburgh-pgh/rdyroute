@@ -147,6 +147,36 @@ def _is_prev_day_split_helper(db: Session, run_date: date, truck_number: int) ->
     ).first() is not None
 
 
+def _prev_day_carrier_route(db: Session, run_date: date, truck_number: int) -> int | None:
+    """The route whose load this truck brought back on the previous operating day.
+
+    Carriers only. Split rows are excluded (the route ran itself, so BOTH trucks
+    are owed a card) and two-way reciprocals are excluded (both trucks physically
+    ran, so neither stands in for the other). Mirrors buildPrevDayCoverage on the
+    client — if these two ever disagree, a night's batching stops being enterable,
+    so they are deliberately the same shape.
+    """
+    prev = db.scalar(select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date))
+    if prev is None:
+        return None
+    rows = db.scalars(
+        select(RouteSwapLog)
+        .where(RouteSwapLog.run_date == prev, RouteSwapLog.is_split.is_(False))
+        .order_by(RouteSwapLog.created_at.desc())
+    ).all()
+    by_route: dict[int, int] = {}
+    for r in rows:  # newest first, so the first row seen per route wins
+        by_route.setdefault(r.route_truck, r.load_on_truck)
+    # Two-way: A covered by B and B covered by A. Both ran; neither is a carrier.
+    for route, carrier in list(by_route.items()):
+        if by_route.get(carrier) == route:
+            by_route.pop(route, None)
+    for route, carrier in by_route.items():
+        if carrier == truck_number:
+            return route
+    return None
+
+
 @router.post("/assign", response_model=BatchOut, status_code=status.HTTP_201_CREATED)
 def assign_truck_to_batch(
     payload: BatchAssign,
@@ -171,6 +201,26 @@ def assign_truck_to_batch(
     effective_wearers = payload.wearers
     if _is_prev_day_split_helper(db, payload.run_date, payload.truck_number):
         effective_wearers = 0
+
+    # One returned load gets ONE batch card, under the ORIGINAL route number —
+    # the crew never calls it by the spare. Batching the carrier as well counted
+    # the same wearers twice (route 4 and carrier 11, both 670, on 2026-08-13).
+    #
+    # Rejected rather than silently redirected to the route: the move path below
+    # deletes any existing row for the target truck first, so rewriting 11 -> 4
+    # would have DELETED route 4's correct card and re-filed it in the carrier's
+    # batch. That turns a visible double count into silent data loss, and leaves
+    # nothing for the operator to undo. Six surfaces post here, which is exactly
+    # why the split rule above is enforced server-side too.
+    _carried_route = _prev_day_carrier_route(db, payload.run_date, payload.truck_number)
+    if _carried_route is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Truck {payload.truck_number} carried route {_carried_route} last night — "
+                f"batch it as route {_carried_route}. One load, one card."
+            ),
+        )
 
     existing_assignment = db.scalars(
         select(Batch).where(

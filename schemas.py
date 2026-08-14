@@ -1197,3 +1197,13 @@ class RouteDriverOut(_OrmBase):
     route_label: str
     driver_name: str
     is_active: bool
+
+
+class RouteDriverUpsert(BaseModel):
+    """Set (or clear) the SSR on a route from the Fleet Schedule editor.
+
+    A blank name clears the route rather than storing an empty string, so
+    "no SSR on file" stays one state instead of two.
+    """
+
+    driver_name: str = Field(default="", max_length=120)
