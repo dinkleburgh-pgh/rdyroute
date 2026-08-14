@@ -168,9 +168,17 @@ def _prev_day_carrier_route(db: Session, run_date: date, truck_number: int) -> i
     for r in rows:  # newest first, so the first row seen per route wins
         by_route.setdefault(r.route_truck, r.load_on_truck)
     # Two-way: A covered by B and B covered by A. Both ran; neither is a carrier.
-    for route, carrier in list(by_route.items()):
-        if by_route.get(carrier) == route:
-            by_route.pop(route, None)
+    #
+    # Collect the whole set BEFORE removing any of it. Popping inside the loop
+    # destroys the reciprocal the second half of the pair needs to recognise
+    # itself: {52: 53, 53: 52} lost 52 on the first pass, so 53's lookup of 52
+    # then missed and 53 survived as a phantom carrier — blocking truck 52 from
+    # being batched at all on a two-way night, while 53 went through. That is
+    # the exact client/server divergence this docstring warns about; the client
+    # (buildPrevDayCoverage) builds a set first, so match it.
+    two_way = {route for route, carrier in by_route.items() if by_route.get(carrier) == route}
+    for route in two_way:
+        by_route.pop(route, None)
     for route, carrier in by_route.items():
         if carrier == truck_number:
             return route
