@@ -9,6 +9,8 @@ Three varieties:
   one_off   — shown until expires_on date, then archived.
 """
 
+import time
+from collections import defaultdict, deque
 from datetime import date, datetime, timezone
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -17,8 +19,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import NoteType, Truck, TruckNote, User
+from models import NoteType, Truck, TruckNote, TruckState, TruckStatus, User
 from routers.auth import get_current_user, require_admin, require_non_guest
+from routers.trends_common import operational_today
 from schemas import NoteCreate, NoteOut, NoteUpdate
 from ws_manager import manager
 
@@ -123,6 +126,96 @@ def driver_truck_info(token: str, db: Session = Depends(get_db)):
     """Return the truck number for a QR token (no auth required)."""
     truck = _get_truck_by_token(token, db)
     return {"truck_number": truck.truck_number}
+
+
+# --- "I'm Back" ------------------------------------------------------------
+#
+# Unauthenticated, so it is throttled per token. The stamp is worth very little
+# to an attacker (a timestamp), but it feeds return-time predictions, so a
+# script should not be able to spray it.
+_ARRIVE_MAX = 6
+_ARRIVE_WINDOW = 60.0
+_arrive_hits: dict[str, deque] = defaultdict(deque)
+
+
+def _arrive_rate_limit(token: str) -> None:
+    now = time.time()
+    dq = _arrive_hits[token]
+    while dq and dq[0] < now - _ARRIVE_WINDOW:
+        dq.popleft()
+    if len(dq) >= _ARRIVE_MAX:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many taps — wait a moment.",
+        )
+    dq.append(now)
+
+
+@router.post("/driver/{token}/arrived")
+def driver_mark_arrived(
+    token: str,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+):
+    """Record that this truck is back in the yard. No auth — QR token only.
+
+    Idempotent: the FIRST tap wins and later taps return that same time rather
+    than overwriting it. Drivers double-scan, and the whole value of the stamp
+    is that it is when the truck actually landed.
+    """
+    _arrive_rate_limit(token)
+    truck = _get_truck_by_token(token, db)
+
+    # The OPERATIONAL run date, not the calendar one. A driver back at 2am
+    # belongs to the previous day's shift; a plain date.today() would file the
+    # arrival against a day the crew has not started.
+    run_date = operational_today()
+
+    row = db.scalar(
+        select(TruckState).where(
+            TruckState.truck_number == truck.truck_number,
+            TruckState.run_date == run_date,
+        )
+    )
+    if row is None:
+        # Day-init runs off the authenticated board, so if no staff member has
+        # opened the app yet there is nothing to stamp. Create the row rather
+        # than dropping the arrival — deliberately WITHOUT calling day-init,
+        # which closes out the previous day and must never be triggered by an
+        # anonymous scan. Day-init later skips trucks that already have a row.
+        row = TruckState(
+            truck_number=truck.truck_number,
+            run_date=run_date,
+            status=TruckStatus.dirty,
+            arrived_at=time.time(),
+        )
+        db.add(row)
+        db.commit()
+        db.refresh(row)
+        first = True
+    elif row.arrived_at is None:
+        row.arrived_at = time.time()
+        db.commit()
+        db.refresh(row)
+        first = True
+    else:
+        first = False
+
+    if first:
+        background_tasks.add_task(
+            manager.broadcast,
+            {
+                "type": "truck_arrived",
+                "truck_number": truck.truck_number,
+                "run_date": str(run_date),
+                "actor": "driver",
+            },
+        )
+    return {
+        "truck_number": truck.truck_number,
+        "arrived_at": row.arrived_at,
+        "already": not first,
+    }
 
 
 class DriverNoteCreate(BaseModel):

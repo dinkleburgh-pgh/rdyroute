@@ -15,6 +15,7 @@ import {
   useDriverTruckInfo,
   useDriverCreateNote,
   useDriverDeleteNote,
+  useDriverMarkArrived,
 } from "../api/hooks";
 import type { NoteType, TruckNote } from "../types";
 import { format } from "date-fns";
@@ -82,8 +83,17 @@ function AddNoteForm({ token, onClose }: { token: string; onClose: () => void })
         ),
       );
       onClose();
-    } catch {
-      setErr("Failed to save. Please try again.");
+    } catch (e) {
+      // Reachable again now that driver writes are excluded from the offline
+      // queue. Before, this call resolved as a fake 202 and onClose() ran, so
+      // the form closed as if the note had saved and it was replayed by
+      // nothing. The typed body is left in the box on purpose.
+      const status = (e as { response?: { status?: number } })?.response?.status;
+      setErr(
+        status == null
+          ? "Not sent — no signal. Your note is still here; try again when you have a bar."
+          : "Couldn't save that. Try again.",
+      );
     }
   }
 
@@ -251,11 +261,111 @@ function NoteCard({ note, token }: { note: TruckNote; token: string }) {
 // Main page
 // ---------------------------------------------------------------------------
 
+
+/**
+ * What a driver sees when they scan. One thing to do, one thing to read.
+ *
+ * "I'm Back" is the reason to scan at all: it tells the dock the truck has
+ * landed. It is deliberately the whole screen — a driver uses this for five
+ * seconds, in a yard, once a day, with no training and possibly gloves on.
+ */
+function ArrivalLanding({
+  token,
+  truckNumber,
+  today,
+  noteCount,
+  onNotes,
+}: {
+  token: string;
+  truckNumber: number | null;
+  today: string;
+  noteCount: number;
+  onNotes: () => void;
+}) {
+  const arrive = useDriverMarkArrived(token);
+  const [done, setDone] = useState<{ at: number | null; already: boolean } | null>(null);
+  const [err, setErr] = useState("");
+
+  async function markBack() {
+    setErr("");
+    try {
+      const r = await arrive.mutateAsync();
+      setDone({ at: r.arrived_at, already: r.already });
+    } catch (e) {
+      const s = (e as { response?: { status?: number } })?.response?.status;
+      setErr(
+        s == null
+          ? "Not sent — no signal. Move somewhere with a bar and tap again."
+          : "Couldn't send that. Try again.",
+      );
+    }
+  }
+
+  const at = done?.at != null ? format(new Date(done.at * 1000), "h:mm a") : null;
+
+  return (
+    <div className="flex min-h-svh flex-col bg-slate-950 px-5 py-8 text-slate-100">
+      <div className="text-center">
+        <p className="text-xs uppercase tracking-widest text-slate-500">ReadyRoute</p>
+        {/* Big, because scanning the wrong truck is the easiest mistake here
+            and the number is the only way a driver would catch it. */}
+        <h1 className="mt-2 text-6xl font-black tabular-nums">#{truckNumber ?? "…"}</h1>
+        <p className="mt-2 text-sm text-slate-400">{today}</p>
+      </div>
+
+      <div className="mx-auto mt-10 w-full max-w-sm space-y-4">
+        {done ? (
+          <div className="rounded-2xl border border-emerald-700/50 bg-emerald-950/40 px-5 py-6 text-center">
+            <p className="text-2xl font-bold text-emerald-300">
+              {done.already ? "Already marked back" : "Thanks — you're marked back"}
+            </p>
+            {at && <p className="mt-1 text-sm text-emerald-200/80">at {at}</p>}
+            <p className="mt-2 text-xs text-emerald-200/60">The dock has been told.</p>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void markBack()}
+            disabled={arrive.isPending}
+            className="w-full rounded-2xl bg-emerald-600 px-6 py-8 text-3xl font-black text-white shadow-lg active:scale-95 disabled:opacity-60"
+          >
+            {arrive.isPending ? "Sending…" : "I'm Back"}
+          </button>
+        )}
+
+        {err && (
+          <p className="rounded-xl border border-amber-600/50 bg-amber-950/30 px-4 py-3 text-center text-sm font-semibold text-amber-200">
+            {err}
+          </p>
+        )}
+
+        <button
+          type="button"
+          onClick={onNotes}
+          className="flex w-full items-center justify-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-6 py-5 text-xl font-bold text-slate-200 active:scale-95"
+        >
+          Notes
+          {noteCount > 0 && (
+            <span className="rounded-full bg-blue-600 px-2.5 py-0.5 text-sm font-bold text-white">
+              {noteCount}
+            </span>
+          )}
+        </button>
+      </div>
+
+      <p className="mt-auto pt-10 text-center text-xs text-slate-700">
+        Scan the code in your truck any time to reopen this.
+      </p>
+    </div>
+  );
+}
+
 export default function DriverNotes() {
   const { token } = useParams<{ token: string }>();
-  const { data: notes, isLoading, isError } = useDriverNotes(token);
+  const { data: notes, isLoading, isError, error, fetchStatus, refetch } = useDriverNotes(token);
   const { data: truckInfo } = useDriverTruckInfo(token);
   const [adding, setAdding] = useState(false);
+  const [showNotes, setShowNotes] = useState(false);
 
   const today = format(new Date(), "EEEE, MMMM d");
 
@@ -269,14 +379,59 @@ export default function DriverNotes() {
     );
   }
 
-  if (isError || !token) {
+  // Only a real 404 means the code is bad. Everything else — a redeploy, a
+  // timeout, a captive portal, one bar at the back of the yard — is a
+  // connection problem, and telling a driver their sticker is invalid sends
+  // them to regenerate a token that was fine, which voids the code printed in
+  // their cab and manufactures the exact failure the message described.
+  const httpStatus = (error as { response?: { status?: number } } | null)?.response?.status;
+  const badToken = !token || httpStatus === 404;
+  // A paused query (browser reports offline) resolves with no data, no error
+  // and not loading — without this the page renders "No notes yet" as fact.
+  const unreachable = !badToken && (isError || (fetchStatus === "paused" && notes === undefined));
+
+  if (badToken) {
     return (
       <div className="flex min-h-svh flex-col items-center justify-center gap-3 bg-slate-950 p-6 text-center">
-        <p className="text-lg font-semibold text-red-400">Invalid QR Code</p>
+        <p className="text-lg font-semibold text-red-400">QR code not recognised</p>
         <p className="text-sm text-slate-400">
-          This link is not recognised. Ask your supervisor for a new QR code.
+          This code isn&apos;t active any more. Ask the office for a new one for this truck.
         </p>
       </div>
+    );
+  }
+
+  if (unreachable) {
+    return (
+      <div className="flex min-h-svh flex-col items-center justify-center gap-4 bg-slate-950 p-6 text-center">
+        <p className="text-lg font-semibold text-amber-300">Can&apos;t reach ReadyRoute</p>
+        <p className="max-w-xs text-sm text-slate-400">
+          Your code is fine — the phone can&apos;t get a connection right now. Move somewhere
+          with signal and try again.
+        </p>
+        <button
+          type="button"
+          className="mt-2 rounded-xl bg-blue-600 px-8 py-4 text-lg font-bold text-white active:scale-95"
+          onClick={() => void refetch()}
+        >
+          Try again
+        </button>
+        {truckInfo?.truck_number != null && (
+          <p className="text-xs text-slate-600">Truck #{truckInfo.truck_number}</p>
+        )}
+      </div>
+    );
+  }
+
+  if (!showNotes) {
+    return (
+      <ArrivalLanding
+        token={token}
+        truckNumber={truckNumber}
+        today={today}
+        noteCount={(notes ?? []).length}
+        onNotes={() => setShowNotes(true)}
+      />
     );
   }
 

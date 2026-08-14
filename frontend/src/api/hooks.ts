@@ -2440,6 +2440,14 @@ export function useDriverNotes(token: string | undefined) {
     queryFn: async () =>
       (await api.get<TruckNote[]>(`/notes/driver/${token}`)).data,
     staleTime: 30_000,
+    // The app-wide default is offlineFirst, which PAUSES rather than errors when
+    // the browser reports offline: isLoading and isError both go false with no
+    // data, and the page renders as though the truck genuinely has no notes.
+    // A driver in a yard would be told "No notes yet" while a real instruction
+    // sat on the server. Always attempt, so a failure is a failure the UI can
+    // report and offer to retry.
+    networkMode: "always",
+    retry: 1,
   });
 }
 
@@ -2450,11 +2458,25 @@ interface DriverNotePayload {
   expires_on?: string | null;
 }
 
+export function useDriverMarkArrived(token: string | undefined) {
+  return useMutation({
+    mutationFn: async () =>
+      (await api.post<{ truck_number: number; arrived_at: number | null; already: boolean }>(
+        `/notes/driver/${token}/arrived`,
+      )).data,
+    // Never queued, never paused — a driver must not be told the dock knows
+    // when it does not. See useDriverNotes.
+    networkMode: "always",
+  });
+}
+
 export function useDriverCreateNote(token: string) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (payload: DriverNotePayload) =>
       (await api.post<TruckNote>(`/notes/driver/${token}`, payload)).data,
+    // Never silently pause a driver write — see useDriverNotes.
+    networkMode: "always",
     onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-notes", token] }),
   });
 }
@@ -2464,6 +2486,7 @@ export function useDriverDeleteNote(token: string) {
   return useMutation({
     mutationFn: async (noteId: number) =>
       api.delete(`/notes/driver/${token}/${noteId}`),
+    networkMode: "always",
     onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-notes", token] }),
   });
 }

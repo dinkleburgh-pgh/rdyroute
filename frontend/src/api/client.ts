@@ -136,8 +136,17 @@ api.interceptors.response.use(
     // the persisted cache. Auth/update endpoints are never queued.
     const method = (cfg?.method ?? "get").toLowerCase();
     const isMutation = ["post", "put", "patch", "delete"].includes(method);
+    // The public driver surface must NEVER be queued. Queuing resolves the call
+    // as a fake 202 so the UI proceeds as if it worked — which is fine inside
+    // the app, where useOfflineSync drains the queue on reconnect. But that hook
+    // is mounted once, in Layout, inside ProtectedRoute; /driver/:token is a
+    // sibling of that tree and never renders it. So a driver's note was accepted
+    // on screen, written to their phone's IndexedDB, and replayed by nothing,
+    // ever. Better to reject honestly and let the page offer a retry.
+    const isDriverSurface = url.includes("/driver/");
     const queueable =
-      isMutation && !isAuthEndpoint && !url.includes("/auth/") && !url.includes("/updates/") && !url.includes("/exports/");
+      isMutation && !isAuthEndpoint && !isDriverSurface
+      && !url.includes("/auth/") && !url.includes("/updates/") && !url.includes("/exports/");
     if (cfg && queueable && offlineQueue.isNetworkError(error)) {
       let endpoint = url;
       if (cfg.params && typeof cfg.params === "object") {

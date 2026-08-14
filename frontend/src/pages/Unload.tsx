@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
+import { formatEasternTime } from "../utils/dates";
 import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadDayTemplate,
   useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import CoverageCards from "../components/CoverageCards";
@@ -213,6 +214,23 @@ export default function Unload() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [allTrucks, recentlyUnloaded, prevDayCarriers],
   );
+  /**
+   * Trucks the driver has scanned "I'm Back" on (or that a lead tapped Arrived).
+   *
+   * "Dirty" only ever meant "scheduled to come back" — it says nothing about
+   * whether the truck is physically in the yard. Arrival is the first signal
+   * that distinguishes the two, so it leads the sort: what is here, oldest
+   * arrival first, is the crew's actual work queue.
+   */
+  const arrivedAt = (t: TruckWithState): number | null => t.state?.arrived_at ?? null;
+  const byArrivalThenNumber = (a: TruckWithState, b: TruckWithState) => {
+    const aa = arrivedAt(a), ba = arrivedAt(b);
+    if (aa != null && ba != null) return aa - ba;   // longest-waiting first
+    if (aa != null) return -1;
+    if (ba != null) return 1;
+    return a.truck_number - b.truck_number;
+  };
+
   // One predicate per unload bucket, shared by the sections below AND the stat
   // cards above, so a truck can never sit in a section but go missing from its
   // count. Coverage on THIS page is previous-day: whoever physically carried
@@ -236,11 +254,13 @@ export default function Unload() {
   );
 
   const dirtyRoute = useMemo(
-    () => dirty.filter((t) => !isCoverageTruck(t) && !isHoldTruck(t)),
+    () => dirty.filter((t) => !isCoverageTruck(t) && !isHoldTruck(t)).sort(byArrivalThenNumber),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [dirty, isCoverageTruck],
   );
   const dirtyCoverages = useMemo(
-    () => dirty.filter((t) => isCoverageTruck(t) && !isHoldTruck(t)),
+    () => dirty.filter((t) => isCoverageTruck(t) && !isHoldTruck(t)).sort(byArrivalThenNumber),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [dirty, isCoverageTruck],
   );
   const requested = useMemo(
@@ -432,7 +452,15 @@ export default function Unload() {
             statusClassName={isUndo ? "bg-st-unloaded text-[#052e16]" : labelClass}
             coverageRoute={cd.route}
             coverageSplit={cd.split}
-            footer={t.state?.wearers ? <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span> : null}
+            footer={
+              arrivedAt(t) != null ? (
+                <span className="text-xs font-semibold text-emerald-400">
+                  Back {formatEasternTime(arrivedAt(t)!)}
+                </span>
+              ) : t.state?.wearers ? (
+                <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span>
+              ) : null
+            }
             interactive
             ringClassName={isUndo ? "hover:ring-st-unloaded" : "hover:ring-st-dirty"}
           />
