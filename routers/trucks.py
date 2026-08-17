@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
 from database import get_db, settings as app_settings
 from models import AppSetting, GarmentDayLog, RouteSwap, RouteSwapLog, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
-from notification_service import dispatch_notification, truck_hold_notification, truck_oos_notification
+from notification_service import dispatch_notification, send_web_push, truck_arrived_notification, truck_hold_notification, truck_oos_notification
 from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import (
     MAX_LOAD_SECONDS,
@@ -793,6 +793,14 @@ def update_truck_state(
                 "actor": _user.username,
             },
         )
+        # Same opt-in phone push as the driver QR path; push-only, no second
+        # WS broadcast (the event above already carries the in-app toast).
+        _push_setting = db.get(AppSetting, "arrived_push_enabled")
+        if _push_setting is not None and _push_setting.value is True:
+            background_tasks.add_task(
+                send_web_push,
+                truck_arrived_notification(truck_number=truck_number, run_date=run_date),
+            )
     background_tasks.add_task(
         manager.broadcast,
         {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},

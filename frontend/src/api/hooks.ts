@@ -1412,6 +1412,8 @@ export interface ToastKindConfig {
   enabled: boolean;
   /** Dwell time in seconds; 0 = stays until dismissed. */
   seconds: number;
+  /** Play the chime with this toast. Only meaningful where a default sets it. */
+  sound?: boolean;
 }
 
 /** Defaults reproduce the durations these alerts have always used, so an
@@ -1423,7 +1425,9 @@ export const TOAST_DEFAULTS: Record<ToastKind, ToastKindConfig> = {
   // Long by design: whoever walks up to Load should still see the trucks that
   // came ready while they were away from the screen.
   truck_unloaded: { enabled: true, seconds: 420 },
-  truck_arrived:  { enabled: true, seconds: 10 },
+  // sound on by default: the unload dock works heads-down, and the whole
+  // point of the arrival toast is to be noticed without watching the screen.
+  truck_arrived:  { enabled: true, seconds: 10, sound: true },
   // Hold and OOS must be acknowledged — sticky unless someone changes it.
   truck_hold:     { enabled: true, seconds: 0 },
   truck_oos:      { enabled: true, seconds: 0 },
@@ -1465,6 +1469,7 @@ export function useToastSettings(): ToastSettings {
           // Guard the stored value: a negative or non-numeric dwell would make
           // a toast that should expire hang around forever.
           seconds: Number.isFinite(secs) && secs >= 0 ? secs : TOAST_DEFAULTS[k as ToastKind].seconds,
+          sound: typeof cfg.sound === "boolean" ? cfg.sound : TOAST_DEFAULTS[k as ToastKind].sound === true,
         };
       }
     }

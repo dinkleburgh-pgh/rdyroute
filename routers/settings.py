@@ -37,6 +37,9 @@ KNOWN_KEYS = {
     "outside_timer_enabled",
     "paper_bay_enabled",
     "arrived_tracking_enabled",
+    # Phone push on every truck arrival (30-45/night). Default OFF: a deploy
+    # must not start pushing to every subscribed device by itself.
+    "arrived_push_enabled",
     "note_cards_enabled",
     "realtime_toasts_enabled",
     "toast_settings",
@@ -103,6 +106,7 @@ _USER_READABLE_KEYS = {
     "outside_timer_enabled",
     "paper_bay_enabled",
     "arrived_tracking_enabled",
+    "arrived_push_enabled",
     "note_cards_enabled",
     "realtime_toasts_enabled",
     # Per-pop-up enable + dwell time, one document keyed by alert kind. Read by

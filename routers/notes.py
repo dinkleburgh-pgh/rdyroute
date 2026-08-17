@@ -19,8 +19,9 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from database import get_db
-from models import NoteType, Truck, TruckNote, TruckState, TruckStatus, User
+from models import AppSetting, NoteType, Truck, TruckNote, TruckState, TruckStatus, User
 from routers.auth import get_current_user, require_admin, require_non_guest
+from notification_service import send_web_push, truck_arrived_notification
 from routers.trends_common import operational_today
 from schemas import NoteCreate, NoteOut, NoteUpdate
 from ws_manager import manager
@@ -211,6 +212,15 @@ def driver_mark_arrived(
                 "actor": "driver",
             },
         )
+        # Phone push, opt-in. send_web_push skips the WS "notification"
+        # broadcast on purpose — the truck_arrived event above already drives
+        # the in-app toast, with its own settings and dedupe.
+        _push_setting = db.get(AppSetting, "arrived_push_enabled")
+        if _push_setting is not None and _push_setting.value is True:
+            background_tasks.add_task(
+                send_web_push,
+                truck_arrived_notification(truck_number=truck.truck_number, run_date=run_date),
+            )
     return {
         "truck_number": truck.truck_number,
         "arrived_at": row.arrived_at,

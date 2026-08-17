@@ -51,6 +51,18 @@ def truck_hold_notification(*, truck_number: int, run_date: date) -> Notificatio
     )
 
 
+def truck_arrived_notification(*, truck_number: int, run_date: date) -> NotificationEvent:
+    return NotificationEvent(
+        type="truck_arrived",
+        title=f"Truck #{truck_number} is back",
+        body="Parked in the yard — ready to unload.",
+        tag=f"truck-arrived-{run_date.isoformat()}-{truck_number}",
+        url=f"/unload?truck={truck_number}",
+        truck_number=truck_number,
+        run_date=run_date.isoformat(),
+    )
+
+
 def truck_oos_notification(*, truck_number: int, run_date: date) -> NotificationEvent:
     return NotificationEvent(
         type="truck_oos",
@@ -124,6 +136,24 @@ async def dispatch_notification(
     if actor is not None:
         event.actor = actor
     await manager.broadcast({"type": "notification", "event": asdict(event)})
+    await send_web_push(event, user_id=user_id, endpoint=endpoint)
+
+
+async def send_web_push(
+    event: NotificationEvent,
+    *,
+    user_id: int | None = None,
+    endpoint: str | None = None,
+) -> None:
+    """Web push ONLY — no WS "notification" broadcast.
+
+    For events that already have their own realtime WS event and in-app toast
+    (truck_arrived does: useRealtimeSync + Layout render it with per-kind
+    settings, self-suppression and dedupe). Routing those through
+    dispatch_notification would toast every open client a second time — and
+    under the wrong settings kind, since Layout maps unknown notification
+    types to "coverage".
+    """
     if not notifications_configured():
         return
     await asyncio.to_thread(_send_push_sync, event, user_id, endpoint)

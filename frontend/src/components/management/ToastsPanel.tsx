@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
+import { playChime, primeAudio } from "../../utils/chime";
 import {
   TOAST_DEFAULTS,
   TOAST_KIND_LABELS,
@@ -61,6 +62,7 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
         kinds[k as ToastKind] = {
           enabled: cfg.enabled !== false,
           seconds: Number.isFinite(secs) && secs >= 0 ? secs : TOAST_DEFAULTS[k as ToastKind].seconds,
+          sound: typeof cfg.sound === "boolean" ? cfg.sound : TOAST_DEFAULTS[k as ToastKind].sound === true,
         };
       }
     }
@@ -152,6 +154,19 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                       }}
                     />
                     <span className="w-32 text-xs text-slate-500">{describe(cfg.seconds)}</span>
+                    {/* Only kinds whose DEFAULT defines a sound offer the
+                        checkbox — a chime on chat messages would be noise. */}
+                    {TOAST_DEFAULTS[kind].sound !== undefined && (
+                      <label className="flex items-center gap-1 text-xs text-slate-400">
+                        <input
+                          type="checkbox"
+                          checked={cfg.sound === true}
+                          disabled={!form.enabled || !cfg.enabled}
+                          onChange={(e) => setKind(kind, { sound: e.target.checked })}
+                        />
+                        Sound
+                      </label>
+                    )}
                   </div>
                 </div>
 
@@ -189,12 +204,15 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                   <button
                     type="button"
                     disabled={!form.enabled}
-                    onClick={() =>
+                    onClick={() => {
+                      // The click is itself the priming gesture, so an admin
+                      // can verify the chime actually plays on this device.
+                      if (cfg.sound) { primeAudio(); playChime(); }
                       toast.info(`This is how a "${meta.label}" alert looks.`, {
                         title: meta.label,
                         durationMs: cfg.seconds * 1000,
-                      })
-                    }
+                      });
+                    }}
                     className="ml-auto rounded border border-slate-700 bg-slate-800/60 px-2 py-0.5 text-[11px] font-semibold text-slate-400 transition-colors hover:border-slate-500 disabled:opacity-40"
                   >
                     Preview

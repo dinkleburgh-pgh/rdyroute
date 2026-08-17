@@ -12,6 +12,7 @@ import NotificationSettingsCard from "./NotificationSettingsCard";
 import { todayIso } from "../api/client";
 import { useRealtimeSync } from "../api/useRealtimeSync";
 import { useOfflineSync } from "../api/useOfflineSync";
+import { playChime, primeAudio } from "../utils/chime";
 import { useToast } from "../contexts/ToastContext";
 import { OfflineIndicator } from "./OfflineIndicator";
 import type { AuthRole, TruckStatus, TruckWithState } from "../types";
@@ -219,6 +220,23 @@ export default function Layout() {
     (kind: ToastKind) => toastSettings.kinds[kind].enabled,
     [toastSettings],
   );
+  const kindSound = useCallback(
+    (kind: ToastKind) => toastSettings.kinds[kind].sound === true,
+    [toastSettings],
+  );
+
+  // Unlock audio on the first real gesture. Browsers refuse to start an
+  // AudioContext without one, and the arrival chime is useless if the wall
+  // display's context is still locked — one tap anywhere, ever, is enough.
+  useEffect(() => {
+    const prime = () => primeAudio();
+    window.addEventListener("pointerdown", prime, { once: true, capture: true });
+    window.addEventListener("keydown", prime, { once: true, capture: true });
+    return () => {
+      window.removeEventListener("pointerdown", prime, { capture: true } as EventListenerOptions);
+      window.removeEventListener("keydown", prime, { capture: true } as EventListenerOptions);
+    };
+  }, []);
 
   useEffect(() => {
     if (!toastsEnabled || !kindOn("driver_note")) return;
@@ -297,11 +315,15 @@ export default function Layout() {
       } else if (d.type === "truck_arrived") {
         if (!kindOn("truck_arrived")) return;
         if (truck == null || !once(`arrived-${truck}`)) return;
+        // Audible on the wall display: the dock crew works heads-down, and the
+        // chime obeys exactly the gates the toast just passed (master switch,
+        // kind enable, self-suppression, dedupe).
+        if (kindSound("truck_arrived")) playChime();
         toast.info("Parked in the yard — ready to unload.", {
           title: "Truck arrived",
           chip: `#${truck}`,
           durationMs: kindMs("truck_arrived"),
-          onClick: () => nav("/unload"),
+          onClick: () => nav(`/unload?truck=${truck}`),
         });
       }
     };
@@ -313,6 +335,11 @@ export default function Layout() {
     const onNotification = (e: Event) => {
       const n = (e as CustomEvent<import("../types").NotificationEvent & { actor?: string }>).detail;
       if (!n) return;
+      // Arrivals are push-only on the server (send_web_push, no "notification"
+      // broadcast); the in-app toast rides the dedicated truck_arrived event
+      // above. If a future change routes them through dispatch_notification,
+      // this stops a duplicate toast filed under the wrong ("coverage") kind.
+      if (n.type === "truck_arrived") return;
       if (n.actor && me && n.actor === me) return;
       if (!once(`notif-${n.tag}`)) return;
       const chipTruck = n.truck_number ?? n.route_truck ?? null;
@@ -337,7 +364,7 @@ export default function Layout() {
       window.removeEventListener("readyroute:app-event", onAppEvent);
       window.removeEventListener("readyroute:notification", onNotification);
     };
-  }, [toast, nav, user?.username, location.pathname, toastsEnabled, kindOn, kindMs]);
+  }, [toast, nav, user?.username, location.pathname, toastsEnabled, kindOn, kindMs, kindSound]);
 
   // Close sidebar and more drawer on route change (mobile nav tap)
   useEffect(() => {
@@ -374,6 +401,20 @@ export default function Layout() {
         (t) =>
           t.state?.priority_hold === true &&
           (t.state?.status === "dirty" || t.state == null),
+      ).length,
+    [board],
+  );
+
+  // Trucks physically back in the yard and still dirty (driver tapped "I'm
+  // Back" / lead tapped Arrived). Approximate the same way holdCount is — no
+  // roster context here — an exotic coverage case can be off by one.
+  const inYardCount = useMemo(
+    () =>
+      (board ?? []).filter(
+        (t) =>
+          t.state?.status === "dirty" &&
+          t.state?.arrived_at != null &&
+          t.state?.priority_hold !== true,
       ).length,
     [board],
   );
@@ -556,6 +597,7 @@ export default function Layout() {
             {sidebarPrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
+              const showYardBadge = item.to === "/unload" && inYardCount > 0;
               return (
                 <NavLink
                   key={item.to}
@@ -578,6 +620,14 @@ export default function Layout() {
                   {showUnloadBadge && (
                     <span className="absolute right-2 inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">
                       {holdCount}
+                    </span>
+                  )}
+                  {showYardBadge && (
+                    <span className={clsx(
+                      "absolute inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-bold text-white",
+                      showUnloadBadge ? "right-8" : "right-2",
+                    )}>
+                      {inYardCount}
                     </span>
                   )}
                 </NavLink>
@@ -815,6 +865,7 @@ export default function Layout() {
             {mobilePrimaryNav.map((item) => {
               const showLoadBadge = item.to === "/load" && trucksNotYetLoaded > 0;
               const showUnloadBadge = item.to === "/unload" && holdCount > 0;
+              const showYardBadge = item.to === "/unload" && inYardCount > 0;
               return (
                 <NavLink
                   key={item.to}
@@ -835,6 +886,11 @@ export default function Layout() {
                   {showUnloadBadge && (
                     <span className="absolute right-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-red-600 px-1 text-[9px] font-bold text-white">
                       {holdCount}
+                    </span>
+                  )}
+                  {showYardBadge && (
+                    <span className="absolute left-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
+                      {inYardCount}
                     </span>
                   )}
                 </NavLink>

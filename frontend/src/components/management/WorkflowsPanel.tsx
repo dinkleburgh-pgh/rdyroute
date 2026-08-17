@@ -17,6 +17,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
       paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
+      arrived_push_enabled: asBool(map.get("arrived_push_enabled"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
       shift_notes_enabled: asBool(map.get("shift_notes_enabled"), true),
       calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), false),
@@ -112,7 +113,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Tracking</p>
       <FieldRow
         label="Arrived tracking"
-        hint="Records when each truck parks back in the yard — auto-captured when unloading starts, or tap 'Mark Arrived' on a dirty truck to log the exact time earlier."
+        hint="Records when each truck parks back in the yard — drivers tap 'I'm Back' on their QR page, or a lead taps Arrived on the board. Never auto-stamped."
       >
         <label className="flex items-center gap-2 text-sm">
           <input
@@ -121,6 +122,19 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, arrived_tracking_enabled: e.target.checked })}
           />
           Enable Arrived quick action
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Arrival push notifications"
+        hint="Sends a phone push to every subscribed device when a truck arrives (30-45 a night). The wall display and any open page get the pop-up either way."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.arrived_push_enabled}
+            onChange={(e) => setForm({ ...form, arrived_push_enabled: e.target.checked })}
+          />
+          Push on arrival
         </label>
       </FieldRow>
       <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Notes</p>
