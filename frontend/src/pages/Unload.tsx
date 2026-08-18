@@ -480,15 +480,15 @@ export default function Unload() {
     { key: "requested", title: "Requested — priority hold", titleClass: "text-st-inprogress", trucks: requested, accent: "text-amber-300", label: "HOLD", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
     // Back = physically in the yard (driver tapped "I'm Back" / lead tapped
     // Arrived), oldest arrival first — what can be worked NOW.
-    // Deliberately the SAME red as Not back. A Back truck is still Dirty —
+    // Deliberately the SAME red as Not arrived. An arrived truck is still Dirty —
     // arrival is a fact about a dirty truck, not a fourth state — and green is
     // what "unloaded" means everywhere else in the app. The distinguishing mark
     // is the pin, not the hue.
-    { key: "back", title: "Back", titleClass: "text-st-dirty", trucks: back, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
+    { key: "back", title: "Arrived", titleClass: "text-st-dirty", trucks: back, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
     { key: "unfinished", title: "Unfinished", titleClass: "text-st-unfinished", trucks: unfinished, accent: "text-st-unfinished", label: "Unfinished", labelClass: "bg-[#b45309] text-white", rowAccent: "border-l-st-unfinished", actionLabel: "Finish unload", ghost: true, overflow: "unfinished" as const },
-    // Not back = still on the road. Coverage and route trucks together; the
+    // Not arrived = still on the road. Coverage and route trucks together; the
     // CoverageTag on the card says which is which.
-    { key: "notback", title: "Not back", titleClass: "text-st-dirty", trucks: notBack, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
+    { key: "notback", title: "Not arrived", titleClass: "text-st-dirty", trucks: notBack, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
   ];
 
   /** Cards style: a tappable dirty-family truck card (opens the action menu). */
@@ -509,7 +509,7 @@ export default function Unload() {
               arrivedAt(t) != null ? (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink">
                   <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
-                  Back {formatEasternTime(arrivedAt(t)!)}
+                  Arrived {formatEasternTime(arrivedAt(t)!)}
                 </span>
               ) : t.state?.wearers ? (
                 <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span>
@@ -545,7 +545,7 @@ export default function Unload() {
           {arrivedAt(t) != null && (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-ink">
               <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
-              Back {formatEasternTime(arrivedAt(t)!)}
+              Arrived {formatEasternTime(arrivedAt(t)!)}
             </span>
           )}
           {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
