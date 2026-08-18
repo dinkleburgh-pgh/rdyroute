@@ -223,6 +223,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             if prev_state.status in _OPEN_STATUSES:
                 prev_state.status = TruckStatus.unloaded
                 prev_state.state_source = TruckStateSource.workflow.value
+                prev_state.unloading_started_at = None
 
     today_states = {
         row.truck_number: row
@@ -246,10 +247,12 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 existing_today.priority_hold
                 or existing_today.needs_checked
                 or existing_today.crossload_to_truck is not None
+                or existing_today.unloading_started_at is not None
             ):
                 existing_today.priority_hold = False
                 existing_today.needs_checked = False
                 existing_today.crossload_to_truck = None
+                existing_today.unloading_started_at = None
             continue
 
         prior = prev_states_by_num.get(truck.truck_number)
@@ -659,6 +662,7 @@ def update_truck_state(
         "crossload_to_truck": row.crossload_to_truck,
         "arrived_at": row.arrived_at,
         "unloaded_at": row.unloaded_at,
+        "unloading_started_at": row.unloading_started_at,
         "state_source": row.state_source,
     })
     updates = payload.model_dump(exclude_unset=True)
@@ -743,6 +747,42 @@ def update_truck_state(
     elif row.status in _UNLOAD_OPEN and previous_status == TruckStatus.unloaded:
         row.unloaded_at = None
 
+    # ---- unloading_started_at: "the crew is emptying this one now" ----------
+    # A transient marker for the Load board, not a status. Rules:
+    #   (a) it can only be SET on a truck there is genuinely something to unload
+    #       from — dirty or unfinished; anything else is a 409, not a silent no-op,
+    #       so a stale tap on an already-unloaded truck is visible.
+    #   (b) first tap wins: a second Start on the same truck keeps the original
+    #       time (two devices, or a double-tap, must not restart the clock).
+    #   (c) one truck at a time: setting it clears it on every other truck that
+    #       night. The dock works one truck; the previous one just drops back to
+    #       Arrived / Not arrived with no error.
+    #   (d) any status change ends it. Mark Unloaded, Mark Unfinished, undo, OOS —
+    #       whatever moves status also clears the marker, so it can never outlive
+    #       the work it describes.
+    _UNLOAD_WORKABLE = (TruckStatus.dirty, TruckStatus.unfinished)
+    _marker_set = updates.get("unloading_started_at") is not None
+    if _marker_set:
+        if row.status not in _UNLOAD_WORKABLE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Truck {truck_number} is {row.status.value} on {run_date} — nothing to unload.",
+            )
+        if before_state.unloading_started_at is not None:
+            row.unloading_started_at = before_state.unloading_started_at  # (b)
+        else:
+            # (c) one at a time
+            for other in db.scalars(
+                select(TruckState).where(
+                    TruckState.run_date == run_date,
+                    TruckState.truck_number != truck_number,
+                    TruckState.unloading_started_at.is_not(None),
+                )
+            ).all():
+                other.unloading_started_at = None
+    if row.status != previous_status or row.status not in _UNLOAD_WORKABLE:
+        row.unloading_started_at = None  # (d)
+
     append_truck_state_activity(
         db,
         actor_user=_user,
@@ -801,6 +841,18 @@ def update_truck_state(
                 send_web_push,
                 truck_arrived_notification(truck_number=truck_number, run_date=run_date),
             )
+    # Unloading started — no push, no toast (the user wants this informational):
+    # the event exists so open Load boards refresh on the tick, not the 5s poll.
+    if before_state.unloading_started_at is None and row.unloading_started_at is not None:
+        background_tasks.add_task(
+            manager.broadcast,
+            {
+                "type": "truck_unloading",
+                "truck_number": truck_number,
+                "run_date": str(run_date),
+                "actor": _user.username,
+            },
+        )
     background_tasks.add_task(
         manager.broadcast,
         {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},

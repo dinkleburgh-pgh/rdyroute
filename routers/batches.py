@@ -305,6 +305,10 @@ def assign_truck_to_batch(
     else:
         if not prebatch and state.status == TruckStatus.dirty:
             state.status = TruckStatus.unloaded
+            # The only status write outside the PUT handler that a truck being
+            # physically unloaded can hit — end the "unloading now" marker here
+            # too, so it never outlives the work.
+            state.unloading_started_at = None
         state.wearers = effective_wearers
         state.batch_id = payload.batch_number
         state.state_source = TruckStateSource.workflow.value

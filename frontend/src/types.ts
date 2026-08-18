@@ -61,6 +61,8 @@ export interface TruckState {
   /** Freight needs crossloading onto this truck number (pending action). */
   crossload_to_truck: number | null;
   arrived_at: number | null;
+  /** Transient "unload crew is emptying this now" marker. Not a status. */
+  unloading_started_at: number | null;
   unloaded_at: number | null;
   state_source: TruckStateSource;
   updated_at: string;

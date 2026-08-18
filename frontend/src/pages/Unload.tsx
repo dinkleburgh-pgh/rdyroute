@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { createPortal } from "react-dom";
 import { formatEasternTime } from "../utils/dates";
+import { formatDuration, useElapsed } from "../components/LiveInProgress";
 import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadDayTemplate,
   useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
 import CoverageCards from "../components/CoverageCards";
@@ -298,18 +299,31 @@ export default function Unload() {
    * time) rather than moving here. Both ⊆ dirty, so nothing outside the page
    * roster can appear.
    */
+  /**
+   * The truck the crew is emptying RIGHT NOW. Zero or one by construction —
+   * the server clears every other marker when one is set — and it wins over
+   * every other bucket so a truck lives in exactly one section. Not a status:
+   * the truck is still Dirty underneath, and no counter reads this.
+   */
+  const unloadingAt = (t: TruckWithState): number | null => t.state?.unloading_started_at ?? null;
+  const unloading = useMemo(
+    () => dirty.filter((t) => unloadingAt(t) != null).sort((a, b) => (unloadingAt(a) ?? 0) - (unloadingAt(b) ?? 0)),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [dirty],
+  );
   const back = useMemo(
-    () => dirty.filter((t) => !isHoldTruck(t) && arrivedAt(t) != null).sort(byArrivalThenNumber),
+    () => dirty.filter((t) => !isHoldTruck(t) && arrivedAt(t) != null && unloadingAt(t) == null).sort(byArrivalThenNumber),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dirty],
   );
   const notBack = useMemo(
-    () => dirty.filter((t) => !isHoldTruck(t) && arrivedAt(t) == null).sort((a, b) => a.truck_number - b.truck_number),
+    () => dirty.filter((t) => !isHoldTruck(t) && arrivedAt(t) == null && unloadingAt(t) == null).sort((a, b) => a.truck_number - b.truck_number),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dirty],
   );
   const requested = useMemo(
-    () => dirty.filter(isHoldTruck),
+    () => dirty.filter((t) => isHoldTruck(t) && unloadingAt(t) == null),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [dirty],
   );
   const unfinished = useMemo(
@@ -396,6 +410,26 @@ export default function Unload() {
     setBatchOpen(null);
   }
 
+  /** Start the "unloading now" clock. Sends ONLY the marker — never status. */
+  async function startUnloading(t: TruckWithState) {
+    setBusy(t.truck_number);
+    setOverflowOpen(null);
+    try {
+      await upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, unloading_started_at: Date.now() / 1000 });
+    } finally {
+      setBusy(null);
+    }
+  }
+  async function cancelUnloading(t: TruckWithState) {
+    setBusy(t.truck_number);
+    setOverflowOpen(null);
+    try {
+      await upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, unloading_started_at: null });
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function markUnfinished(t: TruckWithState) {
     setBusy(t.truck_number);
     setOverflowOpen(null);
@@ -477,6 +511,11 @@ export default function Unload() {
 
   // The dirty-family sections, shared by both layouts.
   const dirtySections = [
+    // "Now unloading" — the one truck being emptied. Amber, the same tokens the
+    // Load page's "Loading" and the Requested section use: the app's colour for
+    // work in flight. Not green (that means done) and not orange (misreads
+    // against amber on a wall display).
+    { key: "unloading", title: "Unloading now", titleClass: "text-st-inprogress", trucks: unloading, accent: "text-amber-300", label: "Unloading", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
     { key: "requested", title: "Requested — priority hold", titleClass: "text-st-inprogress", trucks: requested, accent: "text-amber-300", label: "HOLD", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
     // Back = physically in the yard (driver tapped "I'm Back" / lead tapped
     // Arrived), oldest arrival first — what can be worked NOW.
@@ -506,7 +545,9 @@ export default function Unload() {
             coverageRoute={cd.route}
             coverageSplit={cd.split}
             footer={
-              arrivedAt(t) != null ? (
+              unloadingAt(t) != null ? (
+                <UnloadingSince startSec={unloadingAt(t)!} />
+              ) : arrivedAt(t) != null ? (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink">
                   <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
                   Arrived {formatEasternTime(arrivedAt(t)!)}
@@ -542,12 +583,14 @@ export default function Unload() {
           <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
           {/* List style previously showed no arrival at all — the sort moved
               trucks up but nothing said why. */}
-          {arrivedAt(t) != null && (
+          {unloadingAt(t) != null ? (
+            <UnloadingSince startSec={unloadingAt(t)!} />
+          ) : arrivedAt(t) != null ? (
             <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-ink">
               <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
               Arrived {formatEasternTime(arrivedAt(t)!)}
             </span>
-          )}
+          ) : null}
           {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
           {isUndo ? (
             <div className="flex shrink-0 items-center gap-2">
@@ -564,6 +607,11 @@ export default function Unload() {
                     <button className="w-full px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => { setOverflowOpen(null); upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); }}>Back to dirty</button>
                   ) : (
                     <>
+                      {unloadingAt(t) != null ? (
+                        <button className="w-full px-3 py-2 text-left text-sm font-medium text-amber-300 transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => void cancelUnloading(t)}>Not unloading — cancel</button>
+                      ) : (
+                        <button className="w-full px-3 py-2 text-left text-sm font-medium text-amber-300 transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => void startUnloading(t)}>Start unloading</button>
+                      )}
                       <button className="w-full px-3 py-2 text-left text-sm font-medium text-st-unfinished transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => markUnfinished(t)}>Mark unfinished</button>
                       {!batchingDisabled && (
                         <button className="w-full px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2" onClick={() => toggleBatch(t)}>{t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign batch"}</button>
@@ -882,6 +930,19 @@ export default function Unload() {
                       {isBusy ? "…" : isUnfin ? "Finish Unload" : "Mark Unloaded"}
                     </button>
 
+                    {/* Tells the Load board which truck is being emptied. Only
+                        the marker moves — status stays dirty until Mark
+                        Unloaded, so nothing is counted early. */}
+                    {unloadingAt(t) != null ? (
+                      <button className="w-full rounded-lg border border-amber-600/50 bg-amber-950/30 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-900/40 disabled:opacity-50" disabled={isBusy} onClick={async () => { await cancelUnloading(t); close(); }}>
+                        Not unloading — cancel
+                      </button>
+                    ) : (
+                      <button className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:opacity-50" disabled={isBusy} onClick={async () => { await startUnloading(t); close(); }}>
+                        {isUnfin ? "Resume Unloading" : "Start Unloading"}
+                      </button>
+                    )}
+
                     {/* Both status actions sit together directly under the
                         primary one — they're the same decision ("is this truck
                         done?"), so batching shouldn't be wedged between them. */}
@@ -929,6 +990,18 @@ export default function Unload() {
 // ---------------------------------------------------------------------------
 // Sub-components (mirror the Load page)
 // ---------------------------------------------------------------------------
+
+/** "Unloading · mm:ss" — a live clock since the marker was set. Its own
+ *  component because useElapsed is a hook and the footer is rendered per card. */
+function UnloadingSince({ startSec }: { startSec: number }) {
+  const elapsed = useElapsed(startSec);
+  return (
+    <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-300">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" aria-hidden />
+      Unloading · {formatDuration(elapsed)}
+    </span>
+  );
+}
 
 function StatCard({ label, value, accent, active, onClick }: { label: string; value: number; accent: string; active?: boolean; onClick?: () => void }) {
   const isTotal = label === "Total Left";

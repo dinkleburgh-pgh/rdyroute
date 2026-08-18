@@ -178,6 +178,13 @@ class TruckState(Base):
     # on bulk/admin changes) — kept distinct from arrived_at for unload-timing
     # pattern analysis.
     unloaded_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # TRANSIENT "the unload crew is emptying this truck right now" marker, so the
+    # Load board can see which truck is coming. Set only by an explicit Start
+    # Unloading tap while dirty/unfinished; nulled on ANY status change and at
+    # day-init; one truck at a time (setting it clears the previous). It is NOT a
+    # lifecycle status and no counter reads it — status stays `dirty` throughout,
+    # which is the whole reason it is a timestamp and not an enum value.
+    unloading_started_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     # Who last established the current-day row shape
     state_source: Mapped[str] = mapped_column(String(16), nullable=False, default=TruckStateSource.auto.value)
 

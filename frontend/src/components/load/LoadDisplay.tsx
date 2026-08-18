@@ -40,6 +40,7 @@ export default function LoadDisplay({
   actions,
   paceAvgSeconds,
   ready,
+  unloading = [],
   nextUpTruck,
   queuedNextUp,
   coverage,
@@ -54,6 +55,8 @@ export default function LoadDisplay({
   actions: LoadActions;
   paceAvgSeconds: number | null;
   ready: TruckWithState[];
+  /** What Unload is emptying right now (0 or 1). Informational. */
+  unloading?: TruckWithState[];
   nextUpTruck?: TruckWithState;
   queuedNextUp: TruckWithState | null;
   coverage: CoverageEntry[];
@@ -216,6 +219,15 @@ export default function LoadDisplay({
                       ? "Tap a truck below to start it."
                       : `${loadedCount} loaded today.`}
                   </p>
+                </div>
+              )}
+
+              {unloading.length > 0 && (
+                <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 border-amber-600/40 bg-amber-950/20 py-2">
+                  <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">Now unloading</span>
+                  {unloading.map((t) => (
+                    <span key={t.truck_number} className="font-mono text-lg font-black tabular-nums text-ink">#{t.truck_number}</span>
+                  ))}
                 </div>
               )}
 

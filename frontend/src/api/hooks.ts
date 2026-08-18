@@ -181,6 +181,7 @@ export function useUpsertTruckState() {
       needs_checked?: boolean | null;
       crossload_to_truck?: number | null;
       arrived_at?: number | null;
+      unloading_started_at?: number | null;
       /**
        * The status this write assumed the truck was in. Filled in automatically
        * by onMutate below from the pre-mutation cache; the server 409s if the
@@ -234,7 +235,7 @@ export function useUpsertTruckState() {
       // to mutationFn, so doing it here covers every caller of this hook at
       // once, and no future surface can forget it. It has to happen before the
       // optimistic update below, which overwrites the very value we need.
-      if (vars.status !== undefined && vars.expected_status === undefined) {
+      if ((vars.status !== undefined || vars.unloading_started_at !== undefined) && vars.expected_status === undefined) {
         const seen = (previous as import("../types").TruckWithState[] | undefined)
           ?.find((t) => t.truck_number === vars.truck_number)?.state?.status;
         if (seen) vars.expected_status = seen;
@@ -266,6 +267,7 @@ export function useUpsertTruckState() {
               crossload_to_truck: null,
               arrived_at: null,
               unloaded_at: null,
+              unloading_started_at: null,
               state_source: "workflow" as TruckStateSource,
               updated_at: new Date().toISOString(),
             };
@@ -287,6 +289,7 @@ export function useUpsertTruckState() {
                 ...(vars.needs_checked      !== undefined && { needs_checked: vars.needs_checked ?? false }),
                 ...(vars.crossload_to_truck !== undefined && { crossload_to_truck: vars.crossload_to_truck }),
                 ...(vars.arrived_at         !== undefined && { arrived_at: vars.arrived_at }),
+                ...(vars.unloading_started_at !== undefined && { unloading_started_at: vars.unloading_started_at }),
                 ...(vars.state_source       !== undefined && vars.state_source !== null && { state_source: vars.state_source }),
               },
             };

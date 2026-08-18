@@ -81,6 +81,11 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
         } else if (event.type === "truck_arrived") {
           if (event.run_date) qc.invalidateQueries({ queryKey: ["board", event.run_date] });
           window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
+        } else if (event.type === "truck_unloading") {
+          // Informational only: refresh the board so Load sees the "Now
+          // unloading" line on the tick, not the 5s poll. No app-event, no
+          // toast — the user chose quiet.
+          if (event.run_date) qc.invalidateQueries({ queryKey: ["board", event.run_date] });
         } else if (event.type === "driver_note_created") {
           // A driver just added a note from the QR page — refresh the notes
           // board live and let the app surface a clickable toast.

@@ -22,6 +22,7 @@ import {
 } from "../api/hooks";
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
+import { formatEasternTime } from "../utils/dates";
 import { workdayNumbers } from "../components/Clock";
 import {
   buildOperationalDayContext,
@@ -132,6 +133,16 @@ export default function Load() {
     [board, loadDay, holidayLoad],
   );
   const loadDisplayTrucks = loadContext.activeTrucks;
+  // The truck Unload is emptying right now (0 or 1 — server enforces one at a
+  // time). Whole board, status-guarded: a marker on anything not dirty/
+  // unfinished is stale and must never paint a clean truck as "unloading".
+  const unloadingNow = useMemo(
+    () =>
+      board
+        .filter((t) => t.state?.unloading_started_at != null && (t.state.status === "dirty" || t.state.status === "unfinished"))
+        .sort((a, b) => (a.state!.unloading_started_at ?? 0) - (b.state!.unloading_started_at ?? 0)),
+    [board],
+  );
   // Ready = unloaded and scheduled for tomorrow.
   const ready = useMemo(
     () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true && t.state?.needs_checked !== true),
@@ -285,6 +296,7 @@ export default function Load() {
           actions={actions}
           paceAvgSeconds={pace?.avg_seconds ?? null}
           ready={ready}
+          unloading={unloadingNow}
           nextUpTruck={nextUpTruck}
           queuedNextUp={queuedNextUp}
           coverage={loadCoverage}
@@ -454,6 +466,24 @@ export default function Load() {
         <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
         <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
       </div>
+
+      {/* What Unload is emptying right now — informational, one line, so the
+          load crew knows what's coming without it shouting. Hidden when idle. */}
+      {unloadingNow.length > 0 && (
+        <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 border-amber-600/40 bg-amber-950/20 px-4 py-2.5">
+          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">Now unloading</span>
+          {unloadingNow.map((t) => (
+            <span key={t.truck_number} className="inline-flex items-center gap-2 text-sm">
+              <span className="font-mono text-lg font-black tabular-nums text-ink">#{t.truck_number}</span>
+              {getCoverageRouteNumber(t) != null && (
+                <CoverageTag route={getCoverageRouteNumber(t)!} truck={t.truck_number} />
+              )}
+              <UnloadingSinceLoad startSec={t.state!.unloading_started_at!} />
+            </span>
+          ))}
+          <span className="ml-auto text-[11px] text-ink-muted">Ready to load once Unload marks it done.</span>
+        </div>
+      )}
 
       {/* On Hold */}
       {heldReady.length > 0 && (
@@ -699,6 +729,16 @@ function StatCard({ label, value, accent, active, onClick }: { label: string; va
       <p className="mt-1 font-mono tabular-nums tracking-[-0.02em] text-[32px] font-bold leading-none" style={{ color: isTotal ? "#dbe3ee" : accent }}>{value}</p>
     </button>
     </AnimateCard>
+  );
+}
+
+/** "started 7:42 PM · 12:34" — hook-bearing, so its own component. */
+function UnloadingSinceLoad({ startSec }: { startSec: number }) {
+  const elapsed = useElapsed(startSec);
+  return (
+    <span className="text-xs text-amber-200/80">
+      started {formatEasternTime(startSec)} · <span className="font-mono tabular-nums">{formatDuration(elapsed)}</span>
+    </span>
   );
 }
 
