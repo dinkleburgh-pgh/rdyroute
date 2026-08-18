@@ -26,7 +26,7 @@ import PageHeader from "../components/PageHeader";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import { motion } from "framer-motion";
-import { ArrowLeftRight } from "lucide-react";
+import { ArrowLeftRight, MapPin } from "lucide-react";
 import { format } from "date-fns";
 import clsx from "clsx";
 import { truckTypeLabel } from "../utils/truckType";
@@ -480,7 +480,11 @@ export default function Unload() {
     { key: "requested", title: "Requested — priority hold", titleClass: "text-st-inprogress", trucks: requested, accent: "text-amber-300", label: "HOLD", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
     // Back = physically in the yard (driver tapped "I'm Back" / lead tapped
     // Arrived), oldest arrival first — what can be worked NOW.
-    { key: "back", title: "Back", titleClass: "text-st-unloaded", trucks: back, accent: "text-emerald-300", label: "Back", labelClass: "bg-emerald-600 text-white", rowAccent: "border-l-st-unloaded", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
+    // Deliberately the SAME red as Not back. A Back truck is still Dirty —
+    // arrival is a fact about a dirty truck, not a fourth state — and green is
+    // what "unloaded" means everywhere else in the app. The distinguishing mark
+    // is the pin, not the hue.
+    { key: "back", title: "Back", titleClass: "text-st-dirty", trucks: back, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
     { key: "unfinished", title: "Unfinished", titleClass: "text-st-unfinished", trucks: unfinished, accent: "text-st-unfinished", label: "Unfinished", labelClass: "bg-[#b45309] text-white", rowAccent: "border-l-st-unfinished", actionLabel: "Finish unload", ghost: true, overflow: "unfinished" as const },
     // Not back = still on the road. Coverage and route trucks together; the
     // CoverageTag on the card says which is which.
@@ -492,7 +496,7 @@ export default function Unload() {
     const isUndo = recentlyUnloaded.has(t.truck_number);
     const cd = coverDisplay(t);
     return (
-      <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} hoverScale={1.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-emerald-400 animate-pulse rounded-2xl")}>
+      <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} hoverScale={1.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse rounded-2xl")}>
         <button type="button" onClick={() => openTruckMenu(t)} className="h-full w-full text-left transition-all duration-150 active:scale-[0.98]">
           <LoadWorkflowCard
             truck={t}
@@ -503,7 +507,8 @@ export default function Unload() {
             coverageSplit={cd.split}
             footer={
               arrivedAt(t) != null ? (
-                <span className="text-xs font-semibold text-emerald-400">
+                <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink">
+                  <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
                   Back {formatEasternTime(arrivedAt(t)!)}
                 </span>
               ) : t.state?.wearers ? (
@@ -530,7 +535,7 @@ export default function Unload() {
     if (t.state?.batch_id != null) detailParts.push(`Batch ${t.state.batch_id}`);
     const detail = detailParts.join("  ·  ");
     return (
-      <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} className={clsx("card flex flex-col !p-0", opts.accentClass, highlightTruck === t.truck_number && "ring-2 ring-emerald-400 animate-pulse")}>
+      <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} className={clsx("card flex flex-col !p-0", opts.accentClass, highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse")}>
         <div className="flex items-center gap-3 px-4 py-3">
           <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
           {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} className="shrink-0" />}
@@ -538,7 +543,10 @@ export default function Unload() {
           {/* List style previously showed no arrival at all — the sort moved
               trucks up but nothing said why. */}
           {arrivedAt(t) != null && (
-            <span className="shrink-0 text-xs font-semibold text-emerald-400">Back {formatEasternTime(arrivedAt(t)!)}</span>
+            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-ink">
+              <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
+              Back {formatEasternTime(arrivedAt(t)!)}
+            </span>
           )}
           {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
           {isUndo ? (
@@ -719,7 +727,7 @@ export default function Unload() {
                   const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
                   const cd = coverDisplay(t);
                   return (
-                    <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-emerald-400 animate-pulse rounded-[10px]")}>
+                    <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse rounded-[10px]")}>
                       <button type="button" onClick={() => openTruckMenu(t)} className="flex h-full min-h-[6rem] w-full flex-col items-center justify-center rounded-[10px] border border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.06)] px-1.5 py-2.5 text-center transition-shadow hover:ring-2 hover:ring-st-unloaded">
                         <span className="font-mono text-[17px] font-extrabold leading-none text-ink">#{t.truck_number}</span>
                         {cd.route != null && <span className="mt-1 flex justify-center"><CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} /></span>}
@@ -734,7 +742,7 @@ export default function Unload() {
                 {unloadedSorted.map((t, idx) => {
                   const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
                   return (
-                    <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={idx * 0.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-emerald-400 animate-pulse rounded-2xl")}>
+                    <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={idx * 0.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse rounded-2xl")}>
                       <div className="relative h-full">
                         {unloadedSort === "order" && (
                           <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-unloaded ring-1 ring-st-unloaded/60">{idx + 1}</span>

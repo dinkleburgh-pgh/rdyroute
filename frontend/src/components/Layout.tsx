@@ -624,7 +624,7 @@ export default function Layout() {
                   )}
                   {showYardBadge && (
                     <span className={clsx(
-                      "absolute inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-emerald-600 px-1 text-[10px] font-bold text-white",
+                      "absolute inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-slate-500 px-1 text-[10px] font-bold text-white",
                       showUnloadBadge ? "right-8" : "right-2",
                     )}>
                       {inYardCount}
@@ -889,7 +889,7 @@ export default function Layout() {
                     </span>
                   )}
                   {showYardBadge && (
-                    <span className="absolute left-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-emerald-600 px-1 text-[9px] font-bold text-white">
+                    <span className="absolute left-1/4 top-1.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-slate-500 px-1 text-[9px] font-bold text-white">
                       {inYardCount}
                     </span>
                   )}
