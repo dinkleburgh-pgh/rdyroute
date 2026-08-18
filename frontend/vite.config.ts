@@ -60,6 +60,24 @@ const appVersion = process.env.VITE_APP_VERSION || predictBuildLabel() || pkg.ve
 const apiProxyTarget = process.env.VITE_API_PROXY_TARGET || "http://127.0.0.1:8000";
 const wsProxyTarget = process.env.VITE_WS_PROXY_TARGET || apiProxyTarget.replace(/^http/i, "ws");
 
+// HMR websocket target. Default (true) = let Vite infer it from the browser's own
+// URL, so the SAME dev server works on localhost and from other devices on the LAN
+// (phones/tablets). A hard-coded "localhost" here made the HMR socket unreachable
+// from any other device, which looks like the page loading then hanging/reconnecting.
+// For tunnel access, override e.g.:
+//   VITE_HMR_HOST=test.rdyroute.app VITE_HMR_PROTOCOL=wss VITE_HMR_CLIENT_PORT=443
+const hmrHost = process.env.VITE_HMR_HOST;
+const hmrProtocol = process.env.VITE_HMR_PROTOCOL;
+const hmrClientPort = process.env.VITE_HMR_CLIENT_PORT;
+const hmrConfig =
+  hmrHost || hmrProtocol || hmrClientPort
+    ? {
+        ...(hmrHost ? { host: hmrHost } : {}),
+        ...(hmrProtocol ? { protocol: hmrProtocol } : {}),
+        ...(hmrClientPort ? { clientPort: Number(hmrClientPort) } : {}),
+      }
+    : true;
+
 export default defineConfig({
   plugins: [
     react(),
@@ -119,11 +137,7 @@ export default defineConfig({
     allowedHosts: true,
     port: 5180,
     strictPort: true,
-    hmr: {
-      host: "localhost",
-      port: 5180,
-      protocol: "ws",
-    },
+    hmr: hmrConfig,
     proxy: {
       "/api": {
         target: apiProxyTarget,

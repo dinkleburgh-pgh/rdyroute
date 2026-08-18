@@ -24,6 +24,7 @@ from jwt.exceptions import PyJWTError
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
+from activity_log import append_activity_event
 from database import get_db, settings
 from models import AuthRequest, AuthRequestStatus, AuthRole, LoginAttempt, Session as SessionModel, User
 from schemas import (
@@ -467,6 +468,14 @@ def create_user(
         display_name=payload.display_name,
     )
     db.add(user)
+    append_activity_event(
+        db,
+        actor_user=_admin,
+        event_family="system",
+        event_type="user_created",
+        summary=f"Created account {payload.username} ({payload.role.value})",
+        diff_json={"username": payload.username, "role": payload.role.value},
+    )
     db.commit()
     db.refresh(user)
     return user
@@ -480,8 +489,25 @@ def update_user(
     db: Session = Depends(get_db),
 ):
     user = _get_user_or_404(username, db)
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    changes = payload.model_dump(exclude_unset=True)
+    before = {k: getattr(user, k) for k in changes}
+    for field, value in changes.items():
         setattr(user, field, value)
+    # Only what actually moved, with enum values flattened for the JSON diff.
+    diff = {
+        k: {"before": getattr(before[k], "value", before[k]), "after": getattr(v, "value", v)}
+        for k, v in changes.items()
+        if before[k] != v
+    }
+    if diff:
+        append_activity_event(
+            db,
+            actor_user=_admin,
+            event_family="system",
+            event_type="user_updated",
+            summary=f"Updated account {username}: {', '.join(diff)}",
+            diff_json={"username": username, "fields": diff},
+        )
     db.commit()
     db.refresh(user)
     return user
@@ -499,6 +525,22 @@ def change_password(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Cannot change another user's password")
     user = _get_user_or_404(username, db)
     user.hashed_password = _hash_password(payload.new_password)
+    # Who reset whose password, and when. Never the password itself. Until this
+    # existed there was no record either way — when a login stopped working
+    # there was no way to tell a forgotten password from a changed one.
+    self_change = current_user.username == username
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="system",
+        event_type="password_changed",
+        summary=(
+            f"{username} changed their own password"
+            if self_change
+            else f"Password for {username} reset by {current_user.username}"
+        ),
+        diff_json={"username": username, "self": self_change},
+    )
     db.commit()
 
 
@@ -511,7 +553,16 @@ def delete_user(
     if username == current_user.username:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Cannot delete your own account")
     user = _get_user_or_404(username, db)
+    role = getattr(user.role, "value", user.role)
     db.delete(user)
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="system",
+        event_type="user_deleted",
+        summary=f"Deleted account {username} ({role})",
+        diff_json={"username": username, "role": role},
+    )
     db.commit()
 
 
