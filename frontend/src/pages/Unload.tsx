@@ -285,25 +285,28 @@ export default function Unload() {
   );
 
   /**
-   * Physically back and waiting to be unloaded — the crew's real work queue,
-   * oldest arrival first. Holds outrank arrival (a held+arrived truck stays in
-   * Requested, wearing its Back time), and inYard ⊆ dirty, so nothing outside
-   * the page roster can appear here.
+   * The dirty family, split ONE way: is the truck physically back yet.
+   *
+   * Two lists, deliberately. A coverage split on top (route trucks vs covering
+   * trucks) turned this into four buckets and the crew read none of them; a
+   * covering truck still wears its CoverageTag inside whichever list it is in,
+   * which is all the coverage information the dock needs. Counting is not
+   * touched — the stat cards compute their own route/coverage split off
+   * stillDirty and never read these.
+   *
+   * Holds outrank arrival: a held truck stays in Requested (wearing its Back
+   * time) rather than moving here. Both ⊆ dirty, so nothing outside the page
+   * roster can appear.
    */
-  const inYard = useMemo(
+  const back = useMemo(
     () => dirty.filter((t) => !isHoldTruck(t) && arrivedAt(t) != null).sort(byArrivalThenNumber),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [dirty],
   );
-  const dirtyRoute = useMemo(
-    () => dirty.filter((t) => !isCoverageTruck(t) && !isHoldTruck(t) && arrivedAt(t) == null).sort(byArrivalThenNumber),
+  const notBack = useMemo(
+    () => dirty.filter((t) => !isHoldTruck(t) && arrivedAt(t) == null).sort((a, b) => a.truck_number - b.truck_number),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dirty, isCoverageTruck],
-  );
-  const dirtyCoverages = useMemo(
-    () => dirty.filter((t) => isCoverageTruck(t) && !isHoldTruck(t) && arrivedAt(t) == null).sort(byArrivalThenNumber),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [dirty, isCoverageTruck],
+    [dirty],
   );
   const requested = useMemo(
     () => dirty.filter(isHoldTruck),
@@ -475,12 +478,13 @@ export default function Unload() {
   // The dirty-family sections, shared by both layouts.
   const dirtySections = [
     { key: "requested", title: "Requested — priority hold", titleClass: "text-st-inprogress", trucks: requested, accent: "text-amber-300", label: "HOLD", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
-    // Physically back (driver tapped "I'm Back" or a lead tapped Arrived),
-    // oldest arrival first — the queue of what can actually be worked NOW.
-    { key: "yard", title: "In the yard", titleClass: "text-st-unloaded", trucks: inYard, accent: "text-emerald-300", label: "In yard", labelClass: "bg-emerald-600 text-white", rowAccent: "border-l-st-unloaded", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
+    // Back = physically in the yard (driver tapped "I'm Back" / lead tapped
+    // Arrived), oldest arrival first — what can be worked NOW.
+    { key: "back", title: "Back", titleClass: "text-st-unloaded", trucks: back, accent: "text-emerald-300", label: "Back", labelClass: "bg-emerald-600 text-white", rowAccent: "border-l-st-unloaded", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
     { key: "unfinished", title: "Unfinished", titleClass: "text-st-unfinished", trucks: unfinished, accent: "text-st-unfinished", label: "Unfinished", labelClass: "bg-[#b45309] text-white", rowAccent: "border-l-st-unfinished", actionLabel: "Finish unload", ghost: true, overflow: "unfinished" as const },
-    { key: "coverage", title: "Still out — coverage", titleClass: "text-st-spare", trucks: dirtyCoverages, accent: "text-st-spare", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-spare", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
-    { key: "route", title: "Still out — route trucks", titleClass: "text-st-dirty", trucks: dirtyRoute, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
+    // Not back = still on the road. Coverage and route trucks together; the
+    // CoverageTag on the card says which is which.
+    { key: "notback", title: "Not back", titleClass: "text-st-dirty", trucks: notBack, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
   ];
 
   /** Cards style: a tappable dirty-family truck card (opens the action menu). */
