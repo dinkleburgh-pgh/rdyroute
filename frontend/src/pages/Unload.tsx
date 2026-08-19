@@ -878,6 +878,14 @@ export default function Unload() {
                       {isUnfin ? " · Unfinished" : ""}
                       {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
                     </p>
+                    {/* Start Unloading keeps this window open — the tablet sits
+                        on the truck for the whole job — so the clock lives here
+                        too, and Mark Unloaded is one tap away when it's done. */}
+                    {unloadingAt(t) != null && (
+                      <p className="mt-1.5">
+                        <UnloadingSince startSec={unloadingAt(t)!} />
+                      </p>
+                    )}
                   </div>
                   <button className="btn-ghost" onClick={close}>Close</button>
                 </div>
@@ -934,11 +942,11 @@ export default function Unload() {
                         the marker moves — status stays dirty until Mark
                         Unloaded, so nothing is counted early. */}
                     {unloadingAt(t) != null ? (
-                      <button className="w-full rounded-lg border border-amber-600/50 bg-amber-950/30 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-900/40 disabled:opacity-50" disabled={isBusy} onClick={async () => { await cancelUnloading(t); close(); }}>
+                      <button className="w-full rounded-lg border border-amber-600/50 bg-amber-950/30 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-900/40 disabled:opacity-50" disabled={isBusy} onClick={() => void cancelUnloading(t)}>
                         Not unloading — cancel
                       </button>
                     ) : (
-                      <button className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:opacity-50" disabled={isBusy} onClick={async () => { await startUnloading(t); close(); }}>
+                      <button className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:opacity-50" disabled={isBusy} onClick={() => void startUnloading(t)}>
                         {isUnfin ? "Resume Unloading" : "Start Unloading"}
                       </button>
                     )}
