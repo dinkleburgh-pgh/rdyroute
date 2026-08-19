@@ -31,6 +31,13 @@ export interface ToastOptions {
   title?: string;
   /** Small mono chip beside the title — e.g. a truck number ("#57"). */
   chip?: string;
+  /**
+   * The Pop-ups settings row this toast is governed by. When set, the card
+   * grows a small gear that jumps to Management → Pop-ups with that row
+   * highlighted, so "how do I turn this off / make it stay longer" is one tap
+   * from the thing itself rather than a hunt through Settings.
+   */
+  settingsKind?: string;
 }
 
 export interface Toast {
@@ -38,6 +45,7 @@ export interface Toast {
   message: string;
   variant: ToastVariant;
   onClick?: () => void;
+  settingsKind?: string;
   title?: string;
   chip?: string;
 }
@@ -68,7 +76,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = _nextId++;
       setToasts((prev) => [
         ...prev,
-        { id, message, variant, onClick: opts?.onClick, title: opts?.title, chip: opts?.chip },
+        { id, message, variant, onClick: opts?.onClick, title: opts?.title, chip: opts?.chip, settingsKind: opts?.settingsKind },
       ]);
       const ttl = opts?.durationMs ?? AUTO_DISMISS_MS;
       if (ttl > 0) setTimeout(() => dismiss(id), ttl);

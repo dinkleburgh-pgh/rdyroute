@@ -247,6 +247,7 @@ export default function Layout() {
         title: "New Driver Note",
         chip: truck != null ? `#${truck}` : undefined,
         durationMs: kindMs("driver_note"),
+        settingsKind: "driver_note",
         onClick: () => nav(truck != null ? `/notes?truck=${truck}` : "/notes"),
       });
     };
@@ -287,6 +288,7 @@ export default function Layout() {
         toast.info(String(d.body || "Tap to open the conversation."), {
           title: `New message · ${who}`,
           durationMs: kindMs("chat_message"),
+          settingsKind: "chat_message",
           onClick: () => nav("/communications"),
         });
       } else if (d.type === "notice_created") {
@@ -295,6 +297,7 @@ export default function Layout() {
         toast.info(String(d.body || "Tap to read it on the Run Day board."), {
           title: `Notice · ${String(d.title ?? "")}`.trim(),
           durationMs: kindMs("notice"),
+          settingsKind: "notice",
           onClick: () => nav("/"),
         });
       } else if (d.type === "truck_unloaded") {
@@ -310,6 +313,7 @@ export default function Layout() {
           // Defaults to a long dwell: whoever walks up to Load should still see
           // the trucks that came ready while they were away from the screen.
           durationMs: kindMs("truck_unloaded"),
+          settingsKind: "truck_unloaded",
           onClick: () => nav(`/fleet?truck=${truck}`),
         });
       } else if (d.type === "truck_arrived") {
@@ -323,6 +327,7 @@ export default function Layout() {
           title: "Truck arrived",
           chip: `#${truck}`,
           durationMs: kindMs("truck_arrived"),
+          settingsKind: "truck_arrived",
           onClick: () => nav(`/unload?truck=${truck}`),
         });
       }
@@ -354,6 +359,7 @@ export default function Layout() {
         title: n.title,
         chip: chipTruck != null ? `#${chipTruck}` : undefined,
         durationMs: kindMs(kind),
+        settingsKind: kind,
         onClick: () => nav(n.url || "/fleet"),
       });
     };

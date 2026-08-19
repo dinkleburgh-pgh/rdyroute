@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
+import { useSearchParams } from "react-router-dom";
 import { playChime, primeAudio } from "../../utils/chime";
 import {
   TOAST_DEFAULTS,
@@ -48,6 +49,24 @@ function describe(seconds: number): string {
 }
 
 export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
+  // ?kind=<ToastKind> — a toast's gear lands here. Scroll that row into view
+  // and ring it briefly, then drop the param so a refresh isn't stuck on it.
+  const [params, setParams] = useSearchParams();
+  const focusKind = params.get("kind");
+  const [highlight, setHighlight] = useState<string | null>(null);
+  useEffect(() => {
+    if (!focusKind || !(focusKind in TOAST_DEFAULTS)) return;
+    setHighlight(focusKind);
+    const t1 = window.setTimeout(() => {
+      document.getElementById(`toast-kind-${focusKind}`)?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 250);
+    const t2 = window.setTimeout(() => setHighlight(null), 6000);
+    const next = new URLSearchParams(params);
+    next.delete("kind");
+    setParams(next, { replace: true });
+    return () => { window.clearTimeout(t1); window.clearTimeout(t2); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusKind]);
   const upsert = useUpsertSetting();
   const toast = useToast();
 
@@ -121,9 +140,11 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
             return (
               <div
                 key={kind}
+                id={`toast-kind-${kind}`}
                 className={clsx(
                   "rounded-lg border px-3 py-2.5 transition-colors",
                   cfg.enabled ? "border-slate-700 bg-slate-900/60" : "border-slate-800 bg-slate-900/20",
+                  highlight === kind && "ring-2 ring-white/70 animate-pulse",
                 )}
               >
                 <div className="flex flex-wrap items-center gap-x-3 gap-y-2">

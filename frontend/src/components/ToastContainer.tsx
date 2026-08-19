@@ -10,6 +10,8 @@
  *     card is tappable; the ✕ still dismisses without firing it.
  */
 import { motion, AnimatePresence } from "framer-motion";
+import { useNavigate } from "react-router-dom";
+import { Settings2 } from "lucide-react";
 import clsx from "clsx";
 import { useToast, type Toast, type ToastVariant } from "../contexts/ToastContext";
 import { CheckIcon, XIcon, AlertTriangleIcon } from "./icons";
@@ -29,6 +31,7 @@ function VariantIcon({ variant }: { variant: ToastVariant }) {
 
 /** Rich card toast — matches the app's card look (surface, hairline, ink). */
 function CardToast({ t, dismiss }: { t: Toast; dismiss: (id: number) => void }) {
+  const nav = useNavigate();
   const styles = VARIANT_STYLES[t.variant];
   const body = (
     <>
@@ -75,6 +78,23 @@ function CardToast({ t, dismiss }: { t: Toast; dismiss: (id: number) => void }) 
       >
         <XIcon className="h-3.5 w-3.5" />
       </button>
+      {/* Manage this kind of pop-up. Deliberately NOT the main tap — that
+          already goes to the truck / chat the toast is about — and it stops
+          propagation so it never fires the card's onClick. */}
+      {t.settingsKind && (
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            dismiss(t.id);
+            nav(`/management?tab=toasts&kind=${encodeURIComponent(t.settingsKind!)}`);
+          }}
+          className="absolute bottom-2 right-2 text-ink-faint transition-colors hover:text-ink-soft"
+          aria-label="Pop-up settings"
+          title="Pop-up settings"
+        >
+          <Settings2 className="h-3.5 w-3.5" />
+        </button>
+      )}
     </div>
   );
 }
