@@ -10,20 +10,18 @@ import { useEffect, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { motion } from "framer-motion";
 import clsx from "clsx";
-import { QRCodeSVG } from "qrcode.react";
-import { useBoard, useQrTokens } from "../api/hooks";
+import { useBoard } from "../api/hooks";
 import { Truck } from "lucide-react";
 import { ChevronRightIcon } from "../components/icons";
 import {
   useCreateNote,
   useDeleteNote,
   useLoadDayOverride,
-  useRegenerateQR,
   useTruckNotes,
   useUnloadsDayOverride,
   useUpdateNote,
 } from "../api/hooks";
-import { todayIso, publicBase } from "../api/client";
+import { todayIso } from "../api/client";
 import type { NoteType, TruckNote, TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
@@ -321,103 +319,6 @@ function NoteCard({
 // QR code modal (admin: view, copy, and regenerate)
 // ---------------------------------------------------------------------------
 
-function TruckQRModal({
-  truckNumber,
-  qrToken,
-  onClose,
-}: {
-  truckNumber: number;
-  qrToken: string | null | undefined;
-  onClose: () => void;
-}) {
-  const regen = useRegenerateQR();
-  const [copied, setCopied] = useState(false);
-
-  const base = publicBase();
-  const url = qrToken ? `${base}/driver/${qrToken}` : null;
-
-  function copy() {
-    if (!url) return;
-    navigator.clipboard.writeText(url).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    });
-  }
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="w-full max-w-xs rounded-xl border border-slate-700 bg-slate-900 p-5 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-4 flex items-center justify-between">
-          <h3 className="font-semibold">Route #{truckNumber} — Driver QR</h3>
-          <button onClick={onClose} className="text-slate-500 hover:text-slate-300">✕</button>
-        </div>
-
-        {url ? (
-          <>
-            <div className="flex justify-center rounded-lg bg-white p-3">
-              <QRCodeSVG value={url} size={160} />
-            </div>
-
-            {/* Copyable URL */}
-            <div className="mt-3 flex gap-1.5">
-              <input
-                readOnly
-                value={url}
-                className="input min-w-0 flex-1 truncate text-xs"
-              />
-              <button
-                className="shrink-0 rounded-md bg-slate-700 px-3 text-xs font-medium text-slate-200 hover:bg-slate-600"
-                onClick={copy}
-              >
-                {copied ? "Copied!" : "Copy"}
-              </button>
-            </div>
-
-            {/* Preview link */}
-            <a
-              href={url}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-2 block text-center text-xs text-blue-400 underline hover:text-blue-300"
-            >
-              Preview driver view ↗
-            </a>
-          </>
-        ) : (
-          <p className="text-center text-sm text-slate-400">No QR token assigned yet.</p>
-        )}
-
-        {/* Regenerate */}
-        <div className="mt-4 border-t border-slate-800 pt-3">
-          <p className="mb-2 text-xs text-slate-500">
-            Regenerate to invalidate the current QR code (e.g. if it was shared with unauthorized people).
-          </p>
-          <button
-            className="w-full rounded-md bg-red-900/60 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900 disabled:opacity-50"
-            disabled={regen.isPending}
-            onClick={() => {
-              if (!confirm(`Regenerate QR code for route #${truckNumber}? The old code will stop working immediately.`)) return;
-              regen.mutate(truckNumber, { onSuccess: onClose });
-            }}
-          >
-            {regen.isPending ? "Regenerating…" : "Regenerate QR Code"}
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Per-truck note panel
-// ---------------------------------------------------------------------------
-
 function TruckNotePanel({
   truck,
   notes,
@@ -435,11 +336,6 @@ function TruckNotePanel({
 }) {
   const [adding, setAdding]     = useState(false);
   const [editing, setEditing]   = useState<TruckNote | null>(null);
-  const [showQR, setShowQR]     = useState(false);
-  // Admin-only, and only fetched once the QR block is actually opened — the
-  // token is a credential for the public driver page, so it no longer rides
-  // along on the board payload every session can read.
-  const { data: qrTokens = {} } = useQrTokens(showQR);
 
   const visible = notes.filter(
     (n) => showArchived || (n.is_active && !isExpired(n)),
@@ -465,26 +361,11 @@ function TruckNotePanel({
             className={clsx("ml-auto h-4 w-4 shrink-0 text-ink-muted transition-transform", isOpen && "rotate-90")}
           />
         </button>
-        {/* QR code button — only for non-spare trucks that have a token */}
-        {truck.truck_type !== "Spare" && (
-          <button
-            type="button"
-            title="View driver QR code"
-            onClick={() => setShowQR(true)}
-            className="shrink-0 rounded p-1.5 text-slate-500 hover:bg-slate-800 hover:text-slate-200"
-          >
-            <ChevronRightIcon className="h-4 w-4" />
-          </button>
-        )}
       </div>
 
-      {showQR && (
-        <TruckQRModal
-          truckNumber={truck.truck_number}
-          qrToken={qrTokens[String(truck.truck_number)] ?? null}
-          onClose={() => setShowQR(false)}
-        />
-      )}
+      {/* Driver QR management moved to the Fleet truck view (and the bulk
+          print sheet in Management → Driver QR) — the QR is the truck's
+          arrival + notes entry point now, not a notes feature. */}
 
       {/* Expanded content */}
       {isOpen && (

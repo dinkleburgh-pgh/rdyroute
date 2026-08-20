@@ -22,6 +22,7 @@ export type PermissionAction =
   | "edit:notes"
   | "delete:messages"
   | "edit:wearer-defaults"
+  | "manage:qr"
   | "edit:fleet-schedule";
 
 /** Roles that are considered elevated "manager-level" operators. */
@@ -43,6 +44,9 @@ const ACTION_ROLES: Record<PermissionAction, AuthRole[]> = {
   // _ADMIN_ROLES = {admin, fleet, supervisor}, so offering the editor to atl or
   // lead would let them transcribe five sheets and then eat a 403 on save.
   "edit:wearer-defaults": ["admin", "fleet", "supervisor"],
+  // Driver QR tokens are bearer credentials; the API (GET /fleet/qr-tokens,
+  // regenerate) is require_admin, so the UI matches.
+  "manage:qr": ["admin", "fleet", "supervisor"],
   // The Fleet Schedule page is visible to everyone including guests, but both
   // things its edit mode writes — PUT /fleet/{n} for the off-days and
   // PUT /route-drivers/{n} for the SSR — are require_admin. Arming edit mode

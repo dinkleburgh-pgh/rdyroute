@@ -2,7 +2,15 @@
  * Truck detail modal (fleet board). Wraps StatusEditor + FleetTruckEditor and
  * shows stats, notes, shortages, and audit entries. Extracted from Board.tsx.
  */
+import { lazy, Suspense, useState } from "react";
 import { createPortal } from "react-dom";
+import { QrCode } from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
+import { can } from "../../utils/permissions";
+
+// Lazy ON PURPOSE: Board is statically imported, and qrcode.react must stay
+// out of the eager entry bundle. This chunk loads only when the section opens.
+const TruckQRSection = lazy(() => import("../../components/TruckQRSection"));
 import type { TruckStatus, TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
 import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
@@ -168,6 +176,8 @@ export default function TruckDetailModal({
             )}
           </section>
 
+          <QRBlock truckNumber={truck.truck_number} readOnly={readOnly} />
+
           <TruckDocuments truckNumber={truck.truck_number} />
 
           <TruckActivityTimeline truckNumber={truck.truck_number} />
@@ -175,5 +185,39 @@ export default function TruckDetailModal({
       </div>
     </div>,
     document.body,
+  );
+}
+
+
+/**
+ * Driver QR management, gated the way the API is: the token fetch and
+ * regenerate are require_admin (admin/fleet/supervisor), so anyone else gets
+ * no section rather than a button that 403s — the exact bug the old Notes
+ * placement had. Collapsed by default so the QR chunk and the token request
+ * only ever load when someone asks for them.
+ */
+function QRBlock({ truckNumber, readOnly }: { truckNumber: number; readOnly: boolean }) {
+  const { user } = useAuth();
+  const [open, setOpen] = useState(false);
+  if (readOnly || !can(user?.role, "manage:qr")) return null;
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="flex w-full items-center gap-2 text-left text-sm font-semibold text-slate-300 hover:text-slate-100"
+      >
+        <QrCode className="h-4 w-4 shrink-0 text-slate-500" />
+        Driver QR
+        <span className="ml-auto text-xs text-slate-500">{open ? "Hide" : "Show"}</span>
+      </button>
+      {open && (
+        <div className="mt-3">
+          <Suspense fallback={<p className="py-3 text-center text-xs text-slate-500">Loading QR…</p>}>
+            <TruckQRSection truckNumber={truckNumber} />
+          </Suspense>
+        </div>
+      )}
+    </div>
   );
 }

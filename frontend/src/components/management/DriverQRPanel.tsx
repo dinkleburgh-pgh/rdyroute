@@ -3,6 +3,7 @@
  * Extracted from Settings.tsx.
  */
 import { useMemo, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
 import { useFleet, useQrTokens, useRegenerateQR } from "../../api/hooks";
 import { publicBase } from "../../api/client";
@@ -11,7 +12,10 @@ export default function DriverQRPanel() {
   const { data: trucks, isLoading } = useFleet(true);
   const { data: qrTokens = {} } = useQrTokens();
   const regen = useRegenerateQR();
-  const [search, setSearch] = useState("");
+  // Seeded from ?truck= so the Fleet modal's "Print sticker" lands filtered to
+  // one truck — "Print all visible" then prints a single sticker.
+  const [params] = useSearchParams();
+  const [search, setSearch] = useState(() => params.get("truck") ?? "");
   const [copiedTruck, setCopiedTruck] = useState<number | null>(null);
 
   const base = publicBase();
@@ -19,7 +23,11 @@ export default function DriverQRPanel() {
   const active = useMemo(
     () =>
       (trucks ?? [])
-        .filter((t) => t.is_active && t.truck_type !== "Spare")
+        // Spares are left off the bulk sheet (it's a route-sticker print run), but
+    // an EXACT number search still finds one — a spare has a QR and its driver
+    // taps "I'm Back" like anyone else, and the Fleet modal's "Print sticker"
+    // deep-links here for spares too.
+    .filter((t) => t.is_active && (t.truck_type !== "Spare" || String(t.truck_number) === search.trim()))
         .filter((t) => search === "" || String(t.truck_number).includes(search))
         .sort((a, b) => a.truck_number - b.truck_number),
     [trucks, search],
