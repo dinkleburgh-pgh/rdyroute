@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { Fragment, useCallback, useMemo, useState, useEffect, useRef } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
@@ -488,6 +488,18 @@ export default function Layout() {
     () => (board ?? []).find((t) => t.state?.status === "in_progress"),
     [board],
   );
+  // The truck the unload crew is emptying RIGHT NOW (one at a time, enforced
+  // server-side). Status-guarded exactly like Load.tsx's unloadingNow: a
+  // marker left on an already-unloaded row must not keep the chip lit.
+  const unloadingTruck = useMemo(
+    () =>
+      (board ?? []).find(
+        (t) =>
+          t.state?.unloading_started_at != null &&
+          (t.state.status === "dirty" || t.state.status === "unfinished"),
+      ),
+    [board],
+  );
   const unloadedPct =
     totalScheduledUnload > 0
       ? Math.round((unloadedScheduled / totalScheduledUnload) * 100)
@@ -667,25 +679,51 @@ export default function Layout() {
               </span>
             </NavLink>
             {STATUS_ORDER.map((s) => (
-              <button
-                key={s}
-                onClick={() => nav(`/board?status=${s}`)}
-                className="relative flex w-full items-center justify-center rounded-[9px] border border-hairline bg-[#141a27] px-3 py-1.5 text-sm font-medium text-[#aab4c4] transition-colors hover:bg-surface-2"
-              >
-                <span className={clsx(
-                  "absolute left-2 h-3 w-3 rounded-full",
-                  STATUS_DOT[s],
-                  s === "in_progress" && counts[s] > 0 && "animate-pulse",
-                )} />
-                {STATUS_LABELS[s]}
-                <span className="absolute right-2 text-ink-muted">
-                  {s === "in_progress"
-                    ? inProgressTruck
-                      ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{inProgressTruck.truck_number}</span>
-                      : <span className="text-ink-faint">None</span>
-                    : counts[s]}
-                </span>
-              </button>
+              <Fragment key={s}>
+                <button
+                  onClick={() => nav(`/board?status=${s}`)}
+                  className="relative flex w-full items-center justify-center rounded-[9px] border border-hairline bg-[#141a27] px-3 py-1.5 text-sm font-medium text-[#aab4c4] transition-colors hover:bg-surface-2"
+                >
+                  <span className={clsx(
+                    "absolute left-2 h-3 w-3 rounded-full",
+                    STATUS_DOT[s],
+                    s === "in_progress" && counts[s] > 0 && "animate-pulse",
+                  )} />
+                  {/* in_progress means LOADING; spelled out here so it can't be
+                      read as the unloading row's sibling-in-ambiguity. */}
+                  {s === "in_progress" ? "Loading" : STATUS_LABELS[s]}
+                  <span className="absolute right-2 text-ink-muted">
+                    {s === "in_progress"
+                      ? inProgressTruck
+                        ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{inProgressTruck.truck_number}</span>
+                        : <span className="text-ink-faint">None</span>
+                      : counts[s]}
+                  </span>
+                </button>
+                {/* Unloading sits between Dirty and Unloaded in the lifecycle,
+                    so the rail reads as the pipeline: dirty → unloading →
+                    unloaded → loading → loaded. Not a status — it mirrors the
+                    transient unloading_started_at marker. */}
+                {s === "dirty" && (
+                  <button
+                    onClick={() =>
+                      nav(unloadingTruck ? `/unload?truck=${unloadingTruck.truck_number}` : "/unload")
+                    }
+                    className="relative flex w-full items-center justify-center rounded-[9px] border border-hairline bg-[#141a27] px-3 py-1.5 text-sm font-medium text-[#aab4c4] transition-colors hover:bg-surface-2"
+                  >
+                    <span className={clsx(
+                      "absolute left-2 h-3 w-3 rounded-full bg-status-inprogress",
+                      unloadingTruck && "animate-pulse",
+                    )} />
+                    Unloading
+                    <span className="absolute right-2 text-ink-muted">
+                      {unloadingTruck
+                        ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{unloadingTruck.truck_number}</span>
+                        : <span className="text-ink-faint">None</span>}
+                    </span>
+                  </button>
+                )}
+              </Fragment>
             ))}
           </div>
 
@@ -781,22 +819,78 @@ export default function Layout() {
               {unloadBadgeText}
             </span>
           </div>
-          <div className="ml-auto hidden items-center gap-3 text-sm md:flex">
-            <Clock compact className="font-mono text-2xl font-bold tabular-nums text-blue-400" />
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-4 py-2 font-semibold text-[#c4b5fd]">
+          <div className="ml-auto hidden flex-wrap items-center justify-end gap-2 py-2 text-sm md:flex">
+            <Clock compact className="whitespace-nowrap font-mono text-2xl font-bold tabular-nums text-blue-400" />
+            {/* Live "happening right now" chips — visible only while a truck is
+                actually on a dock, so the bar stays clean when idle. Amber =
+                work in flight, matching in_progress everywhere else. */}
+            {unloadingTruck && (
+              <button
+                type="button"
+                onClick={() => nav(`/unload?truck=${unloadingTruck.truck_number}`)}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[rgba(245,158,11,0.32)] bg-[rgba(245,158,11,0.12)] px-4 py-2 font-bold text-[#fcd34d] transition-colors hover:bg-[rgba(245,158,11,0.2)]"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#c89a4a]">Unloading</span>
+                #{unloadingTruck.truck_number}
+              </button>
+            )}
+            {inProgressTruck && (
+              <button
+                type="button"
+                onClick={() => nav("/load")}
+                className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[rgba(245,158,11,0.32)] bg-[rgba(245,158,11,0.12)] px-4 py-2 font-bold text-[#fcd34d] transition-colors hover:bg-[rgba(245,158,11,0.2)]"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#c89a4a]">Loading</span>
+                #{inProgressTruck.truck_number}
+              </button>
+            )}
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[rgba(139,92,246,0.24)] bg-[rgba(139,92,246,0.10)] px-4 py-2 font-semibold text-[#c4b5fd]">
               <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#8b6fd1]">Shift</span>
               {shiftName}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-4 py-2 font-semibold text-[#93c5fd]">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[rgba(59,130,246,0.24)] bg-[rgba(59,130,246,0.10)] px-4 py-2 font-semibold text-[#93c5fd]">
               <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#5a8fd6]">Load</span>
               Day {loadDay}{holidayLoad ? `+${loadDay === 5 ? 1 : loadDay + 1}` : ""}
             </span>
-            <span className="inline-flex items-center gap-1.5 rounded-xl border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-4 py-2 font-semibold text-[#6ee7b7]">
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-xl border border-[rgba(16,185,129,0.24)] bg-[rgba(16,185,129,0.10)] px-4 py-2 font-semibold text-[#6ee7b7]">
               <span className="text-xs font-semibold uppercase tracking-[0.08em] text-[#4f9e84]">Unload</span>
               Day {unloadsDay}{holidayUnload ? `+${unloadsDay === 5 ? 1 : unloadsDay + 1}` : ""}
             </span>
           </div>
         </header>
+
+        {/* Mobile live ticker — the top row has no room for more chips, so
+            what's on the docks right now gets its own slim strip, shown only
+            while something is actually running. */}
+        {(unloadingTruck || inProgressTruck) && (
+          <div className="sticky top-[54px] z-10 flex items-center justify-center gap-2 border-b border-[rgba(245,158,11,0.25)] bg-[rgba(245,158,11,0.10)] px-3 py-1.5 backdrop-blur md:hidden">
+            {unloadingTruck && (
+              <button
+                type="button"
+                onClick={() => nav(`/unload?truck=${unloadingTruck.truck_number}`)}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                UNLOADING #{unloadingTruck.truck_number}
+              </button>
+            )}
+            {unloadingTruck && inProgressTruck && (
+              <span className="text-amber-500/50">·</span>
+            )}
+            {inProgressTruck && (
+              <button
+                type="button"
+                onClick={() => nav("/load")}
+                className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-300"
+              >
+                <span className="h-2 w-2 animate-pulse rounded-full bg-amber-400" />
+                LOADING #{inProgressTruck.truck_number}
+              </button>
+            )}
+          </div>
+        )}
 
         <main className="flex-1 overflow-auto pb-nav-safe md:pb-0">
           <AnimatePresence mode="wait">
