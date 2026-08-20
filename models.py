@@ -185,6 +185,12 @@ class TruckState(Base):
     # lifecycle status and no counter reads it — status stays `dirty` throughout,
     # which is the whole reason it is a timestamp and not an enum value.
     unloading_started_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # A spare driver's CLAIM, from the QR page, of which route they carried on
+    # the run they just finished. Not coverage — a lead confirms it on the Fleet
+    # board (writing the real SpareAssignment/RouteSwapLog through the
+    # authenticated path) or dismisses it. Cleared at day-init; no counter reads
+    # it.
+    driver_claimed_route: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Who last established the current-day row shape
     state_source: Mapped[str] = mapped_column(String(16), nullable=False, default=TruckStateSource.auto.value)
 

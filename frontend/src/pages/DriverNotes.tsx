@@ -16,6 +16,10 @@ import {
   useDriverCreateNote,
   useDriverDeleteNote,
   useDriverMarkArrived,
+  useDriverCoverageNotes,
+  useDriverRunReport,
+  type DriverTruckInfo,
+  type DriverRunReportResult,
 } from "../api/hooks";
 import type { NoteType, TruckNote } from "../types";
 import { format } from "date-fns";
@@ -199,9 +203,12 @@ function AddNoteForm({ token, onClose }: { token: string; onClose: () => void })
 // Single note card
 // ---------------------------------------------------------------------------
 
-function NoteCard({ note, token }: { note: TruckNote; token: string }) {
+function NoteCard({ note, token, readOnly = false }: { note: TruckNote; token: string; readOnly?: boolean }) {
   const del = useDriverDeleteNote(token);
-  const isDriverNote = note.created_by === "driver";
+  // readOnly: another truck's notes (a covered route's). The delete endpoint
+  // is token-scoped to THIS truck, so offering Remove there could only 404 —
+  // and "You added this" would be claiming someone else's note.
+  const isDriverNote = !readOnly && note.created_by === "driver";
 
   return (
     <div
@@ -329,6 +336,150 @@ function ArrivalBlock({ token }: { token: string }) {
   );
 }
 
+/**
+ * A spare with NO recorded coverage: the driver tells us how the run ended,
+ * replacing the plain "I'm Back" (every choice also stamps arrival).
+ *
+ * "Ran a Route" is a claim a lead confirms, not coverage — the team calls a
+ * covered route by its original number, and a wrong anonymous tap here must
+ * not be able to rewrite the coverage records. "Ran Special" IS authoritative:
+ * it does exactly what a lead tapping Ran Special does, nothing more.
+ */
+function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInfo }) {
+  const report = useDriverRunReport(token);
+  const [picking, setPicking] = useState(false);
+  const [done, setDone] = useState<DriverRunReportResult | null>(null);
+  const [err, setErr] = useState("");
+
+  async function send(choice: "route" | "ran_special" | "clean", route_truck?: number) {
+    setErr("");
+    try {
+      const r = await report.mutateAsync({ choice, ...(route_truck != null && { route_truck }) });
+      setDone(r);
+      setPicking(false);
+    } catch (e) {
+      const s = (e as { response?: { status?: number } })?.response?.status;
+      setErr(
+        s == null
+          ? "Not sent — no signal. Move somewhere with a bar and tap again."
+          : "Couldn't send that. Try again.",
+      );
+    }
+  }
+
+  const at =
+    done?.arrived_at != null ? format(new Date(done.arrived_at * 1000), "h:mm a") : null;
+
+  // Already reported a route earlier (page reopened) — show the pending state.
+  if (done == null && info.claimed_route != null) {
+    return (
+      <div className="rounded-2xl border border-cyan-700/50 bg-cyan-950/40 px-5 py-6 text-center">
+        <p className="text-2xl font-bold text-cyan-300">
+          Reported: Route {info.claimed_route}
+        </p>
+        <p className="mt-2 text-xs text-cyan-200/60">
+          You&apos;re marked back. A lead will confirm the route.
+        </p>
+      </div>
+    );
+  }
+
+  if (done != null) {
+    return (
+      <div className="rounded-2xl border border-emerald-700/50 bg-emerald-950/40 px-5 py-6 text-center">
+        <p className="text-2xl font-bold text-emerald-300">
+          {done.choice === "route" && `Got it — Route ${done.claimed_route}`}
+          {done.choice === "ran_special" && "Got it — Ran Special"}
+          {done.choice === "clean" && "Thanks — you're marked back"}
+        </p>
+        {at && <p className="mt-1 text-sm text-emerald-200/80">back at {at}</p>}
+        <p className="mt-2 text-xs text-emerald-200/60">
+          {done.choice === "route"
+            ? "The dock has been told. A lead will confirm the route."
+            : "The dock has been told."}
+        </p>
+      </div>
+    );
+  }
+
+  if (picking) {
+    return (
+      <div className="space-y-3 rounded-2xl border border-slate-700 bg-slate-900 p-4">
+        <p className="text-center text-sm font-semibold text-slate-300">
+          Which route did you run?
+        </p>
+        <div className="grid max-h-72 grid-cols-4 gap-2 overflow-y-auto">
+          {(info.route_options ?? []).map((n) => (
+            <button
+              key={n}
+              type="button"
+              disabled={report.isPending}
+              onClick={() => void send("route", n)}
+              className="rounded-xl bg-slate-800 py-3 text-lg font-bold tabular-nums text-slate-100 ring-1 ring-slate-700 active:scale-95 active:bg-blue-700 disabled:opacity-50"
+            >
+              {n}
+            </button>
+          ))}
+        </div>
+        {err && <p className="text-center text-sm font-semibold text-amber-300">{err}</p>}
+        <button
+          type="button"
+          onClick={() => setPicking(false)}
+          className="w-full rounded-xl bg-slate-800 py-2.5 text-sm font-semibold text-slate-400 hover:bg-slate-700"
+        >
+          Never mind
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-center text-sm font-semibold text-slate-400">
+        You&apos;re back — how did this truck run today?
+      </p>
+      <button
+        type="button"
+        disabled={report.isPending}
+        onClick={() => setPicking(true)}
+        className="w-full rounded-2xl bg-blue-600 px-6 py-6 text-2xl font-black text-white shadow-lg active:scale-95 disabled:opacity-60"
+      >
+        Ran a Route
+        <span className="mt-1 block text-sm font-semibold text-blue-200">
+          I covered someone&apos;s route
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={report.isPending}
+        onClick={() => void send("ran_special")}
+        className="w-full rounded-2xl bg-fuchsia-700 px-6 py-6 text-2xl font-black text-white shadow-lg active:scale-95 disabled:opacity-60"
+      >
+        Ran Special
+        <span className="mt-1 block text-sm font-semibold text-fuchsia-200">
+          A special run — comes back dirty
+        </span>
+      </button>
+      <button
+        type="button"
+        disabled={report.isPending}
+        onClick={() => void send("clean")}
+        className="w-full rounded-2xl bg-slate-800 px-6 py-6 text-2xl font-black text-slate-100 ring-1 ring-slate-600 shadow-lg active:scale-95 disabled:opacity-60"
+      >
+        Returned Clean
+        <span className="mt-1 block text-sm font-semibold text-slate-400">
+          Didn&apos;t run — nothing to unload
+        </span>
+      </button>
+      {err && (
+        <p className="rounded-xl border border-amber-600/50 bg-amber-950/30 px-4 py-3 text-center text-sm font-semibold text-amber-200">
+          {err}
+        </p>
+      )}
+    </div>
+  );
+}
+
 export default function DriverNotes() {
   const { token } = useParams<{ token: string }>();
   const { data: notes, isLoading, isError, error, fetchStatus, refetch } = useDriverNotes(token);
@@ -338,6 +489,8 @@ export default function DriverNotes() {
   const today = format(new Date(), "EEEE, MMMM d");
 
   const truckNumber = truckInfo?.truck_number ?? notes?.[0]?.truck_number ?? null;
+  const coverage = truckInfo?.is_spare ? truckInfo.coverage : null;
+  const { data: coverageNotes } = useDriverCoverageNotes(token, coverage != null);
 
   if (isLoading) {
     return (
@@ -400,13 +553,43 @@ export default function DriverNotes() {
       <div className="mb-6 text-center">
         <p className="text-xs uppercase tracking-widest text-slate-500">ReadyRoute</p>
         {/* Big: scanning the wrong truck is the easiest mistake a driver can
-            make here, and this number is the only thing that would catch it. */}
-        <h1 className="mt-1 text-5xl font-black tabular-nums">#{truckNumber ?? "…"}</h1>
+            make here, and this number is the only thing that would catch it.
+            When a spare is covering, the ROUTE is the identity the team uses
+            — the spare number is the footnote. */}
+        {coverage != null ? (
+          <>
+            <h1 className="mt-1 text-5xl font-black tabular-nums">
+              Route {coverage.route_truck}
+            </h1>
+            <p className="mt-1 text-sm font-semibold text-cyan-400">
+              on Spare #{truckNumber ?? "…"}
+            </p>
+          </>
+        ) : (
+          <h1 className="mt-1 text-5xl font-black tabular-nums">#{truckNumber ?? "…"}</h1>
+        )}
         <p className="mt-1 text-sm text-slate-400">{today}</p>
       </div>
 
       <div className="mx-auto max-w-lg space-y-6">
-        <ArrivalBlock token={token} />
+        {truckInfo?.is_spare && coverage == null ? (
+          <SpareReportBlock token={token} info={truckInfo} />
+        ) : (
+          <ArrivalBlock token={token} />
+        )}
+
+        {/* Notes for the route this spare is covering — read-only here; the
+            driver's own add/remove stays scoped to the spare truck's notes. */}
+        {coverage != null && (coverageNotes ?? []).length > 0 && (
+          <section className="space-y-3">
+            <h2 className="text-xs font-semibold uppercase tracking-widest text-cyan-500">
+              For Route {coverage.route_truck}
+            </h2>
+            {(coverageNotes ?? []).map((n) => (
+              <NoteCard key={n.id} note={n} token={token} readOnly />
+            ))}
+          </section>
+        )}
 
         {/* Add-note button / form */}
         {adding ? (

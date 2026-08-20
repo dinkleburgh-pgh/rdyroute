@@ -63,6 +63,8 @@ export interface TruckState {
   arrived_at: number | null;
   /** Transient "unload crew is emptying this now" marker. Not a status. */
   unloading_started_at: number | null;
+  /** Spare driver's unconfirmed "I covered route N" claim from the QR page. */
+  driver_claimed_route: number | null;
   unloaded_at: number | null;
   state_source: TruckStateSource;
   updated_at: string;

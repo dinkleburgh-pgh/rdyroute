@@ -182,6 +182,7 @@ export function useUpsertTruckState() {
       crossload_to_truck?: number | null;
       arrived_at?: number | null;
       unloading_started_at?: number | null;
+      driver_claimed_route?: number | null;
       /**
        * The status this write assumed the truck was in. Filled in automatically
        * by onMutate below from the pre-mutation cache; the server 409s if the
@@ -268,6 +269,7 @@ export function useUpsertTruckState() {
               arrived_at: null,
               unloaded_at: null,
               unloading_started_at: null,
+              driver_claimed_route: null,
               state_source: "workflow" as TruckStateSource,
               updated_at: new Date().toISOString(),
             };
@@ -290,6 +292,7 @@ export function useUpsertTruckState() {
                 ...(vars.crossload_to_truck !== undefined && { crossload_to_truck: vars.crossload_to_truck }),
                 ...(vars.arrived_at         !== undefined && { arrived_at: vars.arrived_at }),
                 ...(vars.unloading_started_at !== undefined && { unloading_started_at: vars.unloading_started_at }),
+                ...(vars.driver_claimed_route !== undefined && { driver_claimed_route: vars.driver_claimed_route }),
                 ...(vars.state_source       !== undefined && vars.state_source !== null && { state_source: vars.state_source }),
               },
             };
@@ -2431,13 +2434,69 @@ export function useDeleteNote() {
 }
 
 // Driver-portal hooks (unauthenticated, keyed by QR token)
+
+/** Resolved coverage for a spare's QR page: the route it carried this run. */
+export interface DriverCoverage {
+  route_truck: number;
+  run_date: string;
+  source: "state" | "swap" | "assignment" | "log";
+}
+
+export interface DriverTruckInfo {
+  truck_number: number;
+  is_spare: boolean;
+  coverage: DriverCoverage | null;
+  /** Pending unconfirmed "I covered route N" claim, if the driver made one. */
+  claimed_route: number | null;
+  /** Route numbers for the Select Route picker — only when spare + no coverage. */
+  route_options?: number[];
+}
+
 export function useDriverTruckInfo(token: string | undefined) {
   return useQuery({
     queryKey: ["driver-truck", token],
     enabled: !!token,
     queryFn: async () =>
-      (await api.get<{ truck_number: number }>(`/notes/driver/${token}/info`)).data,
-    staleTime: Infinity,
+      (await api.get<DriverTruckInfo>(`/notes/driver/${token}/info`)).data,
+    // Coverage and claims change during the day (a lead confirms, an
+    // assignment lands), so this can no longer be cached forever the way the
+    // bare truck number could.
+    staleTime: 60_000,
+    networkMode: "always",
+    retry: 1,
+  });
+}
+
+/** Notes for the ROUTE a spare is covering (empty for route trucks / no coverage). */
+export function useDriverCoverageNotes(token: string | undefined, enabled: boolean) {
+  return useQuery({
+    queryKey: ["driver-coverage-notes", token],
+    enabled: !!token && enabled,
+    queryFn: async () =>
+      (await api.get<TruckNote[]>(`/notes/driver/${token}/coverage-notes`)).data,
+    staleTime: 30_000,
+    networkMode: "always",
+    retry: 1,
+  });
+}
+
+export interface DriverRunReportResult {
+  truck_number: number;
+  choice: "route" | "ran_special" | "clean";
+  arrived_at: number | null;
+  claimed_route: number | null;
+  status: TruckStatus;
+}
+
+/** Spare driver reports how the run ended: route claim / ran special / clean. */
+export function useDriverRunReport(token: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { choice: "route" | "ran_special" | "clean"; route_truck?: number }) =>
+      (await api.post<DriverRunReportResult>(`/notes/driver/${token}/run-report`, payload)).data,
+    // Never queued, never paused — see useDriverNotes.
+    networkMode: "always",
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["driver-truck", token] }),
   });
 }
 

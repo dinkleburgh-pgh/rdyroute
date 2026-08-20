@@ -26,6 +26,7 @@ _TRUCK_STATE_FIELDS: tuple[str, ...] = (
     "crossload_to_truck",
     "arrived_at",
     "unloading_started_at",
+    "driver_claimed_route",
     "state_source",
 )
 

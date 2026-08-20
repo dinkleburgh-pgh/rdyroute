@@ -86,6 +86,7 @@ class TruckStateCreate(BaseModel):
     crossload_to_truck: int | None = None
     arrived_at: float | None = None
     unloading_started_at: float | None = None
+    driver_claimed_route: int | None = None
     state_source: TruckStateSource | None = None
 
 
@@ -106,6 +107,7 @@ class TruckStateUpdate(BaseModel):
     crossload_to_truck: int | None = None
     arrived_at: float | None = None
     unloading_started_at: float | None = None
+    driver_claimed_route: int | None = None
     state_source: TruckStateSource | None = None
     # Optimistic-concurrency precondition, NOT a column. The status the caller
     # believed the row held when it decided to write. The handler compares it
@@ -136,6 +138,7 @@ class TruckStateOut(_OrmBase):
     arrived_at: float | None = None
     unloaded_at: float | None = None
     unloading_started_at: float | None = None
+    driver_claimed_route: int | None = None
     state_source: TruckStateSource
     updated_at: datetime
 

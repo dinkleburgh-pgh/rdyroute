@@ -1,7 +1,15 @@
 import clsx from "clsx";
+import { useState } from "react";
 import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
-import { useClearNextUp, useNextUp, useSetNextUp, useUpsertTruckState } from "../../api/hooks";
+import {
+  useAssignSpare,
+  useClearNextUp,
+  useNextUp,
+  usePrevOperatingDay,
+  useSetNextUp,
+  useUpsertTruckState,
+} from "../../api/hooks";
 import { fmtCountdown } from "./useOutsideTimer";
 import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, statusStampFields } from "./constants";
 import CoverageTag from "../../components/CoverageTag";
@@ -67,6 +75,42 @@ export default function FleetMobileActionSheet({
   const { data: nextUp } = useNextUp(runDate);
   const setNextUp = useSetNextUp(runDate);
   const clearNextUp = useClearNextUp(runDate);
+  // A spare driver's unconfirmed "I covered route N" from the QR page. Confirm
+  // writes the REAL coverage through the same authenticated path a lead uses
+  // for any late assignment — dated to the run the driver just finished (the
+  // previous operating day), which is what feeds today's unload bucketing.
+  const claimedRoute = truck.state?.driver_claimed_route ?? null;
+  const { data: prevOpDay } = usePrevOperatingDay(runDate);
+  const assignSpare = useAssignSpare();
+  const [claimErr, setClaimErr] = useState("");
+
+  function clearClaim() {
+    upsert.mutate({
+      truck_number: truck.truck_number,
+      run_date: runDate,
+      driver_claimed_route: null,
+      // The claim is what raised the flag; resolving it lowers it.
+      needs_checked: false,
+      wearers: truck.state?.wearers ?? 0,
+    });
+  }
+
+  async function confirmClaim() {
+    if (claimedRoute == null) return;
+    setClaimErr("");
+    try {
+      await assignSpare.mutateAsync({
+        run_date: prevOpDay ?? runDate,
+        spare_truck_number: truck.truck_number,
+        covering_route_truck: claimedRoute,
+      });
+      clearClaim();
+      onClose();
+    } catch (e) {
+      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      setClaimErr(detail ?? "Couldn't record the coverage — try the coverage editor.");
+    }
+  }
   const isNextUp = nextUp === truck.truck_number;
   const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
   const isHold = truck.state?.priority_hold === true;
@@ -96,6 +140,41 @@ export default function FleetMobileActionSheet({
         </div>
 
         <div className="space-y-4 p-5">
+          {claimedRoute != null && (
+            <div className="rounded-lg border border-cyan-700/50 bg-cyan-950/40 p-3">
+              <p className="text-sm font-semibold text-cyan-200">
+                Driver reported: covered <span className="font-black">Route {claimedRoute}</span>
+              </p>
+              <p className="mt-0.5 text-[11px] text-cyan-300/70">
+                From the truck&apos;s QR page. Confirming records the coverage for{" "}
+                {prevOpDay ?? "the last run day"}.
+              </p>
+              {claimErr && (
+                <p className="mt-1 text-xs font-semibold text-amber-300">{claimErr}</p>
+              )}
+              <div className="mt-2 flex gap-2">
+                <button
+                  type="button"
+                  disabled={assignSpare.isPending || upsert.isPending}
+                  onClick={() => void confirmClaim()}
+                  className="flex-1 rounded-md bg-cyan-700 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-cyan-600 disabled:opacity-50"
+                >
+                  {assignSpare.isPending ? "Recording…" : "Confirm coverage"}
+                </button>
+                <button
+                  type="button"
+                  disabled={assignSpare.isPending || upsert.isPending}
+                  onClick={() => {
+                    clearClaim();
+                    onClose();
+                  }}
+                  className="rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-50"
+                >
+                  Dismiss
+                </button>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-3 gap-2">
             {STATUS_ACTIONS.map((s) => {
               const isCurrent = status === s;

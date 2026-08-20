@@ -224,6 +224,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 prev_state.status = TruckStatus.unloaded
                 prev_state.state_source = TruckStateSource.workflow.value
                 prev_state.unloading_started_at = None
+                prev_state.driver_claimed_route = None
 
     today_states = {
         row.truck_number: row
@@ -248,11 +249,13 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 or existing_today.needs_checked
                 or existing_today.crossload_to_truck is not None
                 or existing_today.unloading_started_at is not None
+                or existing_today.driver_claimed_route is not None
             ):
                 existing_today.priority_hold = False
                 existing_today.needs_checked = False
                 existing_today.crossload_to_truck = None
                 existing_today.unloading_started_at = None
+                existing_today.driver_claimed_route = None
             continue
 
         prior = prev_states_by_num.get(truck.truck_number)
@@ -663,6 +666,7 @@ def update_truck_state(
         "arrived_at": row.arrived_at,
         "unloaded_at": row.unloaded_at,
         "unloading_started_at": row.unloading_started_at,
+        "driver_claimed_route": row.driver_claimed_route,
         "state_source": row.state_source,
     })
     updates = payload.model_dump(exclude_unset=True)
