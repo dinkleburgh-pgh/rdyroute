@@ -37,8 +37,6 @@ import {
   STATUS_BG,
   STATUS_TEXT,
   STATUS_BADGE_TEXT,
-  STATUS_OPTIONS,
-  FLEET_STATUS_OPTIONS,
   FLEET_RAIL_STATUSES,
   DustGarmentIcon,
   statusStampFields,
@@ -1087,7 +1085,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       return next;
                     });
                   } else if (fleetMode) {
-                    setMobileActionTruck(truck);
+                    // Archive dates skip the action sheet: every control on it
+                    // mutates run_date = the viewed date, so on a past date a
+                    // stray tap would rewrite history (and Arrived would stamp
+                    // TODAY's clock onto an old row). Go straight to the
+                    // read-only detail modal instead.
+                    if (isReadOnly) setDetailNum(truck.truck_number);
+                    else setMobileActionTruck(truck);
                   } else {
                     setDetailNum(detailNum === truck.truck_number ? null : truck.truck_number);
                   }

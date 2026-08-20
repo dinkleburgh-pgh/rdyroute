@@ -19,8 +19,9 @@ import { publicBase } from "../api/client";
 import { useQrTokens, useRegenerateQR } from "../api/hooks";
 
 export default function TruckQRSection({ truckNumber }: { truckNumber: number }) {
-  // Only mounted once the section is opened, so the admin-only token fetch
-  // never fires for a modal that stays collapsed.
+  // Mounts whenever the truck modal opens for a role passing manage:qr —
+  // that gate (in TruckDetailModal's QRBlock) is what keeps this admin-only
+  // token fetch from firing as a 403 for everyone else.
   const { data: qrTokens = {}, isLoading } = useQrTokens(true);
   const regen = useRegenerateQR();
   const [copied, setCopied] = useState(false);

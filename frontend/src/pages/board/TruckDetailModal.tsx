@@ -1,23 +1,24 @@
 /**
- * Truck detail modal (fleet board). Wraps StatusEditor + FleetTruckEditor and
- * shows stats, notes, shortages, and audit entries. Extracted from Board.tsx.
+ * Truck detail modal (fleet board) — the TRUCK's management surface: fleet
+ * attributes, driver QR, and today's record. Deliberately NO day-state
+ * controls (status / needs-checked / next-up): those live one tap up on the
+ * card's action sheet, and duplicating them here was pure bloat.
  */
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense } from "react";
 import { createPortal } from "react-dom";
 import { QrCode } from "lucide-react";
 import { useAuth } from "../../contexts/AuthContext";
 import { can } from "../../utils/permissions";
 
 // Lazy ON PURPOSE: Board is statically imported, and qrcode.react must stay
-// out of the eager entry bundle. This chunk loads only when the section opens.
+// out of the eager entry bundle. This chunk loads only when the modal opens
+// for a role that can see the section.
 const TruckQRSection = lazy(() => import("../../components/TruckQRSection"));
-import type { TruckStatus, TruckWithState } from "../../types";
+import type { TruckWithState } from "../../types";
 import { useAuditEntries, useShortages } from "../../api/hooks";
-import TruckActivityTimeline from "../../components/activity/TruckActivityTimeline";
 import TruckDocuments from "../../components/TruckDocuments";
 import Stat from "./Stat";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
-import StatusEditor from "./StatusEditor";
 import FleetTruckEditor from "./FleetTruckEditor";
 import { format } from "date-fns";
 import { truckTypeLabel } from "../../utils/truckType";
@@ -42,8 +43,6 @@ export default function TruckDetailModal({
   const truckAudits = (audits ?? []).filter(
     (a) => a.truck_number === truck.truck_number,
   );
-  // is_oos flag takes priority — ensures OOS is reflected even on dates with no state row
-  const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
 
   return createPortal(
     <div
@@ -82,11 +81,11 @@ export default function TruckDetailModal({
         </div>
 
         <div className="space-y-4 p-4">
-          {!readOnly && <StatusEditor truck={truck} runDate={runDate} status={status} />}
-
           {fleetMode && !readOnly && (
             <FleetTruckEditor truck={truck} runDate={runDate} />
           )}
+
+          <QRBlock truckNumber={truck.truck_number} readOnly={readOnly} />
 
           <section className="grid grid-cols-2 gap-3 text-sm">
             <Stat label="Wearers" value={truck.state?.wearers ?? 0} />
@@ -106,10 +105,8 @@ export default function TruckDetailModal({
             />
             <Stat
               label="Arrived"
-              value={truck.state?.arrived_at ? format(new Date(truck.state.arrived_at * 1000), "PPpp") : "—"}
+              value={truck.state?.arrived_at ? format(new Date(truck.state.arrived_at * 1000), "p") : "—"}
             />
-            <Stat label="State source" value={truck.state?.state_source ?? "—"} />
-            <Stat label="Needs checked" value={truck.state?.needs_checked ? "Yes" : "No"} />
           </section>
 
           {(truck.state?.off_note || truck.state?.shop_note) && (
@@ -176,11 +173,7 @@ export default function TruckDetailModal({
             )}
           </section>
 
-          <QRBlock truckNumber={truck.truck_number} readOnly={readOnly} />
-
           <TruckDocuments truckNumber={truck.truck_number} />
-
-          <TruckActivityTimeline truckNumber={truck.truck_number} />
         </div>
       </div>
     </div>,
@@ -193,31 +186,21 @@ export default function TruckDetailModal({
  * Driver QR management, gated the way the API is: the token fetch and
  * regenerate are require_admin (admin/fleet/supervisor), so anyone else gets
  * no section rather than a button that 403s — the exact bug the old Notes
- * placement had. Collapsed by default so the QR chunk and the token request
- * only ever load when someone asks for them.
+ * placement had. Always expanded: a collapsed "Show" row at the bottom read
+ * as the QR not being here at all.
  */
 function QRBlock({ truckNumber, readOnly }: { truckNumber: number; readOnly: boolean }) {
   const { user } = useAuth();
-  const [open, setOpen] = useState(false);
   if (readOnly || !can(user?.role, "manage:qr")) return null;
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/40 p-3">
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        className="flex w-full items-center gap-2 text-left text-sm font-semibold text-slate-300 hover:text-slate-100"
-      >
+      <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-slate-300">
         <QrCode className="h-4 w-4 shrink-0 text-slate-500" />
         Driver QR
-        <span className="ml-auto text-xs text-slate-500">{open ? "Hide" : "Show"}</span>
-      </button>
-      {open && (
-        <div className="mt-3">
-          <Suspense fallback={<p className="py-3 text-center text-xs text-slate-500">Loading QR…</p>}>
-            <TruckQRSection truckNumber={truckNumber} />
-          </Suspense>
-        </div>
-      )}
+      </p>
+      <Suspense fallback={<p className="py-3 text-center text-xs text-slate-500">Loading QR…</p>}>
+        <TruckQRSection truckNumber={truckNumber} />
+      </Suspense>
     </div>
   );
 }

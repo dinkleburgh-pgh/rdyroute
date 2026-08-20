@@ -3,7 +3,7 @@
  *
  * Extracted from Board.tsx so the page and its sub-components (RouteCardPanel,
  * StartLoadModal, TruckDetailPanel, TruckDetailModal, FleetTruckEditor,
- * StatusEditor) can share them without duplication.
+ * FleetMobileActionSheet) can share them without duplication.
  */
 import type { TruckStatus } from "../../types";
 import { STATUS_COLORS } from "../../constants/truckStatus";
@@ -34,16 +34,6 @@ export const STATUS_BADGE_TEXT: Partial<Record<TruckStatus, string>> = Object.fr
 // 'in_progress' IS offered: the load workflow is the normal way in, but a truck
 // that started loading without anyone tapping Start (or that needs putting back
 // mid-load) previously had no route to that status at all.
-export const STATUS_OPTIONS: TruckStatus[] = [
-  "dirty",
-  "unfinished",
-  "shop",
-  "unloaded",
-  "in_progress",
-  "loaded",
-  "oos",
-];
-
 export const FLEET_STATUS_OPTIONS: TruckStatus[] = [
   "dirty",
   "unfinished",
