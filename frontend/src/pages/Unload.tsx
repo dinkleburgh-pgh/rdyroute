@@ -127,6 +127,13 @@ export default function Unload() {
     () => (settings ?? []).find((s) => s.key === "batching_disabled")?.value === true,
     [settings],
   );
+  // Pre-batch mode: the crew transcribes the paper batch sheet BEFORE the
+  // trucks are actually emptied, so /batches/assign deliberately leaves status
+  // alone. Batching therefore cannot be what finishes an unload while it's on.
+  const prebatchMode = useMemo(
+    () => (settings ?? []).find((s) => s.key === "prebatch_mode")?.value === true,
+    [settings],
+  );
   const wearerCap = useMemo(() => {
     const v = Number((settings ?? []).find((s) => s.key === "wearer_cap")?.value);
     return Number.isFinite(v) && v > 0 ? v : 1800;
@@ -405,21 +412,56 @@ export default function Unload() {
 
   const toGo = Math.max(0, unloadTotal - unloadDone);
 
-  async function assignBatch(truckNumber: number) {
-    await assign.mutateAsync({ run_date: runDate, batch_number: Number(batchNum), truck_number: truckNumber, wearers: Number(wearers || 0) });
-    setBatchOpen(null);
-  }
-
-  /** Start the "unloading now" clock. Sends ONLY the marker — never status. */
-  async function startUnloading(t: TruckWithState) {
-    setBusy(t.truck_number);
-    setOverflowOpen(null);
+  /**
+   * Assign the batch AND finish the unload — batching IS how a truck is marked
+   * unloaded now, so the crew touches each truck once.
+   *
+   * `batchTruck` is where the CARD goes (the original route number for a
+   * carrier — one card per load) while `physical` is the truck actually on the
+   * dock, which is the one whose status moves. They are the same truck for
+   * everything except coverage.
+   *
+   * The status write is deliberately here and not in the assign endpoint: the
+   * pre-batch planning surfaces (wizard, Batches page) assign batches too and
+   * must never touch status — the crew fills that paper in early and changes
+   * it later.
+   */
+  async function assignBatch(batchTruck: number, physical?: TruckWithState) {
+    // Pin first so the card holds its place through the status flip, the same
+    // way markUnloaded does — the server turns a dirty truck unloaded as part
+    // of this very request, so without the pin the card jumps mid-tap.
+    const completes = !!physical && !prebatchMode && !isUnloadDone(physical);
+    if (completes) setRecentlyUnloaded((prev) => new Set([...prev, physical!.truck_number]));
     try {
-      await upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, unloading_started_at: Date.now() / 1000 });
-    } finally {
-      setBusy(null);
+      await assign.mutateAsync({ run_date: runDate, batch_number: Number(batchNum), truck_number: batchTruck, wearers: Number(wearers || 0) });
+    } catch (e) {
+      if (completes) setRecentlyUnloaded((prev) => { const next = new Set(prev); next.delete(physical!.truck_number); return next; });
+      throw e;
+    }
+    setBatchOpen(null);
+    // NOT followed by a status write. /batches/assign already turns a dirty
+    // truck unloaded and clears the unloading marker in the same transaction;
+    // writing it again from here raced that commit and 409'd on the
+    // expected_status precondition, leaving the truck dirty and un-batched.
+    if (physical && prebatchMode && !isUnloadDone(physical)) {
+      await markUnloaded(physical);
     }
   }
+
+  /**
+   * Tapping a truck IS starting its unload. Fire-and-forget: the tap must open
+   * the truck instantly, and a truck that can't be started (already done, or
+   * unloaded by its carrier) just opens.
+   *
+   * Idempotent by way of the server's first-tap-wins rule, so re-opening a
+   * truck mid-job never restarts its clock.
+   */
+  function beginUnloading(t: TruckWithState) {
+    if (isUnloadDone(t)) return;
+    if (unloadingAt(t) != null) return;
+    upsert.mutate({ truck_number: t.truck_number, run_date: runDate, unloading_started_at: Date.now() / 1000 });
+  }
+
   async function cancelUnloading(t: TruckWithState) {
     setBusy(t.truck_number);
     setOverflowOpen(null);
@@ -493,6 +535,7 @@ export default function Unload() {
   function openTruckMenu(t: TruckWithState) {
     setBatchNum(String(t.state?.batch_id ?? 1));
     setWearers(String(defaultWearersFor(t)));
+    beginUnloading(t);
     setMenuTruck(t);
   }
   function toggleBatch(t: TruckWithState) {
@@ -515,19 +558,19 @@ export default function Unload() {
     // Load page's "Loading" and the Requested section use: the app's colour for
     // work in flight. Not green (that means done) and not orange (misreads
     // against amber on a wall display).
-    { key: "unloading", title: "Unloading now", titleClass: "text-st-inprogress", trucks: unloading, accent: "text-amber-300", label: "Unloading", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
-    { key: "requested", title: "Requested — priority hold", titleClass: "text-st-inprogress", trucks: requested, accent: "text-amber-300", label: "HOLD", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
+    { key: "unloading", title: "Unloading now", titleClass: "text-st-inprogress", trucks: unloading, accent: "text-amber-300", label: "Unloading", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", overflow: "dirty" as const },
+    { key: "requested", title: "Requested — priority hold", titleClass: "text-st-inprogress", trucks: requested, accent: "text-amber-300", label: "HOLD", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", overflow: "dirty" as const },
     // Back = physically in the yard (driver tapped "I'm Back" / lead tapped
     // Arrived), oldest arrival first — what can be worked NOW.
     // Deliberately the SAME red as Not arrived. An arrived truck is still Dirty —
     // arrival is a fact about a dirty truck, not a fourth state — and green is
     // what "unloaded" means everywhere else in the app. The distinguishing mark
     // is the pin, not the hue.
-    { key: "back", title: "Arrived", titleClass: "text-st-dirty", trucks: back, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
-    { key: "unfinished", title: "Unfinished", titleClass: "text-st-unfinished", trucks: unfinished, accent: "text-st-unfinished", label: "Unfinished", labelClass: "bg-[#b45309] text-white", rowAccent: "border-l-st-unfinished", actionLabel: "Finish unload", ghost: true, overflow: "unfinished" as const },
+    { key: "back", title: "Arrived", titleClass: "text-st-dirty", trucks: back, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", overflow: "dirty" as const },
+    { key: "unfinished", title: "Unfinished", titleClass: "text-st-unfinished", trucks: unfinished, accent: "text-st-unfinished", label: "Unfinished", labelClass: "bg-[#b45309] text-white", rowAccent: "border-l-st-unfinished", overflow: "unfinished" as const },
     // Not arrived = still on the road. Coverage and route trucks together; the
     // CoverageTag on the card says which is which.
-    { key: "notback", title: "Not arrived", titleClass: "text-st-dirty", trucks: notBack, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", actionLabel: "Mark Unloaded", overflow: "dirty" as const },
+    { key: "notback", title: "Not arrived", titleClass: "text-st-dirty", trucks: notBack, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", overflow: "dirty" as const },
   ];
 
   /** Cards style: a tappable dirty-family truck card (opens the action menu). */
@@ -565,7 +608,7 @@ export default function Unload() {
   }
 
   /** List style: a compact horizontal dirty-family row with inline actions. */
-  function renderRow(t: TruckWithState, index: number, opts: { accentClass?: string; actionLabel: string; ghost?: boolean; overflow: "dirty" | "unfinished" }) {
+  function renderRow(t: TruckWithState, index: number, opts: { accentClass?: string; overflow: "dirty" | "unfinished" }) {
     const isUndo = recentlyUnloaded.has(t.truck_number);
     const isBusy = busy === t.truck_number;
     const isBatchOpen = batchOpen === t.truck_number;
@@ -578,20 +621,28 @@ export default function Unload() {
     return (
       <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} className={clsx("card flex flex-col !p-0", opts.accentClass, highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse")}>
         <div className="flex items-center gap-3 px-4 py-3">
-          <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
-          {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} className="shrink-0" />}
-          <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
-          {/* List style previously showed no arrival at all — the sort moved
-              trucks up but nothing said why. */}
-          {unloadingAt(t) != null ? (
-            <UnloadingSince startSec={unloadingAt(t)!} />
-          ) : arrivedAt(t) != null ? (
-            <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-ink">
-              <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
-              Arrived {formatEasternTime(arrivedAt(t)!)}
-            </span>
-          ) : null}
-          {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
+          {/* Tapping the row IS starting the unload, and it opens the batch
+              entry that finishes it — one truck, one touch. */}
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center gap-3 text-left"
+            onClick={() => { beginUnloading(t); toggleBatch(t); }}
+          >
+            <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
+            {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} className="shrink-0" />}
+            <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
+            {/* List style previously showed no arrival at all — the sort moved
+                trucks up but nothing said why. */}
+            {unloadingAt(t) != null ? (
+              <UnloadingSince startSec={unloadingAt(t)!} />
+            ) : arrivedAt(t) != null ? (
+              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-ink">
+                <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
+                Arrived {formatEasternTime(arrivedAt(t)!)}
+              </span>
+            ) : null}
+            {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
+          </button>
           {isUndo ? (
             <div className="flex shrink-0 items-center gap-2">
               <span className="badge bg-st-unloaded text-[#052e16]">Unloaded</span>
@@ -599,7 +650,7 @@ export default function Unload() {
             </div>
           ) : (
             <div className="relative flex shrink-0 items-center gap-1.5">
-              <button className={clsx(opts.ghost ? "btn-ghost" : "btn-primary", "px-4 py-2")} disabled={isBusy} onClick={() => markUnloaded(t)}>{isBusy ? "…" : opts.actionLabel}</button>
+              {isBusy && <span className="text-xs text-ink-muted">…</span>}
               <button className="flex h-9 w-8 items-center justify-center rounded-md border border-hairline bg-surface-2 text-lg leading-none text-ink-muted transition-colors hover:text-ink" onClick={() => toggleOverflow(t.truck_number)} title="More actions" aria-label="More actions">···</button>
               {isOverflowOpen && (
                 <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-hairline bg-surface-3 py-1 shadow-card">
@@ -607,14 +658,15 @@ export default function Unload() {
                     <button className="w-full px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => { setOverflowOpen(null); upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); }}>Back to dirty</button>
                   ) : (
                     <>
-                      {unloadingAt(t) != null ? (
+                      {unloadingAt(t) != null && (
                         <button className="w-full px-3 py-2 text-left text-sm font-medium text-amber-300 transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => void cancelUnloading(t)}>Not unloading — cancel</button>
-                      ) : (
-                        <button className="w-full px-3 py-2 text-left text-sm font-medium text-amber-300 transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => void startUnloading(t)}>Start unloading</button>
                       )}
                       <button className="w-full px-3 py-2 text-left text-sm font-medium text-st-unfinished transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => markUnfinished(t)}>Mark unfinished</button>
-                      {!batchingDisabled && (
-                        <button className="w-full px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2" onClick={() => toggleBatch(t)}>{t.state?.batch_id != null ? `Batch ${t.state.batch_id}` : "Assign batch"}</button>
+                      {/* Batching normally finishes the unload; when it
+                          can't (disabled, or pre-batch mode) there has to be
+                          some way to say done. */}
+                      {(batchingDisabled || prebatchMode) && (
+                        <button className="w-full px-3 py-2 text-left text-sm font-medium text-st-unloaded transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => markUnloaded(t)}>Mark unloaded</button>
                       )}
                     </>
                   )}
@@ -631,7 +683,7 @@ export default function Unload() {
               ))}
             </div>
             <input type="number" min={0} className="input" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />
-            <button className="btn-primary w-full" disabled={assign.isPending} onClick={() => assignBatch(t.truck_number)}>{assign.isPending ? "Saving…" : "Assign"}</button>
+            <button className="btn-primary w-full" disabled={assign.isPending || isBusy} onClick={() => void assignBatch(carriedRouteOf(t) ?? t.truck_number, t)}>{assign.isPending || isBusy ? "Saving…" : carriedRouteOf(t) != null ? `Assign as route #${carriedRouteOf(t)} — done` : "Assign — done unloading"}</button>
           </div>
         )}
       </AnimateCard>
@@ -743,7 +795,7 @@ export default function Unload() {
             <h3 className={clsx("mb-2 text-sm font-semibold uppercase tracking-wide", sec.titleClass)}>{sec.title} ({sec.trucks.length})</h3>
             {style === "list" ? (
               <div className="flex flex-col gap-2">
-                {sec.trucks.map((t, i) => renderRow(t, i, { accentClass: `border-l-[3px] ${sec.rowAccent}`, actionLabel: sec.actionLabel, ghost: sec.ghost, overflow: sec.overflow }))}
+                {sec.trucks.map((t, i) => renderRow(t, i, { accentClass: `border-l-[3px] ${sec.rowAccent}`, overflow: sec.overflow }))}
               </div>
             ) : (
               <div className={GRID}>
@@ -913,20 +965,18 @@ export default function Unload() {
                         returned load gets ONE card, under the original route
                         number — so a carrier shows where its card lives instead
                         of offering a second one. */}
-                    {!batchingDisabled && carriedRouteOf(t) != null ? (
-                      <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs leading-snug text-slate-400">
-                        Batched as route <span className="font-bold text-slate-200">#{carriedRouteOf(t)}</span> — one card per load.
-                      </p>
-                    ) : !batchingDisabled && (
+                    {!batchingDisabled && (
                       <section>
-                        <p className="label">Batch</p>
+                        <p className="label">
+                          {carriedRouteOf(t) != null ? `Batch — as route #${carriedRouteOf(t)}` : "Batch"}
+                        </p>
                         <div className="grid grid-cols-6 gap-1.5">
                           {[1, 2, 3, 4, 5, 6].map((n) => (
                             <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"}>{n}</button>
                           ))}
                         </div>
                         <input type="number" min={0} className="input mt-2" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />
-                        <button className="btn-primary mt-2 w-full font-semibold" disabled={assign.isPending} onClick={async () => { await assignBatch(t.truck_number); close(); }}>
+                        <button className="btn-primary mt-2 w-full font-semibold" disabled={assign.isPending} onClick={async () => { await assignBatch(carriedRouteOf(t) ?? t.truck_number, t); close(); }}>
                           {assign.isPending ? "Saving…" : t.state?.batch_id != null ? `Assign (current: Batch ${t.state.batch_id})` : "Assign Batch"}
                         </button>
                       </section>
@@ -934,26 +984,34 @@ export default function Unload() {
                   </>
                 ) : (
                   <>
-                    <button className="w-full rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnloaded(t); close(); }}>
-                      {isBusy ? "…" : isUnfin ? "Finish Unload" : "Mark Unloaded"}
-                    </button>
+                    {/* Opening this truck already started its unload — the Load
+                        board is watching the marker. Assigning the batch below
+                        is what finishes it, so there is no separate "Start" or
+                        "Mark Unloaded" left to forget. */}
+                    <p className="rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2.5 text-xs leading-snug text-amber-200">
+                      {unloadingAt(t) != null
+                        ? "Unloading now — assign the batch below when it's empty and that marks it unloaded."
+                        : "Assign the batch below when it's empty — that marks it unloaded."}
+                    </p>
 
-                    {/* Tells the Load board which truck is being emptied. Only
-                        the marker moves — status stays dirty until Mark
-                        Unloaded, so nothing is counted early. */}
-                    {unloadingAt(t) != null ? (
-                      <button className="w-full rounded-lg border border-amber-600/50 bg-amber-950/30 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-900/40 disabled:opacity-50" disabled={isBusy} onClick={() => void cancelUnloading(t)}>
-                        Not unloading — cancel
-                      </button>
-                    ) : (
-                      <button className="w-full rounded-lg bg-amber-500 py-2.5 text-sm font-bold text-black transition-colors hover:bg-amber-400 disabled:opacity-50" disabled={isBusy} onClick={() => void startUnloading(t)}>
-                        {isUnfin ? "Resume Unloading" : "Start Unloading"}
+                    {/* Batching is what completes a truck now, so when it
+                        can't be (switched off entirely, or pre-batch mode where
+                        assigning deliberately leaves status alone) there has to
+                        be another way to say done. */}
+                    {(batchingDisabled || prebatchMode) && (
+                      <button className="w-full rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnloaded(t); close(); }}>
+                        {isBusy ? "…" : "Mark Unloaded"}
                       </button>
                     )}
 
-                    {/* Both status actions sit together directly under the
-                        primary one — they're the same decision ("is this truck
-                        done?"), so batching shouldn't be wedged between them. */}
+                    {unloadingAt(t) != null && (
+                      <button className="w-full rounded-lg border border-amber-600/50 bg-amber-950/30 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-900/40 disabled:opacity-50" disabled={isBusy} onClick={() => void cancelUnloading(t)}>
+                        Not unloading — cancel
+                      </button>
+                    )}
+
+                    {/* The escape hatch: a truck that cannot be finished
+                        tonight leaves the flow here instead of via batching. */}
                     {isUnfin ? (
                       <button className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700" onClick={() => { upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); close(); }}>
                         Back to Dirty
@@ -964,22 +1022,23 @@ export default function Unload() {
                       </button>
                     )}
 
-                    {/* One returned load, one card, under the original route. */}
-                    {!batchingDisabled && carriedRouteOf(t) != null ? (
-                      <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-2 text-xs leading-snug text-slate-400">
-                        Batched as route <span className="font-bold text-slate-200">#{carriedRouteOf(t)}</span> — one card per load.
-                      </p>
-                    ) : !batchingDisabled && (
+                    {/* One returned load, one card, under the original route
+                        — but the card still has to be fillable from the truck
+                        that physically brought it back, because that is the
+                        truck on the dock and the one whose status moves. */}
+                    {!batchingDisabled && (
                       <section>
-                        <p className="label">Batch</p>
+                        <p className="label">
+                          {carriedRouteOf(t) != null ? `Batch — as route #${carriedRouteOf(t)}` : "Batch"}
+                        </p>
                         <div className="grid grid-cols-6 gap-1.5">
                           {[1, 2, 3, 4, 5, 6].map((n) => (
                             <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"}>{n}</button>
                           ))}
                         </div>
                         <input type="number" min={0} className="input mt-2" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />
-                        <button className="btn-primary mt-2 w-full font-semibold" disabled={assign.isPending} onClick={async () => { await assignBatch(t.truck_number); close(); }}>
-                          {assign.isPending ? "Saving…" : t.state?.batch_id != null ? `Assign (current: Batch ${t.state.batch_id})` : "Assign Batch"}
+                        <button className="btn-primary mt-2 w-full font-semibold" disabled={assign.isPending || isBusy} onClick={async () => { await assignBatch(carriedRouteOf(t) ?? t.truck_number, t); close(); }}>
+                          {assign.isPending || isBusy ? "Saving…" : "Assign Batch — Mark Unloaded"}
                         </button>
                       </section>
                     )}

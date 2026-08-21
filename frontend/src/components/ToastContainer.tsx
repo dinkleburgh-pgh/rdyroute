@@ -10,7 +10,7 @@
  *     card is tappable; the ✕ still dismisses without firing it.
  */
 import { motion, AnimatePresence } from "framer-motion";
-import { useNavigate } from "react-router-dom";
+import { navigateApp } from "../utils/navigation";
 import { Settings2 } from "lucide-react";
 import clsx from "clsx";
 import { useToast, type Toast, type ToastVariant } from "../contexts/ToastContext";
@@ -31,7 +31,6 @@ function VariantIcon({ variant }: { variant: ToastVariant }) {
 
 /** Rich card toast — matches the app's card look (surface, hairline, ink). */
 function CardToast({ t, dismiss }: { t: Toast; dismiss: (id: number) => void }) {
-  const nav = useNavigate();
   const styles = VARIANT_STYLES[t.variant];
   const body = (
     <>
@@ -86,7 +85,7 @@ function CardToast({ t, dismiss }: { t: Toast; dismiss: (id: number) => void }) 
           onClick={(e) => {
             e.stopPropagation();
             dismiss(t.id);
-            nav(`/management?tab=toasts&kind=${encodeURIComponent(t.settingsKind!)}`);
+            navigateApp(`/management?tab=toasts&kind=${encodeURIComponent(t.settingsKind!)}`);
           }}
           className="absolute bottom-2 right-2 text-ink-faint transition-colors hover:text-ink-soft"
           aria-label="Pop-up settings"

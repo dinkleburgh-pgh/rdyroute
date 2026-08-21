@@ -26,6 +26,7 @@ import {
   unloadedTruckNumbersFromContext,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
+import { setAppNavigator } from "../utils/navigation";
 import { STATUS_LABELS } from "../constants/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
@@ -165,6 +166,12 @@ export default function Layout() {
 
   const nav = useNavigate();
   const location = useLocation();
+  // Lend routing to the toasts, which render outside the router (see
+  // utils/navigation).
+  useEffect(() => {
+    setAppNavigator((to) => nav(to));
+    return () => setAppNavigator(null);
+  }, [nav]);
   const { data: board } = useBoard(todayIso());
   const { data: swapLog = [] } = useRouteSwapLog(60);
   const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
