@@ -7,7 +7,7 @@
  *   - Add new notes (Always / Workday / Set Until...)
  *   - Delete notes they added (created_by = "driver")
  */
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import clsx from "clsx";
 import {
@@ -47,6 +47,67 @@ const TYPE_COLOR: Record<NoteType, string> = {
   workday:  "bg-violet-900/60 text-violet-300 ring-1 ring-violet-700/40",
   one_off:  "bg-amber-900/60 text-amber-300 ring-1 ring-amber-700/40",
 };
+
+/**
+ * "You're done here" footer: counts down and then tries to close the tab.
+ *
+ * Scanning the same QR every morning leaves a driver with a pile of open
+ * tabs, so the page tries to clean up after itself. Best effort ONLY —
+ * browsers refuse window.close() on a tab the script didn't open, which is
+ * every tab a camera-app QR scan produces. So the countdown always ends in a
+ * plain "safe to close" line rather than pretending it worked, and the
+ * close attempt is just a bonus for the scanners (in-app webviews, installed
+ * PWAs) where it does go through.
+ *
+ * Any tap on the page cancels it — a driver who reaches for "Add a note"
+ * must not have the page yanked out from under them mid-thought.
+ */
+function DoneFooter({ seconds = 5 }: { seconds?: number }) {
+  const [left, setLeft] = useState(seconds);
+  const [cancelled, setCancelled] = useState(false);
+  const [stillOpen, setStillOpen] = useState(false);
+
+  // Cancel on any interaction. Registered in an effect, so the very tap that
+  // produced this card (already dispatched) can't immediately cancel it.
+  useEffect(() => {
+    if (cancelled || stillOpen) return;
+    const cancel = () => setCancelled(true);
+    window.addEventListener("pointerdown", cancel, { once: true });
+    return () => window.removeEventListener("pointerdown", cancel);
+  }, [cancelled, stillOpen]);
+
+  useEffect(() => {
+    if (cancelled || stillOpen) return;
+    if (left > 0) {
+      const t = setTimeout(() => setLeft((n) => n - 1), 1000);
+      return () => clearTimeout(t);
+    }
+    try {
+      // The _self dance is an old workaround some engines still honour; both
+      // calls are no-ops in the browsers that refuse, and neither throws in a
+      // way that matters.
+      window.open("", "_self");
+      window.close();
+    } catch {
+      /* refused — expected on most phones */
+    }
+    const t = setTimeout(() => setStillOpen(true), 500);
+    return () => clearTimeout(t);
+  }, [left, cancelled, stillOpen]);
+
+  if (stillOpen || cancelled) {
+    return (
+      <p className="pt-1 text-center text-xs text-slate-500">
+        All set — you can close this tab.
+      </p>
+    );
+  }
+  return (
+    <p className="pt-1 text-center text-xs text-slate-500">
+      Closing in {left}s — tap anywhere to stay.
+    </p>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Add-note form
@@ -314,6 +375,7 @@ function ArrivalBlock({ token }: { token: string }) {
             </p>
             {at && <p className="mt-1 text-sm text-emerald-200/80">at {at}</p>}
             <p className="mt-2 text-xs text-emerald-200/60">The dock has been told.</p>
+            <DoneFooter />
           </div>
         ) : (
           <button
@@ -404,6 +466,7 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
             ? "The dock has been told. A lead will confirm the route."
             : "The dock has been told."}
         </p>
+        <DoneFooter />
       </div>
     );
   }
