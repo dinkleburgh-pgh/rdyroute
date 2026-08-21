@@ -79,11 +79,10 @@ export default function Unload() {
     const c = prevDayCarriers.get(t.truck_number);
     return !!c && c.truck_number !== t.truck_number && carrierCountsAsUnloaded(c);
   };
-  // Has this truck's unload already happened? Mirrors the `unloaded` memo below
-  // so the action menu can never offer "Mark Unloaded" on a truck that is
-  // sitting in the Unloaded-today section. Durable state only — the
-  // recentlyUnloaded set is per-tab, so anything keyed on it forgets the moment
-  // the page reloads or another device opens it.
+  // Has this truck's unload already happened? Mirrors the `unloaded` memo
+  // below, so tapping a truck that is sitting in the Unloaded-today section
+  // never restarts its unload clock. Durable state only, so it reads the same
+  // on every device and survives a reload.
   const isUnloadDone = (t: TruckWithState): boolean => {
     const s = t.state?.status;
     return s === "unloaded" || s === "in_progress" || s === "loaded" || carrierDone(t);
@@ -182,7 +181,6 @@ export default function Unload() {
 
   // Trucks marked unloaded this session — the card stays in its section (styled
   // done, with undo) until navigation.
-  const [recentlyUnloaded, setRecentlyUnloaded] = useState<Set<number>>(new Set());
   // The truck whose action menu is open (cards style).
   const [menuTruck, setMenuTruck] = useState<TruckWithState | null>(null);
 
@@ -245,13 +243,20 @@ export default function Unload() {
   const dirty = useMemo(
     () =>
       allTrucks.filter((t) => {
-        if (recentlyUnloaded.has(t.truck_number)) return true;
         if (carrierDone(t)) return false; // covered route: its carrier's unload IS its unload
+        // Batched = done. Assigning a batch is what finishes an unload, so a
+        // truck carrying a batch number has no business still sitting in
+        // Arrived / Not arrived as outstanding work — it belongs under
+        // Unloaded today. The exception is pre-batch mode, where the sheet is
+        // deliberately transcribed BEFORE the trucks come back: there a batch
+        // number says nothing about whether the truck has been emptied, and
+        // dropping those would erase the crew's actual work list.
+        if (!prebatchMode && t.state?.batch_id != null) return false;
         const s = t.state?.status;
         return s !== "unloaded" && s !== "loaded" && s !== "unfinished";
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allTrucks, recentlyUnloaded, prevDayCarriers],
+    [allTrucks, prebatchMode, prevDayCarriers],
   );
   /**
    * Trucks the driver has scanned "I'm Back" on (or that a lead tapped Arrived).
@@ -334,8 +339,8 @@ export default function Unload() {
     [dirty],
   );
   const unfinished = useMemo(
-    () => allTrucks.filter((t) => t.state?.status === "unfinished" && !recentlyUnloaded.has(t.truck_number)),
-    [allTrucks, recentlyUnloaded],
+    () => allTrucks.filter((t) => t.state?.status === "unfinished"),
+    [allTrucks],
   );
   // Unloaded today = every truck that went dirty → unloaded this shift, i.e.
   // status "unloaded" AND anything further along that lifecycle ("in_progress"
@@ -345,13 +350,16 @@ export default function Unload() {
     () =>
       allTrucks.filter((t) => {
         if (carrierDone(t)) return true; // covered route: shown Unloaded once its carrier is
+        // The mirror of the `dirty` rule above: batched is done, so it lands
+        // here even if the status write is still in flight.
+        if (!prebatchMode && t.state?.batch_id != null) return true;
         const s = t.state?.status;
         if (!(s === "unloaded" || s === "in_progress" || s === "loaded")) return false;
         if (s === "unloaded" && t.state?.state_source === "auto" && t.state?.unloaded_at == null) return false;
         return true;
       }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [allTrucks, prevDayCarriers],
+    [allTrucks, prebatchMode, prevDayCarriers],
   );
   const unloadedSorted = useMemo(() => {
     const arr = [...unloaded];
@@ -377,8 +385,8 @@ export default function Unload() {
   // Load page splits it. Each card is the count of the section with the same
   // accent colour below, so tapping one drills into exactly that list.
   const stillDirty = useMemo(
-    () => dirty.filter((t) => !recentlyUnloaded.has(t.truck_number)),
-    [dirty, recentlyUnloaded],
+    () => dirty,
+    [dirty],
   );
   const routesLeftTrucks = useMemo(
     () => stillDirty.filter((t) => !isCoverageTruck(t) && !isHoldTruck(t)),
@@ -427,17 +435,7 @@ export default function Unload() {
    * it later.
    */
   async function assignBatch(batchTruck: number, physical?: TruckWithState) {
-    // Pin first so the card holds its place through the status flip, the same
-    // way markUnloaded does — the server turns a dirty truck unloaded as part
-    // of this very request, so without the pin the card jumps mid-tap.
-    const completes = !!physical && !prebatchMode && !isUnloadDone(physical);
-    if (completes) setRecentlyUnloaded((prev) => new Set([...prev, physical!.truck_number]));
-    try {
-      await assign.mutateAsync({ run_date: runDate, batch_number: Number(batchNum), truck_number: batchTruck, wearers: Number(wearers || 0) });
-    } catch (e) {
-      if (completes) setRecentlyUnloaded((prev) => { const next = new Set(prev); next.delete(physical!.truck_number); return next; });
-      throw e;
-    }
+    await assign.mutateAsync({ run_date: runDate, batch_number: Number(batchNum), truck_number: batchTruck, wearers: Number(wearers || 0) });
     setBatchOpen(null);
     // NOT followed by a status write. /batches/assign already turns a dirty
     // truck unloaded and clears the unloading marker in the same transaction;
@@ -485,20 +483,8 @@ export default function Unload() {
   async function markUnloaded(t: TruckWithState) {
     setBusy(t.truck_number);
     setOverflowOpen(null);
-    // Pin BEFORE the mutation so the card stays in its section (styled done)
-    // the moment the optimistic update flips status — avoids a jump/flash.
-    //
-    // Only pin a truck that was genuinely mid-unload. The pin forces the truck
-    // into `dirty` (see that memo), which is what holds its card in place — so
-    // pinning one that is ALREADY unloaded drags it into the Dirty section
-    // instead, i.e. "marking it unloaded moved it to dirty".
-    if (!isUnloadDone(t)) {
-      setRecentlyUnloaded((prev) => new Set([...prev, t.truck_number]));
-    }
     try {
       await upsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, status: "unloaded", wearers: t.state?.wearers ?? 0 });
-    } catch {
-      setRecentlyUnloaded((prev) => { const next = new Set(prev); next.delete(t.truck_number); return next; });
     } finally {
       setBusy(null);
     }
@@ -508,7 +494,6 @@ export default function Unload() {
     setBusy(truckNumber);
     try {
       await upsert.mutateAsync({ truck_number: truckNumber, run_date: runDate, status: "dirty" });
-      setRecentlyUnloaded((prev) => { const next = new Set(prev); next.delete(truckNumber); return next; });
     } finally {
       setBusy(null);
     }
@@ -575,16 +560,15 @@ export default function Unload() {
 
   /** Cards style: a tappable dirty-family truck card (opens the action menu). */
   function DirtyCard({ t, index, accent, label, labelClass }: { t: TruckWithState; index: number; accent: string; label: string; labelClass: string }) {
-    const isUndo = recentlyUnloaded.has(t.truck_number);
     const cd = coverDisplay(t);
     return (
       <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} hoverScale={1.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse rounded-2xl")}>
         <button type="button" onClick={() => openTruckMenu(t)} className="h-full w-full text-left transition-all duration-150 active:scale-[0.98]">
           <LoadWorkflowCard
             truck={t}
-            accent={isUndo ? "text-st-unloaded" : accent}
-            statusLabel={isUndo ? "Unloaded" : label}
-            statusClassName={isUndo ? "bg-st-unloaded text-[#052e16]" : labelClass}
+            accent={accent}
+            statusLabel={label}
+            statusClassName={labelClass}
             coverageRoute={cd.route}
             coverageSplit={cd.split}
             footer={
@@ -600,7 +584,7 @@ export default function Unload() {
               ) : null
             }
             interactive
-            ringClassName={isUndo ? "hover:ring-st-unloaded" : "hover:ring-st-dirty"}
+            ringClassName="hover:ring-st-dirty"
           />
         </button>
       </AnimateCard>
@@ -609,7 +593,6 @@ export default function Unload() {
 
   /** List style: a compact horizontal dirty-family row with inline actions. */
   function renderRow(t: TruckWithState, index: number, opts: { accentClass?: string; overflow: "dirty" | "unfinished" }) {
-    const isUndo = recentlyUnloaded.has(t.truck_number);
     const isBusy = busy === t.truck_number;
     const isBatchOpen = batchOpen === t.truck_number;
     const isOverflowOpen = overflowOpen === t.truck_number;
@@ -643,13 +626,7 @@ export default function Unload() {
             ) : null}
             {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
           </button>
-          {isUndo ? (
-            <div className="flex shrink-0 items-center gap-2">
-              <span className="badge bg-st-unloaded text-[#052e16]">Unloaded</span>
-              <button className="btn-ghost" disabled={isBusy} onClick={() => undoUnload(t.truck_number)}>{isBusy ? "…" : "Undo"}</button>
-            </div>
-          ) : (
-            <div className="relative flex shrink-0 items-center gap-1.5">
+          <div className="relative flex shrink-0 items-center gap-1.5">
               {isBusy && <span className="text-xs text-ink-muted">…</span>}
               <button className="flex h-9 w-8 items-center justify-center rounded-md border border-hairline bg-surface-2 text-lg leading-none text-ink-muted transition-colors hover:text-ink" onClick={() => toggleOverflow(t.truck_number)} title="More actions" aria-label="More actions">···</button>
               {isOverflowOpen && (
@@ -672,8 +649,7 @@ export default function Unload() {
                   )}
                 </div>
               )}
-            </div>
-          )}
+          </div>
         </div>
         {!batchingDisabled && isBatchOpen && (
           <div className="space-y-2 rounded-b-xl border-t border-hairline bg-surface-2 p-3">
