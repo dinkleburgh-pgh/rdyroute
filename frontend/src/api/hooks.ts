@@ -269,6 +269,8 @@ export function useUpsertTruckState() {
               arrived_at: null,
               unloaded_at: null,
               unloading_started_at: null,
+              load_request: null,
+              load_request_at: null,
               driver_claimed_route: null,
               state_source: "workflow" as TruckStateSource,
               updated_at: new Date().toISOString(),
@@ -1412,7 +1414,8 @@ export type ToastKind =
   | "truck_arrived"
   | "truck_hold"
   | "truck_oos"
-  | "coverage";
+  | "coverage"
+  | "load_request";
 
 export interface ToastKindConfig {
   enabled: boolean;
@@ -1438,6 +1441,10 @@ export const TOAST_DEFAULTS: Record<ToastKind, ToastKindConfig> = {
   truck_hold:     { enabled: true, seconds: 0 },
   truck_oos:      { enabled: true, seconds: 0 },
   coverage:       { enabled: true, seconds: 12 },
+  // Aimed at one specific person on the dock, like a hold — sticky so it can't
+  // scroll past while they're heads-down in a truck. Sound off by default;
+  // the dock can turn the chime on for itself.
+  load_request:   { enabled: true, seconds: 0, sound: false },
 };
 
 export const TOAST_KIND_LABELS: Record<ToastKind, { label: string; hint: string }> = {
@@ -1449,6 +1456,7 @@ export const TOAST_KIND_LABELS: Record<ToastKind, { label: string; hint: string 
   truck_hold:     { label: "Priority hold", hint: "A truck was put on hold. Needs acknowledging." },
   truck_oos:      { label: "Out of service", hint: "A truck went OOS. Needs acknowledging." },
   coverage:       { label: "Coverage change", hint: "Coverage assigned, changed, or removed." },
+  load_request:   { label: "Load asked", hint: "Shown only on Unload — Load wants the current truck pulled forward, or backed out of." },
 };
 
 export interface ToastSettings {
@@ -2793,6 +2801,42 @@ export function useUpdateTrackedItemCategories() {
       qc.invalidateQueries({ queryKey: ["tracked-item-categories"] });
       qc.invalidateQueries({ queryKey: ["settings"] });
     },
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Load crew's answer on the truck being unloaded
+// ---------------------------------------------------------------------------
+
+export type LoadRequestValue = "want" | "skip";
+
+/**
+ * Set (or clear, with null) the load crew's advisory request on one truck.
+ *
+ * Its own endpoint rather than the generic state upsert: the offline queue
+ * filters by URL and this one is deliberately excluded (see api/client.ts), so
+ * a tap on a dead connection fails visibly instead of replaying a stale opinion
+ * later. `networkMode: "always"` keeps React Query from pausing it before axios
+ * ever gets the chance to fail.
+ */
+export function useSetLoadRequest(runDate: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      truck_number: number;
+      request: LoadRequestValue | null;
+      expected_status?: TruckStatus | null;
+    }) => {
+      const { truck_number, request, expected_status } = args;
+      const { data } = await api.post(
+        `/trucks/${truck_number}/load-request`,
+        { request, ...(expected_status ? { expected_status } : {}) },
+        { params: { run_date: runDate } },
+      );
+      return data;
+    },
+    networkMode: "always",
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["board", runDate] }),
   });
 }
 

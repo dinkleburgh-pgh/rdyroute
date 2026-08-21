@@ -185,6 +185,13 @@ class TruckState(Base):
     # lifecycle status and no counter reads it — status stays `dirty` throughout,
     # which is the whole reason it is a timestamp and not an enum value.
     unloading_started_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # The LOAD crew's answer to the truck the dock is on right now: "want" (pull
+    # it forward) or "skip" (back out of it). ADVISORY — it never clears the
+    # marker, never moves a status and never blocks a transition; the dock reads
+    # it and decides. Invariant: NULL whenever unloading_started_at is NULL, so
+    # it cannot outlive the truck it describes. No counter reads it.
+    load_request: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    load_request_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     # A spare driver's CLAIM, from the QR page, of which route they carried on
     # the run they just finished. Not coverage — a lead confirms it on the Fleet
     # board (writing the real SpareAssignment/RouteSwapLog through the

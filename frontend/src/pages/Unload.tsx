@@ -573,7 +573,10 @@ export default function Unload() {
             coverageSplit={cd.split}
             footer={
               unloadingAt(t) != null ? (
-                <UnloadingSince startSec={unloadingAt(t)!} />
+                <span className="flex flex-wrap items-center gap-1.5">
+                  <UnloadingSince startSec={unloadingAt(t)!} />
+                  <LoadRequestBadge t={t} />
+                </span>
               ) : arrivedAt(t) != null ? (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink">
                   <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
@@ -591,7 +594,29 @@ export default function Unload() {
     );
   }
 
-  /** List style: a compact horizontal dirty-family row with inline actions. */
+  /**
+ * The load crew's advisory answer on the truck being unloaded.
+ *
+ * Cyan, both ways: red means dirty, green means unloaded, and amber is already
+ * the whole unloading section — a badge inside an amber card in amber would
+ * vanish. Cyan is what the app uses when the OTHER crew is saying something
+ * (see the driver-claim card on the Fleet sheet). The words carry the polarity,
+ * not the hue.
+ */
+function LoadRequestBadge({ t }: { t: TruckWithState }) {
+  const req = t.state?.load_request ?? null;
+  // Never render on a truck the dock isn't actually on — the same staleness
+  // guard every other reader of the marker applies.
+  if (req == null || t.state?.unloading_started_at == null) return null;
+  if (t.state.status !== "dirty" && t.state.status !== "unfinished") return null;
+  return (
+    <span className="badge shrink-0 bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40">
+      {req === "want" ? "LOAD: PULL FORWARD" : "LOAD: BACK OUT"}
+    </span>
+  );
+}
+
+/** List style: a compact horizontal dirty-family row with inline actions. */
   function renderRow(t: TruckWithState, index: number, opts: { accentClass?: string; overflow: "dirty" | "unfinished" }) {
     const isBusy = busy === t.truck_number;
     const isBatchOpen = batchOpen === t.truck_number;
@@ -625,6 +650,7 @@ export default function Unload() {
               </span>
             ) : null}
             {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
+            <LoadRequestBadge t={t} />
           </button>
           <div className="relative flex shrink-0 items-center gap-1.5">
               {isBusy && <span className="text-xs text-ink-muted">…</span>}
@@ -969,6 +995,23 @@ export default function Unload() {
                         ? "Unloading now — assign the batch below when it's empty and that marks it unloaded."
                         : "Assign the batch below when it's empty — that marks it unloaded."}
                     </p>
+
+                    {/* What Load said about this truck. Advisory: it sits above
+                        "Not unloading — cancel" because that's the action a
+                        "back out" suggests, but nothing here presses it. The
+                        unloader still decides. */}
+                    {t.state?.load_request != null && unloadingAt(t) != null && (
+                      <p className="rounded-lg border border-cyan-600/40 bg-cyan-950/30 px-3 py-2.5 text-sm font-semibold leading-snug text-cyan-200">
+                        {t.state.load_request === "want"
+                          ? "Load wants this one — pull it forward."
+                          : "Load asked to back out of this one."}
+                        {t.state.load_request_at != null && (
+                          <span className="ml-1 font-normal text-cyan-300/70">
+                            · {formatEasternTime(t.state.load_request_at)}
+                          </span>
+                        )}
+                      </p>
+                    )}
 
                     {/* Batching is what completes a truck now, so when it
                         can't be (switched off entirely, or pre-batch mode where

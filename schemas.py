@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from models import AuditSource, AuthRequestStatus, AuthRole, NoteType, TruckStatus, TruckType
 
 TruckStateSource = Literal["auto", "wizard", "workflow"]
+# What the load crew is asking the dock to do with the truck it is on.
+LoadRequestValue = Literal["want", "skip"]
 ActivityActorType = Literal["user", "system"]
 ActivityEventFamily = Literal["state", "batch", "coverage", "setup", "recovery", "system"]
 
@@ -138,9 +140,25 @@ class TruckStateOut(_OrmBase):
     arrived_at: float | None = None
     unloaded_at: float | None = None
     unloading_started_at: float | None = None
+    # Read-only here on purpose: the load crew's request is written ONLY through
+    # POST /trucks/{n}/load-request, which enforces "must be the truck currently
+    # being unloaded". Keeping it off TruckStateCreate/Update means the generic
+    # state writes can never set it, and in particular can never smuggle it in
+    # through the no-rules create path.
+    load_request: LoadRequestValue | None = None
+    load_request_at: float | None = None
     driver_claimed_route: int | None = None
     state_source: TruckStateSource
     updated_at: datetime
+
+
+class LoadRequestIn(BaseModel):
+    """Load crew's answer on the truck being unloaded. None clears it."""
+    request: LoadRequestValue | None = None
+    # Same optimistic-concurrency precondition the state PUT uses. Secondary
+    # here — the real guard is "is this still the truck being unloaded" — but it
+    # catches the case where the dock finished the truck a second ago.
+    expected_status: TruckStatus | None = None
 
 
 class TruckWithState(_OrmBase):

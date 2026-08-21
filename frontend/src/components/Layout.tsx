@@ -323,6 +323,29 @@ export default function Layout() {
           settingsKind: "truck_unloaded",
           onClick: () => nav(`/fleet?truck=${truck}`),
         });
+      } else if (d.type === "load_request") {
+        // Aimed at the dock and nobody else, so it's scoped to /unload the way
+        // truck_unloaded is scoped to Fleet/Load. The dedupe tag carries the
+        // VALUE: a want -> skip correction inside the 10s window is a different
+        // message, and swallowing it would be the worst possible bug here.
+        if (!kindOn("load_request")) return;
+        const req = (d as { request?: string }).request ?? null;
+        if (location.pathname !== "/unload" || truck == null) return;
+        if (!once(`load-req-${truck}-${req ?? "clear"}`)) return;
+        if (req == null) return; // a clear needs no announcement
+        if (kindSound("load_request")) playChime();
+        toast.info(
+          req === "want"
+            ? "Load wants this one — pull it forward."
+            : "Load asked to back out of this one.",
+          {
+            title: "Load asked",
+            chip: `#${truck}`,
+            durationMs: kindMs("load_request"),
+            settingsKind: "load_request",
+            onClick: () => nav(`/unload?truck=${truck}`),
+          },
+        );
       } else if (d.type === "truck_arrived") {
         if (!kindOn("truck_arrived")) return;
         if (truck == null || !once(`arrived-${truck}`)) return;

@@ -40,6 +40,7 @@ from routers.trends_common import (
 )
 from schemas import (
     AnomalyDay,
+    LoadRequestIn,
     CompletionDailyPoint,
     CycleDailyPoint,
     GarmentDayLogOut,
@@ -56,6 +57,10 @@ router = APIRouter(prefix="/trucks", tags=["trucks"])
 
 _PERSISTENT_STATUSES = {"off", "oos", "shop"}
 
+# Statuses a truck can actually be unloaded FROM. Shared by the marker rules
+# and the load-request guard, which must agree on what "being unloaded" means.
+_UNLOAD_WORKABLE = (TruckStatus.dirty, TruckStatus.unfinished)
+
 
 def _ship_day_number(value: date) -> int:
     weekday = value.weekday()  # Mon=0 .. Sun=6
@@ -66,6 +71,19 @@ def _ship_day_number(value: date) -> int:
 
 def _load_day_number(run_date: date) -> int:
     return _ship_day_number(run_date + timedelta(days=1))
+
+
+def _end_unloading(state: TruckState) -> None:
+    """End a truck's unload: drop the marker AND everything that hangs off it.
+
+    The load crew's request only means anything while the dock is actually on
+    that truck, so the two die together. Every site that stops an unload goes
+    through here — scattering the assignments is how half an invariant gets
+    left behind when a sixth site is added.
+    """
+    state.unloading_started_at = None
+    state.load_request = None
+    state.load_request_at = None
 
 
 def _ran_special(note: str | None) -> bool:
@@ -223,7 +241,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             if prev_state.status in _OPEN_STATUSES:
                 prev_state.status = TruckStatus.unloaded
                 prev_state.state_source = TruckStateSource.workflow.value
-                prev_state.unloading_started_at = None
+                _end_unloading(prev_state)
                 prev_state.driver_claimed_route = None
 
     today_states = {
@@ -249,12 +267,13 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 or existing_today.needs_checked
                 or existing_today.crossload_to_truck is not None
                 or existing_today.unloading_started_at is not None
+                or existing_today.load_request is not None
                 or existing_today.driver_claimed_route is not None
             ):
                 existing_today.priority_hold = False
                 existing_today.needs_checked = False
                 existing_today.crossload_to_truck = None
-                existing_today.unloading_started_at = None
+                _end_unloading(existing_today)
                 existing_today.driver_claimed_route = None
             continue
 
@@ -666,6 +685,8 @@ def update_truck_state(
         "arrived_at": row.arrived_at,
         "unloaded_at": row.unloaded_at,
         "unloading_started_at": row.unloading_started_at,
+        "load_request": row.load_request,
+        "load_request_at": row.load_request_at,
         "driver_claimed_route": row.driver_claimed_route,
         "state_source": row.state_source,
     })
@@ -764,7 +785,6 @@ def update_truck_state(
     #   (d) any status change ends it. Mark Unloaded, Mark Unfinished, undo, OOS —
     #       whatever moves status also clears the marker, so it can never outlive
     #       the work it describes.
-    _UNLOAD_WORKABLE = (TruckStatus.dirty, TruckStatus.unfinished)
     _marker_set = updates.get("unloading_started_at") is not None
     if _marker_set:
         if row.status not in _UNLOAD_WORKABLE:
@@ -783,9 +803,17 @@ def update_truck_state(
                     TruckState.unloading_started_at.is_not(None),
                 )
             ).all():
-                other.unloading_started_at = None
+                # Their request dies with their marker — the derived clear
+                # below only covers the row being written.
+                _end_unloading(other)
     if row.status != previous_status or row.status not in _UNLOAD_WORKABLE:
         row.unloading_started_at = None  # (d)
+    # (e) the load crew's request hangs off the marker — derived, not duplicated,
+    # so rules (c) and (d) can never clear one without the other, and a future
+    # rule (f) gets this for free.
+    if row.unloading_started_at is None:
+        row.load_request = None
+        row.load_request_at = None
 
     append_truck_state_activity(
         db,
@@ -857,6 +885,123 @@ def update_truck_state(
                 "actor": _user.username,
             },
         )
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},
+    )
+    return row
+
+
+# ---------------------------------------------------------------------------
+# Load crew's answer on the truck the dock is emptying right now
+# ---------------------------------------------------------------------------
+
+@router.post("/{truck_number}/load-request", response_model=TruckStateOut)
+def set_load_request(
+    truck_number: int,
+    payload: LoadRequestIn,
+    background_tasks: BackgroundTasks,
+    run_date: date = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_non_guest),
+):
+    """The load crew answers the truck the dock is on: want it, or skip it.
+
+    ADVISORY. This writes one field and nothing else — it never clears the
+    unloading marker, never moves a status, never blocks a transition. The
+    unloader reads it and decides; a "skip" that the dock ignores is a
+    legitimate outcome, not a bug.
+
+    It has its own URL rather than riding the generic state PUT for two
+    reasons. The offline queue filters by URL, and an opinion about which truck
+    the dock is on right now is worthless four minutes later — so this one has
+    to be excludable (see api/client.ts). And keeping the field off
+    TruckStateCreate/Update means the no-rules create path can never smuggle a
+    request onto a truck nobody is unloading.
+
+    Role gate is `require_non_guest`, the same as the state PUT: there is no
+    per-permission dependency in this codebase, and inventing one for a single
+    advisory field would be inconsistent. The UI gates the buttons on
+    can(role, "load:trucks").
+    """
+    row = db.scalars(
+        select(TruckState).where(
+            TruckState.truck_number == truck_number,
+            TruckState.run_date == run_date,
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No state for truck {truck_number} on {run_date}",
+        )
+
+    expected = payload.expected_status
+    if expected is not None and row.status != expected:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Truck {truck_number} is {row.status.value} on {run_date}, not "
+                f"{getattr(expected, 'value', expected)} — your view was out of date. "
+                "Refresh and try again."
+            ),
+        )
+
+    before = row.load_request
+    # Clearing is ALWAYS allowed. Undoing a mis-tap must never be blocked by the
+    # truck having moved on in the meantime — that is exactly when someone is
+    # most likely to be trying to take it back.
+    if payload.request is not None:
+        # The primary guard, and the only one that catches "the dock tapped Not
+        # unloading — cancel a second ago": that clears the marker WITHOUT
+        # changing status, so expected_status sails straight through it.
+        if row.unloading_started_at is None or row.status not in _UNLOAD_WORKABLE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Truck {truck_number} isn't the one being unloaded right now "
+                    "— the dock moved on. Refresh and try again."
+                ),
+            )
+        row.load_request = payload.request
+        row.load_request_at = time.time()
+    else:
+        row.load_request = None
+        row.load_request_at = None
+
+    # An explicit event, because the automatic truck-state diff would render
+    # this as "updated truck 42" — and the activity feed is exactly where an
+    # unload lead goes to ask whether Load really did say to back out.
+    if payload.request == "want":
+        summary = f"Load crew asked to pull truck {truck_number} forward"
+    elif payload.request == "skip":
+        summary = f"Load crew asked to back out of truck {truck_number}"
+    else:
+        summary = f"Load crew cleared their request on truck {truck_number}"
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="state",
+        event_type="load_request",
+        run_date=run_date,
+        truck_number=truck_number,
+        summary=summary,
+        diff_json={"load_request": {"before": before, "after": row.load_request}},
+        context_json={"via": "load_board"},
+    )
+    db.commit()
+    db.refresh(row)
+
+    background_tasks.add_task(
+        manager.broadcast,
+        {
+            "type": "load_request",
+            "truck_number": truck_number,
+            "run_date": str(run_date),
+            "request": row.load_request,
+            "actor": current_user.username,
+        },
+    )
     background_tasks.add_task(
         manager.broadcast,
         {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},

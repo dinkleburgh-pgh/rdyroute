@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 from activity_log import add_related_truck_context, append_activity_event, build_field_diff, snapshot_truck_state
 from database import get_db
 from models import AppSetting, Batch, BatchHistory, RouteSwapLog, TruckState, TruckStateSource, TruckStatus, User
+from routers.trucks import _end_unloading
 from routers.auth import get_current_user, require_non_guest
 from schemas import BatchAssign, BatchHistoryCreate, BatchHistoryOut, BatchOut, BatchSummary, BatchTruck
 from ws_manager import manager
@@ -306,9 +307,9 @@ def assign_truck_to_batch(
         if not prebatch and state.status == TruckStatus.dirty:
             state.status = TruckStatus.unloaded
             # The only status write outside the PUT handler that a truck being
-            # physically unloaded can hit — end the "unloading now" marker here
-            # too, so it never outlives the work.
-            state.unloading_started_at = None
+            # physically unloaded can hit — end the unload here too, so neither
+            # the marker nor the load crew's request outlives the work.
+            _end_unloading(state)
         state.wearers = effective_wearers
         state.batch_id = payload.batch_number
         state.state_source = TruckStateSource.workflow.value

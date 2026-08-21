@@ -341,6 +341,8 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
                 "crossload_to_truck": item.get("crossload_to_truck"),
                 "arrived_at": item.get("arrived_at"),
                 "unloading_started_at": item.get("unloading_started_at"),
+                "load_request": item.get("load_request"),
+                "load_request_at": item.get("load_request_at"),
                 "driver_claimed_route": item.get("driver_claimed_route"),
                 "state_source": str(item.get("state_source") or "workflow"),
             }
@@ -912,6 +914,8 @@ def download_backup(_admin: User = Depends(require_admin), db: Session = Depends
                         "needs_checked": r.needs_checked,
                         "arrived_at": r.arrived_at,
                         "unloading_started_at": r.unloading_started_at,
+                        "load_request": r.load_request,
+                        "load_request_at": r.load_request_at,
                         "driver_claimed_route": r.driver_claimed_route,
                         "state_source": r.state_source,
                         "updated_at": r.updated_at.isoformat(),

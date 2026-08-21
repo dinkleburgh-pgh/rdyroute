@@ -12,6 +12,8 @@ import GarmentsStrip from "./GarmentsStrip";
 import InProgressHeroPanel from "./InProgressHeroPanel";
 import LoadNotesPanel from "./LoadNotesPanel";
 import type { LoadActions } from "../../hooks/useLoadActions";
+import type { LoadRequestActions } from "../../hooks/useLoadRequest";
+import NowUnloadingStrip from "./NowUnloadingStrip";
 import type { CoverageEntry } from "../../utils/truckStatus";
 import type { TruckWithState } from "../../types";
 
@@ -41,6 +43,7 @@ export default function LoadDisplay({
   paceAvgSeconds,
   ready,
   unloading = [],
+  loadRequest,
   nextUpTruck,
   queuedNextUp,
   coverage,
@@ -55,8 +58,10 @@ export default function LoadDisplay({
   actions: LoadActions;
   paceAvgSeconds: number | null;
   ready: TruckWithState[];
-  /** What Unload is emptying right now (0 or 1). Informational. */
+  /** What Unload is emptying right now (0 or 1). */
   unloading?: TruckWithState[];
+  /** Answering it is shared with the Load page — same hook instance. */
+  loadRequest: LoadRequestActions;
   nextUpTruck?: TruckWithState;
   queuedNextUp: TruckWithState | null;
   coverage: CoverageEntry[];
@@ -222,14 +227,7 @@ export default function LoadDisplay({
                 </div>
               )}
 
-              {unloading.length > 0 && (
-                <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 border-amber-600/40 bg-amber-950/20 py-2">
-                  <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">Now unloading</span>
-                  {unloading.map((t) => (
-                    <span key={t.truck_number} className="font-mono text-lg font-black tabular-nums text-ink">#{t.truck_number}</span>
-                  ))}
-                </div>
-              )}
+              <NowUnloadingStrip trucks={unloading} actions={loadRequest} dense />
 
               <div className="card">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-st-unloaded">

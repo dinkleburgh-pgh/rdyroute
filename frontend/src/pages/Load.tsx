@@ -41,6 +41,8 @@ import {
 import { reportProgressOverflow } from "../utils/debugLog";
 import { NextUpPanel, PaceBar, StartNextUpBanner, formatDuration, useElapsed } from "../components/LiveInProgress";
 import { useLoadActions } from "../hooks/useLoadActions";
+import { useLoadRequest } from "../hooks/useLoadRequest";
+import NowUnloadingStrip from "../components/load/NowUnloadingStrip";
 import LoadActionDialogs from "../components/load/LoadActionDialogs";
 import InProgressHeroPanel from "../components/load/InProgressHeroPanel";
 import GarmentsStrip from "../components/load/GarmentsStrip";
@@ -156,6 +158,8 @@ export default function Load() {
   // truck is still ready it wins; otherwise fall back to the first ready truck.
   const { data: storedNextUp } = useNextUp(runDate);
   const clearNextUp = useClearNextUp(runDate);
+  // One hook call feeds both surfaces: LoadDisplay is rendered by this page.
+  const loadRequest = useLoadRequest(runDate);
   const [nextUpOpen, setNextUpOpen] = useState(false);
   const nextUpTruck = useMemo(
     () => ready.find((t) => t.truck_number === storedNextUp) ?? ready[0],
@@ -297,6 +301,7 @@ export default function Load() {
           paceAvgSeconds={pace?.avg_seconds ?? null}
           ready={ready}
           unloading={unloadingNow}
+          loadRequest={loadRequest}
           nextUpTruck={nextUpTruck}
           queuedNextUp={queuedNextUp}
           coverage={loadCoverage}
@@ -467,23 +472,13 @@ export default function Load() {
         <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
       </div>
 
-      {/* What Unload is emptying right now — informational, one line, so the
-          load crew knows what's coming without it shouting. Hidden when idle. */}
-      {unloadingNow.length > 0 && (
-        <div className="card flex flex-wrap items-center gap-x-3 gap-y-1 border-amber-600/40 bg-amber-950/20 px-4 py-2.5">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">Now unloading</span>
-          {unloadingNow.map((t) => (
-            <span key={t.truck_number} className="inline-flex items-center gap-2 text-sm">
-              <span className="font-mono text-lg font-black tabular-nums text-ink">#{t.truck_number}</span>
-              {getCoverageRouteNumber(t) != null && (
-                <CoverageTag route={getCoverageRouteNumber(t)!} truck={t.truck_number} />
-              )}
-              <UnloadingSinceLoad startSec={t.state!.unloading_started_at!} />
-            </span>
-          ))}
-          <span className="ml-auto text-[11px] text-ink-muted">Ready to load once Unload marks it done.</span>
-        </div>
-      )}
+      {/* What Unload is emptying right now — and the two buttons that answer
+          it. Shared with the full-screen display so they cannot drift. */}
+      <NowUnloadingStrip
+        trucks={unloadingNow}
+        actions={loadRequest}
+        renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
+      />
 
       {/* On Hold */}
       {heldReady.length > 0 && (

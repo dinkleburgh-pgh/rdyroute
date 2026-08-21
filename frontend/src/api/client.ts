@@ -144,8 +144,13 @@ api.interceptors.response.use(
     // on screen, written to their phone's IndexedDB, and replayed by nothing,
     // ever. Better to reject honestly and let the page offer a retry.
     const isDriverSurface = url.includes("/driver/");
+    // The load crew's answer about which truck the dock is on RIGHT NOW is
+    // worthless four minutes later, and the server would 409 it anyway. Queuing
+    // it would show a fake success on a dead tablet and then replay a stale
+    // opinion on reconnect — better to fail honestly and let the page say so.
+    const isLoadRequest = url.includes("/load-request");
     const queueable =
-      isMutation && !isAuthEndpoint && !isDriverSurface
+      isMutation && !isAuthEndpoint && !isDriverSurface && !isLoadRequest
       && !url.includes("/auth/") && !url.includes("/updates/") && !url.includes("/exports/");
     if (cfg && queueable && offlineQueue.isNetworkError(error)) {
       let endpoint = url;
