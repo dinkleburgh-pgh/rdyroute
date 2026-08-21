@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import CoverageTag from "../CoverageTag";
-import { getCoverageRouteNumber } from "../../utils/truckStatus";
+import { getCoverageRouteNumber, loadNeedFor } from "../../utils/truckStatus";
 import type { LoadRequestActions } from "../../hooks/useLoadRequest";
 import type { TruckWithState } from "../../types";
 
@@ -21,11 +21,18 @@ import type { TruckWithState } from "../../types";
 export default function NowUnloadingStrip({
   trucks,
   actions,
+  board,
+  loadDay,
+  holidayLoad,
   dense = false,
   renderClock,
 }: {
   trucks: TruckWithState[];
   actions: LoadRequestActions;
+  /** Whole board + load day: the auto answer is derived, not stored. */
+  board: TruckWithState[];
+  loadDay: number;
+  holidayLoad?: boolean;
   dense?: boolean;
   /** The page's live elapsed-time component; omitted on the dense display. */
   renderClock?: (startSec: number) => React.ReactNode;
@@ -43,6 +50,9 @@ export default function NowUnloadingStrip({
         const req = t.state?.load_request ?? null;
         const isBusy = actions.busy === t.truck_number;
         const cov = getCoverageRouteNumber(t);
+        // What the schedule already says. Shown until a person disagrees.
+        const need = loadNeedFor(t, board, loadDay, holidayLoad);
+        const suggested: "want" | "skip" = need.needed ? "want" : "skip";
         return (
           <div key={t.truck_number} className="flex flex-wrap items-center gap-x-3 gap-y-2">
             <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
@@ -55,32 +65,44 @@ export default function NowUnloadingStrip({
             {!dense && renderClock?.(t.state!.unloading_started_at!)}
 
             {req == null ? (
-              actions.canAct ? (
-                <div className="ml-auto flex items-center gap-2">
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {/* The schedule's own answer, stated before anyone taps. Load
+                    only has to touch this to disagree with it. */}
+                <span
+                  className={clsx(
+                    "rounded-md px-2.5 py-1 text-xs font-bold",
+                    need.needed
+                      ? "bg-emerald-600/15 text-emerald-300 ring-1 ring-emerald-600/40"
+                      : "bg-slate-600/25 text-slate-200 ring-1 ring-slate-500/40",
+                  )}
+                >
+                  {need.needed ? "Pull it forward" : "Back it out"}
+                  <span className="ml-1 font-normal opacity-70">· {need.reason}</span>
+                </span>
+                {actions.canAct && (
                   <button
                     type="button"
                     disabled={isBusy}
-                    onClick={() => void actions.set(t, "want")}
-                    className="min-h-[44px] rounded-lg bg-emerald-600 px-4 text-sm font-bold text-white transition-colors hover:bg-emerald-500 disabled:opacity-50"
-                  >
-                    {dense ? "Pull it forward" : "We want it — pull it forward"}
-                  </button>
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void actions.set(t, "skip")}
+                    onClick={() => void actions.set(t, suggested === "want" ? "skip" : "want")}
                     className="min-h-[44px] rounded-lg border border-slate-500 bg-slate-800 px-4 text-sm font-bold text-slate-100 transition-colors hover:bg-slate-700 disabled:opacity-50"
                   >
-                    {dense ? "Back out" : "Back out of it"}
+                    {suggested === "want"
+                      ? (dense ? "No — back out" : "No — back out of it")
+                      : (dense ? "Actually, pull it forward" : "Actually — we want it")}
                   </button>
-                </div>
-              ) : (
-                !dense && (
-                  <span className="ml-auto text-[11px] text-ink-muted">
-                    Ready to load once Unload marks it done.
-                  </span>
-                )
-              )
+                )}
+                {actions.canAct && (
+                  <button
+                    type="button"
+                    disabled={isBusy}
+                    onClick={() => void actions.set(t, suggested)}
+                    className="min-h-[44px] rounded-lg px-3 text-xs font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+                    title="Tell the dock a person checked this, not just the schedule"
+                  >
+                    Confirm
+                  </button>
+                )}
+              </div>
             ) : (
               <div className="ml-auto flex items-center gap-2">
                 <span

@@ -44,6 +44,8 @@ export default function LoadDisplay({
   ready,
   unloading = [],
   loadRequest,
+  board,
+  holidayLoad,
   nextUpTruck,
   queuedNextUp,
   coverage,
@@ -62,6 +64,9 @@ export default function LoadDisplay({
   unloading?: TruckWithState[];
   /** Answering it is shared with the Load page — same hook instance. */
   loadRequest: LoadRequestActions;
+  /** Whole board + holiday flag: the auto answer is derived from the schedule. */
+  board: TruckWithState[];
+  holidayLoad?: boolean;
   nextUpTruck?: TruckWithState;
   queuedNextUp: TruckWithState | null;
   coverage: CoverageEntry[];
@@ -227,7 +232,14 @@ export default function LoadDisplay({
                 </div>
               )}
 
-              <NowUnloadingStrip trucks={unloading} actions={loadRequest} dense />
+              <NowUnloadingStrip
+                trucks={unloading}
+                actions={loadRequest}
+                board={board}
+                loadDay={loadDay}
+                holidayLoad={holidayLoad}
+                dense
+              />
 
               <div className="card">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-st-unloaded">

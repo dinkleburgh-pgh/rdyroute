@@ -302,6 +302,8 @@ export default function Load() {
           ready={ready}
           unloading={unloadingNow}
           loadRequest={loadRequest}
+          board={board}
+          holidayLoad={holidayLoad}
           nextUpTruck={nextUpTruck}
           queuedNextUp={queuedNextUp}
           coverage={loadCoverage}
@@ -477,6 +479,9 @@ export default function Load() {
       <NowUnloadingStrip
         trucks={unloadingNow}
         actions={loadRequest}
+        board={board}
+        loadDay={loadDay}
+        holidayLoad={holidayLoad}
         renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
       />
 

@@ -17,7 +17,9 @@ import {
   countLoaded,
   countUnloadedFromContext,
   getCoverageRouteNumber,
+  loadNeedFor,
   resolvePrevRunDate,
+  type LoadNeed,
 } from "../utils/truckStatus";
 import CoverageTag from "../components/CoverageTag";
 import OverbatchedChip from "../components/OverbatchedChip";
@@ -318,6 +320,11 @@ export default function Unload() {
    * the truck is still Dirty underneath, and no counter reads this.
    */
   const unloadingAt = (t: TruckWithState): number | null => t.state?.unloading_started_at ?? null;
+  // Only the truck actually on the dock ever shows this, so derive it for that
+  // one truck rather than the whole board.
+  const loadNeedOf = (t: TruckWithState): LoadNeed | null =>
+    t.state?.unloading_started_at == null ? null : loadNeedFor(t, data ?? [], loadDay, holidayLoad);
+
   const unloading = useMemo(
     () => dirty.filter((t) => unloadingAt(t) != null).sort((a, b) => (unloadingAt(a) ?? 0) - (unloadingAt(b) ?? 0)),
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -575,7 +582,7 @@ export default function Unload() {
               unloadingAt(t) != null ? (
                 <span className="flex flex-wrap items-center gap-1.5">
                   <UnloadingSince startSec={unloadingAt(t)!} />
-                  <LoadRequestBadge t={t} />
+                  <LoadRequestBadge t={t} need={loadNeedOf(t)} />
                 </span>
               ) : arrivedAt(t) != null ? (
                 <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink">
@@ -603,15 +610,37 @@ export default function Unload() {
  * (see the driver-claim card on the Fleet sheet). The words carry the polarity,
  * not the hue.
  */
-function LoadRequestBadge({ t }: { t: TruckWithState }) {
+function LoadRequestBadge({ t, need }: { t: TruckWithState; need: LoadNeed | null }) {
   const req = t.state?.load_request ?? null;
   // Never render on a truck the dock isn't actually on — the same staleness
   // guard every other reader of the marker applies.
-  if (req == null || t.state?.unloading_started_at == null) return null;
+  if (t.state?.unloading_started_at == null) return null;
   if (t.state.status !== "dirty" && t.state.status !== "unfinished") return null;
+
+  // A person's decision outranks the schedule's, and reads louder: solid cyan
+  // and the word LOAD, because someone actually looked at this truck.
+  if (req != null) {
+    return (
+      <span className="badge shrink-0 bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40">
+        {req === "want" ? "LOAD: PULL FORWARD" : "LOAD: BACK OUT"}
+      </span>
+    );
+  }
+  // Nobody has spoken — state what the schedule says, in the dock's own terms
+  // ("does tomorrow need this?") and quietly, so it can't be mistaken for
+  // someone having checked.
+  if (need == null) return null;
   return (
-    <span className="badge shrink-0 bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40">
-      {req === "want" ? "LOAD: PULL FORWARD" : "LOAD: BACK OUT"}
+    <span
+      className={clsx(
+        "badge shrink-0 ring-1",
+        need.needed
+          ? "bg-cyan-500/10 text-cyan-300/80 ring-cyan-500/25"
+          : "bg-slate-600/20 text-slate-300 ring-slate-500/30",
+      )}
+      title={need.reason}
+    >
+      {need.needed ? "LOADS TOMORROW" : "NOT LOADING TOMORROW"}
     </span>
   );
 }
@@ -650,7 +679,7 @@ function LoadRequestBadge({ t }: { t: TruckWithState }) {
               </span>
             ) : null}
             {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
-            <LoadRequestBadge t={t} />
+            <LoadRequestBadge t={t} need={loadNeedOf(t)} />
           </button>
           <div className="relative flex shrink-0 items-center gap-1.5">
               {isBusy && <span className="text-xs text-ink-muted">…</span>}
@@ -1000,7 +1029,7 @@ function LoadRequestBadge({ t }: { t: TruckWithState }) {
                         "Not unloading — cancel" because that's the action a
                         "back out" suggests, but nothing here presses it. The
                         unloader still decides. */}
-                    {t.state?.load_request != null && unloadingAt(t) != null && (
+                    {unloadingAt(t) != null && t.state?.load_request != null && (
                       <p className="rounded-lg border border-cyan-600/40 bg-cyan-950/30 px-3 py-2.5 text-sm font-semibold leading-snug text-cyan-200">
                         {t.state.load_request === "want"
                           ? "Load wants this one — pull it forward."
@@ -1012,6 +1041,26 @@ function LoadRequestBadge({ t }: { t: TruckWithState }) {
                         )}
                       </p>
                     )}
+                    {/* Nobody from Load has looked at this one yet, so say what
+                        the schedule says — quieter, and worded as a fact about
+                        tomorrow rather than as a request from a person. */}
+                    {unloadingAt(t) != null && t.state?.load_request == null && (() => {
+                      const need = loadNeedOf(t);
+                      if (need == null) return null;
+                      return (
+                        <p className={clsx(
+                          "rounded-lg border px-3 py-2.5 text-xs leading-snug",
+                          need.needed
+                            ? "border-cyan-700/30 bg-cyan-950/20 text-cyan-300/90"
+                            : "border-slate-600/40 bg-slate-800/40 text-slate-300",
+                        )}>
+                          <span className="font-semibold">
+                            {need.needed ? "Loads tomorrow" : "Not loading tomorrow"}
+                          </span>{" "}
+                          — {need.reason}.
+                        </p>
+                      );
+                    })()}
 
                     {/* Batching is what completes a truck now, so when it
                         can't be (switched off entirely, or pre-batch mode where

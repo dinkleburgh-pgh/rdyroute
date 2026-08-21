@@ -660,6 +660,56 @@ export interface OperationalDayContext {
   routeTruckByNumber: Map<number, TruckWithState>;
 }
 
+/**
+ * Does the load crew actually want this truck back tonight?
+ *
+ * The answer is already implicit in the schedule, so nobody should have to tap
+ * it in: a route that is off tomorrow has nothing to load, while an off-day or
+ * spare truck that is COVERING a route which loads is exactly the one Load is
+ * waiting on. Both fall straight out of the load-day active set — the same
+ * derivation the load counters use — so this can never disagree with the
+ * "Ready to load" grid or the progress bar.
+ *
+ * Deliberately derived, never stored: it is a fact about the schedule, not a
+ * decision someone made, and storing it would put "Load crew asked..." in the
+ * activity log ~30 times a shift with no human behind it.
+ */
+export interface LoadNeed {
+  needed: boolean;
+  /** Short, dock-readable justification — always names the deciding fact. */
+  reason: string;
+}
+
+export function loadNeedFor(
+  truck: TruckWithState,
+  board: TruckWithState[],
+  loadDayNum: number,
+  holidayLoad = false,
+): LoadNeed {
+  const active = buildOperationalDayContext(board, loadDayNum, holidayLoad, false, "load").activeTrucks;
+  const needed = active.some((t) => t.truck_number === truck.truck_number);
+  const cover = getCoverageRouteNumber(truck);
+
+  if (needed) {
+    if (cover != null) return { needed, reason: `covers route #${cover}, which loads Day ${loadDayNum}` };
+    if (truck.route_split_route != null) {
+      return { needed, reason: `carries route #${truck.route_split_route}'s overflow` };
+    }
+    return { needed, reason: `loads Day ${loadDayNum}` };
+  }
+
+  if (truck.truck_type === "Spare" && cover == null) {
+    return { needed, reason: "spare with no route to load" };
+  }
+  if (isScheduledOff(truck, loadDayNum)) {
+    return { needed, reason: `off Day ${loadDayNum} — nothing to load` };
+  }
+  if (truck.is_oos || truck.state?.status === "oos") {
+    return { needed, reason: "out of service — its route rides a cover" };
+  }
+  return { needed, reason: `not on Day ${loadDayNum}'s load` };
+}
+
 export function buildOperationalDayContext(
   trucks: TruckWithState[],
   dayNum: number,
