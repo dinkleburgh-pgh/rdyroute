@@ -18,6 +18,15 @@ import type { TruckWithState } from "../../types";
  * it does not stop the unload, and nothing here should imply that it does —
  * which is why the labels are "asked", not "told".
  */
+/** The alternative action — same weight in both states of the strip. */
+const ACTION_BTN =
+  "min-h-[44px] rounded-lg border border-slate-600 bg-surface-2 px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface disabled:opacity-50";
+/** The quiet one that sits beside it (Confirm / Clear). */
+const GHOST_BTN =
+  "min-h-[44px] rounded-lg px-4 text-sm font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50";
+/** The current answer, worded by the caller. */
+const PILL = "rounded-md px-2.5 py-1 text-xs font-bold";
+
 export default function NowUnloadingStrip({
   trucks,
   actions,
@@ -70,7 +79,7 @@ export default function NowUnloadingStrip({
                     only has to touch this to disagree with it. */}
                 <span
                   className={clsx(
-                    "rounded-md px-2.5 py-1 text-xs font-bold",
+                    PILL,
                     need.needed
                       ? "bg-emerald-600/15 text-emerald-300 ring-1 ring-emerald-600/40"
                       : "bg-slate-600/25 text-slate-200 ring-1 ring-slate-500/40",
@@ -80,37 +89,38 @@ export default function NowUnloadingStrip({
                   <span className="ml-1 font-normal opacity-70">· {need.reason}</span>
                 </span>
                 {actions.canAct && (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void actions.set(t, suggested === "want" ? "skip" : "want")}
-                    className="min-h-[44px] rounded-lg border border-slate-500 bg-slate-800 px-4 text-sm font-bold text-slate-100 transition-colors hover:bg-slate-700 disabled:opacity-50"
-                  >
-                    {suggested === "want"
-                      ? (dense ? "No — back out" : "No — back out of it")
-                      : (dense ? "Actually, pull it forward" : "Actually — we want it")}
-                  </button>
-                )}
-                {actions.canAct && (
-                  <button
-                    type="button"
-                    disabled={isBusy}
-                    onClick={() => void actions.set(t, suggested)}
-                    className="min-h-[44px] rounded-lg px-3 text-xs font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
-                    title="Tell the dock a person checked this, not just the schedule"
-                  >
-                    Confirm
-                  </button>
+                  <>
+                    {/* Named plainly for the action it takes, not phrased as a
+                        rebuttal — it reads the same length as Change/Clear in
+                        the other state, and needs no dense variant. */}
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void actions.set(t, suggested === "want" ? "skip" : "want")}
+                      className={ACTION_BTN}
+                    >
+                      {suggested === "want" ? "Back it out" : "Pull it forward"}
+                    </button>
+                    <button
+                      type="button"
+                      disabled={isBusy}
+                      onClick={() => void actions.set(t, suggested)}
+                      className={GHOST_BTN}
+                      title="Tell the dock a person checked this, not just the schedule"
+                    >
+                      Confirm
+                    </button>
+                  </>
                 )}
               </div>
             ) : (
               <div className="ml-auto flex items-center gap-2">
                 <span
                   className={clsx(
-                    "rounded-md px-2.5 py-1 text-xs font-bold",
+                    PILL,
                     req === "want"
-                      ? "bg-emerald-600/20 text-emerald-300"
-                      : "bg-slate-600/30 text-slate-200",
+                      ? "bg-emerald-600/20 text-emerald-300 ring-1 ring-emerald-600/40"
+                      : "bg-slate-600/30 text-slate-200 ring-1 ring-slate-500/40",
                   )}
                 >
                   {req === "want" ? "Asked to pull forward" : "Asked to back out"}
@@ -119,13 +129,15 @@ export default function NowUnloadingStrip({
                 </span>
                 {actions.canAct && (
                   <>
+                    {/* Same pairing as the auto state: the alternative action
+                        first, the quiet one beside it. */}
                     <button
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, req === "want" ? "skip" : "want")}
-                      className="min-h-[44px] rounded-lg border border-slate-600 bg-surface-2 px-3 text-xs font-semibold text-ink-soft transition-colors hover:bg-surface disabled:opacity-50"
+                      className={ACTION_BTN}
                     >
-                      Change
+                      {req === "want" ? "Back it out" : "Pull it forward"}
                     </button>
                     {/* Clearing has to stay reachable — a mis-tap on a tablet is
                         the likeliest single failure of this whole feature. */}
@@ -133,7 +145,7 @@ export default function NowUnloadingStrip({
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, null)}
-                      className="min-h-[44px] rounded-lg px-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50"
+                      className={GHOST_BTN}
                     >
                       Clear
                     </button>
