@@ -601,9 +601,13 @@ export default function DriverNotes() {
         {adding ? (
           <AddNoteForm token={token} onClose={() => setAdding(false)} />
         ) : (
+          /* Solid surface, not a dashed outline: on a phone at arm's length the
+             old ghost button was nearly invisible against the near-black page.
+             Still ranks below the run-report buttons — it is the secondary
+             action, just not a hidden one. */
           <button
             onClick={() => setAdding(true)}
-            className="w-full rounded-xl border border-dashed border-slate-600 py-3 text-sm font-semibold text-slate-400 hover:border-blue-500 hover:text-blue-400"
+            className="w-full rounded-xl border border-slate-600 bg-slate-800 py-4 text-base font-semibold text-slate-100 shadow-sm transition-colors hover:bg-slate-700 active:scale-[0.99]"
           >
             + Add a note to your route
           </button>
