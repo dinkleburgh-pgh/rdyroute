@@ -1,80 +1,25 @@
 /**
- * Resets panel — workday reset, selective reset, purge abnormal durations.
- * Extracted from Settings.tsx. Includes SelectiveResetCard sub-component.
+ * Resets panel — one day reset, plus the load-time outlier purge.
+ *
+ * There used to be three overlapping controls here (full workday reset,
+ * a four-checkbox selective reset, and the purge). The two resets existed for
+ * testing and were easy to misfire: both wiped coverage and day flags, so
+ * "undo the shift" also erased the setup the shift was built on. They are
+ * replaced by a single "Reset day" that rewinds to how the day started.
  */
 import { useState } from "react";
-import clsx from "clsx";
-import { usePurgeAbnormalDurations, useResetWorkday, useSelectiveReset } from "../../api/hooks";
+import { usePurgeAbnormalDurations, useResetDay } from "../../api/hooks";
 import { todayIso } from "../../api/client";
 import { useAuth } from "../../contexts/AuthContext";
-
-const SELECTIVE_ITEMS = [
-  { key: "truck_states", label: "Truck states",       desc: "Clears status, load times, wearers and garments for all trucks" },
-  { key: "batches",      label: "Batch assignments",  desc: "Removes all truck → batch assignments" },
-  { key: "route_swaps",  label: "Route swaps",        desc: "Deletes all route swap records" },
-  { key: "day_flags",    label: "Day flags",           desc: "Resets wizard, holiday load/unload, and holiday mode flags" },
-] as const;
-type SelectiveKey = typeof SELECTIVE_ITEMS[number]["key"];
-
-function SelectiveResetCard({ runDate, isPrivileged }: { runDate: string; isPrivileged: boolean }) {
-  const selective = useSelectiveReset();
-  const [checked, setChecked] = useState<Set<SelectiveKey>>(new Set());
-  const [result, setResult]   = useState<string | null>(null);
-
-  function toggle(key: SelectiveKey) {
-    setChecked((prev) => { const next = new Set(prev); next.has(key) ? next.delete(key) : next.add(key); return next; });
-    setResult(null);
-  }
-
-  async function run() {
-    if (checked.size === 0) return;
-    const labels = SELECTIVE_ITEMS.filter((i) => checked.has(i.key)).map((i) => i.label).join(", ");
-    if (!confirm(`Selectively reset [${labels}] for ${runDate}? This cannot be undone.`)) return;
-    const args: Parameters<ReturnType<typeof useSelectiveReset>["mutateAsync"]>[0] = { runDate };
-    for (const key of checked) (args as Record<string, unknown>)[key] = true;
-    const r = await selective.mutateAsync(args);
-    const cleared = (r.cleared as string[]).map((c: string) => c.replace(/_/g, " ")).join(", ");
-    setResult(`Done — cleared: ${cleared || "nothing"}.`);
-    setChecked(new Set());
-  }
-
-  return (
-    <div className="border-t border-slate-800 pt-4 space-y-3">
-      <p className="text-sm font-medium text-slate-200">Selective reset</p>
-      <p className="text-xs text-slate-500">Choose exactly which components to clear for the selected date.</p>
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
-        {SELECTIVE_ITEMS.map((item) => (
-          <label key={item.key} className={clsx(
-            "flex cursor-pointer items-start gap-3 rounded-lg border p-3 transition-colors",
-            checked.has(item.key) ? "border-red-600/60 bg-red-950/30" : "border-slate-700 bg-slate-900 hover:border-slate-600",
-          )}>
-            <input type="checkbox" className="mt-0.5 accent-red-500" checked={checked.has(item.key)} onChange={() => toggle(item.key)} />
-            <div>
-              <p className="text-xs font-semibold text-slate-200">{item.label}</p>
-              <p className="text-[11px] text-slate-500">{item.desc}</p>
-            </div>
-          </label>
-        ))}
-      </div>
-      {result && <p className="text-xs text-emerald-400">{result}</p>}
-      <button
-        className="rounded bg-red-900 px-3 py-1.5 text-sm text-red-200 hover:bg-red-800 disabled:opacity-50"
-        disabled={!isPrivileged || checked.size === 0 || selective.isPending}
-        onClick={run}
-      >
-        {selective.isPending ? "Resetting…" : `Reset selected (${checked.size})`}
-      </button>
-    </div>
-  );
-}
 
 export default function ResetsPanel() {
   const { user } = useAuth();
   const [runDate, setRunDate] = useState(todayIso());
-  const reset  = useResetWorkday();
-  const purge  = usePurgeAbnormalDurations();
-  const [purgeResult, setPurgeResult]   = useState<string | null>(null);
-  const [resetResult, setResetResult]   = useState<string | null>(null);
+  const reset = useResetDay();
+  const purge = usePurgeAbnormalDurations();
+  const [purgeResult, setPurgeResult] = useState<string | null>(null);
+  const [resetResult, setResetResult] = useState<string | null>(null);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const isPrivileged =
     user?.role === "admin" || user?.role === "fleet" || user?.role === "atl" ||
@@ -86,7 +31,7 @@ export default function ResetsPanel() {
         <p className="text-xs text-slate-400">Destructive operations for the selected run date.</p>
         <div>
           <label className="label">Run date</label>
-          <input className="input" type="date" value={runDate} onChange={(e) => setRunDate(e.target.value)} />
+          <input className="input" type="date" value={runDate} onChange={(e) => { setRunDate(e.target.value); setResetResult(null); setResetError(null); }} />
         </div>
       </div>
 
@@ -110,30 +55,70 @@ export default function ResetsPanel() {
           </button>
         </div>
 
-        <div className="flex items-center justify-between gap-4 border-t border-slate-800 pt-4">
-          <div>
-            <p className="text-sm font-medium text-slate-200">Reset workday</p>
-            <p className="text-xs text-slate-500">
-              Clears all truck states, batch assignments, route swaps, and day flags
-              (holiday, wizard) for the selected date. Cannot be undone.
-            </p>
-            {resetResult && <p className="mt-1 text-xs text-emerald-400">{resetResult}</p>}
+        <div className="border-t border-slate-800 pt-4">
+          <div className="flex items-start justify-between gap-4">
+            <div>
+              <p className="text-sm font-medium text-slate-200">Reset day</p>
+              <p className="text-xs text-slate-500">
+                Puts the selected date back to how it looked right after Setup Day —
+                every truck returns to its start-of-day status and the shift&apos;s work is undone.
+              </p>
+            </div>
+            <button
+              className="shrink-0 rounded bg-red-900 px-3 py-1.5 text-sm text-red-200 hover:bg-red-800 disabled:opacity-50"
+              disabled={!isPrivileged || reset.isPending}
+              onClick={() => {
+                if (!confirm(
+                  `Reset ${runDate} back to how the day started?\n\n` +
+                  "Clears: truck statuses, arrival times, holds, unloading/loading progress, wearers, batches, Next Up.\n" +
+                  "Keeps: coverage, holiday flags, and any shortages or audit entries logged today.\n\n" +
+                  "This cannot be undone.",
+                )) return;
+                setResetError(null);
+                reset.mutate(runDate, {
+                  onSuccess: (r) => {
+                    setResetResult(
+                      `Day reset — ${r.states_rebuilt} truck(s) back to their start-of-day status` +
+                      (r.batches_cleared > 0 ? `, ${r.batches_cleared} batch assignment(s) cleared.` : "."),
+                    );
+                  },
+                  // The server refuses a day that hasn't started (nothing to
+                  // go back to). Without this the button just did nothing.
+                  onError: (err) => {
+                    setResetResult(null);
+                    const detail = (err as { response?: { data?: { detail?: string } } })
+                      ?.response?.data?.detail;
+                    setResetError(detail ?? "Couldn't reset that day — try again.");
+                  },
+                });
+              }}
+            >
+              {reset.isPending ? "Resetting…" : "Reset day"}
+            </button>
           </div>
-          <button
-            className="shrink-0 rounded bg-red-900 px-3 py-1.5 text-sm text-red-200 hover:bg-red-800 disabled:opacity-50"
-            disabled={!isPrivileged || reset.isPending}
-            onClick={() => {
-              if (!confirm(`Full reset for ${runDate}? This clears all truck states, batches, route swaps, and day flags. Cannot be undone.`)) return;
-              reset.mutate(runDate, {
-                onSuccess: (r) => setResetResult(`Reset complete — ${r.states_cleared} truck state(s) cleared.`),
-              });
-            }}
-          >
-            {reset.isPending ? "Resetting…" : "Reset workday"}
-          </button>
-        </div>
 
-        <SelectiveResetCard runDate={runDate} isPrivileged={isPrivileged} />
+          {/* Spelled out, because the old resets quietly took coverage and the
+              day flags with them and people learned to fear the button. */}
+          <div className="mt-3 grid gap-2 sm:grid-cols-2">
+            <div className="rounded-lg border border-red-900/40 bg-red-950/20 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-red-300">Cleared</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                Truck statuses · arrival times · holds &amp; needs-checked · unloading and loading
+                progress · wearers · batch assignments · Next Up · corrected load order
+              </p>
+            </div>
+            <div className="rounded-lg border border-emerald-900/40 bg-emerald-950/20 p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-emerald-300">Kept</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-slate-400">
+                Coverage (route swaps &amp; spares) · holiday load/unload flags · Setup Day completion ·
+                shortages and audit entries logged today
+              </p>
+            </div>
+          </div>
+
+          {resetResult && <p className="mt-2 text-xs text-emerald-400">{resetResult}</p>}
+          {resetError && <p className="mt-2 text-xs font-semibold text-amber-300">{resetError}</p>}
+        </div>
       </div>
     </div>
   );

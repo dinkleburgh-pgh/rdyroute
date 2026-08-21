@@ -2797,54 +2797,27 @@ export function useUpdateTrackedItemCategories() {
 }
 
 // ---------------------------------------------------------------------------
-// Full workday reset
+// Reset day — rewind a run date to how the day started
 // ---------------------------------------------------------------------------
 
-export function useResetWorkday() {
+export interface ResetDayResult {
+  reset: boolean;
+  run_date: string;
+  states_cleared: number;
+  states_rebuilt: number;
+  batches_cleared: number;
+}
+
+export function useResetDay() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async (runDate: string) =>
-      (await api.post(`/trucks/reset-workday?run_date=${runDate}`)).data,
+      (await api.post<ResetDayResult>(`/trucks/reset-day?run_date=${runDate}`)).data,
     onSuccess: (_data, runDate) => {
       qc.invalidateQueries({ queryKey: ["board"] });
       qc.invalidateQueries({ queryKey: ["truck-states"] });
       qc.invalidateQueries({ queryKey: ["batches", runDate] });
-      qc.invalidateQueries({ queryKey: ["route-swaps", runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday-mode", runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_load", runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_unload", runDate] });
-      qc.invalidateQueries({ queryKey: ["wizard-completed", runDate] });
-      qc.invalidateQueries({ queryKey: ["settings"] });
-    },
-  });
-}
-
-export function useSelectiveReset() {
-  const qc = useQueryClient();
-  return useMutation({
-    mutationFn: async (args: {
-      runDate: string;
-      truck_states?: boolean;
-      batches?: boolean;
-      route_swaps?: boolean;
-      day_flags?: boolean;
-    }) => {
-      const p = new URLSearchParams({ run_date: args.runDate });
-      if (args.truck_states) p.set("truck_states", "true");
-      if (args.batches)      p.set("batches", "true");
-      if (args.route_swaps)  p.set("route_swaps", "true");
-      if (args.day_flags)    p.set("day_flags", "true");
-      return (await api.post(`/trucks/selective-reset?${p}`)).data;
-    },
-    onSuccess: (_data, args) => {
-      qc.invalidateQueries({ queryKey: ["board"] });
-      qc.invalidateQueries({ queryKey: ["truck-states"] });
-      qc.invalidateQueries({ queryKey: ["batches", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["route-swaps", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday-mode", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_load", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["holiday_unload", args.runDate] });
-      qc.invalidateQueries({ queryKey: ["wizard-completed", args.runDate] });
+      qc.invalidateQueries({ queryKey: ["next-up", runDate] });
       qc.invalidateQueries({ queryKey: ["settings"] });
     },
   });

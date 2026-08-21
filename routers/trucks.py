@@ -865,81 +865,94 @@ def update_truck_state(
 
 
 # ---------------------------------------------------------------------------
-# Full workday reset — wipes all per-date operational state in one transaction
+# Reset day — put the run date back to how the day started
 # ---------------------------------------------------------------------------
 
-@router.post("/reset-workday")
-def reset_workday(
+@router.post("/reset-day")
+def reset_day(
     background_tasks: BackgroundTasks,
     run_date: date = Query(...),
     db: Session = Depends(get_db),
     _admin: User = Depends(require_admin),
 ):
-    """
-    Full workday reset for *run_date*:
+    """Rewind *run_date* to the state it was in right after Setup Day.
 
-    1. Deletes all TruckState rows for the date (status, times, notes, garments, etc.)
-    2. Deletes all RouteSwap rows for the date
-    3. Deletes all Batch rows for the date
-    4. Deletes per-date AppSetting keys:
-         wizard_completed_<date>
-         day_setup_source_<date>
-         holiday_mode_<date>
-         holiday_load_<date>
-         holiday_unload_<date>
+    "How it started" is defined as what day-init produces, so this deletes the
+    day's TruckState rows and re-runs `_ensure_day_initialized` in the same
+    transaction rather than trying to un-apply each change: the rebuilt rows are
+    byte-for-byte what the crew saw at the start of the shift (statuses carried
+    from the previous day, scheduled-off trucks off, persistent statuses kept),
+    and every shift-time marker on those rows — arrival stamps, holds, needs
+    checked, unloading/loading timers, wearers, driver claims — goes with them.
+
+    Also cleared: batch assignments, Next Up, and any corrected load order —
+    all of which are produced during the shift, not by setup.
+
+    Deliberately PRESERVED, because they ARE the day's setup or are records of
+    something that physically happened:
+      - coverage (route swaps + spare assignments)
+      - holiday load/unload flags and the wizard-completed flag
+      - shortages and audit entries logged today
     """
     from models import AppSetting, Batch  # local import avoids circular
 
+    # Day-init refuses to build a day that has not begun, so on a future date
+    # this would clear the rows and rebuild nothing — leaving an empty day
+    # behind the very button that promises to restore one.
+    if run_date > operational_today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That run day hasn't started yet — there's no start-of-day to go back to.",
+        )
+
     date_str = str(run_date)
-    state_truck_numbers = db.scalars(
-        select(TruckState.truck_number).where(TruckState.run_date == run_date)
-    ).all()
-    route_swap_count = db.scalar(
-        select(func.count(RouteSwap.id)).where(RouteSwap.run_date == run_date)
-    ) or 0
+    state_truck_numbers = list(
+        db.scalars(select(TruckState.truck_number).where(TruckState.run_date == run_date)).all()
+    )
     batch_count = db.scalar(
         select(func.count(Batch.id)).where(Batch.run_date == run_date)
     ) or 0
 
-    # 1. Truck states
     deleted_states = db.execute(
         delete(TruckState).where(TruckState.run_date == run_date)
     ).rowcount
-
-    # 2. Route swaps
-    db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date))
-
-    # 3. Batch assignments
     db.execute(delete(Batch).where(Batch.run_date == run_date))
 
-    # 4. Per-date settings
-    setting_keys = [
-        f"wizard_completed_{date_str}",
+    # Shift-time settings. day_setup_source is the day-init guard — dropping it
+    # is what lets the rebuild below run at all; day-init writes it back.
+    cleared_keys = [
         f"day_setup_source_{date_str}",
-        f"holiday_mode_{date_str}",
-        f"holiday_load_{date_str}",
-        f"holiday_unload_{date_str}",
+        f"runday_next_up_{date_str}",
+        f"load_order_{date_str}",
     ]
-    for key in setting_keys:
+    for key in cleared_keys:
         setting = db.get(AppSetting, key)
-        if setting:
+        if setting is not None:
             db.delete(setting)
+    db.flush()
+
+    # Rebuild. Day-init no-ops for a future date, which is correct: there was
+    # no start-of-day to return to.
+    _ensure_day_initialized(run_date, db)
+    rebuilt_states = db.scalar(
+        select(func.count(TruckState.id)).where(TruckState.run_date == run_date)
+    ) or 0
 
     append_activity_event(
         db,
         actor_user=_admin,
         event_family="recovery",
-        event_type="workday_reset",
+        event_type="day_reset",
         run_date=run_date,
-        summary=f"Reset workday for {run_date}",
+        summary=f"Reset {run_date} back to how the day started",
         diff_json={
             "states_cleared": deleted_states,
-            "route_swaps_cleared": route_swap_count,
+            "states_rebuilt": rebuilt_states,
             "batches_cleared": batch_count,
-            "settings_cleared": setting_keys,
+            "settings_cleared": cleared_keys,
         },
         context_json=add_related_truck_context(
-            {"setting_keys": setting_keys, "route_swap_count": route_swap_count, "batch_count": batch_count},
+            {"batch_count": batch_count, "preserved": ["coverage", "day_flags", "shortages", "audit"]},
             state_truck_numbers,
         ),
     )
@@ -950,100 +963,13 @@ def reset_workday(
         {"type": "truck_state_updated", "run_date": date_str},
     )
 
-    return {"reset": True, "run_date": date_str, "states_cleared": deleted_states}
-
-
-@router.post("/selective-reset")
-def selective_reset(
-    background_tasks: BackgroundTasks,
-    run_date: date = Query(...),
-    truck_states: bool = Query(False),
-    batches: bool = Query(False),
-    route_swaps: bool = Query(False),
-    day_flags: bool = Query(False),
-    db: Session = Depends(get_db),
-    _admin: User = Depends(require_admin),
-):
-    """
-    Selective workday reset — clears only the requested components for *run_date*.
-    """
-    from models import AppSetting, Batch  # local import avoids circular
-
-    date_str = str(run_date)
-    result: dict = {"run_date": date_str, "cleared": []}
-    related_truck_numbers: list[int] = []
-    diff_payload: dict[str, object] = {}
-
-    if truck_states:
-        related_truck_numbers.extend(
-            db.scalars(select(TruckState.truck_number).where(TruckState.run_date == run_date)).all()
-        )
-        deleted = db.execute(
-            delete(TruckState).where(TruckState.run_date == run_date)
-        ).rowcount
-        result["states_cleared"] = deleted
-        diff_payload["states_cleared"] = deleted
-        result["cleared"].append("truck_states")
-        for key in [
-            f"wizard_completed_{date_str}",
-            f"day_setup_source_{date_str}",
-        ]:
-            setting = db.get(AppSetting, key)
-            if setting:
-                db.delete(setting)
-
-    if batches:
-        batch_deleted = db.execute(delete(Batch).where(Batch.run_date == run_date)).rowcount
-        diff_payload["batches_cleared"] = batch_deleted
-        result["cleared"].append("batches")
-
-    if route_swaps:
-        related_truck_numbers.extend(
-            db.scalars(select(RouteSwap.route_truck).where(RouteSwap.run_date == run_date)).all()
-        )
-        related_truck_numbers.extend(
-            db.scalars(select(RouteSwap.load_on_truck).where(RouteSwap.run_date == run_date)).all()
-        )
-        route_swap_deleted = db.execute(delete(RouteSwap).where(RouteSwap.run_date == run_date)).rowcount
-        diff_payload["route_swaps_cleared"] = route_swap_deleted
-        result["cleared"].append("route_swaps")
-
-    if day_flags:
-        for key in [
-            f"wizard_completed_{date_str}",
-            f"day_setup_source_{date_str}",
-            f"holiday_mode_{date_str}",
-            f"holiday_load_{date_str}",
-            f"holiday_unload_{date_str}",
-        ]:
-            setting = db.get(AppSetting, key)
-            if setting:
-                db.delete(setting)
-        result["cleared"].append("day_flags")
-        diff_payload["day_flags_cleared"] = True
-
-    append_activity_event(
-        db,
-        actor_user=_admin,
-        event_family="recovery",
-        event_type="selective_reset",
-        run_date=run_date,
-        summary=f"Selective reset cleared {', '.join(result['cleared']) or 'nothing'} for {run_date}",
-        diff_json=diff_payload,
-        context_json=add_related_truck_context(
-            {"cleared": list(result["cleared"])},
-            related_truck_numbers,
-        ),
-    )
-    db.commit()
-
-    if truck_states or batches or route_swaps:
-        background_tasks.add_task(
-            manager.broadcast,
-            {"type": "truck_state_updated", "run_date": date_str},
-        )
-
-    return result
+    return {
+        "reset": True,
+        "run_date": date_str,
+        "states_cleared": deleted_states,
+        "states_rebuilt": rebuilt_states,
+        "batches_cleared": batch_count,
+    }
 
 
 # ---------------------------------------------------------------------------
