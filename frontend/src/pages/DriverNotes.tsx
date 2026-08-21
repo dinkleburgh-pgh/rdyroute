@@ -385,15 +385,21 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
   }
 
   if (done != null) {
+    const tone =
+      done.choice === "ran_special"
+        ? { box: "border-amber-600/50 bg-amber-950/40", head: "text-amber-300", sub: "text-amber-200/80", foot: "text-amber-200/60" }
+        : done.choice === "route"
+          ? { box: "border-blue-600/50 bg-blue-950/40", head: "text-blue-300", sub: "text-blue-200/80", foot: "text-blue-200/60" }
+          : { box: "border-emerald-700/50 bg-emerald-950/40", head: "text-emerald-300", sub: "text-emerald-200/80", foot: "text-emerald-200/60" };
     return (
-      <div className="rounded-2xl border border-emerald-700/50 bg-emerald-950/40 px-5 py-6 text-center">
-        <p className="text-2xl font-bold text-emerald-300">
+      <div className={`rounded-2xl border px-5 py-6 text-center ${tone.box}`}>
+        <p className={`text-2xl font-bold ${tone.head}`}>
           {done.choice === "route" && `Got it — Route ${done.claimed_route}`}
           {done.choice === "ran_special" && "Got it — Ran Special"}
           {done.choice === "clean" && "Thanks — you're marked back"}
         </p>
-        {at && <p className="mt-1 text-sm text-emerald-200/80">back at {at}</p>}
-        <p className="mt-2 text-xs text-emerald-200/60">
+        {at && <p className={`mt-1 text-sm ${tone.sub}`}>back at {at}</p>}
+        <p className={`mt-2 text-xs ${tone.foot}`}>
           {done.choice === "route"
             ? "The dock has been told. A lead will confirm the route."
             : "The dock has been told."}
@@ -453,10 +459,10 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
         type="button"
         disabled={report.isPending}
         onClick={() => void send("ran_special")}
-        className="w-full rounded-2xl bg-fuchsia-700 px-6 py-6 text-2xl font-black text-white shadow-lg active:scale-95 disabled:opacity-60"
+        className="w-full rounded-2xl bg-amber-500 px-6 py-6 text-2xl font-black text-black shadow-lg active:scale-95 disabled:opacity-60"
       >
         Ran Special
-        <span className="mt-1 block text-sm font-semibold text-fuchsia-200">
+        <span className="mt-1 block text-sm font-semibold text-amber-900">
           A special run — comes back dirty
         </span>
       </button>
@@ -464,10 +470,10 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
         type="button"
         disabled={report.isPending}
         onClick={() => void send("clean")}
-        className="w-full rounded-2xl bg-slate-800 px-6 py-6 text-2xl font-black text-slate-100 ring-1 ring-slate-600 shadow-lg active:scale-95 disabled:opacity-60"
+        className="w-full rounded-2xl bg-emerald-600 px-6 py-6 text-2xl font-black text-white shadow-lg active:scale-95 disabled:opacity-60"
       >
         Returned Clean
-        <span className="mt-1 block text-sm font-semibold text-slate-400">
+        <span className="mt-1 block text-sm font-semibold text-emerald-100">
           Didn&apos;t run — nothing to unload
         </span>
       </button>
