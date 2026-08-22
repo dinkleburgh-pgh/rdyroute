@@ -1,11 +1,13 @@
-import { ArrowLeftRight, Plus } from "lucide-react";
+import { ArrowRight, Plus } from "lucide-react";
 import clsx from "clsx";
 
 /**
- * The app-wide coverage idiom: `#route ⇄ #truck` — the route being covered,
- * then the truck carrying its load. Same shape as the Previous Load-Day
- * Coverage banner chips; replaces the older "Cov. #N" pills so coverage reads
- * identically on every surface.
+ * The app-wide coverage idiom: `#route → ON #truck` — the route being covered,
+ * then the truck its load RIDES ON. The old ⇄ read both ways ("is 4 on 11, or
+ * 11 on 4?"), so the arrow is now directional and the truck wears a tiny ON,
+ * matching the coverage banner's "ROUTE → LOADED ON" vocabulary. Same shape as
+ * the Previous Load-Day Coverage banner chips; replaces the older "Cov. #N"
+ * pills so coverage reads identically on every surface.
  *
  * `prev` renders the muted amber previous-day variant; default is today's
  * sky-tinted variant. `split` renders the amber `#route + #truck` SPLIT
@@ -49,9 +51,11 @@ export default function CoverageTag({
           : "border-sky-700/40 bg-sky-950/40",
         className,
       )}
+      title={`Route ${route}'s load rides on truck ${truck}`}
     >
       <span className="font-black text-red-300">#{route}</span>
-      <ArrowLeftRight className={clsx("h-3 w-3", prev ? "text-amber-600/70" : "text-sky-500/70")} />
+      <ArrowRight className={clsx("h-3 w-3", prev ? "text-amber-600/70" : "text-sky-500/70")} />
+      <span className={clsx("text-[8px] font-bold uppercase tracking-wider", prev ? "text-amber-600/80" : "text-sky-500/80")}>on</span>
       <span className={clsx("font-black", prev ? "text-amber-200" : "text-sky-300")}>#{truck}</span>
     </span>
   );

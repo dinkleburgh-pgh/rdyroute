@@ -211,6 +211,23 @@ export default function Batches() {
   const unloadsDay = unloadsOverride ?? workdayNumbers(new Date(uy, um - 1, ud, 12)).unloadsDay;
   const dayTemplate = useUnloadDayTemplate(unloadsDay);
   const { prevCarriers, batchUnitFor, carrierOf } = useBatchUnit(runDate, board);
+  // The batch the crew is currently filling — same signal as the Unload page's
+  // batch entry (most recent unloaded_at that carries a batch), so the two
+  // surfaces always suggest the same number. Null on a fresh day, so the
+  // "tap a batch card" hint still shows when there's nothing to suggest.
+  const currentBatchDefault = useMemo(() => {
+    let best: number | null = null;
+    let bestAt = -1;
+    for (const t of board) {
+      const st = t.state;
+      if (st?.batch_id == null || st.unloaded_at == null) continue;
+      if (st.unloaded_at > bestAt) {
+        bestAt = st.unloaded_at;
+        best = st.batch_id;
+      }
+    }
+    return best;
+  }, [board]);
   const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const defaultWearers = useMemo(() => {
     const n = Number(truck);
@@ -245,7 +262,14 @@ export default function Batches() {
   useEffect(() => {
     if (!truck) {
       setSelectedBatch(null);
+      return;
     }
+    // Entering a truck preselects the batch in progress — the crew fills
+    // batches in runs, so the last one used is almost always the next one
+    // wanted, and its card opens ready to assign. Tapping another card still
+    // switches; a fresh day (no default) keeps the pick-a-card hint.
+    setSelectedBatch((prev) => prev ?? currentBatchDefault);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [truck]);
 
   return (
