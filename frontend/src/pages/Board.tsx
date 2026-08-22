@@ -23,7 +23,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useCollapseState } from "../utils/useCollapseState";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
-import CoverageList from "../components/CoverageList";
+import CoverageCards from "../components/CoverageCards";
 import CoverageCardBadges from "../components/CoverageCardBadges";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
@@ -806,11 +806,21 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           onApplyBulk={applyBulkEdit}
         />
       )}
-      {/* Master coverage overview — everything covered today + previous day */}
+      {/* Master coverage overview — everything covered today + previous day.
+          Same big ROUTE → TRUCK cards as Load and Unload; Fleet was the last
+          surface still reading coverage off the dense chips. The prev badge
+          stays on because this block mixes both days. */}
       {fleetMode && fleetCoverage.length > 0 && (
-        <div className="rounded-xl border border-slate-700 bg-slate-900/50 p-3">
-          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage</p>
-          <CoverageList entries={fleetCoverage} grouped />
+        <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
+          <div className="flex w-full items-center gap-2 px-3 py-2.5">
+            <span className="text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage</span>
+            <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
+              {fleetCoverage.length} route{fleetCoverage.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="border-t px-3 pb-3 pt-3" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
+            <CoverageCards entries={fleetCoverage} />
+          </div>
         </div>
       )}
       {/* Previous Day Coverage — directly below the bulk-edit section */}
