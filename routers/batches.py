@@ -10,6 +10,7 @@ V1 mapping:
   batch_history.json        →  BatchHistory rows
 """
 
+import time
 from datetime import date
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
@@ -306,6 +307,11 @@ def assign_truck_to_batch(
     else:
         if not prebatch and state.status == TruckStatus.dirty:
             state.status = TruckStatus.unloaded
+            # Assigning the batch IS how a truck is marked unloaded now, so this
+            # is a genuine per-truck unload and gets the durable stamp — without
+            # it these trucks showed no time in Unloaded today and vanished
+            # from the dwell analytics.
+            state.unloaded_at = time.time()
             # The only status write outside the PUT handler that a truck being
             # physically unloaded can hit — end the unload here too, so neither
             # the marker nor the load crew's request outlives the work.

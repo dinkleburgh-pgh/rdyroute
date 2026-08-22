@@ -534,6 +534,40 @@ export default function Unload() {
    *   3. otherwise the sheet, resolved THROUGH coverage: a carrier is unloading
    *      the covered route's freight, so it takes that route's line, not its own.
    */
+  /**
+   * The batch the crew is currently filling — the batch of the most recently
+   * unloaded-and-batched truck. Trucks land in the same batch in runs, so the
+   * last one used is almost always the next one wanted, and starting there
+   * saves a tap on every truck.
+   *
+   * Derived from unloaded_at rather than remembered in tab state: it survives
+   * a reload, and every device at the dock agrees on it. unloaded_at (not
+   * updated_at) because later edits to a done truck must not steal the
+   * default. Falls back to 1 on a fresh day.
+   */
+  const currentBatchDefault = useMemo(() => {
+    let best: number | null = null;
+    let bestAt = -1;
+    // Pre-batch fallback: assigning there deliberately leaves status (and so
+    // unloaded_at) alone, so track the freshest batched row by updated_at too
+    // and use it only when no truck has actually been unloaded yet.
+    let preBest: number | null = null;
+    let preAt = "";
+    for (const t of data ?? []) {
+      const st = t.state;
+      if (st?.batch_id == null) continue;
+      if (st.unloaded_at != null && st.unloaded_at > bestAt) {
+        bestAt = st.unloaded_at;
+        best = st.batch_id;
+      }
+      if (st.updated_at > preAt) {
+        preAt = st.updated_at;
+        preBest = st.batch_id;
+      }
+    }
+    return best ?? preBest ?? 1;
+  }, [data]);
+
   function defaultWearersFor(t: TruckWithState): number {
     if (isSplitHelper(t)) return 0;
     const live = t.state?.wearers ?? 0;
@@ -542,7 +576,7 @@ export default function Unload() {
   }
 
   function openTruckMenu(t: TruckWithState) {
-    setBatchNum(String(t.state?.batch_id ?? 1));
+    setBatchNum(String(t.state?.batch_id ?? currentBatchDefault));
     setWearers(String(defaultWearersFor(t)));
     beginUnloading(t);
     setMenuTruck(t);
@@ -550,7 +584,7 @@ export default function Unload() {
   function toggleBatch(t: TruckWithState) {
     const isOpen = batchOpen === t.truck_number;
     setBatchOpen(isOpen ? null : t.truck_number);
-    setBatchNum(String(t.state?.batch_id ?? 1));
+    setBatchNum(String(t.state?.batch_id ?? currentBatchDefault));
     setWearers(String(defaultWearersFor(t)));
     setOverflowOpen(null);
   }
