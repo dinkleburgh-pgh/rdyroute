@@ -461,6 +461,23 @@ export default function Unload() {
    * Idempotent by way of the server's first-tap-wins rule, so re-opening a
    * truck mid-job never restarts its clock.
    */
+  /**
+   * Follow a truck that just jumped sections.
+   *
+   * Starting an unload moves the row out of Arrived / Not arrived and into
+   * "Unloading now" at the top of the page — so in list style the row the user
+   * just tapped, and the batch entry that opens with it, vanish upward off
+   * screen. Wait a frame for the optimistic update to re-render it in its new
+   * home, then bring it back under their thumb.
+   */
+  function scrollToTruck(truckNumber: number) {
+    window.setTimeout(() => {
+      document
+        .getElementById(`unload-truck-${truckNumber}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 60);
+  }
+
   function beginUnloading(t: TruckWithState) {
     if (isUnloadDone(t)) return;
     if (unloadingAt(t) != null) return;
@@ -663,7 +680,15 @@ function LoadRequestBadge({ t, need }: { t: TruckWithState; need: LoadNeed | nul
           <button
             type="button"
             className="flex min-w-0 flex-1 items-center gap-3 text-left"
-            onClick={() => { beginUnloading(t); toggleBatch(t); }}
+            onClick={() => {
+              // Only chase it when it is about to move — re-tapping the truck
+              // already on the dock just closes its batch panel, and yanking
+              // the page for that would be worse than doing nothing.
+              const willMove = unloadingAt(t) == null && !isUnloadDone(t);
+              beginUnloading(t);
+              toggleBatch(t);
+              if (willMove) scrollToTruck(t.truck_number);
+            }}
           >
             <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
             {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} className="shrink-0" />}
