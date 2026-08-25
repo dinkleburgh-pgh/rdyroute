@@ -221,33 +221,35 @@ export default function RunDayWizard({
 
   async function saveAbsentAndAdvance() {
     const tasks: Promise<unknown>[] = [];
-    // Absent trucks: flag needs_checked and park them in a non-dirty status.
-    // An absent truck isn't here to unload, so it must NOT land in the dirty
-    // pile — give spares "spare" and route trucks "unloaded", and let the
-    // Needs Checked badge prompt a manual verify when it actually arrives.
-    // (Passing an explicit status also stops the backend defaulting a freshly
-    // created state row — e.g. an unseeded spare — to "dirty".)
+    // Absent trucks: raise Needs Checked and touch NOTHING else.
+    //
+    // This used to park them at "unloaded" (spares at "spare"), which closed
+    // the job before anyone had been near the truck — it dropped out of the
+    // crew's work list and out of the unload denominator, and the only thing
+    // left pointing at it was a badge nobody was hunting for. It also cost
+    // real load work: truck 88 went loaded -> unloaded through here on
+    // 2026-07-16 and had to be put back by hand.
+    //
+    // Saying "this truck isn't here yet" is an observation, not a decision
+    // about where it is in its day, so the status stays exactly as it was and
+    // the flag does the talking.
     for (const num of absentSelected) {
       const truck = specialTrucks.find((t) => t.truck_number === num);
       if (!truck) continue;
-      // A truck that has already been worked this shift keeps its status; only
-      // the needs-checked flag goes on. This branch used to downgrade
-      // unconditionally, and it really did destroy load work — truck 88 went
-      // loaded -> unloaded through here on 2026-07-16 and had to be set back by
-      // hand. Unlike the returning-truck path below, no staleness was involved:
-      // it simply never looked.
-      const worked = truck.state?.status === "loaded"
-        || truck.state?.status === "in_progress"
-        || truck.state?.status === "off"
-        || truck.state?.status === "oos";
       tasks.push(upsert.mutateAsync({
         truck_number: num,
         run_date: runDate,
         needs_checked: true,
-        ...(worked ? {} : {
-          status: truck.truck_type === "Spare" ? "spare" : "unloaded",
-          wearers: truck.state?.wearers ?? 0,
-        }),
+        // Echo the CURRENT status rather than omitting it: on the rare truck
+        // with no row yet, the create fallback would otherwise default the row
+        // to "dirty" — inventing a status change through the one path that is
+        // supposed to make none. A spare with no row gets "spare" for the same
+        // reason (dirty would invent unload work it never had).
+        ...(truck.state
+          ? { status: truck.state.status, wearers: truck.state.wearers }
+          : truck.truck_type === "Spare"
+            ? { status: "spare" as const }
+            : {}),
         state_source: "wizard",
       }));
     }
@@ -728,7 +730,7 @@ export default function RunDayWizard({
           {step === 4 && (
             <div className="space-y-4">
               <p className="text-center text-xl font-extrabold text-slate-100">What trucks are NOT here?</p>
-              <p className="text-center text-xs text-slate-400">Select returning or spare trucks that are absent today.</p>
+              <p className="text-center text-xs text-slate-400">Select returning or spare trucks that are absent today. They keep their current status — this only flags them Needs Checked.</p>
               {editableSpecialTrucks.length === 0 ? (
                 <p className="text-center text-sm text-slate-500">No returning or spare trucks found.</p>
               ) : (

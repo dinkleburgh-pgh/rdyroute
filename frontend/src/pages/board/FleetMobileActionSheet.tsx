@@ -249,6 +249,31 @@ export default function FleetMobileActionSheet({
                   🚩 Unload &amp; Hold
                 </button>
               )}
+              {/* Garments are set in Setup Day, but they turn up after it —
+                  an F.S. truck comes back carrying them and nobody wants to
+                  re-run the wizard for one flag. Only F.S. trucks: the badge,
+                  the Load strip and the finish-load prompt all gate on that
+                  type, so the flag means nothing anywhere else. */}
+              {truck.truck_type === "Dust" && (
+                <button
+                  type="button"
+                  disabled={upsert.isPending}
+                  onClick={() => {
+                    upsert.mutate({
+                      truck_number: truck.truck_number,
+                      run_date: runDate,
+                      has_dust_garment: !truck.state?.has_dust_garment,
+                      wearers: truck.state?.wearers ?? 0,
+                    });
+                    onClose();
+                  }}
+                  className={truck.state?.has_dust_garment
+                    ? "rounded-md border border-amber-500/60 bg-amber-900/40 px-3 py-2 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-900/60"
+                    : "rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"}
+                >
+                  {truck.state?.has_dust_garment ? "🧥 Garments on" : "🧥 Has garments"}
+                </button>
+              )}
               <button
                 type="button"
                 disabled={upsert.isPending}
