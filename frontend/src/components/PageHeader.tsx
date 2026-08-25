@@ -6,6 +6,8 @@ type PageHeaderProps = {
   subtitle?: string;
   eyebrow?: string;
   mobileBadge?: ReactNode;
+  /** Sits beside the title at every width (e.g. a LIVE pill). */
+  titleBadge?: ReactNode;
   actions?: ReactNode;
   centerMobile?: boolean;
   className?: string;
@@ -16,6 +18,7 @@ export default function PageHeader({
   subtitle,
   eyebrow,
   mobileBadge,
+  titleBadge,
   actions,
   centerMobile = true,
   className,
@@ -49,6 +52,9 @@ export default function PageHeader({
             {mobileBadge && (
               <div className="md:hidden">{mobileBadge}</div>
             )}
+            {/* Shown at every width — a "live" state belongs next to the title
+                on a desktop board too, not only on a phone. */}
+            {titleBadge}
           </div>
           {subtitle && (
             <p className="mt-1.5 hidden max-w-2xl text-[13.5px] text-ink-muted md:block">

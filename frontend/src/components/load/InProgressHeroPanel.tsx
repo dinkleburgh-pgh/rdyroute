@@ -34,6 +34,7 @@ export default function InProgressHeroPanel({
   onCancel,
   onShortSheet,
   onChangeNextUp,
+  onLogShortage,
   variant = "page",
 }: {
   truck: TruckWithState;
@@ -48,6 +49,8 @@ export default function InProgressHeroPanel({
   /** Opens the next-up picker. Rendered as a button under the Next Up number
    *  so the queue can be changed without leaving the timer. */
   onChangeNextUp?: () => void;
+  /** Page variant only — reveals the inline shortage logger below the card. */
+  onLogShortage?: () => void;
   variant?: "page" | "display";
 }) {
   const big = variant === "display";
@@ -73,6 +76,98 @@ export default function InProgressHeroPanel({
     onPace == null ? "text-ink-muted"
     : onPace       ? "text-st-unloaded"
     :                "text-st-dirty";
+
+  const coverRoute = getCoverageRouteNumber(truck);
+
+  // PAGE variant — the quiet instrument card. Colour is a signal only: amber
+  // on the clock and the top rule, nothing else. The display variant below is
+  // left alone; it is read from across a dock and needs the big centred type.
+  if (!big) {
+    return (
+      <section className="card overflow-hidden !p-0">
+        <div className="h-[2px] w-full animate-pulse bg-st-inprogress" />
+        <div className="flex flex-col gap-4 px-[22px] py-[18px]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
+            <div className="sm:min-w-[190px]">
+              <div className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-ink-muted">Loading now</div>
+              <div className="mt-1 font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums text-ink">
+                #{truck.truck_number}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-muted">
+                <span>
+                  Load Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` — ${LOAD_DAY_NAMES[loadDay]}` : ""}
+                </span>
+                {truck.state?.wearers ? <span>· {truck.state.wearers} wearers</span> : null}
+                {coverRoute != null && <CoverageTag route={coverRoute} truck={truck.truck_number} />}
+                {truck.state?.has_dust_garment && (
+                  <span className="inline-flex items-center gap-1 text-st-inprogress">
+                    <DustGarmentIcon className="h-4 w-4" />
+                    garment
+                  </span>
+                )}
+              </div>
+            </div>
+            <div className="hidden w-px self-stretch bg-hairline sm:block" />
+            <div className="flex-1">
+              <div className="mb-2 flex items-baseline justify-between gap-3">
+                <span className={clsx("font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums", timerColor)}>
+                  {formatDuration(elapsed)}
+                </span>
+                {paceLabel && <span className={clsx("text-xs", paceLabelColor)}>{paceLabel}</span>}
+              </div>
+              <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={6} />
+            </div>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-hairline bg-surface-3 px-3.5 py-2.5">
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Next up</span>
+            <span className="font-mono text-xl font-black tabular-nums text-ink-soft">
+              {nextUp ? `#${nextUp.truck_number}` : "—"}
+            </span>
+            {nextUp && paceAvgSeconds != null && (
+              <span className="text-[11px] text-ink-faint">avg {formatDuration(paceAvgSeconds)}</span>
+            )}
+            {nextUp && getCoverageRouteNumber(nextUp) != null && (
+              <CoverageTag route={getCoverageRouteNumber(nextUp)!} truck={nextUp.truck_number} />
+            )}
+            {onChangeNextUp && (
+              <button type="button" onClick={onChangeNextUp} className="btn-ghost ml-auto px-3 py-1 text-[11px]">
+                {nextUp ? "Change" : "Set Next Up"}
+              </button>
+            )}
+          </div>
+
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={onFinish}
+              className="flex-1 rounded-lg py-3.5 text-sm font-bold text-white transition-opacity disabled:opacity-50"
+              style={{ background: "#15803d" }}
+            >
+              {busy ? "Finishing…" : `Finish Loading #${truck.truck_number}`}
+            </button>
+            {/* The 15s lock stays: it exists so a mis-tapped Start can be taken
+                back without letting a real load be cancelled mid-run. */}
+            <button
+              type="button"
+              className="btn-ghost px-5 py-3.5 text-xs"
+              disabled={busy || elapsed >= 15}
+              onClick={onCancel}
+              title={elapsed < 15 ? `Locks in ${15 - elapsed}s` : "Cancel locked — this load is under way"}
+            >
+              {elapsed < 15 ? `Cancel (${15 - elapsed}s)` : "Cancel"}
+            </button>
+            {onLogShortage && (
+              <button type="button" onClick={onLogShortage} className="btn-ghost px-5 py-3.5 text-xs">
+                Log Shortage
+              </button>
+            )}
+          </div>
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section className="overflow-hidden rounded-xl border-2" style={{ borderColor: "rgba(245,158,11,0.50)", background: "rgba(245,158,11,0.07)" }}>

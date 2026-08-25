@@ -51,8 +51,10 @@ export default function NowUnloadingStrip({
   return (
     <div
       className={clsx(
-        "card border-amber-600/40 bg-amber-950/20",
-        dense ? "space-y-2 py-2" : "space-y-2 px-4 py-2.5",
+        // Quiet by design: amber is reserved for the loading card's rule and
+        // clock. This strip is reference, not an alarm.
+        "rounded-[10px] border border-hairline bg-surface-3",
+        dense ? "space-y-2 px-3 py-2" : "space-y-2 px-4 py-2.5",
       )}
     >
       {trucks.map((t) => {

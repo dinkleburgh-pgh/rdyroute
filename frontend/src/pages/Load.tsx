@@ -161,6 +161,10 @@ export default function Load() {
   // One hook call feeds both surfaces: LoadDisplay is rendered by this page.
   const loadRequest = useLoadRequest(runDate);
   const [nextUpOpen, setNextUpOpen] = useState(false);
+  // The inline logger is revealed by the card's Log Shortage button rather
+  // than sitting open under every load — it's a long panel and most loads
+  // don't need it.
+  const [shortagesOpen, setShortagesOpen] = useState(false);
   const nextUpTruck = useMemo(
     () => ready.find((t) => t.truck_number === storedNextUp) ?? ready[0],
     [ready, storedNextUp],
@@ -340,7 +344,7 @@ export default function Load() {
             </button>
           </div>
         }
-        mobileBadge={anyInProgress ? (
+        titleBadge={anyInProgress ? (
           <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
             <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
             Live
@@ -359,313 +363,272 @@ export default function Load() {
         Open Load Display
       </button>
 
-      {/* Standing load-workflow notes for today, edited on the Notes page. */}
-      <WorkflowDayNotes scope="load" day={loadDay} />
-
       <GarmentsStrip trucks={dustGarmentTrucks} />
 
-      {/* Coverage today — always open; big ROUTE -> TRUCK cards, same read as
-          the report's coverage section. */}
-      {loadCoverage.length > 0 && (
-        <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
-          <div className="flex w-full items-center gap-2 px-3 py-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage today</span>
-            <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
-              {loadCoverage.length} route{loadCoverage.length === 1 ? "" : "s"}
-            </span>
+      {/* Two rails: what's happening right now on the left, the reference
+          material that supports it on the right. */}
+      <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
+        {/* ---------------- Left rail ---------------- */}
+        <div className="flex flex-col gap-4">
+          {inProgress ? (
+            <>
+              <InProgressHeroPanel
+                truck={inProgress}
+                paceAvgSeconds={pace?.avg_seconds ?? null}
+                busy={busy === inProgress.truck_number}
+                loadDay={loadDay}
+                nextUp={nextUpTruck}
+                onFinish={() => requestFinish(inProgress)}
+                onCancel={() => cancelLoad(inProgress)}
+                onChangeNextUp={() => setNextUpOpen(true)}
+                onLogShortage={() => setShortagesOpen((v) => !v)}
+              />
+              {shortagesOpen && <InlineShortages truck={inProgress} runDate={runDate} />}
+            </>
+          ) : queuedNextUp ? (
+            /* Nothing loading — hand straight off to the queued truck rather
+               than making the user find it again down in the ready grid. */
+            <StartNextUpBanner
+              truck={queuedNextUp}
+              paceAvgSeconds={pace?.avg_seconds ?? null}
+              busy={busy === queuedNextUp.truck_number}
+              onStart={() => requestStart(queuedNextUp)}
+            />
+          ) : null}
+
+          {/* What Unload is emptying right now — and the buttons that answer
+              it. Shared with the full-screen display so they cannot drift. */}
+          <NowUnloadingStrip
+            trucks={unloadingNow}
+            actions={loadRequest}
+            board={board}
+            loadDay={loadDay}
+            holidayLoad={holidayLoad}
+            renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
+          />
+        </div>
+
+        {/* ---------------- Right rail ---------------- */}
+        <div className="flex flex-col gap-4">
+          {/* Standing load-workflow notes for today, edited on the Notes page. */}
+          <WorkflowDayNotes scope="load" day={loadDay} />
+
+          {loadCoverage.length > 0 && (
+            <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
+              <div className="flex w-full items-center gap-2 px-3.5 py-2.5">
+                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-sky-400">Coverage today</span>
+                <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-muted">
+                  {loadCoverage.length} route{loadCoverage.length === 1 ? "" : "s"}
+                </span>
+              </div>
+              <div className="border-t px-3.5 pb-3.5 pt-3.5" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
+                <CoverageCards entries={loadCoverage} isRecurring={isRecurringCoverage} />
+              </div>
+            </div>
+          )}
+
+          {/* Left-to-load counts — one card, four cells, no tinted tiles. The
+              dot carries the category; the number stays ink so a big count
+              can't read as an alarm. */}
+          <div className="card flex !px-0 !py-3.5">
+            {([
+              { key: "dust", value: dustsLeft, label: "F.S. left", dot: "bg-st-dirty" },
+              { key: "uniform", value: uniformsLeft, label: "Uniforms left", dot: "bg-st-shop" },
+              { key: "spare", value: sparesLeft, label: "Spares left", dot: "bg-st-spare" },
+              { key: "total", value: totalLeft, label: "Total left", dot: null },
+            ] as const).map((cell, i) => (
+              <button
+                key={cell.key}
+                type="button"
+                onClick={() => setStatFilter(statFilter === cell.key ? null : cell.key)}
+                className={clsx(
+                  "flex-1 px-1 text-center transition-colors",
+                  i < 3 && "border-r border-hairline",
+                  statFilter === cell.key ? "bg-surface-2" : "hover:bg-surface-2/60",
+                )}
+              >
+                <div className="font-mono text-2xl font-black tabular-nums text-ink">{cell.value}</div>
+                <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                  {cell.dot && <span className={clsx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full", cell.dot)} />}
+                  {cell.label}
+                </div>
+              </button>
+            ))}
           </div>
-          <div className="border-t px-3 pb-3 pt-3" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-            <CoverageCards entries={loadCoverage} isRecurring={isRecurringCoverage} />
+
+          {/* Stat drill-down */}
+          {statFilter && (() => {
+            const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
+            const statusLabel: Record<string, string> = { dirty: "Dirty", unloaded: "Unloaded", in_progress: "Loading" };
+            const statusDot: Record<string, string> = { dirty: "bg-st-dirty", unloaded: "bg-st-unloaded", in_progress: "bg-st-inprogress" };
+            return (
+              <div className="card animate-slide-down space-y-2.5">
+                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                  {statFilter === "dust" ? "F.S." : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
+                </p>
+                <div className="grid grid-cols-2 gap-2">
+                  {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
+                    const st = t.state?.status ?? "dirty";
+                    const cr = getCoverageRouteNumber(t);
+                    return (
+                      <QuietTile
+                        key={t.truck_number}
+                        truck={t}
+                        dotClass={statusDot[st] ?? "bg-st-off"}
+                        numberClass="text-ink-soft"
+                        tag={t.state?.priority_hold ? "Hold" : undefined}
+                        tagClass="text-st-dirty"
+                        sub={
+                          <>
+                            <span>{statusLabel[st] ?? st}</span>
+                            {cr != null && <CoverageTag route={cr} truck={t.truck_number} />}
+                          </>
+                        }
+                      />
+                    );
+                  })}
+                  {trucks.length === 0 && <span className="col-span-full text-sm text-ink-faint">All clear!</span>}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Load / Unload progress */}
+          <div className="card flex flex-col justify-center gap-2.5">
+            <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
+            <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
           </div>
         </div>
-      )}
-
-      {/* In-progress truck — top of page */}
-      {inProgress && (
-        <>
-          <InProgressHeroPanel
-            truck={inProgress}
-            paceAvgSeconds={pace?.avg_seconds ?? null}
-            busy={busy === inProgress.truck_number}
-            loadDay={loadDay}
-            nextUp={nextUpTruck}
-            onFinish={() => requestFinish(inProgress)}
-            onCancel={() => cancelLoad(inProgress)}
-            onChangeNextUp={() => setNextUpOpen(true)}
-          />
-          <InlineShortages truck={inProgress} runDate={runDate} />
-        </>
-      )}
-
-      {/* Nothing loading — hand straight off to the queued truck rather than
-          making the user find it again down in the ready grid. */}
-      {!anyInProgress && queuedNextUp && (
-        <StartNextUpBanner
-          truck={queuedNextUp}
-          paceAvgSeconds={pace?.avg_seconds ?? null}
-          busy={busy === queuedNextUp.truck_number}
-          onStart={() => requestStart(queuedNextUp)}
-        />
-      )}
-
-      {/* Stats grid */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-        <StatCard label="F.S. Left" value={dustsLeft} accent="#ef4444" active={statFilter === "dust"} onClick={() => setStatFilter(statFilter === "dust" ? null : "dust")} />
-        <StatCard label="Uniforms Left" value={uniformsLeft} accent="#6366f1" active={statFilter === "uniform"} onClick={() => setStatFilter(statFilter === "uniform" ? null : "uniform")} />
-        <StatCard label="Spares Left" value={sparesLeft} accent="#22c55e" active={statFilter === "spare"} onClick={() => setStatFilter(statFilter === "spare" ? null : "spare")} />
-        <StatCard label="Total Left" value={totalLeft} accent="#dbe3ee" active={statFilter === "total"} onClick={() => setStatFilter(statFilter === "total" ? null : "total")} />
       </div>
 
-      {/* Stat drill-down */}
-      {statFilter && (() => {
-        const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
-        const statusLabel: Record<string, string> = { dirty: "Dirty", unloaded: "Unloaded", in_progress: "Loading" };
-        const statusColor: Record<string, string> = { dirty: "text-red-400", unloaded: "text-emerald-400", in_progress: "text-amber-400" };
-        const statusBadgeColor: Record<string, string> = {
-          dirty: "bg-red-950/60 text-red-300 ring-red-900/80",
-          unloaded: "bg-emerald-950/60 text-emerald-300 ring-emerald-900/80",
-          in_progress: "bg-amber-950/60 text-amber-300 ring-amber-900/80",
-        };
-        return (
-          <div className="card animate-slide-down space-y-2">
-            <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-              {statFilter === "dust" ? "F.S." : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
+      {/* ---------------- Ready to load + On hold ---------------- */}
+      <div className="card flex flex-col gap-[18px]">
+        <div>
+          <SectionHeader label="Ready to load" count={ready.length}>
+            {suggestedNext.length > 0 && (
+              <span className="text-[11px] text-ink-faint">
+                Usually next:{" "}
+                <span className="font-mono font-bold text-ink-soft">
+                  {suggestedNext.map((sg) => `#${sg.truck_number}`).join(" · ")}
+                </span>
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={() => setNextUpOpen(true)}
+              className="btn-ghost px-3 py-1 text-[11px]"
+            >
+              {storedNextUp != null ? `Next Up: #${storedNextUp} · Change` : "Set Next Up"}
+            </button>
+          </SectionHeader>
+          {anyInProgress && (
+            <p className="mb-2 text-[11px] text-st-inprogress">
+              Finish the in-progress truck before starting another.
             </p>
-            <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-              {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
-                const st = t.state?.status ?? "dirty";
-                const cr = getCoverageRouteNumber(t);
-                return (
-                  <span
-                    key={t.truck_number}
-                    className="flex min-h-[3.35rem] items-start justify-between rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5"
-                  >
-                    <span className="pt-0.5 text-lg font-extrabold tracking-tight tabular-nums text-ink">
-                      #{t.truck_number}
-                    </span>
-                    <span className="flex flex-col items-end gap-1">
-                      <span
-                        className={clsx(
-                          "rounded-full px-1.5 py-0.5 text-[10px] font-semibold leading-none ring-1",
-                          statusBadgeColor[st] ?? "bg-slate-700/70 text-slate-300 ring-slate-600/80",
-                        )}
-                      >
-                        {statusLabel[st] ?? st}
-                      </span>
-                      {cr != null && <CoverageTag route={cr} truck={t.truck_number} />}
-                      {t.state?.priority_hold && (
-                        <span className="inline-flex items-center rounded-pill bg-red-950/70 px-1.5 py-0.5 text-[10px] font-bold leading-none text-red-300 ring-1 ring-red-900/80">
-                          Hold
-                        </span>
-                      )}
-                    </span>
-                  </span>
-                );
-              })}
-              {trucks.length === 0 && <span className="col-span-full text-sm text-ink-faint">All clear!</span>}
-            </div>
-          </div>
-        );
-      })()}
-
-      {/* Load / Unload progress */}
-      <div className="card space-y-2">
-        <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
-        <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
-      </div>
-
-      {/* What Unload is emptying right now — and the two buttons that answer
-          it. Shared with the full-screen display so they cannot drift. */}
-      <NowUnloadingStrip
-        trucks={unloadingNow}
-        actions={loadRequest}
-        board={board}
-        loadDay={loadDay}
-        holidayLoad={holidayLoad}
-        renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
-      />
-
-      {/* On Hold */}
-      {heldReady.length > 0 && (
-        <section>
-          <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-st-dirty">
-            On Hold ({heldReady.length})
-          </h3>
-          <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]">
-            {heldReady.map((t, index) => {
+          )}
+          <div className={TILE_GRID}>
+            {ready.map((t) => {
+              const disabled = anyInProgress || busy === t.truck_number;
+              const cr = getCoverageRouteNumber(t);
               return (
-                <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.0} className="h-full">
-                  <LoadWorkflowCard
-                    truck={t}
-                    accent="text-red-300"
-                    statusLabel="HOLD"
-                    statusClassName="bg-[#b91c1c] text-white"
-                    footer={<span className="text-[11px] font-semibold text-st-dirty">Clear in Fleet</span>}
-                    disabled
-                  />
-                </AnimateCard>
+                <QuietTile
+                  key={t.truck_number}
+                  truck={t}
+                  disabled={disabled}
+                  onClick={() => requestStart(t)}
+                  title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
+                  tag={t.truck_number === storedNextUp ? "Next" : undefined}
+                  tagClass="text-[#3b82f6]"
+                  dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
+                  sub={
+                    cr != null ? (
+                      <span>Covering route {cr}</span>
+                    ) : (
+                      <span>
+                        {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
+                        {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
+                      </span>
+                    )
+                  }
+                />
               );
             })}
+            {ready.length === 0 && (
+              <p className="col-span-full text-sm text-ink-muted">No trucks ready to load.</p>
+            )}
           </div>
-        </section>
-      )}
-
-      {/* Ready to load */}
-      <section>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-st-unloaded">
-            Ready to load ({ready.length})
-          </h3>
-          <button
-            type="button"
-            onClick={() => setNextUpOpen(true)}
-            className="rounded-lg border border-sky-700/40 bg-sky-950/50 px-3 py-1 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-900/50"
-          >
-            {storedNextUp != null ? `Next Up: #${storedNextUp} · Change` : "Set Next Up"}
-          </button>
         </div>
-        {/* What usually loads next — historical average load position over the
-            last 14 days, intersected with tonight's ready trucks. */}
-        {suggestedNext.length > 0 && (
-          <p className="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-muted">
-            <span className="font-semibold uppercase tracking-wide text-ink-faint">Usually next:</span>
-            {suggestedNext.map((s, i) => (
-              <span
-                key={s.truck_number}
-                className={clsx(
-                  "inline-flex items-center gap-1 rounded-pill border px-2 py-0.5 font-mono font-bold",
-                  i === 0 ? "border-st-loaded/60 bg-st-loaded/10 text-st-loaded" : "border-hairline bg-surface-2 text-ink-soft",
-                )}
-                title={`Usually loads ~position ${s.avg_load_position} (seen ${s.times_loaded}× in 14 days)`}
-              >
-                #{s.truck_number}
-                <span className="text-[10px] font-normal text-ink-faint">~{s.avg_load_position}</span>
-              </span>
-            ))}
-          </p>
-        )}
-        {anyInProgress && (
-          <p className="mb-2 text-xs text-st-inprogress">
-            Finish the in-progress truck before starting another.
-          </p>
-        )}
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]">
-          {ready.map((t, index) => {
-            const disabled = anyInProgress || busy === t.truck_number;
-            return (
-              <AnimateCard key={t.truck_number} delay={index * 0.03} hoverScale={1.02} className="h-full">
-              <button
-                type="button"
-                disabled={disabled}
-                onClick={() => requestStart(t)}
-                className={clsx(
-                  "h-full w-full text-left transition-all duration-150",
-                  disabled
-                    ? "cursor-not-allowed opacity-50"
-                    : "active:scale-[0.98]",
-                )}
-                title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
-              >
-                <LoadWorkflowCard
+
+        {heldReady.length > 0 && (
+          <div>
+            <SectionHeader label="On hold" count={heldReady.length} />
+            <div className={TILE_GRID}>
+              {heldReady.map((t) => (
+                <QuietTile
+                  key={t.truck_number}
                   truck={t}
-                  accent="text-st-unloaded"
-                  statusLabel="Unloaded"
-                  statusClassName="bg-[#16a34a] text-white"
-                  footer={
-                    t.truck_number === storedNextUp || t.state?.wearers ? (
-                      <span className="flex items-center gap-1.5">
-                        {t.truck_number === storedNextUp && (
-                          <span className="rounded-pill bg-sky-900/70 px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide text-sky-300">
-                            Next
-                          </span>
-                        )}
-                        {t.state?.wearers ? <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span> : null}
-                      </span>
-                    ) : null
-                  }
-                  interactive={!disabled}
-                  ringClassName="hover:ring-st-unloaded"
+                  dim
+                  tag="Hold"
+                  tagClass="text-st-dirty"
+                  dotClass="bg-st-dirty"
+                  sub={<span className="text-ink-faint">Clear in Fleet</span>}
                 />
-              </button>
-              </AnimateCard>
-            );
-          })}
-          {ready.length === 0 && (
-            <p className="col-span-full text-sm text-ink-muted">
-              No trucks ready to load.
-            </p>
-          )}
-        </div>
-      </section>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
 
-      {/* Loaded today */}
-      <section>
-        <div className="mb-2 flex items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-st-loaded">
-            Loaded today ({loaded.length})
-          </h3>
+      {/* ---------------- Loaded today ---------------- */}
+      <div>
+        <SectionHeader label="Loaded today" count={loaded.length}>
           {loaded.length > 1 && (
-            <div className="inline-flex overflow-hidden rounded-md border border-hairline text-[11px] font-semibold">
-              <button
-                type="button"
-                onClick={() => setLoadedSort("number")}
-                className={clsx(
-                  "px-2 py-1 transition-colors",
-                  loadedSort === "number"
-                    ? "bg-st-loaded text-white"
-                    : "bg-surface-2 text-ink-muted hover:bg-surface",
-                )}
-              >
-                # Number
-              </button>
-              <button
-                type="button"
-                onClick={() => setLoadedSort("order")}
-                className={clsx(
-                  "border-l border-hairline px-2 py-1 transition-colors",
-                  loadedSort === "order"
-                    ? "bg-st-loaded text-white"
-                    : "bg-surface-2 text-ink-muted hover:bg-surface",
-                )}
-              >
-                Load order
-              </button>
+            <div className="inline-flex overflow-hidden rounded-[7px] border border-hairline text-[11px] font-semibold">
+              {([["number", "# Number"], ["order", "Load order"]] as const).map(([key, text], i) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setLoadedSort(key)}
+                  className={clsx(
+                    "px-3 py-1 transition-colors",
+                    i > 0 && "border-l border-hairline",
+                    loadedSort === key ? "bg-track text-ink" : "text-ink-muted hover:text-ink",
+                  )}
+                >
+                  {text}
+                </button>
+              ))}
             </div>
           )}
-        </div>
-        <div className="grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]">
-          {loadedSorted.map((t, idx) => {
-            return (
-              <AnimateCard key={t.truck_number} delay={idx * 0.03} className="h-full">
-                <div className="relative h-full">
-                  {loadedSort === "order" && (
-                    <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-loaded ring-1 ring-st-loaded/60">
-                      {idx + 1}
-                    </span>
-                  )}
-                  <LoadWorkflowCard
-                    truck={t}
-                    accent="text-st-loaded"
-                    statusLabel="Loaded"
-                    statusClassName="bg-st-loaded text-white"
-                    footer={t.state?.load_finish_time ? (
-                      <span className="text-xs text-ink-muted">
-                        Done {format(new Date(t.state.load_finish_time * 1000), "h:mm a")}
-                      </span>
-                    ) : null}
-                    interactive
-                    ringClassName="hover:ring-st-loaded"
-                  />
-                </div>
-              </AnimateCard>
-            );
-          })}
+        </SectionHeader>
+        <div className={TILE_GRID}>
+          {loadedSorted.map((t, idx) => (
+            <div key={t.truck_number} className="relative">
+              {loadedSort === "order" && (
+                <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-loaded ring-1 ring-st-loaded/60">
+                  {idx + 1}
+                </span>
+              )}
+              <QuietTile
+                truck={t}
+                numberClass="text-ink-soft"
+                dotClass="bg-st-loaded"
+                sub={
+                  <span className="text-ink-faint">
+                    {t.state?.load_finish_time
+                      ? `Done ${format(new Date(t.state.load_finish_time * 1000), "h:mm a")}`
+                      : "Loaded"}
+                  </span>
+                }
+              />
+            </div>
+          ))}
           {loaded.length === 0 && (
             <p className="col-span-full text-sm text-ink-muted">Nothing loaded yet.</p>
           )}
         </div>
-      </section>
-      <LoadActionDialogs actions={actions} />
+      </div>
+            <LoadActionDialogs actions={actions} />
       {/* Next Up picker — same panel the In Progress page uses */}
       {nextUpOpen && createPortal(
         <div
@@ -778,6 +741,91 @@ function PaceBadge({ avgSeconds }: { avgSeconds: number | null }) {
     </span>
   );
 }
+
+/**
+ * Section header: label, mono count, a hairline rule that eats the slack, and
+ * whatever controls belong on the right. Used by Ready / On hold / Loaded so
+ * the three read as one system instead of three differently-coloured headings.
+ */
+function SectionHeader({
+  label,
+  count,
+  children,
+}: {
+  label: string;
+  count: number;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-2">
+      <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ink">{label}</span>
+      <span className="font-mono text-[11px] tabular-nums text-ink-faint">{count}</span>
+      <span className="hidden h-px flex-1 bg-hairline sm:block" />
+      {children}
+    </div>
+  );
+}
+
+/**
+ * One truck, stated quietly: the number carries the weight and a 6px dot does
+ * the work the old colour-block badges did. Status lives in the words next to
+ * the dot, so a wall of these reads as a list rather than a paint chart.
+ */
+function QuietTile({
+  truck,
+  sub,
+  dotClass,
+  tag,
+  tagClass,
+  numberClass = "text-ink",
+  dim = false,
+  disabled = false,
+  onClick,
+  title,
+}: {
+  truck: TruckWithState;
+  sub: React.ReactNode;
+  dotClass: string;
+  tag?: string;
+  tagClass?: string;
+  numberClass?: string;
+  dim?: boolean;
+  disabled?: boolean;
+  onClick?: () => void;
+  title?: string;
+}) {
+  const body = (
+    <>
+      <div className="flex items-baseline gap-2">
+        <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", numberClass)}>
+          #{truck.truck_number}
+        </span>
+        {tag && (
+          <span className={clsx("text-[9.5px] font-bold uppercase tracking-[0.08em]", tagClass)}>{tag}</span>
+        )}
+      </div>
+      <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-muted">
+        <span className={clsx("inline-block h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
+        {sub}
+      </div>
+    </>
+  );
+  const cls = clsx(
+    "w-full rounded-[10px] border border-hairline px-3.5 py-3 text-left transition-colors",
+    dim ? "bg-surface-3 opacity-75" : "bg-surface",
+    onClick && !disabled && "hover:bg-surface-2 active:scale-[0.99]",
+    disabled && "cursor-not-allowed opacity-50",
+  );
+  if (!onClick) return <div className={cls}>{body}</div>;
+  return (
+    <button type="button" className={cls} disabled={disabled} onClick={onClick} title={title}>
+      {body}
+    </button>
+  );
+}
+
+/** Shared grid for all three truck sections. */
+const TILE_GRID = "grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5";
 
 function InlineShortages({ truck, runDate }: { truck: TruckWithState; runDate: string }) {
   const { data: shorts = [] } = useShortages(runDate, truck.truck_number);
