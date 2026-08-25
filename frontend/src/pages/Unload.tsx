@@ -26,6 +26,7 @@ import OverbatchedChip from "../components/OverbatchedChip";
 import { capacityColor, capacityPct } from "../utils/batchCapacity";
 import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader from "../components/PageHeader";
+import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/QuietTile";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import { motion } from "framer-motion";
@@ -50,6 +51,10 @@ import { truckTypeLabel } from "../utils/truckType";
  * tonight's assignment. The truck membership/counting logic (allTrucks/dirty/
  * unloaded/toGo/unloadCtx) is unchanged.
  */
+const UNLOAD_DAY_NAMES: Record<number, string> = {
+  1: "Monday", 2: "Tuesday", 3: "Wednesday", 4: "Thursday", 5: "Friday",
+};
+
 export default function Unload() {
   const runDate = todayIso();
   const { unloadsDay: computedUnloadsDay, loadDay: computedLoadDay } = workdayNumbers();
@@ -146,11 +151,27 @@ export default function Unload() {
   const [wearers, setWearers] = useState("0");
   const [batchOpen, setBatchOpen] = useState<number | null>(null);
   const [overflowOpen, setOverflowOpen] = useState<number | null>(null);
+  // Long enough to be useful, short enough not to bury the work above it.
+  // The batch the crew filled most recently tonight. Shown as a hint next to
+  // the picker because batches are filled roughly in order, so the last one
+  // used is nearly always the right answer for the truck on the dock.
+  const lastBatchUsed = useMemo(() => {
+    const done = (data ?? [])
+      .filter((t) => t.state?.batch_id != null && t.state?.unloaded_at != null)
+      .sort((a, b) => (b.state!.unloaded_at ?? 0) - (a.state!.unloaded_at ?? 0));
+    return done[0]?.state?.batch_id ?? null;
+  }, [data]);
+  const UNLOADED_PREVIEW = 8;
+  const [showAllUnloaded, setShowAllUnloaded] = useState(false);
   const [unloadedSort, setUnloadedSort] = useState<"number" | "order">("number");
   const [statFilter, setStatFilter] = useState<"routes" | "coverage" | "holds" | "total" | null>(null);
   // Per-device layout preference: "cards" (Load-page look, default) | "list".
   const [style, setStyle] = useState<"cards" | "list">(() => (localStorage.getItem("unload:style") === "list" ? "list" : "cards"));
   const setStylePref = (s: "cards" | "list") => { setStyle(s); localStorage.setItem("unload:style", s); };
+  // Cards = the wide 5-up grid; List = the same tiles stacked narrow, for
+  // a phone or a tablet held in portrait on the dock. Without this the
+  // toggle was still on screen and still flipping a value nothing read.
+  const tileGrid = style === "list" ? "grid gap-2 grid-cols-1 sm:grid-cols-2" : TILE_GRID;
   // ?truck=N — where the arrival toast and web push land. Scroll that truck's
   // card into view and ring it briefly, then drop the param so a refresh isn't
   // stuck on it. Same pattern as Board.tsx; gated on the board being loaded so
@@ -444,11 +465,18 @@ export default function Unload() {
   async function assignBatch(batchTruck: number, physical?: TruckWithState) {
     await assign.mutateAsync({ run_date: runDate, batch_number: Number(batchNum), truck_number: batchTruck, wearers: Number(wearers || 0) });
     setBatchOpen(null);
-    // NOT followed by a status write. /batches/assign already turns a dirty
-    // truck unloaded and clears the unloading marker in the same transaction;
-    // writing it again from here raced that commit and 409'd on the
-    // expected_status precondition, leaving the truck dirty and un-batched.
-    if (physical && prebatchMode && !isUnloadDone(physical)) {
+    // /batches/assign turns a dirty truck unloaded and clears the unloading
+    // marker in the same transaction — but only for the truck the CARD is
+    // filed under. Writing it again from here would race that commit and 409
+    // on the expected_status precondition, so we only step in when the server
+    // can't have done it:
+    //   - pre-batch mode, where assign deliberately leaves status alone; or
+    //   - a carrier, where the card is filed under the route it brought back
+    //     and the truck actually on the dock is a different one. Without this
+    //     the route showed unloaded while the truck being emptied stayed dirty
+    //     — exactly backwards from how coverage is counted everywhere else.
+    const serverMarkedIt = !prebatchMode && physical != null && batchTruck === physical.truck_number;
+    if (physical && !serverMarkedIt && !isUnloadDone(physical)) {
       await markUnloaded(physical);
     }
   }
@@ -593,190 +621,195 @@ export default function Unload() {
     setBatchOpen(null);
   }
 
-  const GRID = "grid gap-3 grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(152px,1fr))]";
-
-  // The dirty-family sections, shared by both layouts.
-  const dirtySections = [
-    // "Now unloading" — the one truck being emptied. Amber, the same tokens the
-    // Load page's "Loading" and the Requested section use: the app's colour for
-    // work in flight. Not green (that means done) and not orange (misreads
-    // against amber on a wall display).
-    { key: "unloading", title: "Unloading now", titleClass: "text-st-inprogress", trucks: unloading, accent: "text-amber-300", label: "Unloading", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", overflow: "dirty" as const },
-    { key: "requested", title: "Requested — priority hold", titleClass: "text-st-inprogress", trucks: requested, accent: "text-amber-300", label: "HOLD", labelClass: "bg-amber-500 text-black", rowAccent: "border-l-st-inprogress", overflow: "dirty" as const },
-    // Back = physically in the yard (driver tapped "I'm Back" / lead tapped
-    // Arrived), oldest arrival first — what can be worked NOW.
-    // Deliberately the SAME red as Not arrived. An arrived truck is still Dirty —
-    // arrival is a fact about a dirty truck, not a fourth state — and green is
-    // what "unloaded" means everywhere else in the app. The distinguishing mark
-    // is the pin, not the hue.
-    { key: "back", title: "Arrived", titleClass: "text-st-dirty", trucks: back, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", overflow: "dirty" as const },
-    { key: "unfinished", title: "Unfinished", titleClass: "text-st-unfinished", trucks: unfinished, accent: "text-st-unfinished", label: "Unfinished", labelClass: "bg-[#b45309] text-white", rowAccent: "border-l-st-unfinished", overflow: "unfinished" as const },
-    // Not arrived = still on the road. Coverage and route trucks together; the
-    // CoverageTag on the card says which is which.
-    { key: "notback", title: "Not arrived", titleClass: "text-st-dirty", trucks: notBack, accent: "text-red-300", label: "Dirty", labelClass: "bg-[#b91c1c] text-white", rowAccent: "border-l-st-dirty", overflow: "dirty" as const },
-  ];
-
-  /** Cards style: a tappable dirty-family truck card (opens the action menu). */
-  function DirtyCard({ t, index, accent, label, labelClass }: { t: TruckWithState; index: number; accent: string; label: string; labelClass: string }) {
-    const cd = coverDisplay(t);
-    return (
-      <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} hoverScale={1.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse rounded-2xl")}>
-        <button type="button" onClick={() => openTruckMenu(t)} className="h-full w-full text-left transition-all duration-150 active:scale-[0.98]">
-          <LoadWorkflowCard
-            truck={t}
-            accent={accent}
-            statusLabel={label}
-            statusClassName={labelClass}
-            coverageRoute={cd.route}
-            coverageSplit={cd.split}
-            footer={
-              unloadingAt(t) != null ? (
-                <span className="flex flex-wrap items-center gap-1.5">
-                  <UnloadingSince startSec={unloadingAt(t)!} />
-                  <LoadRequestBadge t={t} need={loadNeedOf(t)} />
-                </span>
-              ) : arrivedAt(t) != null ? (
-                <span className="inline-flex items-center gap-1 text-xs font-semibold text-ink">
-                  <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
-                  Arrived {formatEasternTime(arrivedAt(t)!)}
-                </span>
-              ) : t.state?.wearers ? (
-                <span className="text-xs text-ink-muted">{t.state.wearers} wearers</span>
-              ) : null
-            }
-            interactive
-            ringClassName="hover:ring-st-dirty"
-          />
-        </button>
-      </AnimateCard>
-    );
-  }
-
   /**
- * The load crew's advisory answer on the truck being unloaded.
- *
- * Cyan, both ways: red means dirty, green means unloaded, and amber is already
- * the whole unloading section — a badge inside an amber card in amber would
- * vanish. Cyan is what the app uses when the OTHER crew is saying something
- * (see the driver-claim card on the Fleet sheet). The words carry the polarity,
- * not the hue.
- */
-function LoadRequestBadge({ t, need }: { t: TruckWithState; need: LoadNeed | null }) {
-  const req = t.state?.load_request ?? null;
-  // Never render on a truck the dock isn't actually on — the same staleness
-  // guard every other reader of the marker applies.
-  if (t.state?.unloading_started_at == null) return null;
-  if (t.state.status !== "dirty" && t.state.status !== "unfinished") return null;
-
-  // A person's decision outranks the schedule's, and reads louder: solid cyan
-  // and the word LOAD, because someone actually looked at this truck.
-  if (req != null) {
-    return (
-      <span className="badge shrink-0 bg-cyan-500/20 text-cyan-200 ring-1 ring-cyan-500/40">
-        {req === "want" ? "LOAD: PULL FORWARD" : "LOAD: BACK OUT"}
-      </span>
-    );
-  }
-  // Nobody has spoken — state what the schedule says, in the dock's own terms
-  // ("does tomorrow need this?") and quietly, so it can't be mistaken for
-  // someone having checked.
-  if (need == null) return null;
-  return (
-    <span
-      className={clsx(
-        "badge shrink-0 ring-1",
-        need.needed
-          ? "bg-cyan-500/10 text-cyan-300/80 ring-cyan-500/25"
-          : "bg-slate-600/20 text-slate-300 ring-slate-500/30",
-      )}
-      title={need.reason}
-    >
-      {need.needed ? "LOADS TOMORROW" : "NOT LOADING TOMORROW"}
-    </span>
-  );
-}
-
-/** List style: a compact horizontal dirty-family row with inline actions. */
-  function renderRow(t: TruckWithState, index: number, opts: { accentClass?: string; overflow: "dirty" | "unfinished" }) {
+   * The truck on the dock right now — and everything needed to finish it.
+   *
+   * Batch entry lives IN this card rather than behind a modal because
+   * assigning the batch is what marks the truck unloaded: the crew's last act
+   * on a truck and the app's completion signal are the same tap, so they
+   * belong in the same place.
+   */
+  function UnloadingNowCard({ truck: t }: { truck: TruckWithState }) {
+    const cd = coverDisplay(t);
+    const startedAt = unloadingAt(t);
     const isBusy = busy === t.truck_number;
-    const isBatchOpen = batchOpen === t.truck_number;
-    const isOverflowOpen = overflowOpen === t.truck_number;
-    const cd = coverDisplay(t); // prev-day coverage / split — what it's unloaded as
-    const detailParts: string[] = [];
-    if (t.truck_type === "Spare") detailParts.push("Spare");
-    if (t.state?.batch_id != null) detailParts.push(`Batch ${t.state.batch_id}`);
-    const detail = detailParts.join("  ·  ");
+    const req = t.state?.load_request ?? null;
+    const batchTarget = carriedRouteOf(t) ?? t.truck_number;
+    const isUnfin = t.state?.status === "unfinished";
     return (
-      <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.03} className={clsx("card flex flex-col !p-0", opts.accentClass, highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse")}>
-        <div className="flex items-center gap-3 px-4 py-3">
-          {/* Tapping the row IS starting the unload, and it opens the batch
-              entry that finishes it — one truck, one touch. */}
-          <button
-            type="button"
-            className="flex min-w-0 flex-1 items-center gap-3 text-left"
-            onClick={() => {
-              // Only chase it when it is about to move — re-tapping the truck
-              // already on the dock just closes its batch panel, and yanking
-              // the page for that would be worse than doing nothing.
-              const willMove = unloadingAt(t) == null && !isUnloadDone(t);
-              beginUnloading(t);
-              toggleBatch(t);
-              if (willMove) scrollToTruck(t.truck_number);
-            }}
-          >
-            <span className="font-mono text-[22px] font-black leading-none text-ink">#{t.truck_number}</span>
-            {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} className="shrink-0" />}
-            <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">{detail}</span>
-            {/* List style previously showed no arrival at all — the sort moved
-                trucks up but nothing said why. */}
-            {unloadingAt(t) != null ? (
-              <UnloadingSince startSec={unloadingAt(t)!} />
-            ) : arrivedAt(t) != null ? (
-              <span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-ink">
-                <MapPin className="h-3.5 w-3.5 text-ink-soft" aria-hidden />
-                Arrived {formatEasternTime(arrivedAt(t)!)}
-              </span>
-            ) : null}
-            {t.state?.needs_checked && <span className="badge shrink-0 bg-st-inprogress text-black">Needs check</span>}
-            <LoadRequestBadge t={t} need={loadNeedOf(t)} />
-          </button>
-          <div className="relative flex shrink-0 items-center gap-1.5">
-              {isBusy && <span className="text-xs text-ink-muted">…</span>}
-              <button className="flex h-9 w-8 items-center justify-center rounded-md border border-hairline bg-surface-2 text-lg leading-none text-ink-muted transition-colors hover:text-ink" onClick={() => toggleOverflow(t.truck_number)} title="More actions" aria-label="More actions">···</button>
-              {isOverflowOpen && (
-                <div className="absolute right-0 top-full z-20 mt-1 w-44 rounded-lg border border-hairline bg-surface-3 py-1 shadow-card">
-                  {opts.overflow === "unfinished" ? (
-                    <button className="w-full px-3 py-2 text-left text-sm font-medium text-ink-soft transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => { setOverflowOpen(null); upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); }}>Back to dirty</button>
-                  ) : (
-                    <>
-                      {unloadingAt(t) != null && (
-                        <button className="w-full px-3 py-2 text-left text-sm font-medium text-amber-300 transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => void cancelUnloading(t)}>Not unloading — cancel</button>
-                      )}
-                      <button className="w-full px-3 py-2 text-left text-sm font-medium text-st-unfinished transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => markUnfinished(t)}>Mark unfinished</button>
-                      {/* Batching normally finishes the unload; when it
-                          can't (disabled, or pre-batch mode) there has to be
-                          some way to say done. */}
-                      {(batchingDisabled || prebatchMode) && (
-                        <button className="w-full px-3 py-2 text-left text-sm font-medium text-st-unloaded transition-colors hover:bg-surface-2" disabled={isBusy} onClick={() => markUnloaded(t)}>Mark unloaded</button>
-                      )}
-                    </>
-                  )}
-                </div>
+      <section className="card overflow-hidden !p-0">
+        <div className="h-[2px] w-full animate-pulse bg-st-inprogress" />
+        <div className="flex flex-col gap-4 px-[22px] py-[18px]">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
+            <div className="sm:min-w-[190px]">
+              <div className="flex items-center gap-1.5">
+                <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+                <span className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-ink-muted">Unloading now</span>
+              </div>
+              <div className="mt-1 font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums text-ink">
+                #{t.truck_number}
+              </div>
+              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-muted">
+                <span>{truckTypeLabel(t.truck_type)}</span>
+                {arrivedAt(t) != null && <span>· arrived {formatEasternTime(arrivedAt(t)!)}</span>}
+                {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
+                {isUnfin && <span className="text-st-unfinished">· resumed</span>}
+              </div>
+            </div>
+            <div className="hidden w-px self-stretch bg-hairline sm:block" />
+            <div className="flex-1">
+              <div className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                {startedAt != null && <UnloadingSince startSec={startedAt} big />}
+                {startedAt != null && (
+                  <span className="text-[11px] text-ink-faint">started {formatEasternTime(startedAt)}</span>
+                )}
+              </div>
+              {/* What Load said about this truck — their answer belongs where
+                  the crew is already looking, not two sections away. */}
+              {req != null && (
+                <span className="mt-2 inline-flex rounded-md bg-cyan-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-cyan-200 ring-1 ring-cyan-500/30">
+                  {req === "want" ? "Load: pull forward" : "Load: back it out"}
+                </span>
               )}
+            </div>
+          </div>
+
+          {!batchingDisabled && (
+            <div className="rounded-lg border border-hairline bg-surface-3 p-3.5">
+              <div className="mb-2.5 flex flex-wrap items-center gap-x-2 gap-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-ink-muted">
+                  Batch · finishes the unload
+                </span>
+                {carriedRouteOf(t) != null && (
+                  <span className="text-[10px] text-ink-faint">as route #{carriedRouteOf(t)}</span>
+                )}
+                {lastBatchUsed != null && (
+                  <span className="ml-auto text-[11px] text-ink-faint">last used: {lastBatchUsed}</span>
+                )}
+              </div>
+              <div className="grid grid-cols-6 gap-2">
+                {[1, 2, 3, 4, 5, 6].map((n) => (
+                  <button
+                    key={n}
+                    type="button"
+                    onClick={() => setBatchNum(String(n))}
+                    className={clsx(
+                      "rounded-md py-2.5 text-center font-mono text-base font-bold transition-colors",
+                      batchNum === String(n)
+                        ? "bg-st-unloaded/15 text-st-unloaded ring-2 ring-st-unloaded"
+                        : "bg-surface-2 text-ink-soft hover:bg-surface",
+                    )}
+                  >
+                    {n}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2.5 flex flex-col gap-2.5 sm:flex-row sm:items-center">
+                <label className="flex flex-1 items-center gap-2.5 rounded-lg border border-hairline bg-surface-2 px-3 py-2">
+                  <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-ink-muted">Wearers</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={wearers}
+                    onChange={(e) => setWearers(e.target.value)}
+                    className="w-20 bg-transparent font-mono text-lg font-bold tabular-nums text-ink outline-none"
+                  />
+                  <span className="ml-auto text-[10px] text-ink-faint">from day sheet</span>
+                </label>
+                <button
+                  type="button"
+                  disabled={assign.isPending || isBusy}
+                  onClick={() => void assignBatch(batchTarget, t)}
+                  className="rounded-lg px-6 py-3 text-sm font-bold text-white transition-opacity disabled:opacity-50"
+                  style={{ background: "#15803d" }}
+                >
+                  {assign.isPending || isBusy ? "Saving…" : "Assign — done unloading"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-col gap-2.5 sm:flex-row">
+            {batchingDisabled && (
+              <button
+                type="button"
+                disabled={isBusy}
+                onClick={() => void markUnloaded(t)}
+                className="flex-1 rounded-lg py-3 text-sm font-bold text-white disabled:opacity-50"
+                style={{ background: "#15803d" }}
+              >
+                Mark unloaded
+              </button>
+            )}
+            <button type="button" className="btn-ghost px-5 py-3 text-xs" disabled={isBusy} onClick={() => void cancelUnloading(t)}>
+              Not unloading — cancel
+            </button>
+            {!isUnfin && (
+              <button
+                type="button"
+                className="btn-ghost px-5 py-3 text-xs !text-st-unfinished"
+                disabled={isBusy}
+                onClick={() => void markUnfinished(t)}
+              >
+                Mark unfinished
+              </button>
+            )}
           </div>
         </div>
-        {!batchingDisabled && isBatchOpen && (
-          <div className="space-y-2 rounded-b-xl border-t border-hairline bg-surface-2 p-3">
-            <div className="grid grid-cols-6 gap-1.5">
-              {[1, 2, 3, 4, 5, 6].map((n) => (
-                <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-st-unloaded py-2 text-center text-base font-bold text-black ring-2 ring-st-unloaded/60" : "rounded-md bg-surface-3 py-2 text-center text-base font-bold text-ink-soft hover:bg-track"}>{n}</button>
-              ))}
-            </div>
-            <input type="number" min={0} className="input" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />
-            <button className="btn-primary w-full" disabled={assign.isPending || isBusy} onClick={() => void assignBatch(carriedRouteOf(t) ?? t.truck_number, t)}>{assign.isPending || isBusy ? "Saving…" : carriedRouteOf(t) != null ? `Assign as route #${carriedRouteOf(t)} — done` : "Assign — done unloading"}</button>
-          </div>
-        )}
-      </AnimateCard>
+      </section>
+    );
+  }
+
+  /** One truck in a section, in the shared quiet-tile language. */
+  function renderTile(t: TruckWithState, kind: "arrived" | "notback" | "requested" | "unfinished") {
+    const cd = coverDisplay(t);
+    const isUnfin = kind === "unfinished";
+    const dot =
+      kind === "requested" ? "bg-st-inprogress"
+      : isUnfin ? "bg-st-unfinished"
+      : "bg-st-dirty";
+    const sub =
+      kind === "arrived" ? (
+        <>
+          <span>Dirty</span>
+          {arrivedAt(t) != null && (
+            <span className="inline-flex items-center gap-1 text-ink">
+              <MapPin className="h-3 w-3 text-ink-soft" aria-hidden />
+              {formatEasternTime(arrivedAt(t)!)}
+            </span>
+          )}
+          {t.state?.needs_checked && <span className="text-st-inprogress">· Needs check</span>}
+        </>
+      ) : kind === "notback" ? (
+        <span className="text-ink-faint">Still on the road</span>
+      ) : kind === "requested" ? (
+        <span className="text-ink-faint">
+          {arrivedAt(t) != null ? `Back ${formatEasternTime(arrivedAt(t)!)} · ` : ""}waiting on dock
+        </span>
+      ) : (
+        <span className="text-ink-faint">Partially emptied · tap to resume</span>
+      );
+    return (
+      <QuietTile
+        key={t.truck_number}
+        id={`unload-truck-${t.truck_number}`}
+        truck={t}
+        highlight={highlightTruck === t.truck_number}
+        dotClass={dot}
+        onClick={() => openTruckMenu(t)}
+        tag={
+          kind === "requested" ? "Hold"
+          : isUnfin ? "Unfinished"
+          : cd.route != null ? `Route ${cd.route}${t.truck_type === "Spare" ? " · Spare" : ""}`
+          : undefined
+        }
+        tagClass={
+          kind === "requested" ? "text-st-inprogress"
+          : isUnfin ? "text-st-unfinished"
+          : "text-sky-300"
+        }
+        sub={sub}
+      />
     );
   }
 
@@ -792,162 +825,230 @@ function LoadRequestBadge({ t, need }: { t: TruckWithState; need: LoadNeed | nul
       <PageHeader
         eyebrow="Workflow"
         title="Unload"
-        subtitle={`Unload Day ${unloadsDay} — mark returning trucks unloaded and assign batches.`}
-        actions={
-          <div className="flex items-center gap-2">
-            {styleToggle}
-            <span className="badge bg-st-dirty text-white">{toGo} to go</span>
-          </div>
+        titleBadge={
+          <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-dirty/40 bg-st-dirty/10 px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.14em] text-st-dirty">
+            <span className="h-1.5 w-1.5 rounded-full bg-st-dirty" />
+            {toGo} to go
+          </span>
         }
+        subtitle={`Unload Day ${unloadsDay}${UNLOAD_DAY_NAMES[unloadsDay] ? ` · ${UNLOAD_DAY_NAMES[unloadsDay]}` : ""}`}
+        actions={styleToggle}
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-5 p-3 md:p-6">
 
-        {/* Previous load-day coverage */}
         <PreBatchBanner />
-        <WorkflowDayNotes scope="unload" day={unloadsDay} />
 
         {prevCoverage.items.length > 0 && (
-          <div className="rounded-xl border border-amber-700/40 bg-amber-950/20 px-3 py-2.5">
-            <div className="mb-1.5 flex items-center gap-2">
+          <div className="rounded-xl border border-amber-700/40 bg-amber-950/20">
+            <div className="flex items-center gap-2 px-3.5 py-2.5">
               <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">Previous load-day coverage</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-400">Previous load-day coverage</span>
               {prevCoverage.date && (
                 <span className="text-[10px] text-amber-500/70">({format(new Date(`${prevCoverage.date}T12:00:00`), "EEE MMM d")})</span>
               )}
+              <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-muted">
+                {unloadCoverage.length} route{unloadCoverage.length === 1 ? "" : "s"}
+              </span>
             </div>
-            <div className="mt-2">
+            <div className="border-t border-amber-700/30 px-3.5 pb-3.5 pt-3.5">
               <CoverageCards entries={unloadCoverage} showPrevBadge={false} />
             </div>
           </div>
         )}
 
-        {/* Stats grid — outstanding unload work, by the page's own buckets */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Routes Left" value={routesLeft} accent="#ef4444" active={statFilter === "routes"} onClick={() => setStatFilter(statFilter === "routes" ? null : "routes")} />
-          <StatCard label="Coverage Left" value={coverageLeft} accent="#06b6d4" active={statFilter === "coverage"} onClick={() => setStatFilter(statFilter === "coverage" ? null : "coverage")} />
-          <StatCard label="Holds" value={holdsLeft} accent="#f59e0b" active={statFilter === "holds"} onClick={() => setStatFilter(statFilter === "holds" ? null : "holds")} />
-          <StatCard label="Total Left" value={totalLeft} accent="#dbe3ee" active={statFilter === "total"} onClick={() => setStatFilter(statFilter === "total" ? null : "total")} />
-        </div>
+        <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
+          {/* ---------------- Left rail: the work ---------------- */}
+          <div className="flex flex-col gap-4">
+            {unloading.map((t) => (
+              <UnloadingNowCard key={t.truck_number} truck={t} />
+            ))}
 
-        {/* Stat drill-down */}
-        {statFilter && (() => {
-          const trucks =
-            statFilter === "routes" ? routesLeftTrucks
-            : statFilter === "coverage" ? coverageLeftTrucks
-            : statFilter === "holds" ? holdsLeftTrucks
-            : totalLeftTrucks;
-          const heading =
-            statFilter === "routes" ? "Route trucks"
-            : statFilter === "coverage" ? "Coverage"
-            : statFilter === "holds" ? "Priority holds"
-            : "All";
-          return (
-            <div className="card animate-slide-down space-y-2">
-              <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
-                {heading} still to unload ({trucks.length})
+            {back.length > 0 && (
+              <div>
+                <SectionHeader label="Arrived" count={back.length} hint="oldest arrival first · tap to start unloading" />
+                <div className={tileGrid}>
+                  {back.map((t) => renderTile(t, "arrived"))}
+                </div>
+              </div>
+            )}
+
+            {notBack.length > 0 && (
+              <div>
+                <SectionHeader label="Not arrived" count={notBack.length} />
+                <div className={tileGrid}>
+                  {notBack.map((t) => renderTile(t, "notback"))}
+                </div>
+              </div>
+            )}
+
+            {dirty.length === 0 && unfinished.length === 0 && (
+              <p className="rounded-xl border border-dashed border-hairline bg-surface/50 p-6 text-center text-sm text-ink-muted">
+                Everything&apos;s unloaded. Nice work.
               </p>
-              <div className="grid grid-cols-2 gap-1.5 sm:grid-cols-3">
-                {trucks.map((t) => {
-                  const cd = coverDisplay(t);
-                  const isUnfinished = t.state?.status === "unfinished";
-                  return (
-                    <span key={t.truck_number} className="flex min-h-[3.35rem] items-start justify-between rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5">
-                      <span className="pt-0.5 text-lg font-extrabold tracking-tight tabular-nums text-ink">#{t.truck_number}</span>
-                      <span className="flex flex-col items-end gap-1">
-                        {isUnfinished ? (
-                          <span className="rounded-full bg-fuchsia-950/60 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-fuchsia-300 ring-1 ring-fuchsia-900/80">Unfinished</span>
-                        ) : (
-                          <span className="rounded-full bg-red-950/60 px-1.5 py-0.5 text-[10px] font-semibold leading-none text-red-300 ring-1 ring-red-900/80">Dirty</span>
-                        )}
-                        {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
-                        {t.state?.priority_hold && (
-                          <span className="inline-flex items-center rounded-pill bg-amber-950/70 px-1.5 py-0.5 text-[10px] font-bold leading-none text-amber-300 ring-1 ring-amber-900/80">Hold</span>
-                        )}
-                      </span>
-                    </span>
-                  );
-                })}
-                {trucks.length === 0 && <span className="col-span-full text-sm text-ink-faint">All clear!</span>}
-              </div>
-            </div>
-          );
-        })()}
-
-        {/* Load / Unload progress */}
-        <div className="card space-y-2">
-          <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
-          <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
-        </div>
-
-        {/* Dirty-family sections */}
-        {dirtySections.map((sec) => sec.trucks.length > 0 && (
-          <section key={sec.key}>
-            <h3 className={clsx("mb-2 text-sm font-semibold uppercase tracking-wide", sec.titleClass)}>{sec.title} ({sec.trucks.length})</h3>
-            {style === "list" ? (
-              <div className="flex flex-col gap-2">
-                {sec.trucks.map((t, i) => renderRow(t, i, { accentClass: `border-l-[3px] ${sec.rowAccent}`, overflow: sec.overflow }))}
-              </div>
-            ) : (
-              <div className={GRID}>
-                {sec.trucks.map((t, i) => <DirtyCard key={t.truck_number} t={t} index={i} accent={sec.accent} label={sec.label} labelClass={sec.labelClass} />)}
-              </div>
             )}
-          </section>
-        ))}
 
-        {dirty.length === 0 && unfinished.length === 0 && (
-          <p className="rounded-xl border border-dashed border-hairline bg-surface/50 p-6 text-center text-sm text-ink-muted">
-            Everything's unloaded. Nice work.
-          </p>
-        )}
-
-        {/* Unloaded today */}
-        {unloaded.length > 0 && (
-          <section>
-            <div className="mb-2 flex items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold uppercase tracking-wide text-st-unloaded">Unloaded today ({unloaded.length})</h3>
-              <div className="inline-flex overflow-hidden rounded-md border border-hairline text-[11px] font-semibold">
-                <button type="button" onClick={() => setUnloadedSort("number")} className={clsx("px-2 py-1 transition-colors", unloadedSort === "number" ? "bg-st-unloaded text-[#052e16]" : "bg-surface-2 text-ink-muted hover:bg-surface")}># Number</button>
-                <button type="button" onClick={() => setUnloadedSort("order")} className={clsx("border-l border-hairline px-2 py-1 transition-colors", unloadedSort === "order" ? "bg-st-unloaded text-[#052e16]" : "bg-surface-2 text-ink-muted hover:bg-surface")}>Unload order</button>
-              </div>
-            </div>
-            {style === "list" ? (
-              <div className="grid grid-cols-4 gap-2 sm:grid-cols-5 md:grid-cols-6">
-                {unloadedSorted.map((t, index) => {
-                  const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
-                  const cd = coverDisplay(t);
-                  return (
-                    <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={index * 0.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse rounded-[10px]")}>
-                      <button type="button" onClick={() => openTruckMenu(t)} className="flex h-full min-h-[6rem] w-full flex-col items-center justify-center rounded-[10px] border border-[rgba(34,197,94,0.35)] bg-[rgba(34,197,94,0.06)] px-1.5 py-2.5 text-center transition-shadow hover:ring-2 hover:ring-st-unloaded">
-                        <span className="font-mono text-[17px] font-extrabold leading-none text-ink">#{t.truck_number}</span>
-                        {cd.route != null && <span className="mt-1 flex justify-center"><CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} /></span>}
-                        <span className="mt-1 font-mono text-[10px] text-ink-muted">{unloadedSort === "order" ? `#${index + 1} · ${time}` : time}</span>
+            {unloaded.length > 0 && (
+              <div>
+                <SectionHeader label="Unloaded today" count={unloaded.length}>
+                  <div className="inline-flex overflow-hidden rounded-[7px] border border-hairline text-[11px] font-semibold">
+                    {([["number", "# Number"], ["order", "Unload order"]] as const).map(([key, text], i) => (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => setUnloadedSort(key)}
+                        className={clsx(
+                          "px-3 py-1 transition-colors",
+                          i > 0 && "border-l border-hairline",
+                          unloadedSort === key ? "bg-track text-ink" : "text-ink-muted hover:text-ink",
+                        )}
+                      >
+                        {text}
                       </button>
-                    </AnimateCard>
-                  );
-                })}
-              </div>
-            ) : (
-              <div className={GRID}>
-                {unloadedSorted.map((t, idx) => {
-                  const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
-                  return (
-                    <AnimateCard key={t.truck_number} id={`unload-truck-${t.truck_number}`} delay={idx * 0.02} className={clsx("h-full", highlightTruck === t.truck_number && "ring-2 ring-white/70 animate-pulse rounded-2xl")}>
-                      <div className="relative h-full">
-                        {unloadedSort === "order" && (
-                          <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-unloaded ring-1 ring-st-unloaded/60">{idx + 1}</span>
-                        )}
-                        <button type="button" onClick={() => openTruckMenu(t)} className="h-full w-full text-left transition-all duration-150 active:scale-[0.98]">
-                          <LoadWorkflowCard truck={t} accent="text-st-unloaded" statusLabel="Unloaded" statusClassName="bg-st-unloaded text-[#052e16]" coverageRoute={coverDisplay(t).route} coverageSplit={coverDisplay(t).split} footer={<span className="text-xs text-ink-muted">{time}</span>} interactive ringClassName="hover:ring-st-unloaded" />
-                        </button>
-                      </div>
-                    </AnimateCard>
-                  );
-                })}
+                    ))}
+                  </div>
+                </SectionHeader>
+                <div className={tileGrid}>
+                  {(showAllUnloaded ? unloadedSorted : unloadedSorted.slice(0, UNLOADED_PREVIEW)).map((t, idx) => {
+                    const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
+                    const cd = coverDisplay(t);
+                    return (
+                      <QuietTile
+                        key={t.truck_number}
+                        id={`unload-truck-${t.truck_number}`}
+                        truck={t}
+                        highlight={highlightTruck === t.truck_number}
+                        numberClass="text-ink-soft"
+                        dotClass="bg-st-unloaded"
+                        onClick={() => openTruckMenu(t)}
+                        tag={cd.route != null ? `Route ${cd.route}` : undefined}
+                        tagClass="text-sky-300"
+                        sub={
+                          <span className="text-ink-faint">
+                            {unloadedSort === "order" ? `#${idx + 1} · ${time}` : time}
+                            {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
+                          </span>
+                        }
+                      />
+                    );
+                  })}
+                  {/* The full list is 20+ tiles most nights — long enough to
+                      bury the work above it, and nobody scrolls it twice. */}
+                  {!showAllUnloaded && unloadedSorted.length > UNLOADED_PREVIEW && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllUnloaded(true)}
+                      className="rounded-[10px] border border-dashed border-hairline bg-surface/40 px-3.5 py-3 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+                    >
+                      + {unloadedSorted.length - UNLOADED_PREVIEW} more
+                    </button>
+                  )}
+                </div>
               </div>
             )}
-          </section>
-        )}
+          </div>
+
+          {/* ---------------- Right rail: reference ---------------- */}
+          <div className="flex flex-col gap-4">
+            <WorkflowDayNotes scope="unload" day={unloadsDay} />
+
+            {/* Outstanding work, by the page's own buckets. Dot carries the
+                category; the number stays ink so a big count isn't an alarm. */}
+            <div className="card flex !px-0 !py-3.5">
+              {([
+                { key: "routes", value: routesLeft, label: "Routes left", dot: "bg-st-dirty" },
+                { key: "coverage", value: coverageLeft, label: "Coverage left", dot: "bg-st-spare" },
+                { key: "holds", value: holdsLeft, label: "Holds", dot: "bg-st-inprogress" },
+                { key: "total", value: totalLeft, label: "Total left", dot: null },
+              ] as const).map((cell, i) => (
+                <button
+                  key={cell.key}
+                  type="button"
+                  onClick={() => setStatFilter(statFilter === cell.key ? null : cell.key)}
+                  className={clsx(
+                    "flex-1 px-1 text-center transition-colors",
+                    i < 3 && "border-r border-hairline",
+                    statFilter === cell.key ? "bg-surface-2" : "hover:bg-surface-2/60",
+                  )}
+                >
+                  <div className="font-mono text-2xl font-black tabular-nums text-ink">{cell.value}</div>
+                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                    {cell.dot && <span className={clsx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full", cell.dot)} />}
+                    {cell.label}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {statFilter && (() => {
+              const trucks =
+                statFilter === "routes" ? routesLeftTrucks
+                : statFilter === "coverage" ? coverageLeftTrucks
+                : statFilter === "holds" ? holdsLeftTrucks
+                : totalLeftTrucks;
+              const heading =
+                statFilter === "routes" ? "Route trucks"
+                : statFilter === "coverage" ? "Coverage"
+                : statFilter === "holds" ? "Priority holds"
+                : "All";
+              return (
+                <div className="card animate-slide-down space-y-2.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                    {heading} still to unload ({trucks.length})
+                  </p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {trucks.map((t) => {
+                      const cd = coverDisplay(t);
+                      const isUnfin = t.state?.status === "unfinished";
+                      return (
+                        <QuietTile
+                          key={t.truck_number}
+                          truck={t}
+                          numberClass="text-ink-soft"
+                          dotClass={isUnfin ? "bg-st-unfinished" : "bg-st-dirty"}
+                          tag={t.state?.priority_hold ? "Hold" : undefined}
+                          tagClass="text-st-inprogress"
+                          sub={
+                            <>
+                              <span>{isUnfin ? "Unfinished" : "Dirty"}</span>
+                              {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
+                            </>
+                          }
+                        />
+                      );
+                    })}
+                    {trucks.length === 0 && <span className="col-span-full text-sm text-ink-faint">All clear!</span>}
+                  </div>
+                </div>
+              );
+            })()}
+
+            <div className="card flex flex-col justify-center gap-2.5">
+              <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
+              <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
+            </div>
+
+            {/* Holds and unfinished trucks are exceptions, not queue — they sit
+                beside the work rather than inside it, so the left rail stays a
+                straight read of what to do next. */}
+            {requested.length > 0 && (
+              <div className="rounded-xl border border-amber-700/40 bg-amber-950/15 p-3.5">
+                <SectionHeader label="Requested — priority hold" count={requested.length} />
+                <div className="flex flex-col gap-2.5">
+                  {requested.map((t) => renderTile(t, "requested"))}
+                </div>
+              </div>
+            )}
+
+            {unfinished.length > 0 && (
+              <div className="rounded-xl border border-fuchsia-800/40 bg-fuchsia-950/15 p-3.5">
+                <SectionHeader label="Unfinished" count={unfinished.length} />
+                <div className="flex flex-col gap-2.5">
+                  {unfinished.map((t) => renderTile(t, "unfinished"))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
 
         {/* Batches */}
         <section>
@@ -1187,8 +1288,17 @@ function LoadRequestBadge({ t, need }: { t: TruckWithState; need: LoadNeed | nul
 
 /** "Unloading · mm:ss" — a live clock since the marker was set. Its own
  *  component because useElapsed is a hook and the footer is rendered per card. */
-function UnloadingSince({ startSec }: { startSec: number }) {
+function UnloadingSince({ startSec, big = false }: { startSec: number; big?: boolean }) {
   const elapsed = useElapsed(startSec);
+  // `big` is the hero clock on the unloading card — the same instrument
+  // treatment the Load page gives its elapsed timer.
+  if (big) {
+    return (
+      <span className="font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums text-st-inprogress">
+        {formatDuration(elapsed)}
+      </span>
+    );
+  }
   return (
     <span className="inline-flex items-center gap-1 text-xs font-bold text-amber-300">
       <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-400" aria-hidden />

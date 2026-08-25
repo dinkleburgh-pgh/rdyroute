@@ -45,7 +45,7 @@ export default function CoverageCards({
             </span>
             <div className="text-center">
               <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-                {e.prev ? "Loaded on" : "Loads on"}
+                {e.prev ? "Carried by" : "Loads on"}
               </p>
               <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">#{e.cover}</p>
             </div>
