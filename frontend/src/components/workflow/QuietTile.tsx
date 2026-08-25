@@ -36,9 +36,14 @@ export function SectionHeader({
 }
 
 /**
- * One truck, stated quietly: the number carries the weight and a 6px dot does
- * the work a colour-block badge used to. Status lives in the words beside the
- * dot, so a wall of these reads as a list rather than a paint chart.
+ * One truck: the number carries both the weight and the STATUS COLOUR, with a
+ * matching 6px dot and words beneath it.
+ *
+ * The first pass at these tiles left every number ink-white and let the dot
+ * alone carry status. That reads calmly but it doesn't survive the actual use:
+ * the crew scans a wall of these from a few feet away and needs to sort red
+ * from green without reading. Colouring the numeral gets that back without
+ * bringing back the colour-block badges — the tile itself stays quiet.
  */
 export function QuietTile({
   truck,

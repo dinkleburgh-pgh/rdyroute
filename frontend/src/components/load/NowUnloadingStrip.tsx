@@ -21,6 +21,13 @@ import type { TruckWithState } from "../../types";
 /** The alternative action — same weight in both states of the strip. */
 const ACTION_BTN =
   "min-h-[44px] rounded-lg border border-slate-600 bg-surface-2 px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface disabled:opacity-50";
+/**
+ * Backing out is the one answer that takes work off the dock's plan, so it
+ * carries the app's red. Pulling forward keeps the neutral treatment — it
+ * agrees with what the crew is already doing.
+ */
+const BACK_OUT_BTN =
+  "min-h-[44px] rounded-lg border border-st-dirty/50 bg-st-dirty/10 px-4 text-sm font-semibold text-st-dirty transition-colors hover:bg-st-dirty/20 disabled:opacity-50";
 /** The quiet one that sits beside it (Confirm / Clear). */
 const GHOST_BTN =
   "min-h-[44px] rounded-lg px-4 text-sm font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50";
@@ -99,7 +106,7 @@ export default function NowUnloadingStrip({
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, suggested === "want" ? "skip" : "want")}
-                      className={ACTION_BTN}
+                      className={suggested === "want" ? BACK_OUT_BTN : ACTION_BTN}
                     >
                       {suggested === "want" ? "Back it out" : "Pull it forward"}
                     </button>
@@ -137,7 +144,7 @@ export default function NowUnloadingStrip({
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, req === "want" ? "skip" : "want")}
-                      className={ACTION_BTN}
+                      className={req === "want" ? BACK_OUT_BTN : ACTION_BTN}
                     >
                       {req === "want" ? "Back it out" : "Pull it forward"}
                     </button>

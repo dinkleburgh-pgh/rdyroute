@@ -476,7 +476,11 @@ export default function Load() {
                         key={t.truck_number}
                         truck={t}
                         dotClass={statusDot[st] ?? "bg-st-off"}
-                        numberClass="text-ink-soft"
+                        numberClass={
+                          st === "unloaded" ? "text-st-unloaded"
+                          : st === "in_progress" ? "text-st-inprogress"
+                          : "text-st-dirty"
+                        }
                         tag={t.state?.priority_hold ? "Hold" : undefined}
                         tagClass="text-st-dirty"
                         sub={
@@ -540,6 +544,7 @@ export default function Load() {
                   title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
                   tag={t.truck_number === storedNextUp ? "Next" : undefined}
                   tagClass="text-[#3b82f6]"
+                  numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
                   dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
                   sub={
                     cr != null ? (
@@ -571,6 +576,7 @@ export default function Load() {
                   dim
                   tag="Hold"
                   tagClass="text-st-dirty"
+                  numberClass="text-st-dirty"
                   dotClass="bg-st-dirty"
                   sub={<span className="text-ink-faint">Clear in Fleet</span>}
                 />
@@ -612,7 +618,7 @@ export default function Load() {
               )}
               <QuietTile
                 truck={t}
-                numberClass="text-ink-soft"
+                numberClass="text-st-loaded"
                 dotClass="bg-st-loaded"
                 sub={
                   <span className="text-ink-faint">

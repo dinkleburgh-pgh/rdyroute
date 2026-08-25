@@ -768,6 +768,11 @@ export default function Unload() {
       kind === "requested" ? "bg-st-inprogress"
       : isUnfin ? "bg-st-unfinished"
       : "bg-st-dirty";
+    // Same status, same colour, on the number as well as the dot.
+    const numberTone =
+      kind === "requested" ? "text-st-inprogress"
+      : isUnfin ? "text-st-unfinished"
+      : "text-st-dirty";
     const sub =
       kind === "arrived" ? (
         <>
@@ -796,6 +801,7 @@ export default function Unload() {
         truck={t}
         highlight={highlightTruck === t.truck_number}
         dotClass={dot}
+        numberClass={numberTone}
         onClick={() => openTruckMenu(t)}
         tag={
           kind === "requested" ? "Hold"
@@ -917,7 +923,7 @@ export default function Unload() {
                         id={`unload-truck-${t.truck_number}`}
                         truck={t}
                         highlight={highlightTruck === t.truck_number}
-                        numberClass="text-ink-soft"
+                        numberClass="text-st-unloaded"
                         dotClass="bg-st-unloaded"
                         onClick={() => openTruckMenu(t)}
                         tag={cd.route != null ? `Route ${cd.route}` : undefined}
@@ -1003,7 +1009,7 @@ export default function Unload() {
                         <QuietTile
                           key={t.truck_number}
                           truck={t}
-                          numberClass="text-ink-soft"
+                          numberClass={isUnfin ? "text-st-unfinished" : "text-st-dirty"}
                           dotClass={isUnfin ? "bg-st-unfinished" : "bg-st-dirty"}
                           tag={t.state?.priority_hold ? "Hold" : undefined}
                           tagClass="text-st-inprogress"
