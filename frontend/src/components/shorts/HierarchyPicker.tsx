@@ -517,6 +517,13 @@ export default function HierarchyPicker({
 
   function reset()    { clearAuto(); setTopCat(null); setBulkSub(null); setPending(null); setQtyInput(""); }
   function resetSub() { clearAuto(); setBulkSub(null); setPending(null); setQtyInput(""); }
+  // Breadcrumb semantics: tapping a crumb returns you TO that crumb — it clears
+  // everything chosen AFTER it and keeps the crumb itself selected. These used
+  // to clear the crumb as well, so tapping "Mats" in "Mats > 4x6 Black" threw
+  // you all the way out to the category list, one level past where you asked
+  // to go, and you had to pick Mats again to get back.
+  function backToTop() { clearAuto(); setBulkSub(null); setPending(null); setQtyInput(""); }
+  function backToSub() { clearAuto(); setPending(null); setQtyInput(""); }
 
   function selectItem(category: string, detail: string) {
     if (onSelectItem) {
@@ -628,14 +635,14 @@ export default function HierarchyPicker({
     trailRaw.push({
       label: topCat,
       palette: catPalette.tileClass(topCat),
-      onClick: reset,
+      onClick: backToTop,
     });
   }
   if (bulkSub !== null) {
     trailRaw.push({
       label: bulkSub,
       palette: catPalette.tileClass(topCat ? `${topCat} > ${bulkSub}` : bulkSub),
-      onClick: resetSub,
+      onClick: backToSub,
     });
   }
   if (pending !== null) {

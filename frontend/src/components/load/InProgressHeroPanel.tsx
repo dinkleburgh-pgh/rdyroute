@@ -98,7 +98,7 @@ export default function InProgressHeroPanel({
             })()}
             <div className="mt-2 inline-flex items-center gap-1.5 rounded-pill border border-st-unloaded/50 bg-st-unloaded/10 px-3 py-0.5 text-xs font-semibold text-st-unloaded">
               <span className="h-1.5 w-1.5 rounded-full bg-st-unloaded" />
-              Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}
+              Load Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}
             </div>
             {truck.state?.has_dust_garment && (
               <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-st-inprogress">

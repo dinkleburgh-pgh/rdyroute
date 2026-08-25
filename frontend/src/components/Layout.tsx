@@ -705,7 +705,7 @@ export default function Layout() {
               <span className="absolute left-2 h-3 w-3 rounded-full bg-purple-400" />
               Day Overview
               <span className="absolute right-2 rounded bg-[rgba(167,139,250,0.16)] px-1.5 py-0.5 text-xs font-semibold text-[#c4b5fd]">
-                {(holidayLoad || holidayUnload) ? "Holiday" : `Day ${unloadsDay}`}
+                {(holidayLoad || holidayUnload) ? "Holiday" : `Unload ${unloadsDay}`}
               </span>
             </NavLink>
             {STATUS_ORDER.map((s) => (

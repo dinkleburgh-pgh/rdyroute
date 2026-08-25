@@ -792,7 +792,7 @@ function LoadRequestBadge({ t, need }: { t: TruckWithState; need: LoadNeed | nul
       <PageHeader
         eyebrow="Workflow"
         title="Unload"
-        subtitle={`Day ${unloadsDay} — mark returning trucks unloaded and assign batches.`}
+        subtitle={`Unload Day ${unloadsDay} — mark returning trucks unloaded and assign batches.`}
         actions={
           <div className="flex items-center gap-2">
             {styleToggle}

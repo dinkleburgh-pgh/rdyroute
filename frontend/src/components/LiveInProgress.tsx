@@ -230,7 +230,9 @@ function InProgressView({
   const { data: shorts = [] } = useShortages(runDate, truck.truck_number);
 
   const dayNum = truck.state?.load_day_num ?? null;
-  const dayLabel = dayNum != null && dayNum >= 1 && dayNum <= 7 ? `Day ${dayNum} — ${DAY_NAMES[dayNum]}` : null;
+  // load_day_num is the day this truck is being LOADED FOR — say so, or it
+  // reads as "today" next to a truck number.
+  const dayLabel = dayNum != null && dayNum >= 1 && dayNum <= 7 ? `Load Day ${dayNum} — ${DAY_NAMES[dayNum]}` : null;
 
   const elapsed = useElapsed(truck.state?.load_start_time ?? null);
   const pct = paceAvgSeconds && paceAvgSeconds > 0 ? elapsed / paceAvgSeconds : null;
@@ -321,17 +323,18 @@ function InProgressView({
             <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={6} />
           </div>
           <div className="hidden w-px self-stretch bg-hairline lg:block" />
-          <div className="lg:min-w-[150px] lg:text-right">
+          {/* The number gets its own line so it can sit at the same weight as
+              the two numerals to its left; the average reads underneath it
+              rather than crowding its baseline. */}
+          <div className="lg:min-w-[170px] lg:text-right">
             <div className="mb-1.5 text-[10px] font-bold uppercase tracking-[0.18em] text-ink-muted">Next up</div>
-            <div className="flex items-baseline gap-2.5 lg:justify-end">
-              <span className="font-mono text-[28px] font-black tabular-nums leading-none text-ink-soft">
-                {nextUp != null ? `#${nextUp}` : "—"}
-              </span>
-              {nextUp != null && paceAvgSeconds != null && (
-                <span className="text-[11px] text-ink-faint">avg {formatDuration(paceAvgSeconds)}</span>
-              )}
+            <div className="font-mono text-[38px] font-black tabular-nums leading-none tracking-[-0.02em] text-ink-soft">
+              {nextUp != null ? `#${nextUp}` : "—"}
             </div>
-            <button type="button" onClick={() => setPickerOpen(true)} className="btn-ghost mt-2 px-3 py-1 text-[11px]">
+            {nextUp != null && paceAvgSeconds != null && (
+              <div className="mt-1.5 text-[11px] text-ink-faint">avg {formatDuration(paceAvgSeconds)}</div>
+            )}
+            <button type="button" onClick={() => setPickerOpen(true)} className="btn-ghost mt-2.5 px-3 py-1 text-[11px]">
               {nextUp != null ? "Change" : "Set Next Up"}
             </button>
           </div>

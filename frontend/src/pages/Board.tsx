@@ -980,9 +980,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             const isUnloadView = filter === "dirty";
             const isLoadView = filter === "loaded" || filter === "unloaded";
             let chipDay: number | undefined;
+            // Which kind of day the chip is showing. The same chip renders the
+            // unload day on the dirty view and the load day on the loaded /
+            // unloaded views, so the number alone is unreadable.
+            let chipKind: "Unload" | "Load" = "Load";
             let chipIsExtra = false;
             if (isUnloadView && holidayUnload) {
               chipDay = isScheduledOff(truck, runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
+              chipKind = "Unload";
               chipIsExtra = chipDay === unloadsDay2;
             } else if (isLoadView && holidayLoad) {
               chipDay = (isScheduledOff(truck, runDayNum) || isScheduledOff(truck, loadNextDay)) ? loadDay2 : runDayNum;
@@ -1352,7 +1357,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         chipIsExtra ? "bg-amber-900/60 text-amber-300" : "bg-blue-900/60 text-blue-300",
                       )}
                     >
-                      Day {chipDay}
+                      {chipKind} Day {chipDay}
                     </span>
                   </div>
                 )}
