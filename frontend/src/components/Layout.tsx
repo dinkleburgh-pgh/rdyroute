@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
-import { Fragment, useCallback, useMemo, useState, useEffect, useRef } from "react";
+import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
 import { useAuth } from "../contexts/AuthContext";
@@ -704,56 +704,41 @@ export default function Layout() {
             >
               <span className="absolute left-2 h-3 w-3 rounded-full bg-purple-400" />
               Day Overview
-              <span className="absolute right-2 rounded bg-[rgba(167,139,250,0.16)] px-1.5 py-0.5 text-xs font-semibold text-[#c4b5fd]">
-                {(holidayLoad || holidayUnload) ? "Holiday" : `Unload ${unloadsDay}`}
+              {/* Compact on purpose: the rail is ~155px and "Unload 1" ran
+                  under the centred label. "U1" matches the U Off / L Off
+                  shorthand the truck cards already use, and the sidebar's
+                  workday card right above spells both days out in full. */}
+              <span
+                title={`Unload Day ${unloadsDay}`}
+                className="absolute right-2 rounded bg-[rgba(167,139,250,0.16)] px-1.5 py-0.5 text-xs font-semibold text-[#c4b5fd]"
+              >
+                {(holidayLoad || holidayUnload) ? "Holiday" : `U${unloadsDay}`}
               </span>
             </NavLink>
+            {/* One In Progress row, not a Loading row plus an Unloading row.
+                What's on each dock live is already spelled out in the top
+                banner; repeating it here twice more made the rail hard to
+                read. */}
             {STATUS_ORDER.map((s) => (
-              <Fragment key={s}>
-                <button
-                  onClick={() => nav(`/board?status=${s}`)}
-                  className="relative flex w-full items-center justify-center rounded-[9px] border border-hairline bg-[#141a27] px-3 py-1.5 text-sm font-medium text-[#aab4c4] transition-colors hover:bg-surface-2"
-                >
-                  <span className={clsx(
-                    "absolute left-2 h-3 w-3 rounded-full",
-                    STATUS_DOT[s],
-                    s === "in_progress" && counts[s] > 0 && "animate-pulse",
-                  )} />
-                  {/* in_progress means LOADING; spelled out here so it can't be
-                      read as the unloading row's sibling-in-ambiguity. */}
-                  {s === "in_progress" ? "Loading" : STATUS_LABELS[s]}
-                  <span className="absolute right-2 text-ink-muted">
-                    {s === "in_progress"
-                      ? inProgressTruck
-                        ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{inProgressTruck.truck_number}</span>
-                        : <span className="text-ink-faint">None</span>
-                      : counts[s]}
-                  </span>
-                </button>
-                {/* Unloading sits between Dirty and Unloaded in the lifecycle,
-                    so the rail reads as the pipeline: dirty → unloading →
-                    unloaded → loading → loaded. Not a status — it mirrors the
-                    transient unloading_started_at marker. */}
-                {s === "dirty" && (
-                  <button
-                    onClick={() =>
-                      nav(unloadingTruck ? `/unload?truck=${unloadingTruck.truck_number}` : "/unload")
-                    }
-                    className="relative flex w-full items-center justify-center rounded-[9px] border border-hairline bg-[#141a27] px-3 py-1.5 text-sm font-medium text-[#aab4c4] transition-colors hover:bg-surface-2"
-                  >
-                    <span className={clsx(
-                      "absolute left-2 h-3 w-3 rounded-full bg-status-inprogress",
-                      unloadingTruck && "animate-pulse",
-                    )} />
-                    Unloading
-                    <span className="absolute right-2 text-ink-muted">
-                      {unloadingTruck
-                        ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{unloadingTruck.truck_number}</span>
-                        : <span className="text-ink-faint">None</span>}
-                    </span>
-                  </button>
-                )}
-              </Fragment>
+              <button
+                key={s}
+                onClick={() => nav(`/board?status=${s}`)}
+                className="relative flex w-full items-center justify-center rounded-[9px] border border-hairline bg-[#141a27] px-3 py-1.5 text-sm font-medium text-[#aab4c4] transition-colors hover:bg-surface-2"
+              >
+                <span className={clsx(
+                  "absolute left-2 h-3 w-3 rounded-full",
+                  STATUS_DOT[s],
+                  s === "in_progress" && counts[s] > 0 && "animate-pulse",
+                )} />
+                {STATUS_LABELS[s]}
+                <span className="absolute right-2 text-ink-muted">
+                  {s === "in_progress"
+                    ? inProgressTruck
+                      ? <span className="font-mono text-base font-bold text-[#fbbf5c]">#{inProgressTruck.truck_number}</span>
+                      : <span className="text-ink-faint">None</span>
+                    : counts[s]}
+                </span>
+              </button>
             ))}
           </div>
 
