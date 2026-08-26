@@ -9,6 +9,7 @@ import {
   useNextUp,
   usePrevOperatingDay,
   useSetNextUp,
+  useUpdateTruck,
   useUpsertTruckState,
 } from "../../api/hooks";
 import { fmtCountdown } from "./useOutsideTimer";
@@ -167,6 +168,7 @@ export default function FleetMobileActionSheet({
   onClearArrived: () => void;
 }) {
   const upsert = useUpsertTruckState();
+  const setOos = useUpdateTruck();
   const { data: nextUp } = useNextUp(runDate);
   const setNextUp = useSetNextUp(runDate);
   const clearNextUp = useClearNextUp(runDate);
@@ -209,6 +211,9 @@ export default function FleetMobileActionSheet({
   const isNextUp = nextUp === truck.truck_number;
   const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
   const isHold = truck.state?.priority_hold === true;
+  // OOS is true if EITHER the fleet record or today's status says so —
+  // the same test the Manage-truck editor uses.
+  const isOosNow = truck.is_oos || status === "oos";
   const arrivedActive = typeof arrivedAt === "number" && Number.isFinite(arrivedAt);
   const canStartOutside = outsideEnabled && !outsideActive && !paperBayActive;
   const canStartPaperBay = paperBayEnabled && !paperBayActive && !outsideActive;
@@ -353,6 +358,52 @@ export default function FleetMobileActionSheet({
                     wearers: truck.state?.wearers ?? 0,
                   })
                 }
+              />
+              {/* OOS is a truck-level fact, not a per-day status, so it lives
+                  with the flags rather than in Set status — and it's settable
+                  here instead of bouncing to Manage truck for one switch. */}
+              <FlagRow
+                label="Out of service"
+                hint="Needs coverage; won't be loaded"
+                on={isOosNow}
+                disabled={setOos.isPending || upsert.isPending}
+                onToggle={() => {
+                  // Same pair of writes the Manage-truck editor makes: the
+                  // truck-level flag AND today's status, or the board and the
+                  // fleet record disagree about the same truck.
+                  setOos.mutate({ truck_number: truck.truck_number, is_oos: !isOosNow });
+                  upsert.mutate({
+                    truck_number: truck.truck_number,
+                    run_date: runDate,
+                    status: !isOosNow ? "oos" : "dirty",
+                    wearers: truck.state?.wearers ?? 0,
+                  });
+                }}
+              />
+              {/* The need, not the destination. A loaded truck sent OOS gets
+                  this raised for it automatically; the truck it goes onto is
+                  chosen later, in Route Swaps. */}
+              <FlagRow
+                label="Needs crossloaded"
+                hint={
+                  truck.state?.crossload_to_truck != null
+                    ? `Going onto #${truck.state.crossload_to_truck}`
+                    : "Freight moves to another truck"
+                }
+                on={truck.state?.needs_crossload === true || truck.state?.crossload_to_truck != null}
+                disabled={upsert.isPending}
+                onToggle={() => {
+                  const on = truck.state?.needs_crossload === true || truck.state?.crossload_to_truck != null;
+                  upsert.mutate({
+                    truck_number: truck.truck_number,
+                    run_date: runDate,
+                    needs_crossload: !on,
+                    // Turning it off drops the destination with it — a truck
+                    // that isn't being crossloaded can't be going anywhere.
+                    ...(on ? { crossload_to_truck: null } : {}),
+                    wearers: truck.state?.wearers ?? 0,
+                  });
+                }}
               />
               <FlagRow
                 label="Next up"

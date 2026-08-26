@@ -80,6 +80,14 @@ export default function WorkflowCard({
               {truck.state?.needs_checked && (
                 <span className="badge bg-st-inprogress/25 text-st-inprogress">Needs Checked</span>
               )}
+              {truck.state?.needs_crossload && truck.state?.crossload_to_truck == null && (
+                <span
+                  className="inline-flex items-center rounded-pill bg-fuchsia-950/70 px-1.5 py-0.5 text-[10px] font-bold uppercase leading-none tracking-wide text-fuchsia-300 ring-1 ring-fuchsia-800/60"
+                  title="Freight has to move onto another truck — no destination chosen yet"
+                >
+                  Crossload
+                </span>
+              )}
               {truck.state?.crossload_to_truck != null && (
                 <span
                   className="badge bg-fuchsia-500/25 text-fuchsia-300"

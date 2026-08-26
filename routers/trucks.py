@@ -266,6 +266,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 existing_today.priority_hold
                 or existing_today.needs_checked
                 or existing_today.crossload_to_truck is not None
+                or existing_today.needs_crossload
                 or existing_today.unloading_started_at is not None
                 or existing_today.load_request is not None
                 or existing_today.driver_claimed_route is not None
@@ -273,6 +274,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 existing_today.priority_hold = False
                 existing_today.needs_checked = False
                 existing_today.crossload_to_truck = None
+                existing_today.needs_crossload = False
                 _end_unloading(existing_today)
                 existing_today.driver_claimed_route = None
             continue
@@ -681,6 +683,7 @@ def update_truck_state(
         "has_dust_garment": row.has_dust_garment,
         "priority_hold": row.priority_hold,
         "needs_checked": row.needs_checked,
+        "needs_crossload": row.needs_crossload,
         "crossload_to_truck": row.crossload_to_truck,
         "arrived_at": row.arrived_at,
         "unloaded_at": row.unloaded_at,
@@ -806,6 +809,18 @@ def update_truck_state(
                 # Their request dies with their marker — the derived clear
                 # below only covers the row being written.
                 _end_unloading(other)
+    # ---- loaded -> OOS raises the crossload flag ---------------------------
+    # A truck that goes out of service with a load already aboard has freight
+    # that must come off and ride something else. Nobody has to know WHICH
+    # truck yet — that's the whole reason the need is its own field — but the
+    # crew should never have to notice this for themselves.
+    if (
+        previous_status == TruckStatus.loaded
+        and row.status == TruckStatus.oos
+        and not row.needs_crossload
+    ):
+        row.needs_crossload = True
+
     if row.status != previous_status or row.status not in _UNLOAD_WORKABLE:
         row.unloading_started_at = None  # (d)
     # (e) the load crew's request hangs off the marker — derived, not duplicated,

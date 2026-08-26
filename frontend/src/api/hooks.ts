@@ -179,6 +179,7 @@ export function useUpsertTruckState() {
       has_dust_garment?: boolean | null;
       priority_hold?: boolean | null;
       needs_checked?: boolean | null;
+      needs_crossload?: boolean | null;
       crossload_to_truck?: number | null;
       arrived_at?: number | null;
       unloading_started_at?: number | null;
@@ -265,6 +266,7 @@ export function useUpsertTruckState() {
               has_dust_garment: false,
               priority_hold: false,
               needs_checked: false,
+              needs_crossload: false,
               crossload_to_truck: null,
               arrived_at: null,
               unloaded_at: null,
@@ -291,6 +293,7 @@ export function useUpsertTruckState() {
                 ...(vars.has_dust_garment   !== undefined && { has_dust_garment: vars.has_dust_garment ?? false }),
                 ...(vars.priority_hold      !== undefined && { priority_hold: vars.priority_hold ?? false }),
                 ...(vars.needs_checked      !== undefined && { needs_checked: vars.needs_checked ?? false }),
+                ...(vars.needs_crossload    !== undefined && { needs_crossload: vars.needs_crossload ?? false }),
                 ...(vars.crossload_to_truck !== undefined && { crossload_to_truck: vars.crossload_to_truck }),
                 ...(vars.arrived_at         !== undefined && { arrived_at: vars.arrived_at }),
                 ...(vars.unloading_started_at !== undefined && { unloading_started_at: vars.unloading_started_at }),

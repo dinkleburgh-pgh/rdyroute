@@ -84,8 +84,11 @@ export default function RouteSwapModal({ onClose }: Props) {
   const [xFromStatus, setXFromStatus] = useState<"unloaded" | "oos" | "shop">("unloaded");
   const [xBusy, setXBusy] = useState(false);
   const [xError, setXError] = useState<string | null>(null);
+  // Includes trucks flagged WITHOUT a destination — a loaded truck sent OOS
+  // raises the need automatically, and this list is where someone comes to
+  // decide which truck it rides.
   const flaggedCrossloads = useMemo(
-    () => board.filter((t) => t.state?.crossload_to_truck != null)
+    () => board.filter((t) => t.state?.crossload_to_truck != null || t.state?.needs_crossload)
                 .sort((a, b) => a.truck_number - b.truck_number),
     [board],
   );
@@ -95,6 +98,10 @@ export default function RouteSwapModal({ onClose }: Props) {
       truck_number: truckNumber,
       run_date: runDate,
       crossload_to_truck: target,
+      // The need travels with the destination: naming one raises the flag,
+      // clearing it drops the flag too — a truck that isn't being crossloaded
+      // can't be going anywhere.
+      needs_crossload: target != null,
     });
   }
 
@@ -129,6 +136,7 @@ export default function RouteSwapModal({ onClose }: Props) {
       run_date: runDate,
       status: fromStatus,
       crossload_to_truck: null,
+      needs_crossload: false,
     });
   }
 

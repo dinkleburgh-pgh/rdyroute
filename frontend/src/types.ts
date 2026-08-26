@@ -58,7 +58,10 @@ export interface TruckState {
   has_dust_garment: boolean;
   priority_hold: boolean;
   needs_checked: boolean;
-  /** Freight needs crossloading onto this truck number (pending action). */
+  /** This truck's freight has to move onto another truck — destination not
+   *  necessarily known yet. Auto-raised when a loaded truck goes OOS. */
+  needs_crossload: boolean;
+  /** Which truck the freight is going onto, once someone has decided. */
   crossload_to_truck: number | null;
   arrived_at: number | null;
   /** Transient "unload crew is emptying this now" marker. Not a status. */

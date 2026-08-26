@@ -85,6 +85,7 @@ class TruckStateCreate(BaseModel):
     has_dust_garment: bool = False
     priority_hold: bool = False
     needs_checked: bool = False
+    needs_crossload: bool = False
     crossload_to_truck: int | None = None
     arrived_at: float | None = None
     unloading_started_at: float | None = None
@@ -106,6 +107,7 @@ class TruckStateUpdate(BaseModel):
     has_dust_garment: bool | None = None
     priority_hold: bool | None = None
     needs_checked: bool | None = None
+    needs_crossload: bool | None = None
     crossload_to_truck: int | None = None
     arrived_at: float | None = None
     unloading_started_at: float | None = None
@@ -136,6 +138,7 @@ class TruckStateOut(_OrmBase):
     has_dust_garment: bool
     priority_hold: bool = False
     needs_checked: bool = False
+    needs_crossload: bool = False
     crossload_to_truck: int | None = None
     arrived_at: float | None = None
     unloaded_at: float | None = None
