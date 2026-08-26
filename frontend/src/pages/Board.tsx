@@ -1231,8 +1231,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       {truck.state?.priority_hold && (fleetMode || filter !== "dirty") && (
                         <span className="badge bg-red-700 text-white">Hold</span>
                       )}
-                      {/* 6. Needs Checked */}
-                      {truck.state?.needs_checked && (
+                      {/* 6. Needs Checked — badge only OUTSIDE fleet mode. The
+                          fleet card already states it in the body, as a chip
+                          that also clears the flag (or, on a Ran Special
+                          truck, as the Ran Special chip, which clears both),
+                          so showing the badge too said the same thing twice
+                          on the same card. */}
+                      {truck.state?.needs_checked && !fleetMode && (
                         <span className="badge bg-amber-700 text-white">Needs Checked</span>
                       )}
                       {/* 7. Dust garment */}
