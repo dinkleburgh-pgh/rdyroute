@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import { useState } from "react";
+import { X } from "lucide-react";
 import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
 import {
@@ -11,10 +12,104 @@ import {
   useUpsertTruckState,
 } from "../../api/hooks";
 import { fmtCountdown } from "./useOutsideTimer";
-import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, statusStampFields } from "./constants";
+import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, STATUS_TEXT, statusStampFields } from "./constants";
 import CoverageTag from "../../components/CoverageTag";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import { truckTypeLabel } from "../../utils/truckType";
+
+/** Uppercase micro-label that opens each block of the sheet. */
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{children}</p>
+  );
+}
+
+/** A named flag with its own one-line explanation and a switch. */
+function FlagRow({
+  label,
+  hint,
+  on,
+  disabled,
+  onToggle,
+}: {
+  label: string;
+  hint: string;
+  on: boolean;
+  disabled?: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={on}
+      disabled={disabled}
+      onClick={onToggle}
+      className="flex w-full items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-colors hover:bg-slate-800 disabled:opacity-50"
+    >
+      <span className="text-[15px] font-bold text-slate-100">{label}</span>
+      <span className="min-w-0 truncate text-[13px] text-slate-500">{hint}</span>
+      <span
+        className={clsx(
+          "ml-auto flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors",
+          on ? "bg-emerald-600" : "bg-slate-600",
+        )}
+      >
+        <span
+          className={clsx(
+            "h-5 w-5 rounded-full bg-white transition-transform",
+            on && "translate-x-5",
+          )}
+        />
+      </span>
+    </button>
+  );
+}
+
+const TIMER_TONES = {
+  emerald: { idle: "border-emerald-700/50 text-emerald-300", on: "border-emerald-500 bg-emerald-950/50 text-emerald-200" },
+  sky:     { idle: "border-sky-700/50 text-sky-300",         on: "border-sky-500 bg-sky-950/50 text-sky-200" },
+  purple:  { idle: "border-purple-700/50 text-purple-300",   on: "border-purple-500 bg-purple-950/50 text-purple-200" },
+} as const;
+
+/**
+ * One timer/stamp. Running ones show their remaining time and cancel on tap,
+ * so a single control covers both directions rather than a second row of
+ * "Cancel" chips appearing beside it.
+ */
+function TimerButton({
+  tone,
+  title,
+  hint,
+  active,
+  disabled,
+  onClick,
+}: {
+  tone: keyof typeof TIMER_TONES;
+  title: string;
+  hint: string;
+  active?: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={clsx(
+        "rounded-xl border px-2 py-3 text-center transition-colors disabled:opacity-40",
+        active ? TIMER_TONES[tone].on : TIMER_TONES[tone].idle,
+        !active && "bg-slate-800/30 hover:bg-slate-800",
+      )}
+    >
+      <div className="text-[15px] font-bold">{title}</div>
+      <div className="mt-0.5 text-[12px] font-semibold opacity-70">
+        {active ? `${hint} · tap to clear` : hint}
+      </div>
+    </button>
+  );
+}
 
 const STATUS_ACTIONS: TruckStatus[] = [
   "dirty",
@@ -121,22 +216,33 @@ export default function FleetMobileActionSheet({
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-md rounded-2xl border border-slate-700 bg-slate-900 shadow-xl overflow-y-auto max-h-[90vh]">
-        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <div className="flex min-w-0 items-center gap-2">
-            <span className="text-2xl font-black tracking-tight text-white">#{truck.truck_number}</span>
-            {(() => {
-              const cr = getCoverageRouteNumber(truck);
-              return cr != null ? <CoverageTag route={cr} truck={truck.truck_number} className="shrink-0" /> : null;
-            })()}
-            <span className="text-sm text-slate-400">
-              {truckTypeLabel(truck.truck_type)}
-              {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
-            </span>
-          </div>
-          <span className={clsx("badge", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
+      <div className="relative w-full max-w-md overflow-hidden overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-xl max-h-[90vh]">
+        {/* The truck's status, stated before anything else — the rule and the
+            numeral carry it, so you know what you tapped without reading. */}
+        <div className={clsx("h-[3px] w-full", STATUS_BG[status])} />
+        <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-4">
+          <span className={clsx("font-mono text-[44px] font-black leading-none tabular-nums", STATUS_TEXT[status])}>
+            {truck.truck_number}
+          </span>
+          <span className={clsx("badge shrink-0", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
             {STATUS_LABELS[status]}
           </span>
+          <span className="min-w-0 truncate text-sm text-slate-400">
+            {truckTypeLabel(truck.truck_type)}
+            {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
+          </span>
+          {(() => {
+            const cr = getCoverageRouteNumber(truck);
+            return cr != null ? <CoverageTag route={cr} truck={truck.truck_number} className="shrink-0" /> : null;
+          })()}
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-700 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+          >
+            <X className="h-4 w-4" />
+          </button>
         </div>
 
         <div className="space-y-4 p-5">
@@ -175,235 +281,180 @@ export default function FleetMobileActionSheet({
               </div>
             </div>
           )}
-          <div className="grid grid-cols-3 gap-2">
-            {STATUS_ACTIONS.map((s) => {
-              const isCurrent = status === s;
-              return (
-                <button
-                  key={s}
-                  type="button"
-                  disabled={upsert.isPending || isCurrent}
-                  onClick={() => {
-                    if (s === "oos") {
-                      onManageTruck();
-                      return;
-                    }
-                    upsert.mutate({
-                      truck_number: truck.truck_number,
-                      run_date: runDate,
-                      status: s,
-                      wearers: truck.state?.wearers ?? 0,
-                      ...statusStampFields(s),
-                    });
-                    onClose();
-                  }}
-                  className={clsx(
-                    "flex flex-col items-center gap-1 rounded-lg border px-2 py-3 text-xs font-semibold transition-colors",
-                    isCurrent
-                      ? "border-slate-600 bg-slate-800 text-slate-500"
-                      : "border-slate-700/60 bg-slate-800/60 text-slate-200 hover:bg-slate-700",
-                  )}
-                >
-                  <span className={clsx("h-3 w-3 rounded-full", STATUS_BG[s])} />
-                  <span>{STATUS_LABELS[s]}</span>
-                </button>
-              );
-            })}
+          <div>
+            <SectionLabel>Set status</SectionLabel>
+            <div className="grid grid-cols-4 gap-2">
+              {STATUS_ACTIONS.map((s) => {
+                const isCurrent = status === s;
+                return (
+                  <button
+                    key={s}
+                    type="button"
+                    disabled={upsert.isPending || isCurrent}
+                    onClick={() => {
+                      if (s === "oos") {
+                        onManageTruck();
+                        return;
+                      }
+                      upsert.mutate({
+                        truck_number: truck.truck_number,
+                        run_date: runDate,
+                        status: s,
+                        wearers: truck.state?.wearers ?? 0,
+                        ...statusStampFields(s),
+                      });
+                      onClose();
+                    }}
+                    className={clsx(
+                      "flex flex-col items-center gap-1.5 rounded-xl border px-1 py-3 text-[13px] font-bold transition-colors",
+                      isCurrent
+                        ? "border-slate-600 bg-slate-800 text-slate-500"
+                        : "border-slate-700/60 bg-slate-800/40 text-slate-100 hover:bg-slate-700/60",
+                    )}
+                  >
+                    <span className={clsx("h-2.5 w-2.5 rounded-full", STATUS_BG[s])} />
+                    <span>{STATUS_LABELS[s]}</span>
+                  </button>
+                );
+              })}
+            </div>
           </div>
 
-          <div className="border-t border-slate-800 pt-3">
-            <p className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">Quick Actions</p>
-            <div className="flex flex-wrap gap-2">
-              {isHold ? (
-                <button
-                  type="button"
-                  disabled={upsert.isPending}
-                  onClick={() => {
-                    upsert.mutate({
-                      truck_number: truck.truck_number,
-                      run_date: runDate,
-                      priority_hold: false,
-                      wearers: truck.state?.wearers ?? 0,
-                    });
-                    onClose();
-                  }}
-                  className="rounded-md border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-950/50"
-                >
-                  🔓 Clear Hold
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  disabled={upsert.isPending}
-                  onClick={() => {
-                    upsert.mutate({
-                      truck_number: truck.truck_number,
-                      run_date: runDate,
-                      priority_hold: true,
-                      wearers: truck.state?.wearers ?? 0,
-                    });
-                    onClose();
-                  }}
-                  className="rounded-md border border-amber-700/40 bg-amber-950/30 px-3 py-2 text-xs font-semibold text-amber-300 transition-colors hover:bg-amber-950/50"
-                >
-                  🚩 Unload &amp; Hold
-                </button>
-              )}
-              {/* Garments are set in Setup Day, but they turn up after it —
-                  an F.S. truck comes back carrying them and nobody wants to
-                  re-run the wizard for one flag. Only F.S. trucks: the badge,
-                  the Load strip and the finish-load prompt all gate on that
-                  type, so the flag means nothing anywhere else. */}
-              {truck.truck_type === "Dust" && (
-                <button
-                  type="button"
-                  disabled={upsert.isPending}
-                  onClick={() => {
-                    upsert.mutate({
-                      truck_number: truck.truck_number,
-                      run_date: runDate,
-                      has_dust_garment: !truck.state?.has_dust_garment,
-                      wearers: truck.state?.wearers ?? 0,
-                    });
-                    onClose();
-                  }}
-                  className={truck.state?.has_dust_garment
-                    ? "rounded-md border border-amber-500/60 bg-amber-900/40 px-3 py-2 text-xs font-semibold text-amber-100 transition-colors hover:bg-amber-900/60"
-                    : "rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"}
-                >
-                  {truck.state?.has_dust_garment ? "🧥 Garments on" : "🧥 Has garments"}
-                </button>
-              )}
-              <button
-                type="button"
+          <div>
+            <SectionLabel>Flags</SectionLabel>
+            <div className="flex flex-col gap-2">
+              {/* Flags are switches now, and flipping one keeps the sheet open:
+                  they're settings on the truck, not decisions that end the
+                  visit, and a lead usually sets two at once. */}
+              <FlagRow
+                label="Unload &amp; hold"
+                hint="Keep on dock after unload"
+                on={isHold}
                 disabled={upsert.isPending}
-                onClick={() => {
+                onToggle={() =>
+                  upsert.mutate({
+                    truck_number: truck.truck_number,
+                    run_date: runDate,
+                    priority_hold: !isHold,
+                    wearers: truck.state?.wearers ?? 0,
+                  })
+                }
+              />
+              <FlagRow
+                label="Needs checked"
+                hint="Flag for a look-over"
+                on={needsChecked}
+                disabled={upsert.isPending}
+                onToggle={() =>
                   upsert.mutate({
                     truck_number: truck.truck_number,
                     run_date: runDate,
                     needs_checked: !needsChecked,
                     wearers: truck.state?.wearers ?? 0,
-                  });
-                  onClose();
-                }}
-                className={needsChecked
-                  ? "rounded-md border border-amber-600/50 bg-amber-900/40 px-3 py-2 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-900/60"
-                  : "rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"}
-              >
-                {needsChecked ? "✅ Clear Checked" : "🔍 Needs Checked"}
-              </button>
-              {/* Sits with Needs Checked so the fleet sheet can queue the next
-                  load without going to the load display's own picker. */}
-              <button
-                type="button"
+                  })
+                }
+              />
+              <FlagRow
+                label="Next up"
+                hint="Queue as next load"
+                on={isNextUp}
                 disabled={setNextUp.isPending || clearNextUp.isPending}
-                onClick={() => {
+                onToggle={() => {
                   if (isNextUp) clearNextUp.mutate();
                   else setNextUp.mutate(truck.truck_number);
-                  onClose();
                 }}
-                className={isNextUp
-                  ? "rounded-md border border-sky-600/50 bg-sky-900/40 px-3 py-2 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-900/60"
-                  : "rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700"}
-              >
-                {isNextUp ? "✕ Clear Next Up" : "⏭ Set Next Up"}
-              </button>
-              {arrivedEnabled && arrivedActive && (
-                <div className="flex items-center gap-2 rounded-md border border-emerald-700/40 bg-emerald-950/30 px-3 py-2 text-xs font-semibold text-emerald-300">
-                  <span>
-                    📍 Arrived {new Date(arrivedAt * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      onClearArrived();
-                      onClose();
-                    }}
-                    className="rounded border border-emerald-700/40 px-2 py-1 text-[11px] font-bold text-emerald-200 transition-colors hover:bg-emerald-900/50"
-                  >
-                    Clear
-                  </button>
-                </div>
-              )}
-              {outsideActive && typeof outsideRemainingSeconds === "number" && (
-                <div className="flex items-center gap-2 rounded-md border border-orange-700/40 bg-orange-950/30 px-3 py-2 text-xs font-semibold text-orange-300">
-                  <span>⏱ Outside {fmtCountdown(outsideRemainingSeconds)}</span>
-                  <button
-                    type="button"
-                    onClick={onCancelOutside}
-                    className="rounded border border-orange-700/40 px-2 py-1 text-[11px] font-bold text-orange-200 transition-colors hover:bg-orange-900/50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-              {paperBayActive && typeof paperBayRemainingSeconds === "number" && (
-                <div className="flex items-center gap-2 rounded-md border border-purple-700/40 bg-purple-950/30 px-3 py-2 text-xs font-semibold text-purple-300">
-                  <span>📄 Paper Bay {fmtCountdown(paperBayRemainingSeconds)}</span>
-                  <button
-                    type="button"
-                    onClick={onCancelPaperBay}
-                    className="rounded border border-purple-700/40 px-2 py-1 text-[11px] font-bold text-purple-200 transition-colors hover:bg-purple-900/50"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              )}
-              {canStartOutside && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onOutside();
-                    onClose();
-                  }}
-                  className="rounded-md border border-sky-700/40 bg-sky-950/30 px-3 py-2 text-xs font-semibold text-sky-300 transition-colors hover:bg-sky-950/50"
-                >
-                  ⏱ Outside ({outsideMinutes} min)
-                </button>
-              )}
-              {canStartPaperBay && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onPaperBay();
-                    onClose();
-                  }}
-                  className="rounded-md border border-purple-700/40 bg-purple-950/30 px-3 py-2 text-xs font-semibold text-purple-300 transition-colors hover:bg-purple-950/50"
-                >
-                  📄 Paper Bay ({paperBayMinutes} min)
-                </button>
-              )}
-              {arrivedEnabled && !arrivedActive && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    onArrived();
-                    onClose();
-                  }}
-                  className="rounded-md border border-emerald-700/40 bg-emerald-950/30 px-3 py-2 text-xs font-semibold text-emerald-300 transition-colors hover:bg-emerald-950/50"
-                >
-                  📍 Arrived
-                </button>
+              />
+              {/* Garments are set in Setup Day, but they turn up after it — an
+                  F.S. truck comes back carrying them and nobody wants to re-run
+                  the wizard for one flag. F.S. only: the badge, the Load strip
+                  and the finish-load prompt all gate on that type. */}
+              {truck.truck_type === "Dust" && (
+                <FlagRow
+                  label="Has garments"
+                  hint="Came back carrying F.S. garments"
+                  on={truck.state?.has_dust_garment === true}
+                  disabled={upsert.isPending}
+                  onToggle={() =>
+                    upsert.mutate({
+                      truck_number: truck.truck_number,
+                      run_date: runDate,
+                      has_dust_garment: !truck.state?.has_dust_garment,
+                      wearers: truck.state?.wearers ?? 0,
+                    })
+                  }
+                />
               )}
             </div>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={onManageTruck}
-              className="flex-1 rounded-lg bg-blue-600 py-3 text-sm font-bold text-white transition-colors hover:bg-blue-500"
-            >
-              🚚 Manage Truck
-            </button>
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 rounded-lg border border-slate-700 bg-slate-800 py-3 text-sm font-semibold text-slate-300 transition-colors hover:bg-slate-700"
-            >
-              Close
-            </button>
-          </div>
+          {(arrivedEnabled || outsideEnabled || outsideActive || paperBayEnabled || paperBayActive) && (
+            <div>
+              <SectionLabel>Timers &amp; arrival</SectionLabel>
+              <div className="grid grid-cols-3 gap-2">
+                {arrivedEnabled && (
+                  <TimerButton
+                    tone="emerald"
+                    title={arrivedActive ? "Arrived" : "Arrived"}
+                    hint={
+                      arrivedActive
+                        ? new Date(arrivedAt! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+                        : "Stamp now"
+                    }
+                    active={arrivedActive}
+                    onClick={() => {
+                      if (arrivedActive) onClearArrived();
+                      else onArrived();
+                      onClose();
+                    }}
+                  />
+                )}
+                {(outsideActive || outsideEnabled) && (
+                  <TimerButton
+                    tone="sky"
+                    title="Outside"
+                    hint={
+                      outsideActive && typeof outsideRemainingSeconds === "number"
+                        ? fmtCountdown(outsideRemainingSeconds)
+                        : `${outsideMinutes} min timer`
+                    }
+                    active={outsideActive}
+                    disabled={!outsideActive && !canStartOutside}
+                    onClick={() => {
+                      if (outsideActive) onCancelOutside();
+                      else onOutside();
+                      onClose();
+                    }}
+                  />
+                )}
+                {(paperBayActive || paperBayEnabled) && (
+                  <TimerButton
+                    tone="purple"
+                    title="Paper bay"
+                    hint={
+                      paperBayActive && typeof paperBayRemainingSeconds === "number"
+                        ? fmtCountdown(paperBayRemainingSeconds)
+                        : `${paperBayMinutes} min timer`
+                    }
+                    active={paperBayActive}
+                    disabled={!paperBayActive && !canStartPaperBay}
+                    onClick={() => {
+                      if (paperBayActive) onCancelPaperBay();
+                      else onPaperBay();
+                      onClose();
+                    }}
+                  />
+                )}
+              </div>
+            </div>
+          )}
+
+          <button
+            type="button"
+            onClick={onManageTruck}
+            className="w-full rounded-xl bg-blue-600 py-3.5 text-base font-bold text-white transition-colors hover:bg-blue-500"
+          >
+            Manage truck
+          </button>
         </div>
       </div>
     </div>,

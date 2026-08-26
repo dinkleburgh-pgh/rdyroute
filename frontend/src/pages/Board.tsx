@@ -2060,9 +2060,16 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         </div>
       )}
 
-      {mobileActionTruck && fleetMode && (
+      {mobileActionTruck && fleetMode && (() => {
+        // The LIVE row, not the snapshot taken on tap. The sheet's flag
+        // switches keep it open after a write, so every prop derived from the
+        // truck has to come from the refreshed board — passing only `truck`
+        // fresh left the switches showing their old position while the write
+        // had already landed.
+        const live = data?.find((t) => t.truck_number === mobileActionTruck.truck_number) ?? mobileActionTruck;
+        return (
         <FleetMobileActionSheet
-          truck={mobileActionTruck}
+          truck={live}
           runDate={runDate}
           onClose={() => setMobileActionTruck(null)}
           onManageTruck={() => {
@@ -2070,8 +2077,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             setMobileActionTruck(null);
           }}
           arrivedEnabled={arrivedTrackingEnabled}
-          arrivedAt={mobileActionTruck.state?.arrived_at}
-          needsChecked={mobileActionTruck.state?.needs_checked === true}
+          arrivedAt={live.state?.arrived_at}
+          needsChecked={live.state?.needs_checked === true}
           outsideEnabled={outsideTimerEnabled}
           outsideActive={outsideTimers.has(mobileActionTruck.truck_number)}
           outsideMinutes={outsideTimerMinutes ?? 20}
@@ -2084,10 +2091,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           onCancelOutside={() => cancelOutsideTimer(mobileActionTruck.truck_number)}
           onPaperBay={() => triggerPaperBayTimer(mobileActionTruck.truck_number)}
           onCancelPaperBay={() => cancelPaperBayTimer(mobileActionTruck.truck_number)}
-          onArrived={() => markArrived(mobileActionTruck)}
-          onClearArrived={() => clearArrived(mobileActionTruck)}
+          onArrived={() => markArrived(live)}
+          onClearArrived={() => clearArrived(live)}
         />
-      )}
+        );
+      })()}
 
       {detailTruck && fleetMode && (
         <TruckDetailModal
