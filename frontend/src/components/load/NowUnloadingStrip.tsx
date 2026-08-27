@@ -72,11 +72,12 @@ export default function NowUnloadingStrip({
         const need = loadNeedFor(t, board, loadDay, holidayLoad);
         const suggested: "want" | "skip" = need.needed ? "want" : "skip";
         return (
-          /* Two deliberate rows on phones — identity, then answer — instead of
-             one flex-wrap line. Wrapped, that line dropped the ghost button to
-             its own row bottom-left, which read as debris. From sm: up it
-             collapses back into the single strip line. */
-          <div key={t.truck_number} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3">
+          /* Two deliberate rows at every width — identity, then the answer.
+             The strip lives in the Load page's left rail and the display's
+             work column, and neither is wide enough for the old single line:
+             it wrapped the pill and buttons into a crowded right-hung clump
+             with mismatched heights. */
+          <div key={t.truck_number} className="flex flex-col gap-2">
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
                 Now unloading
@@ -89,13 +90,13 @@ export default function NowUnloadingStrip({
             </div>
 
             {req == null ? (
-              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              <div className="flex flex-wrap items-center gap-2">
                 {/* The schedule's own answer, stated before anyone taps. Load
                     only has to touch this to disagree with it. */}
                 <span
                   className={clsx(
                     PILL,
-                    "w-full text-center sm:w-auto sm:text-left",
+                    "inline-flex min-h-[32px] w-full items-center justify-center gap-1 sm:w-auto sm:flex-1 sm:justify-start",
                     need.needed
                       ? "bg-emerald-600/15 text-emerald-300 ring-1 ring-emerald-600/40"
                       : "bg-slate-600/25 text-slate-200 ring-1 ring-slate-500/40",
@@ -105,7 +106,7 @@ export default function NowUnloadingStrip({
                   <span className="ml-1 font-normal opacity-70">· {need.reason}</span>
                 </span>
                 {actions.canAct && (
-                  <>
+                  <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
                     {/* Named plainly for the action it takes, not phrased as a
                         rebuttal — it reads the same length as Change/Clear in
                         the other state, and needs no dense variant. */}
@@ -126,15 +127,15 @@ export default function NowUnloadingStrip({
                     >
                       Confirm
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
+              <div className="flex flex-wrap items-center gap-2">
                 <span
                   className={clsx(
                     PILL,
-                    "w-full text-center sm:w-auto sm:text-left",
+                    "inline-flex min-h-[32px] w-full items-center justify-center gap-1 sm:w-auto sm:flex-1 sm:justify-start",
                     req === "want"
                       ? "bg-emerald-600/20 text-emerald-300 ring-1 ring-emerald-600/40"
                       : "bg-slate-600/30 text-slate-200 ring-1 ring-slate-500/40",
@@ -145,7 +146,7 @@ export default function NowUnloadingStrip({
                     ` · ${new Date(t.state.load_request_at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
                 </span>
                 {actions.canAct && (
-                  <>
+                  <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
                     {/* Same pairing as the auto state: the alternative action
                         first, the quiet one beside it. */}
                     <button
@@ -166,7 +167,7 @@ export default function NowUnloadingStrip({
                     >
                       Clear
                     </button>
-                  </>
+                  </div>
                 )}
               </div>
             )}
