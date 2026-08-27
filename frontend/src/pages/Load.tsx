@@ -46,6 +46,7 @@ import NowUnloadingStrip from "../components/load/NowUnloadingStrip";
 import LoadActionDialogs from "../components/load/LoadActionDialogs";
 import InProgressHeroPanel from "../components/load/InProgressHeroPanel";
 import GarmentsStrip from "../components/load/GarmentsStrip";
+import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import LoadDisplay from "../components/load/LoadDisplay";
 import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
@@ -374,6 +375,10 @@ export default function Load() {
       </button>
 
       <GarmentsStrip trucks={dustGarmentTrucks} />
+
+      {/* Freight that has to change trucks affects what gets loaded where —
+          the load crew sees it here; swap-managing roles can assign from it. */}
+      <CrossloadNoticeBar board={data ?? []} />
 
       {/* Two rails: what's happening right now on the left, the reference
           material that supports it on the right. */}

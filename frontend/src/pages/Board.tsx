@@ -43,6 +43,7 @@ import {
 } from "./board/constants";
 import { useOutsideTimer, usePaperBayTimer, fmtCountdown } from "./board/useOutsideTimer";
 import RouteCardPanel from "./board/RouteCardPanel";
+import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import StartLoadModal from "./board/StartLoadModal";
 import TruckDetailPanel from "./board/TruckDetailPanel";
 import TruckDetailModal from "./board/TruckDetailModal";
@@ -856,6 +857,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       {error && (
         <p className="text-red-400">Failed to load board. Is the backend running?</p>
       )}
+
+      {fleetMode && data && !isReadOnly && <CrossloadNoticeBar board={data} />}
 
       {fleetMode && data && <RouteCardPanel data={data} runDate={runDate} />}
 

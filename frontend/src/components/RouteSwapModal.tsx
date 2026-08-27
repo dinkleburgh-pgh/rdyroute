@@ -21,9 +21,12 @@ const DAY_ABBR = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
 interface Props {
   onClose: () => void;
+  /** Accordion section to open on mount — the crossload notice bar lands
+   *  straight on its pending list instead of the default Add swap form. */
+  initialSection?: "add" | "crossload" | "recurring";
 }
 
-export default function RouteSwapModal({ onClose }: Props) {
+export default function RouteSwapModal({ onClose, initialSection = "add" }: Props) {
   const runDate = todayIso();
   const { data: board = [] } = useBoard(runDate);
   const { data: allSpareAssignments = [], isLoading: swapsLoading } = useSpareAssignments(runDate);
@@ -68,7 +71,7 @@ export default function RouteSwapModal({ onClose }: Props) {
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   // Accordion: only one of Add swap / Recurring rules is open at a time.
-  const [openSection, setOpenSection] = useState<"add" | "crossload" | "recurring" | null>("add");
+  const [openSection, setOpenSection] = useState<"add" | "crossload" | "recurring" | null>(initialSection);
   const toggleSection = (s: "add" | "crossload" | "recurring") =>
     setOpenSection((prev) => (prev === s ? null : s));
 
