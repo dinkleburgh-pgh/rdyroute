@@ -123,6 +123,14 @@ const STATUS_ACTIONS: TruckStatus[] = [
   "loaded",
   "oos",
 ];
+// Spares also get their idle status back — without it, one mis-tap on an
+// idle spare was unrecoverable from this sheet. Slotted before OOS so the
+// grid stays two even rows of four.
+const SPARE_STATUS_ACTIONS: TruckStatus[] = [
+  ...STATUS_ACTIONS.slice(0, -1),
+  "spare",
+  "oos",
+];
 
 export default function FleetMobileActionSheet({
   truck,
@@ -210,9 +218,6 @@ export default function FleetMobileActionSheet({
   const ranSpecial = (truck.state?.off_note ?? "").toLowerCase().includes("ran special");
   const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
   const isHold = truck.state?.priority_hold === true;
-  // OOS is true if EITHER the fleet record or today's status says so —
-  // the same test the Manage-truck editor uses.
-  const isOosNow = truck.is_oos || status === "oos";
   const arrivedActive = typeof arrivedAt === "number" && Number.isFinite(arrivedAt);
   const canStartOutside = outsideEnabled && !outsideActive && !paperBayActive;
   const canStartPaperBay = paperBayEnabled && !paperBayActive && !outsideActive;
@@ -292,7 +297,7 @@ export default function FleetMobileActionSheet({
           <div>
             <SectionLabel>Set status</SectionLabel>
             <div className="grid grid-cols-4 gap-2">
-              {STATUS_ACTIONS.map((s) => {
+              {(truck.truck_type === "Spare" ? SPARE_STATUS_ACTIONS : STATUS_ACTIONS).map((s) => {
                 const isCurrent = status === s;
                 return (
                   <button
@@ -313,6 +318,12 @@ export default function FleetMobileActionSheet({
                         });
                         onClose();
                         return;
+                      }
+                      // Leaving OOS must clear the fleet-level flag too, or
+                      // effectiveStatus keeps showing OOS and the tap reads as
+                      // a no-op — the mirror of the OOS tile setting both.
+                      if (truck.is_oos) {
+                        setOos.mutate({ truck_number: truck.truck_number, is_oos: false });
                       }
                       upsert.mutate({
                         truck_number: truck.truck_number,
@@ -371,27 +382,6 @@ export default function FleetMobileActionSheet({
                     wearers: truck.state?.wearers ?? 0,
                   })
                 }
-              />
-              {/* OOS is a truck-level fact, not a per-day status, so it lives
-                  with the flags rather than in Set status — and it's settable
-                  here instead of bouncing to Manage truck for one switch. */}
-              <FlagRow
-                label="Out of service"
-                hint="Needs coverage; won't be loaded"
-                on={isOosNow}
-                disabled={setOos.isPending || upsert.isPending}
-                onToggle={() => {
-                  // Same pair of writes the Manage-truck editor makes: the
-                  // truck-level flag AND today's status, or the board and the
-                  // fleet record disagree about the same truck.
-                  setOos.mutate({ truck_number: truck.truck_number, is_oos: !isOosNow });
-                  upsert.mutate({
-                    truck_number: truck.truck_number,
-                    run_date: runDate,
-                    status: !isOosNow ? "oos" : "dirty",
-                    wearers: truck.state?.wearers ?? 0,
-                  });
-                }}
               />
               {/* The need, not the destination. A loaded truck sent OOS gets
                   this raised for it automatically; the truck it goes onto is
