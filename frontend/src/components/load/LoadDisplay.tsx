@@ -301,6 +301,7 @@ export default function LoadDisplay({
                   <CoverageCards
                     entries={coverage}
                     isRecurring={isRecurringCoverage}
+                    statusOf={(n) => board.find((t) => t.truck_number === n)?.state?.status ?? null}
                     className="grid grid-cols-1 gap-2.5"
                   />
                 )}

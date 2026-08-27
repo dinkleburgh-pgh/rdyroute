@@ -1,4 +1,6 @@
+import clsx from "clsx";
 import type { CoverageEntry } from "../utils/truckStatus";
+import type { TruckStatus } from "../types";
 
 /**
  * The canonical coverage display: big paired ROUTE → TRUCK numbers with micro
@@ -15,12 +17,18 @@ import type { CoverageEntry } from "../utils/truckStatus";
 export default function CoverageCards({
   entries,
   isRecurring,
+  statusOf,
   showPrevBadge = true,
   className = "grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3",
 }: {
   entries: CoverageEntry[];
   /** Optional predicate to badge a pairing as a recurring rule. */
   isRecurring?: (route: number, cover: number) => boolean;
+  /** Live status of the covering truck. With it, a today card stops implying
+   *  pending work once the cover is loaded — the verb flips to "Loaded on"
+   *  and the card wears the state. Without it (or for prev entries) the card
+   *  stays the static pairing it always was. */
+  statusOf?: (truckNumber: number) => TruckStatus | null;
   /** Set false where the surrounding block already says these are prev-day
    *  (e.g. the Unload page's "Previous load-day coverage" header) — otherwise
    *  every card repeats the same chip. */
@@ -30,7 +38,11 @@ export default function CoverageCards({
   if (entries.length === 0) return null;
   return (
     <div className={className}>
-      {entries.map((e) => (
+      {entries.map((e) => {
+        const st = !e.prev ? statusOf?.(e.cover) ?? null : null;
+        const coverLoaded = st === "loaded";
+        const coverLoading = st === "in_progress";
+        return (
         <div
           key={`${e.route}-${e.cover}-${e.prev ? "p" : "t"}`}
           className="rounded-xl border border-hairline bg-surface p-3"
@@ -45,12 +57,21 @@ export default function CoverageCards({
             </span>
             <div className="text-center">
               <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-faint">
-                {e.prev ? "Carried by" : "Loads on"}
+                {e.prev ? "Carried by" : coverLoaded ? "Loaded on" : "Loads on"}
               </p>
-              <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">#{e.cover}</p>
+              <p className={clsx(
+                "font-mono text-3xl font-black leading-none tabular-nums",
+                coverLoaded ? "text-st-loaded" : coverLoading ? "text-st-inprogress" : "text-ink",
+              )}>#{e.cover}</p>
             </div>
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-center gap-1.5">
+            {coverLoaded && (
+              <span className="rounded bg-st-loaded/20 px-1.5 py-0.5 text-[10px] font-semibold text-st-loaded">loaded</span>
+            )}
+            {coverLoading && (
+              <span className="rounded bg-st-inprogress/20 px-1.5 py-0.5 text-[10px] font-semibold text-st-inprogress">loading now</span>
+            )}
             {e.kind === "split" && (
               <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">split</span>
             )}
@@ -65,7 +86,8 @@ export default function CoverageCards({
             )}
           </div>
         </div>
-      ))}
+        );
+      })}
     </div>
   );
 }

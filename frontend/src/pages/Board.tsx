@@ -821,7 +821,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             </span>
           </div>
           <div className="border-t px-3 pb-3 pt-3" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-            <CoverageCards entries={fleetCoverage.filter((e) => !e.prev)} />
+            <CoverageCards
+              entries={fleetCoverage.filter((e) => !e.prev)}
+              statusOf={(n) => data?.find((t) => t.truck_number === n)?.state?.status ?? null}
+            />
           </div>
         </div>
       )}
