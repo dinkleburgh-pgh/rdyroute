@@ -30,7 +30,7 @@ const BACK_OUT_BTN =
   "min-h-[44px] rounded-lg border border-st-dirty/50 bg-st-dirty/10 px-4 text-sm font-semibold text-st-dirty transition-colors hover:bg-st-dirty/20 disabled:opacity-50";
 /** The quiet one that sits beside it (Confirm / Clear). */
 const GHOST_BTN =
-  "min-h-[44px] rounded-lg px-4 text-sm font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50";
+  "min-h-[44px] rounded-lg border border-hairline px-4 text-sm font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50";
 /** The current answer, worded by the caller. */
 const PILL = "rounded-md px-2.5 py-1 text-xs font-bold";
 
@@ -72,23 +72,30 @@ export default function NowUnloadingStrip({
         const need = loadNeedFor(t, board, loadDay, holidayLoad);
         const suggested: "want" | "skip" = need.needed ? "want" : "skip";
         return (
-          <div key={t.truck_number} className="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
-              Now unloading
-            </span>
-            <span className="font-mono text-lg font-black tabular-nums text-ink">
-              #{t.truck_number}
-            </span>
-            {!dense && cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
-            {!dense && renderClock?.(t.state!.unloading_started_at!)}
+          /* Two deliberate rows on phones — identity, then answer — instead of
+             one flex-wrap line. Wrapped, that line dropped the ghost button to
+             its own row bottom-left, which read as debris. From sm: up it
+             collapses back into the single strip line. */
+          <div key={t.truck_number} className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-3">
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
+                Now unloading
+              </span>
+              <span className="font-mono text-lg font-black tabular-nums text-ink">
+                #{t.truck_number}
+              </span>
+              {!dense && cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
+              {!dense && renderClock?.(t.state!.unloading_started_at!)}
+            </div>
 
             {req == null ? (
-              <div className="ml-auto flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
                 {/* The schedule's own answer, stated before anyone taps. Load
                     only has to touch this to disagree with it. */}
                 <span
                   className={clsx(
                     PILL,
+                    "w-full text-center sm:w-auto sm:text-left",
                     need.needed
                       ? "bg-emerald-600/15 text-emerald-300 ring-1 ring-emerald-600/40"
                       : "bg-slate-600/25 text-slate-200 ring-1 ring-slate-500/40",
@@ -106,7 +113,7 @@ export default function NowUnloadingStrip({
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, suggested === "want" ? "skip" : "want")}
-                      className={suggested === "want" ? BACK_OUT_BTN : ACTION_BTN}
+                      className={clsx("flex-1 sm:flex-none", suggested === "want" ? BACK_OUT_BTN : ACTION_BTN)}
                     >
                       {suggested === "want" ? "Back it out" : "Pull it forward"}
                     </button>
@@ -114,7 +121,7 @@ export default function NowUnloadingStrip({
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, suggested)}
-                      className={GHOST_BTN}
+                      className={clsx("flex-1 sm:flex-none", GHOST_BTN)}
                       title="Tell the dock a person checked this, not just the schedule"
                     >
                       Confirm
@@ -123,10 +130,11 @@ export default function NowUnloadingStrip({
                 )}
               </div>
             ) : (
-              <div className="ml-auto flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2 sm:ml-auto">
                 <span
                   className={clsx(
                     PILL,
+                    "w-full text-center sm:w-auto sm:text-left",
                     req === "want"
                       ? "bg-emerald-600/20 text-emerald-300 ring-1 ring-emerald-600/40"
                       : "bg-slate-600/30 text-slate-200 ring-1 ring-slate-500/40",
@@ -144,7 +152,7 @@ export default function NowUnloadingStrip({
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, req === "want" ? "skip" : "want")}
-                      className={req === "want" ? BACK_OUT_BTN : ACTION_BTN}
+                      className={clsx("flex-1 sm:flex-none", req === "want" ? BACK_OUT_BTN : ACTION_BTN)}
                     >
                       {req === "want" ? "Back it out" : "Pull it forward"}
                     </button>
@@ -154,7 +162,7 @@ export default function NowUnloadingStrip({
                       type="button"
                       disabled={isBusy}
                       onClick={() => void actions.set(t, null)}
-                      className={GHOST_BTN}
+                      className={clsx("flex-1 sm:flex-none", GHOST_BTN)}
                     >
                       Clear
                     </button>

@@ -92,7 +92,8 @@ export default function TruckDetailModal({
           </div>
         )}
 
-        <div className="space-y-4 p-4">
+        {/* Safe-area inset: bottom-docked on phones, same reason as the action sheet. */}
+        <div className="space-y-4 p-4 pb-[calc(1rem+env(safe-area-inset-bottom))]">
           {fleetMode && !readOnly && (
             <FleetTruckEditor truck={truck} runDate={runDate} />
           )}

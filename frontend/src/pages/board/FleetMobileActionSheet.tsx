@@ -5,6 +5,7 @@ import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
 import {
   useAssignSpare,
+  useBoard,
   usePrevOperatingDay,
   useUpdateTruck,
   useUpsertTruckState,
@@ -179,6 +180,11 @@ export default function FleetMobileActionSheet({
 }) {
   const upsert = useUpsertTruckState();
   const setOos = useUpdateTruck();
+  // For the crossload destination picker. Reads the board cache the Fleet
+  // page already holds — no extra fetch in practice.
+  const { data: boardData } = useBoard(runDate);
+  const [xloadPickerOpen, setXloadPickerOpen] = useState(false);
+  const [xloadTo, setXloadTo] = useState("");
   // A spare driver's unconfirmed "I covered route N" from the QR page. Confirm
   // writes the REAL coverage through the same authenticated path a lead uses
   // for any late assignment — dated to the run the driver just finished (the
@@ -258,7 +264,10 @@ export default function FleetMobileActionSheet({
           </button>
         </div>
 
-        <div className="space-y-4 p-5">
+        {/* Bottom-docked sheets sit flush on the system gesture/nav bar, so
+            the last control (Manage truck) needs the safe-area inset or the
+            phone's own bar covers it. */}
+        <div className="space-y-4 p-5 pb-[calc(1.25rem+env(safe-area-inset-bottom))]">
           {claimedRoute != null && (
             <div className="rounded-lg border border-cyan-700/50 bg-cyan-950/40 p-3">
               <p className="text-sm font-semibold text-cyan-200">
@@ -397,17 +406,88 @@ export default function FleetMobileActionSheet({
                 disabled={upsert.isPending}
                 onToggle={() => {
                   const on = truck.state?.needs_crossload === true || truck.state?.crossload_to_truck != null;
+                  if (!on) {
+                    // Don't write yet — ask "assign a truck now, or later?"
+                    // first. The flag lands either way; only the destination
+                    // is in question.
+                    setXloadPickerOpen((v) => !v);
+                    return;
+                  }
+                  setXloadPickerOpen(false);
                   upsert.mutate({
                     truck_number: truck.truck_number,
                     run_date: runDate,
-                    needs_crossload: !on,
+                    needs_crossload: false,
                     // Turning it off drops the destination with it — a truck
                     // that isn't being crossloaded can't be going anywhere.
-                    ...(on ? { crossload_to_truck: null } : {}),
+                    crossload_to_truck: null,
                     wearers: truck.state?.wearers ?? 0,
                   });
                 }}
               />
+              {xloadPickerOpen && (
+                <div className="rounded-xl border border-fuchsia-800/50 bg-fuchsia-950/25 p-3">
+                  <p className="text-[13px] font-bold text-fuchsia-200">Where is the freight going?</p>
+                  <p className="mt-0.5 text-[11px] text-fuchsia-300/70">
+                    Pick the receiving truck now, or just flag it and choose in Route Swaps later.
+                  </p>
+                  <select
+                    className="input mt-2 w-full text-sm"
+                    value={xloadTo}
+                    onChange={(e) => setXloadTo(e.target.value)}
+                  >
+                    <option value="">— select truck —</option>
+                    {(boardData ?? [])
+                      .filter((t) => t.truck_number !== truck.truck_number && t.is_active)
+                      .sort((a, b) =>
+                        // Spares first — they're the usual receivers.
+                        (a.truck_type === "Spare" ? 0 : 1) - (b.truck_type === "Spare" ? 0 : 1) ||
+                        a.truck_number - b.truck_number)
+                      .map((t) => (
+                        <option key={t.truck_number} value={t.truck_number}>
+                          #{t.truck_number}{t.truck_type === "Spare" ? " · Spare" : ""}
+                        </option>
+                      ))}
+                  </select>
+                  <div className="mt-2 flex gap-2">
+                    <button
+                      type="button"
+                      disabled={upsert.isPending || xloadTo === ""}
+                      onClick={() => {
+                        upsert.mutate({
+                          truck_number: truck.truck_number,
+                          run_date: runDate,
+                          needs_crossload: true,
+                          crossload_to_truck: parseInt(xloadTo, 10),
+                          wearers: truck.state?.wearers ?? 0,
+                        });
+                        setXloadPickerOpen(false);
+                        setXloadTo("");
+                      }}
+                      className="flex-1 rounded-md bg-fuchsia-700 px-3 py-2 text-xs font-bold text-white transition-colors hover:bg-fuchsia-600 disabled:opacity-40"
+                    >
+                      Assign truck
+                    </button>
+                    <button
+                      type="button"
+                      disabled={upsert.isPending}
+                      onClick={() => {
+                        upsert.mutate({
+                          truck_number: truck.truck_number,
+                          run_date: runDate,
+                          needs_crossload: true,
+                          wearers: truck.state?.wearers ?? 0,
+                        });
+                        setXloadPickerOpen(false);
+                        setXloadTo("");
+                      }}
+                      className="flex-1 rounded-md border border-fuchsia-700/60 bg-fuchsia-900/30 px-3 py-2 text-xs font-semibold text-fuchsia-200 transition-colors hover:bg-fuchsia-900/60 disabled:opacity-40"
+                    >
+                      Assign later
+                    </button>
+                  </div>
+                </div>
+              )}
               {/* Ran Special — the lead-side twin of the driver QR report:
                   the spare ran an errand and is back DIRTY with the note on.
                   Spares only, except a truck already carrying the note (the
