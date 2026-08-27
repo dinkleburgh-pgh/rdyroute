@@ -20,6 +20,9 @@ import TruckDocuments from "../../components/TruckDocuments";
 import Stat from "./Stat";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import FleetTruckEditor from "./FleetTruckEditor";
+import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, STATUS_TEXT } from "./constants";
+import type { TruckStatus } from "../../types";
+import clsx from "clsx";
 import { format } from "date-fns";
 import { truckTypeLabel } from "../../utils/truckType";
 import { useItemDisplayName } from "../../components/shorts/HierarchyPicker";
@@ -43,42 +46,51 @@ export default function TruckDetailModal({
   const truckAudits = (audits ?? []).filter(
     (a) => a.truck_number === truck.truck_number,
   );
+  const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
 
   return createPortal(
     <div
       className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
       onClick={onClose}
     >
+      {/* Same width, corner radius, status strip and header row as the card's
+          action sheet — Manage truck opens FROM that sheet, so it should read
+          as the next page of the same surface, not a second, wider design.
+          (max-w-2xl with a centred 5xl number was the "ill-fitting" look.) */}
       <div
-        className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 shadow-xl"
+        className="max-h-[90vh] w-full max-w-md overflow-hidden overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-xl"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="relative flex items-center justify-between border-b border-slate-800 px-4 py-5">
-          <div className="flex-1" />
-          <div className="text-center">
-            <h3 className="text-5xl font-black tracking-tight text-white">#{truck.truck_number}</h3>
-            <p className="text-xs text-slate-400">
-              {truckTypeLabel(truck.truck_type)}
-              {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
-              {" · "}{truck.is_active ? "Active" : "Inactive"}
-              {truck.is_persistent_spare ? " · Persistent spare" : ""}
-            </p>
-            {readOnly && (
-              <p className="mt-0.5 text-xs font-semibold text-amber-400">Archive — read only</p>
-            )}
-            {truck.state?.priority_hold && (
-              <p className="mt-0.5 text-xs font-semibold text-red-400">Hold — Do Not Load</p>
-            )}
-            {truck.state?.needs_checked && (
-              <p className="mt-0.5 text-xs font-semibold text-amber-400">Needs Checked</p>
-            )}
-          </div>
-          <div className="flex-1 flex justify-end">
-            <button className="btn-ghost" onClick={onClose}>
-              Close
-            </button>
-          </div>
+        <div className={clsx("h-[3px] w-full", STATUS_BG[status])} />
+        <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-4">
+          <span className={clsx("font-mono text-[44px] font-black leading-none tabular-nums", STATUS_TEXT[status])}>
+            {truck.truck_number}
+          </span>
+          <span className={clsx("badge shrink-0", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
+            {STATUS_LABELS[status]}
+          </span>
+          <span className="min-w-0 truncate text-sm text-slate-400">
+            {truckTypeLabel(truck.truck_type)}
+            {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
+            {truck.is_persistent_spare ? " · Persistent spare" : ""}
+            {!truck.is_active ? " · Inactive" : ""}
+          </span>
+          <button
+            type="button"
+            onClick={onClose}
+            aria-label="Close"
+            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-700 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+          >
+            ✕
+          </button>
         </div>
+        {(readOnly || truck.state?.priority_hold || truck.state?.needs_checked) && (
+          <div className="flex flex-wrap gap-x-4 gap-y-1 border-b border-slate-800 px-5 py-2">
+            {readOnly && <span className="text-xs font-semibold text-amber-400">Archive — read only</span>}
+            {truck.state?.priority_hold && <span className="text-xs font-semibold text-red-400">Hold — Do Not Load</span>}
+            {truck.state?.needs_checked && <span className="text-xs font-semibold text-amber-400">Needs Checked</span>}
+          </div>
+        )}
 
         <div className="space-y-4 p-4">
           {fleetMode && !readOnly && (

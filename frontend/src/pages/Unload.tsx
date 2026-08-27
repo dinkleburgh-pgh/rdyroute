@@ -803,16 +803,17 @@ export default function Unload() {
         dotClass={dot}
         numberClass={numberTone}
         onClick={() => openTruckMenu(t)}
+        pair={cd.route != null ? { route: cd.route, split: cd.split } : null}
         tag={
           kind === "requested" ? "Hold"
           : isUnfin ? "Unfinished"
-          : cd.route != null ? `Route ${cd.route}${t.truck_type === "Spare" ? " · Spare" : ""}`
+          : cd.route != null && t.truck_type === "Spare" ? "Spare"
           : undefined
         }
         tagClass={
           kind === "requested" ? "text-st-inprogress"
           : isUnfin ? "text-st-unfinished"
-          : "text-sky-300"
+          : "text-st-spare"
         }
         sub={sub}
       />
@@ -926,8 +927,7 @@ export default function Unload() {
                         numberClass="text-st-unloaded"
                         dotClass="bg-st-unloaded"
                         onClick={() => openTruckMenu(t)}
-                        tag={cd.route != null ? `Route ${cd.route}` : undefined}
-                        tagClass="text-sky-300"
+                        pair={cd.route != null ? { route: cd.route, split: cd.split } : null}
                         sub={
                           <span className="text-ink-faint">
                             {unloadedSort === "order" ? `#${idx + 1} · ${time}` : time}
@@ -1011,14 +1011,10 @@ export default function Unload() {
                           truck={t}
                           numberClass={isUnfin ? "text-st-unfinished" : "text-st-dirty"}
                           dotClass={isUnfin ? "bg-st-unfinished" : "bg-st-dirty"}
+                          pair={cd.route != null ? { route: cd.route, split: cd.split } : null}
                           tag={t.state?.priority_hold ? "Hold" : undefined}
                           tagClass="text-st-inprogress"
-                          sub={
-                            <>
-                              <span>{isUnfin ? "Unfinished" : "Dirty"}</span>
-                              {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
-                            </>
-                          }
+                          sub={<span>{isUnfin ? "Unfinished" : "Dirty"}</span>}
                         />
                       );
                     })}

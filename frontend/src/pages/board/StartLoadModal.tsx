@@ -62,7 +62,7 @@ export default function StartLoadModal({
             </div>
           ) : (
             <p className="text-sm text-slate-400">
-              Mark this truck as <span className="font-semibold text-slate-200">In Progress</span> and begin the load timer?
+              Mark this truck as <span className="font-semibold text-slate-200">Loading</span> and begin the load timer?
             </p>
           )}
 

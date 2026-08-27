@@ -48,8 +48,13 @@ function FlagRow({
       onClick={onToggle}
       className="flex w-full items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-colors hover:bg-slate-800 disabled:opacity-50"
     >
-      <span className="text-[15px] font-bold text-slate-100">{label}</span>
-      <span className="min-w-0 truncate text-[13px] text-slate-500">{hint}</span>
+      {/* Label over hint, and the hint WRAPS. On one line the hint truncated
+          mid-word on every phone ("Keep on dock after u…"), which read as a
+          rendering bug rather than a description. */}
+      <span className="min-w-0 flex-1">
+        <span className="block text-[15px] font-bold leading-tight text-slate-100">{label}</span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-slate-500">{hint}</span>
+      </span>
       <span
         className={clsx(
           "ml-auto flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors",
@@ -219,9 +224,13 @@ export default function FleetMobileActionSheet({
   const canStartPaperBay = paperBayEnabled && !paperBayActive && !outsideActive;
 
   return createPortal(
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+    <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
       <div className="absolute inset-0 bg-black/50" onClick={onClose} />
-      <div className="relative w-full max-w-md overflow-hidden overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-xl max-h-[90vh]">
+      {/* A true bottom sheet on phones — full width, docked to the bottom
+          edge, squared bottom corners — and a centred dialog from sm: up.
+          Floating a rounded box mid-screen on a phone is what made this
+          window feel oddly sized. */}
+      <div className="relative w-full max-w-md overflow-hidden overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 shadow-xl max-h-[92svh] sm:rounded-2xl sm:max-h-[90vh]">
         {/* The truck's status, stated before anything else — the rule and the
             numeral carry it, so you know what you tapped without reading. */}
         <div className={clsx("h-[3px] w-full", STATUS_BG[status])} />

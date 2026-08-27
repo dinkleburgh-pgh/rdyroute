@@ -52,6 +52,7 @@ export function QuietTile({
   tag,
   tagClass,
   numberClass = "text-ink",
+  pair,
   dim = false,
   disabled = false,
   onClick,
@@ -65,6 +66,11 @@ export function QuietTile({
   tag?: ReactNode;
   tagClass?: string;
   numberClass?: string;
+  /** Coverage: the tile renders the app-wide ROUTE → TRUCK pair instead of a
+   *  bare number (amber ROUTE + TRUCK for a split — the route also runs).
+   *  Same idiom as WorkflowCard's coverage face and CoverageTag, so a covered
+   *  load reads identically on every surface. */
+  pair?: { route: number; split?: boolean } | null;
   dim?: boolean;
   disabled?: boolean;
   onClick?: () => void;
@@ -76,9 +82,28 @@ export function QuietTile({
   const body = (
     <>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", numberClass)}>
-          #{truck.truck_number}
-        </span>
+        {pair ? (
+          <span
+            className="flex items-baseline gap-1"
+            title={
+              pair.split
+                ? `Split load — route ${pair.route} also runs; #${truck.truck_number} carries its overflow`
+                : `Route ${pair.route}'s load rides on truck ${truck.truck_number}`
+            }
+          >
+            <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", pair.split ? "text-amber-300" : "text-sky-300")}>
+              {pair.route}
+            </span>
+            <span className="font-mono text-[13px] leading-none text-ink-muted">{pair.split ? "+" : "→"}</span>
+            <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", numberClass)}>
+              {truck.truck_number}
+            </span>
+          </span>
+        ) : (
+          <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", numberClass)}>
+            #{truck.truck_number}
+          </span>
+        )}
         {tag && (
           <span className={clsx("text-[9.5px] font-bold uppercase tracking-[0.08em]", tagClass)}>{tag}</span>
         )}

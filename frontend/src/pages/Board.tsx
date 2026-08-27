@@ -738,8 +738,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             subtitle: `Track ${filtered.length} truck${filtered.length === 1 ? "" : "s"} currently assigned to shop status.`,
           },
           in_progress: {
-            title: "In Progress",
-            subtitle: `Monitor ${filtered.length} truck${filtered.length === 1 ? "" : "s"} actively moving through workflow.`,
+            title: "Loading",
+            subtitle: `Monitor ${filtered.length} truck${filtered.length === 1 ? "" : "s"} actively being loaded.`,
           },
           unloaded: {
             title: "Unloaded",

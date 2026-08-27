@@ -56,7 +56,6 @@ import PageHeader from "../components/PageHeader";
 import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/QuietTile";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
-import CoverageTag from "../components/CoverageTag";
 import CoverageCards from "../components/CoverageCards";
 
 /**
@@ -121,6 +120,16 @@ export default function Load() {
   // splits — via the shared selector. (The old banner showed only spares, so
   // route swaps created in the wizard/Fleet were invisible here.)
   const loadCoverage = useCoverageForRole("load", runDate, data ?? []);
+
+  // The tile-face coverage pair: tonight's covered route, or the route whose
+  // SPLIT overflow this truck carries (amber; the route also runs). One rule
+  // for every tile on this page so covered loads read alike everywhere.
+  const loadPair = (t: TruckWithState): { route: number; split?: boolean } | null => {
+    const cr = getCoverageRouteNumber(t);
+    if (cr != null) return { route: cr };
+    if (t.route_split_route != null) return { route: t.route_split_route, split: true };
+    return null;
+  };
   function isRecurringCoverage(routeTruck: number, loadOnTruck: number): boolean {
     return recurringRules.some(
       (r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay),
@@ -481,14 +490,10 @@ export default function Load() {
                           : st === "in_progress" ? "text-st-inprogress"
                           : "text-st-dirty"
                         }
+                        pair={loadPair(t)}
                         tag={t.state?.priority_hold ? "Hold" : undefined}
                         tagClass="text-st-dirty"
-                        sub={
-                          <>
-                            <span>{statusLabel[st] ?? st}</span>
-                            {cr != null && <CoverageTag route={cr} truck={t.truck_number} />}
-                          </>
-                        }
+                        sub={<span>{statusLabel[st] ?? st}</span>}
                       />
                     );
                   })}
@@ -546,6 +551,7 @@ export default function Load() {
                   tagClass="text-[#3b82f6]"
                   numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
                   dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
+                  pair={loadPair(t)}
                   sub={
                     cr != null ? (
                       <span>Covering route {cr}</span>
@@ -620,8 +626,10 @@ export default function Load() {
                 truck={t}
                 numberClass="text-st-loaded"
                 dotClass="bg-st-loaded"
+                pair={loadPair(t)}
                 sub={
                   <span className="text-ink-faint">
+                    {loadPair(t) != null && <span className="mr-1 text-sky-300/90">Covering {loadPair(t)!.split ? `split ${loadPair(t)!.route}` : `route ${loadPair(t)!.route}`} ·</span>}
                     {t.state?.load_finish_time
                       ? `Done ${format(new Date(t.state.load_finish_time * 1000), "h:mm a")}`
                       : "Loaded"}

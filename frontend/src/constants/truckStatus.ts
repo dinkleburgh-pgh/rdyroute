@@ -4,9 +4,9 @@
  * Extracted from Board.tsx and RunDay.tsx which previously each declared their
  * own near-identical copies. Keep pure (no React) so it can be imported anywhere.
  *
- * Note: the two pages historically used different labels for `in_progress`
- * ("In Progress" on the Board, "Loading" on RunDay). Both are exported so each
- * call site can keep its original wording.
+ * `in_progress` reads "Loading" everywhere. The Board historically said
+ * "In Progress" while RunDay said "Loading"; the live-status rail rename
+ * settled it — one status, one word, every surface.
  */
 
 import type { TruckStatus } from "../types";
@@ -16,7 +16,7 @@ export const STATUS_LABELS: Record<TruckStatus, string> = {
   dirty: "Dirty",
   unfinished: "Unfinished",
   shop: "Shop",
-  in_progress: "In Progress",
+  in_progress: "Loading",
   unloaded: "Unloaded",
   loaded: "Loaded",
   off: "Off",
@@ -24,11 +24,8 @@ export const STATUS_LABELS: Record<TruckStatus, string> = {
   spare: "Spare",
 };
 
-/** RunDay-style labels (uses "Loading" for in_progress). */
-export const STATUS_LABELS_RUNDAY: Record<TruckStatus, string> = {
-  ...STATUS_LABELS,
-  in_progress: "Loading",
-};
+/** @deprecated Same as STATUS_LABELS now that "Loading" is the app-wide word. */
+export const STATUS_LABELS_RUNDAY: Record<TruckStatus, string> = STATUS_LABELS;
 
 export const STATUS_BG: Record<TruckStatus, string> = {
   dirty: "bg-status-dirty",
