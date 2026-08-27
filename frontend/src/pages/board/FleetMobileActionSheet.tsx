@@ -5,10 +5,7 @@ import { createPortal } from "react-dom";
 import type { TruckStatus, TruckWithState } from "../../types";
 import {
   useAssignSpare,
-  useClearNextUp,
-  useNextUp,
   usePrevOperatingDay,
-  useSetNextUp,
   useUpdateTruck,
   useUpsertTruckState,
 } from "../../api/hooks";
@@ -174,9 +171,6 @@ export default function FleetMobileActionSheet({
 }) {
   const upsert = useUpsertTruckState();
   const setOos = useUpdateTruck();
-  const { data: nextUp } = useNextUp(runDate);
-  const setNextUp = useSetNextUp(runDate);
-  const clearNextUp = useClearNextUp(runDate);
   // A spare driver's unconfirmed "I covered route N" from the QR page. Confirm
   // writes the REAL coverage through the same authenticated path a lead uses
   // for any late assignment — dated to the run the driver just finished (the
@@ -213,7 +207,7 @@ export default function FleetMobileActionSheet({
       setClaimErr(detail ?? "Couldn't record the coverage — try the coverage editor.");
     }
   }
-  const isNextUp = nextUp === truck.truck_number;
+  const ranSpecial = (truck.state?.off_note ?? "").toLowerCase().includes("ran special");
   const status = (truck.is_oos ? "oos" : (truck.state?.status ?? "dirty")) as TruckStatus;
   const isHold = truck.state?.priority_hold === true;
   // OOS is true if EITHER the fleet record or today's status says so —
@@ -307,7 +301,17 @@ export default function FleetMobileActionSheet({
                     disabled={upsert.isPending || isCurrent}
                     onClick={() => {
                       if (s === "oos") {
-                        onManageTruck();
+                        // Mark it OOS right here — both writes the Manage-truck
+                        // editor makes, so the fleet record and today's status
+                        // agree. (This used to bounce to Manage truck.)
+                        setOos.mutate({ truck_number: truck.truck_number, is_oos: true });
+                        upsert.mutate({
+                          truck_number: truck.truck_number,
+                          run_date: runDate,
+                          status: "oos",
+                          wearers: truck.state?.wearers ?? 0,
+                        });
+                        onClose();
                         return;
                       }
                       upsert.mutate({
@@ -414,16 +418,42 @@ export default function FleetMobileActionSheet({
                   });
                 }}
               />
-              <FlagRow
-                label="Next up"
-                hint="Queue as next load"
-                on={isNextUp}
-                disabled={setNextUp.isPending || clearNextUp.isPending}
-                onToggle={() => {
-                  if (isNextUp) clearNextUp.mutate();
-                  else setNextUp.mutate(truck.truck_number);
-                }}
-              />
+              {/* Ran Special — the lead-side twin of the driver QR report:
+                  the spare ran an errand and is back DIRTY with the note on.
+                  Spares only, except a truck already carrying the note (the
+                  off-truck loaded flow can tag any type) so it can still be
+                  cleared here. Clearing wipes off_note + needs_checked whole,
+                  matching the board chip's ✕. */}
+              {(truck.truck_type === "Spare" || ranSpecial) && (
+                <FlagRow
+                  label="Ran Special"
+                  hint="Ran an errand; back dirty for unload"
+                  on={ranSpecial}
+                  disabled={upsert.isPending}
+                  onToggle={() => {
+                    if (ranSpecial) {
+                      upsert.mutate({
+                        truck_number: truck.truck_number,
+                        run_date: runDate,
+                        off_note: "",
+                        needs_checked: false,
+                        wearers: truck.state?.wearers ?? 0,
+                      });
+                    } else {
+                      const prev = (truck.state?.off_note ?? "").trim();
+                      upsert.mutate({
+                        truck_number: truck.truck_number,
+                        run_date: runDate,
+                        // Same status rule as the driver endpoint: only a truck
+                        // that hasn't started real work flips to dirty.
+                        ...(["unloaded", "off", "spare"].includes(status) ? { status: "dirty" as const } : {}),
+                        off_note: prev ? `${prev} | Ran Special` : "Ran Special",
+                        wearers: truck.state?.wearers ?? 0,
+                      });
+                    }
+                  }}
+                />
+              )}
               {/* Garments are set in Setup Day, but they turn up after it — an
                   F.S. truck comes back carrying them and nobody wants to re-run
                   the wizard for one flag. F.S. only: the badge, the Load strip

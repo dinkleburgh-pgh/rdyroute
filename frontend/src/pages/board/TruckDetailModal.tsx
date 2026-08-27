@@ -50,7 +50,7 @@ export default function TruckDetailModal({
 
   return createPortal(
     <div
-      className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4"
+      className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 sm:items-center sm:p-4"
       onClick={onClose}
     >
       {/* Same width, corner radius, status strip and header row as the card's
@@ -58,7 +58,7 @@ export default function TruckDetailModal({
           as the next page of the same surface, not a second, wider design.
           (max-w-2xl with a centred 5xl number was the "ill-fitting" look.) */}
       <div
-        className="max-h-[90vh] w-full max-w-md overflow-hidden overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-xl"
+        className="max-h-[92svh] w-full max-w-md overflow-hidden overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 shadow-xl sm:max-h-[90svh] sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className={clsx("h-[3px] w-full", STATUS_BG[status])} />
