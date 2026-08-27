@@ -786,7 +786,7 @@ export default function Unload() {
           {t.state?.needs_checked && <span className="text-st-inprogress">· Needs check</span>}
         </>
       ) : kind === "notback" ? (
-        <span className="text-ink-faint">Still on the road</span>
+        <span className="text-ink-faint">Not Arrived</span>
       ) : kind === "requested" ? (
         <span className="text-ink-faint">
           {arrivedAt(t) != null ? `Back ${formatEasternTime(arrivedAt(t)!)} · ` : ""}waiting on dock
