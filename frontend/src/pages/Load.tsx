@@ -380,8 +380,11 @@ export default function Load() {
           the load crew sees it here; swap-managing roles can assign from it. */}
       <CrossloadNoticeBar board={data ?? []} />
 
-      {/* Two rails: what's happening right now on the left, the reference
-          material that supports it on the right. */}
+      {/* Two rails: the WORK on the left — what's loading, what's being
+          unloaded, and the ready queue — with the reference material (notes,
+          coverage, counts) on the right. Ready-to-load living down at page
+          level left the whole left rail empty whenever nothing was in
+          progress, beside a full right rail. */}
       <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
         {/* ---------------- Left rail ---------------- */}
         <div className="flex flex-col gap-4">
@@ -421,6 +424,87 @@ export default function Load() {
             holidayLoad={holidayLoad}
             renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
           />
+
+        {/* ---------------- Ready to load + On hold ---------------- */}
+        <div className="card flex flex-col gap-[18px]">
+          <div>
+            <SectionHeader label="Ready to load" count={ready.length}>
+              {suggestedNext.length > 0 && (
+                <span className="text-[11px] text-ink-faint">
+                  Usually next:{" "}
+                  <span className="font-mono font-bold text-ink-soft">
+                    {suggestedNext.map((sg) => `#${sg.truck_number}`).join(" · ")}
+                  </span>
+                </span>
+              )}
+              <button
+                type="button"
+                onClick={() => setNextUpOpen(true)}
+                className="btn-ghost px-3 py-1 text-[11px]"
+              >
+                {storedNextUp != null ? `Next Up: #${storedNextUp} · Change` : "Set Next Up"}
+              </button>
+            </SectionHeader>
+            {anyInProgress && (
+              <p className="mb-2 text-[11px] text-st-inprogress">
+                Finish the in-progress truck before starting another.
+              </p>
+            )}
+            <div className={TILE_GRID}>
+              {ready.map((t) => {
+                const disabled = anyInProgress || busy === t.truck_number;
+                const cr = getCoverageRouteNumber(t);
+                return (
+                  <QuietTile
+                    key={t.truck_number}
+                    truck={t}
+                    disabled={disabled}
+                    onClick={() => requestStart(t)}
+                    title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
+                    tag={t.truck_number === storedNextUp ? "Next" : undefined}
+                    tagClass="text-[#3b82f6]"
+                    numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
+                    dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
+                    pair={loadPair(t)}
+                    sub={
+                      cr != null ? (
+                        <span>Covering route {cr}</span>
+                      ) : (
+                        <span>
+                          {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
+                          {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
+                        </span>
+                      )
+                    }
+                  />
+                );
+              })}
+              {ready.length === 0 && (
+                <p className="col-span-full text-sm text-ink-muted">No trucks ready to load.</p>
+              )}
+            </div>
+          </div>
+
+          {heldReady.length > 0 && (
+            <div>
+              <SectionHeader label="On hold" count={heldReady.length} />
+              <div className={TILE_GRID}>
+                {heldReady.map((t) => (
+                  <QuietTile
+                    key={t.truck_number}
+                    truck={t}
+                    dim
+                    tag="Hold"
+                    tagClass="text-st-dirty"
+                    numberClass="text-st-dirty"
+                    dotClass="bg-st-dirty"
+                    sub={<span className="text-ink-faint">Clear in Fleet</span>}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
         </div>
 
         {/* ---------------- Right rail ---------------- */}
@@ -437,7 +521,13 @@ export default function Load() {
                 </span>
               </div>
               <div className="border-t px-3.5 pb-3.5 pt-3.5" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-                <CoverageCards entries={loadCoverage} isRecurring={isRecurringCoverage} />
+                {/* Rail-width grid: the default lg:grid-cols-3 was tuned for
+                    full-width surfaces and overflowed the card outline here. */}
+                <CoverageCards
+                  entries={loadCoverage}
+                  isRecurring={isRecurringCoverage}
+                  className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"
+                />
               </div>
             </div>
           )}
@@ -514,87 +604,6 @@ export default function Load() {
             <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
           </div>
         </div>
-      </div>
-
-      {/* ---------------- Ready to load + On hold ---------------- */}
-      <div className="card flex flex-col gap-[18px]">
-        <div>
-          <SectionHeader label="Ready to load" count={ready.length}>
-            {suggestedNext.length > 0 && (
-              <span className="text-[11px] text-ink-faint">
-                Usually next:{" "}
-                <span className="font-mono font-bold text-ink-soft">
-                  {suggestedNext.map((sg) => `#${sg.truck_number}`).join(" · ")}
-                </span>
-              </span>
-            )}
-            <button
-              type="button"
-              onClick={() => setNextUpOpen(true)}
-              className="btn-ghost px-3 py-1 text-[11px]"
-            >
-              {storedNextUp != null ? `Next Up: #${storedNextUp} · Change` : "Set Next Up"}
-            </button>
-          </SectionHeader>
-          {anyInProgress && (
-            <p className="mb-2 text-[11px] text-st-inprogress">
-              Finish the in-progress truck before starting another.
-            </p>
-          )}
-          <div className={TILE_GRID}>
-            {ready.map((t) => {
-              const disabled = anyInProgress || busy === t.truck_number;
-              const cr = getCoverageRouteNumber(t);
-              return (
-                <QuietTile
-                  key={t.truck_number}
-                  truck={t}
-                  disabled={disabled}
-                  onClick={() => requestStart(t)}
-                  title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
-                  tag={t.truck_number === storedNextUp ? "Next" : undefined}
-                  tagClass="text-[#3b82f6]"
-                  numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
-                  dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
-                  pair={loadPair(t)}
-                  sub={
-                    cr != null ? (
-                      <span>Covering route {cr}</span>
-                    ) : (
-                      <span>
-                        {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
-                        {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
-                      </span>
-                    )
-                  }
-                />
-              );
-            })}
-            {ready.length === 0 && (
-              <p className="col-span-full text-sm text-ink-muted">No trucks ready to load.</p>
-            )}
-          </div>
-        </div>
-
-        {heldReady.length > 0 && (
-          <div>
-            <SectionHeader label="On hold" count={heldReady.length} />
-            <div className={TILE_GRID}>
-              {heldReady.map((t) => (
-                <QuietTile
-                  key={t.truck_number}
-                  truck={t}
-                  dim
-                  tag="Hold"
-                  tagClass="text-st-dirty"
-                  numberClass="text-st-dirty"
-                  dotClass="bg-st-dirty"
-                  sub={<span className="text-ink-faint">Clear in Fleet</span>}
-                />
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* ---------------- Loaded today ---------------- */}
