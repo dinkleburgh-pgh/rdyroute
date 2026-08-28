@@ -118,6 +118,18 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [mobileActionTruck, setMobileActionTruck] = useState<TruckWithState | null>(null);
   const [confirmTruck, setConfirmTruck] = useState<TruckWithState | null>(null);
   const [fleetFilters, setFleetFilters] = useState<Set<TruckStatus | "all" | "Uniform" | "Dust">>(new Set(["all"]));
+  // Fleet card size — S/M/L density so the whole fleet can be made to fit
+  // whatever screen the board lives on. Sticks per device.
+  const [cardSize, setCardSize] = useState<"s" | "m" | "l">(() => {
+    try {
+      const v = localStorage.getItem("rr-fleet-card-size");
+      return v === "s" || v === "l" ? v : "m";
+    } catch { return "m"; }
+  });
+  function pickCardSize(v: "s" | "m" | "l") {
+    setCardSize(v);
+    try { localStorage.setItem("rr-fleet-card-size", v); } catch { /* private mode */ }
+  }
   const [multiSelect, setMultiSelect] = useState(false);
   const [selectedTrucks, setSelectedTrucks] = useState<Set<number>>(new Set());
   const [bulkStatus, setBulkStatus] = useState<TruckStatus>("dirty");
@@ -889,10 +901,37 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
       {filter !== "in_progress" && (
       <>
+      {fleetMode && (
+        <div className="-mt-1 flex items-center justify-end gap-2">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">Card size</span>
+          <div className="inline-flex overflow-hidden rounded-lg border border-slate-700/70 text-[11px] font-semibold">
+            {(["s", "m", "l"] as const).map((v, i) => (
+              <button
+                key={v}
+                type="button"
+                onClick={() => pickCardSize(v)}
+                title={v === "s" ? "Small — fit the most trucks" : v === "l" ? "Large — read from across the room" : "Medium"}
+                className={clsx(
+                  "px-2.5 py-1 uppercase transition-colors",
+                  i > 0 && "border-l border-slate-700/70",
+                  cardSize === v ? "bg-slate-700 text-white" : "bg-slate-950/50 text-slate-400 hover:text-slate-200",
+                )}
+              >
+                {v}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
       <div className={clsx(
-        "grid gap-3",
+        "grid",
+        fleetMode && cardSize === "s" ? "gap-2" : "gap-3",
         fleetMode
-          ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]"
+          ? cardSize === "s"
+            ? "grid-cols-3 sm:grid-cols-4 lg:grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))]"
+            : cardSize === "l"
+            ? "grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
+            : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]"
           : filter === "off" || filter === "dirty" || filter === "unloaded"
           ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
           : "grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
@@ -1048,7 +1087,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 className={clsx(
                   "card cursor-pointer",
                   highlightTruck === truck.truck_number && "ring-2 ring-sky-400 animate-pulse",
-                  fleetMode ? "p-2 flex flex-col gap-1 min-h-[4.5rem] md:p-4 md:gap-2 md:min-h-[10rem]" : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],
+                  fleetMode
+                    ? cardSize === "s"
+                      ? "p-2 flex flex-col gap-1 min-h-[4rem] md:min-h-[6.5rem]"
+                      : cardSize === "l"
+                      ? "p-3 flex flex-col gap-1.5 min-h-[5.5rem] md:p-5 md:gap-2.5 md:min-h-[12rem]"
+                      : "p-2 flex flex-col gap-1 min-h-[4.5rem] md:p-4 md:gap-2 md:min-h-[10rem]"
+                    : ["space-y-2 min-h-[7.5rem]", filter === "off" || filter === "dirty" || filter === "unloaded" ? "p-5" : "p-4"],
                   fleetMode && displayStatus === "oos" && !selectedTrucks.has(truck.truck_number) && "opacity-50 grayscale",
                   fleetMode && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
                   !fleetMode && filter === "dirty" && truck.state?.priority_hold && "animate-priority-glow border-2 border-red-500/30 bg-gradient-to-br from-slate-900 via-red-950/10 to-slate-900",
@@ -1149,7 +1194,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     fleetMode ? "flex-nowrap" : "flex-wrap",
                   )}>
                     <div className={clsx(
-                      "flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5 md:min-h-[4.5rem]",
+                      "flex min-w-0 min-h-[2.5rem] flex-col justify-between gap-0.5",
+                      fleetMode && cardSize === "s" ? "md:min-h-[2.5rem]" : "md:min-h-[4.5rem]",
                       !fleetMode && "shrink-0",
                     )}>
                       {!fleetMode && (showCoverageBadge || showCoveredByBadge) ? (
@@ -1185,7 +1231,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         <span
                           className={clsx(
                             "font-extrabold tracking-tight tabular-nums leading-none",
-                            fleetMode ? "text-2xl md:text-5xl" : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
+                            fleetMode ? (cardSize === "s" ? "text-2xl md:text-3xl" : cardSize === "l" ? "text-3xl md:text-6xl" : "text-2xl md:text-5xl") : filter === "off" || filter === "dirty" || filter === "unloaded" ? "text-5xl" : "text-4xl",
                             numberColor,
                           )}
                         >
