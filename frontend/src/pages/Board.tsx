@@ -1609,6 +1609,17 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       </div>
                     )}
                     {arrivedTrackingEnabled && truck.state?.arrived_at && (
+                      cardSize === "s" ? (
+                        /* S cards: the time alone, no Clear — the full chip
+                           dominated a shrunk card. Clearing still lives one tap
+                           away on the action sheet's Arrived button. */
+                        <span
+                          className="self-start whitespace-nowrap rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300"
+                          title={`Arrived ${formatArrivedAt(truck.state.arrived_at)} — clear from the truck's action sheet`}
+                        >
+                          📍 {formatArrivedAt(truck.state.arrived_at)}
+                        </span>
+                      ) : (
                       <div
                         // max-w-full + wrap: the pill used to run past the card's
                         // edge and over the neighbouring card on narrow columns.
@@ -1626,6 +1637,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                           Clear
                         </button>
                       </div>
+                      )
                     )}
                   </div>
                 )}
