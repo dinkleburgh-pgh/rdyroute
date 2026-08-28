@@ -593,35 +593,56 @@ export default function Load() {
           {statFilter && (() => {
             const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
             const statusLabel: Record<string, string> = { dirty: "Dirty", unloaded: "Unloaded", in_progress: "Loading" };
-            const statusDot: Record<string, string> = { dirty: "bg-st-dirty", unloaded: "bg-st-unloaded", in_progress: "bg-st-inprogress" };
+            /* Compact chips, not full tiles: "total left" is 25-plus trucks
+               most of the night, and two-column tiles ran the list far off
+               screen. A chip carries everything the glance needs — number
+               (pair form when covering), status colour, hold ring — and the
+               whole set fits in a few rows. */
             return (
               <div className="card animate-slide-down space-y-2.5">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
                   {statFilter === "dust" ? "F.S." : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
                 </p>
-                <div className="grid grid-cols-2 gap-2">
+                <div className="flex flex-wrap gap-1.5">
                   {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
                     const st = t.state?.status ?? "dirty";
-                    const cr = getCoverageRouteNumber(t);
+                    const pair = loadPair(t);
+                    const tone =
+                      st === "unloaded" ? "text-st-unloaded"
+                      : st === "in_progress" ? "text-st-inprogress"
+                      : "text-st-dirty";
                     return (
-                      <QuietTile
+                      <span
                         key={t.truck_number}
-                        truck={t}
-                        dotClass={statusDot[st] ?? "bg-st-off"}
-                        numberClass={
-                          st === "unloaded" ? "text-st-unloaded"
-                          : st === "in_progress" ? "text-st-inprogress"
-                          : "text-st-dirty"
-                        }
-                        pair={loadPair(t)}
-                        tag={t.state?.priority_hold ? "Hold" : undefined}
-                        tagClass="text-st-dirty"
-                        sub={<span>{statusLabel[st] ?? st}</span>}
-                      />
+                        className={clsx(
+                          "inline-flex items-center rounded-md border border-hairline bg-surface px-2 py-1.5 font-mono text-[13px] font-bold tabular-nums",
+                          tone,
+                          t.state?.priority_hold && "ring-1 ring-st-dirty/60",
+                        )}
+                        title={`${statusLabel[st] ?? st}${pair != null ? ` · covering route ${pair.route}` : ""}${t.state?.priority_hold ? " · hold" : ""}`}
+                      >
+                        {pair != null ? (
+                          <>
+                            <span className={pair.split ? "text-amber-300" : "text-sky-300"}>{pair.route}</span>
+                            <span className="px-0.5 text-ink-faint">{pair.split ? "+" : "→"}</span>
+                            {t.truck_number}
+                          </>
+                        ) : (
+                          <>#{t.truck_number}</>
+                        )}
+                      </span>
                     );
                   })}
-                  {trucks.length === 0 && <span className="col-span-full text-sm text-ink-faint">All clear!</span>}
+                  {trucks.length === 0 && <span className="text-sm text-ink-faint">All clear!</span>}
                 </div>
+                <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-faint">
+                  {([["bg-st-dirty", "Dirty"], ["bg-st-unloaded", "Unloaded"], ["bg-st-inprogress", "Loading"]] as const).map(([dot, label]) => (
+                    <span key={label} className="inline-flex items-center gap-1">
+                      <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
+                      {label}
+                    </span>
+                  ))}
+                </p>
               </div>
             );
           })()}
