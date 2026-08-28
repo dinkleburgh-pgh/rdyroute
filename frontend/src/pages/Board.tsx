@@ -23,7 +23,7 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import { useCollapseState } from "../utils/useCollapseState";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
-import CoverageCards from "../components/CoverageCards";
+import CollapsibleCoverage from "../components/CollapsibleCoverage";
 import CoverageCardBadges from "../components/CoverageCardBadges";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
@@ -824,35 +824,23 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           today's coverage in the sky frame (Load's "Coverage today"), the
           previous day's in the amber frame (Unload's prev-coverage banner).
           One mixed block made a stale pairing look current. */}
-      {fleetMode && fleetCoverage.some((e) => !e.prev) && (
-        <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
-          <div className="flex w-full items-center gap-2 px-3 py-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wide text-sky-400">Coverage today</span>
-            <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
-              {fleetCoverage.filter((e) => !e.prev).length} route{fleetCoverage.filter((e) => !e.prev).length === 1 ? "" : "s"}
-            </span>
-          </div>
-          <div className="border-t px-3 pb-3 pt-3" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-            <CoverageCards
-              entries={fleetCoverage.filter((e) => !e.prev)}
-              statusOf={(n) => data?.find((t) => t.truck_number === n)?.state?.status ?? null}
-            />
-          </div>
-        </div>
+      {fleetMode && (
+        <CollapsibleCoverage
+          entries={fleetCoverage.filter((e) => !e.prev)}
+          title="Coverage today"
+          storageKey="rr-fleet-coverage-open"
+          tone="sky"
+          statusOf={(n) => data?.find((t) => t.truck_number === n)?.state?.status ?? null}
+        />
       )}
-      {fleetMode && fleetCoverage.some((e) => e.prev) && (
-        <div className="rounded-xl border" style={{ borderColor: "rgba(245,158,11,0.28)", background: "rgba(245,158,11,0.06)" }}>
-          <div className="flex w-full items-center gap-2 px-3 py-2.5">
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Previous day coverage</span>
-            <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
-              {fleetCoverage.filter((e) => e.prev).length} route{fleetCoverage.filter((e) => e.prev).length === 1 ? "" : "s"}
-            </span>
-          </div>
-          <div className="border-t px-3 pb-3 pt-3" style={{ borderColor: "rgba(245,158,11,0.18)" }}>
-            {/* Header already says prev-day — per-card badges would repeat it. */}
-            <CoverageCards entries={fleetCoverage.filter((e) => e.prev)} showPrevBadge={false} />
-          </div>
-        </div>
+      {fleetMode && (
+        <CollapsibleCoverage
+          entries={fleetCoverage.filter((e) => e.prev)}
+          title="Previous day coverage"
+          storageKey="rr-fleet-prev-coverage-open"
+          tone="amber"
+          showPrevBadge={false}
+        />
       )}
       {/* Previous Day Coverage — directly below the bulk-edit section */}
       {fleetMode && (

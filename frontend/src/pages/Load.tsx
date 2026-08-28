@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
-import { ChevronDown, MonitorPlay } from "lucide-react";
+import { MonitorPlay } from "lucide-react";
 import clsx from "clsx";
 import { format } from "date-fns";
 import {
@@ -57,8 +57,7 @@ import PageHeader from "../components/PageHeader";
 import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/QuietTile";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
-import CoverageCards from "../components/CoverageCards";
-import CoverageList from "../components/CoverageList";
+import CollapsibleCoverage from "../components/CollapsibleCoverage";
 
 /**
  * Load workflow (V1 parity):
@@ -68,8 +67,6 @@ import CoverageList from "../components/CoverageList";
  *
  * Only ONE truck may be in_progress at a time (matches V1 inprog_set max=1).
  */
-const COVERAGE_OPEN_KEY = "rr-load-coverage-open";
-
 export default function Load() {
   const runDate = todayIso();
   const { data } = useBoard(runDate);
@@ -179,9 +176,6 @@ export default function Load() {
   // than sitting open under every load — it's a long panel and most loads
   // don't need it.
   const [shortagesOpen, setShortagesOpen] = useState(false);
-  const [coverageOpen, setCoverageOpen] = useState<boolean>(() => {
-    try { return localStorage.getItem(COVERAGE_OPEN_KEY) === "true"; } catch { return false; }
-  });
   const nextUpTruck = useMemo(
     () => ready.find((t) => t.truck_number === storedNextUp) ?? ready[0],
     [ready, storedNextUp],
@@ -514,47 +508,17 @@ export default function Load() {
           {/* Standing load-workflow notes for today, edited on the Notes page. */}
           <WorkflowDayNotes scope="load" day={loadDay} />
 
-          {/* Collapsed by default: the chip row says everything a loader
-              needs at a glance, and the big paired cards were eating the rail
-              on nights with two or three covers. The open/closed choice
-              sticks per device. */}
-          {loadCoverage.length > 0 && (
-            <div className="rounded-xl border" style={{ borderColor: "rgba(56,189,248,0.30)", background: "rgba(56,189,248,0.07)" }}>
-              <button
-                type="button"
-                onClick={() => {
-                  setCoverageOpen((v) => {
-                    localStorage.setItem(COVERAGE_OPEN_KEY, String(!v));
-                    return !v;
-                  });
-                }}
-                aria-expanded={coverageOpen}
-                className="flex w-full items-center gap-2 px-3.5 py-2.5 text-left"
-              >
-                <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-sky-400">Coverage today</span>
-                <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-muted">
-                  {loadCoverage.length} route{loadCoverage.length === 1 ? "" : "s"}
-                </span>
-                <ChevronDown className={clsx("h-4 w-4 shrink-0 text-sky-400/80 transition-transform", coverageOpen && "rotate-180")} />
-              </button>
-              {coverageOpen ? (
-                <div className="border-t px-3.5 pb-3.5 pt-3.5" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-                  {/* Rail-width grid: the default lg:grid-cols-3 was tuned for
-                      full-width surfaces and overflowed the card outline here. */}
-                  <CoverageCards
-                    entries={loadCoverage}
-                    isRecurring={isRecurringCoverage}
-                    statusOf={(n) => board.find((t) => t.truck_number === n)?.state?.status ?? null}
-                    className="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"
-                  />
-                </div>
-              ) : (
-                <div className="border-t px-3.5 pb-3 pt-2.5" style={{ borderColor: "rgba(56,189,248,0.20)" }}>
-                  <CoverageList entries={loadCoverage} isRecurring={(e) => isRecurringCoverage(e.route, e.cover)} />
-                </div>
-              )}
-            </div>
-          )}
+          {/* Collapsible coverage — shared banner, collapsed to chips by
+              default. Same component on Fleet and Unload. */}
+          <CollapsibleCoverage
+            entries={loadCoverage}
+            title="Coverage today"
+            storageKey="rr-load-coverage-open"
+            tone="sky"
+            isRecurring={isRecurringCoverage}
+            statusOf={(n) => board.find((t) => t.truck_number === n)?.state?.status ?? null}
+            cardsClassName="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"
+          />
 
           {/* Left-to-load counts — one card, four cells, no tinted tiles. The
               dot carries the category; the number stays ink so a big count

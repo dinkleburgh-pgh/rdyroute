@@ -5,7 +5,7 @@ import { formatEasternTime } from "../utils/dates";
 import { formatDuration, useElapsed } from "../components/LiveInProgress";
 import { useAssignBatch, useBoard, useBatchSummary, useCoverageForRole, useHolidayLoad, useHolidayUnload, useLoadDayOverride, usePrevDayCarriers, usePrevDaySplitHelpers, usePrevOperatingDay, useRouteSwapLog, useSettings, useUnloadDayTemplate,
   useUnloadsDayOverride, useUpsertTruckState } from "../api/hooks";
-import CoverageCards from "../components/CoverageCards";
+import CollapsibleCoverage from "../components/CollapsibleCoverage";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import PreBatchBanner from "../components/PreBatchBanner";
 import { todayIso } from "../api/client";
@@ -30,7 +30,7 @@ import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/Quie
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import { motion } from "framer-motion";
-import { ArrowLeftRight, MapPin } from "lucide-react";
+import { MapPin } from "lucide-react";
 import { format } from "date-fns";
 import clsx from "clsx";
 import { truckTypeLabel } from "../utils/truckType";
@@ -845,23 +845,18 @@ export default function Unload() {
 
         <PreBatchBanner />
 
-        {prevCoverage.items.length > 0 && (
-          <div className="rounded-xl border border-amber-700/40 bg-amber-950/20">
-            <div className="flex items-center gap-2 px-3.5 py-2.5">
-              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-              <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-amber-400">Previous load-day coverage</span>
-              {prevCoverage.date && (
-                <span className="text-[10px] text-amber-500/70">({format(new Date(`${prevCoverage.date}T12:00:00`), "EEE MMM d")})</span>
-              )}
-              <span className="ml-auto font-mono text-[11px] tabular-nums text-ink-muted">
-                {unloadCoverage.length} route{unloadCoverage.length === 1 ? "" : "s"}
-              </span>
-            </div>
-            <div className="border-t border-amber-700/30 px-3.5 pb-3.5 pt-3.5">
-              <CoverageCards entries={unloadCoverage} showPrevBadge={false} />
-            </div>
-          </div>
-        )}
+        <CollapsibleCoverage
+          entries={unloadCoverage}
+          title="Previous load-day coverage"
+          storageKey="rr-unload-coverage-open"
+          tone="amber"
+          showPrevBadge={false}
+          headerExtra={
+            prevCoverage.date ? (
+              <span className="text-[10px] text-amber-500/70">({format(new Date(`${prevCoverage.date}T12:00:00`), "EEE MMM d")})</span>
+            ) : undefined
+          }
+        />
 
         <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
           {/* ---------------- Left rail: the work ---------------- */}
