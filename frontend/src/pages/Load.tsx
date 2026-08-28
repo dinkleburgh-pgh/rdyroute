@@ -473,14 +473,10 @@ export default function Load() {
                     dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
                     pair={loadPair(t)}
                     sub={
-                      cr != null ? (
-                        <span>Covering route {cr}</span>
-                      ) : (
-                        <span>
-                          {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
-                          {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
-                        </span>
-                      )
+                      <span>
+                        {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
+                        {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
+                      </span>
                     }
                   />
                 );
@@ -692,7 +688,6 @@ export default function Load() {
                 pair={loadPair(t)}
                 sub={
                   <span className="text-ink-faint">
-                    {loadPair(t) != null && <span className="mr-1 text-sky-300/90">Covering {loadPair(t)!.split ? `split ${loadPair(t)!.route}` : `route ${loadPair(t)!.route}`} ·</span>}
                     {t.state?.load_finish_time
                       ? `Done ${format(new Date(t.state.load_finish_time * 1000), "h:mm a")}`
                       : "Loaded"}

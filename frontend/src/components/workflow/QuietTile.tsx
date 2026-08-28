@@ -115,7 +115,9 @@ export function QuietTile({
     </>
   );
   const cls = clsx(
-    "w-full rounded-[10px] border border-hairline px-3.5 py-3 text-left transition-colors",
+    // h-full: grid neighbours stretch to the row, so a tile whose sub wraps
+    // (coverage pairs) never leaves the card beside it hanging short.
+    "h-full w-full rounded-[10px] border border-hairline px-3.5 py-3 text-left transition-colors",
     dim ? "bg-surface-3 opacity-75" : "bg-surface",
     onClick && !disabled && "hover:bg-surface-2 active:scale-[0.99]",
     disabled && "cursor-not-allowed opacity-50",
