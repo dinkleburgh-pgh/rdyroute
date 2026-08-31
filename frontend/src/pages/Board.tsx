@@ -24,6 +24,7 @@ import { useAuth } from "../contexts/AuthContext";
 import { useCollapseState } from "../utils/useCollapseState";
 import OffDaySchedulePanel from "../components/management/OffDaySchedulePanel";
 import CollapsibleCoverage from "../components/CollapsibleCoverage";
+import { QuietTile } from "../components/workflow/QuietTile";
 import CoverageCardBadges from "../components/CoverageCardBadges";
 import { todayIso } from "../api/client";
 import { shipDayNumber, workdayNumbers } from "../components/Clock";
@@ -67,12 +68,15 @@ function CollapsibleSection({
   titleClassName,
   sectionRows,
   renderTruckCard,
+  tileGrid,
 }: {
   sectionKey: string;
   title: string;
   titleClassName: string;
   sectionRows: TruckWithState[];
   renderTruckCard: (truck: TruckWithState, index: number) => ReactNode;
+  /** Quiet-tile grid (denser); "oos" leaves room for the inline picker. */
+  tileGrid?: boolean | "oos";
 }) {
   const initOpen = useRef(
     localStorage.getItem(`readyroutev2_collapse_board-${sectionKey}`) !== "false"
@@ -99,7 +103,13 @@ function CollapsibleSection({
         <span className="text-lg text-slate-500 transition-transform group-open:rotate-180">⌄</span>
       </summary>
       <div className="border-t border-slate-800/80 p-3">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        <div className={clsx(
+          tileGrid === "oos"
+            ? "grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3"
+            : tileGrid
+            ? "grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5"
+            : "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
+        )}>
           {sectionRows.map((truck, sectionIndex) => renderTruckCard(truck, sectionIndex))}
         </div>
       </div>
@@ -920,7 +930,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             : cardSize === "l"
             ? "grid-cols-2 lg:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
             : "grid-cols-2 sm:grid-cols-3 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))]"
-          : filter === "off" || filter === "dirty" || filter === "unloaded"
+          : filter === "off"
+          ? "gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5"
+          : filter === "dirty" || filter === "unloaded"
           ? "grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5"
           : "grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6",
       )}>
@@ -991,6 +1003,345 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           } else {
             rows.push(...filtered);
           }
+          // One click policy for every card/tile on this page — extracted so
+          // the quiet tiles and the fleet cards cannot drift apart.
+          const handleTruckClick = (truck: TruckWithState) => {
+                  if (multiSelect) {
+                    setSelectedTrucks((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(truck.truck_number)) next.delete(truck.truck_number);
+                      else next.add(truck.truck_number);
+                      return next;
+                    });
+                    return;
+                  }
+                  if (filter === "dirty" && !fleetMode && truck.state?.status !== "oos") {
+                    // An "unfinished" truck was already batched/worked — clicking
+                    // it should FINISH the unload (mark unloaded), not send it back
+                    // through batch assignment. (Same as the Unload page's
+                    // "Finish unload" action.)
+                    if (truck.state?.status === "unfinished" || batchingDisabled) {
+                      upsert.mutate({
+                        truck_number: truck.truck_number,
+                        run_date: runDate,
+                        status: "unloaded",
+                        wearers: truck.state?.wearers ?? 0,
+                      });
+                    } else {
+                      navigate(`/batches?truck=${truck.truck_number}&run_date=${runDate}`);
+                    }
+                  } else if (filter === "unloaded" && !fleetMode) {
+                    if (truck.state?.priority_hold) {
+                      setHoldAlertTruck(truck);
+                      return;
+                    }
+                    if (
+                      truck.truck_type === "Spare" &&
+                      truck.route_swap_route == null &&
+                      truck.route_split_route == null &&
+                      truck.state?.oos_spare_route == null
+                    ) {
+                      // A spare only loads to cover a route — make them pick one
+                      // first. A SPLIT assignment already gives it a job.
+                      setSpareCoverageTruck(truck);
+                      setSpareCoverageRoute("");
+                      setSpareCoverageError(null);
+                    } else if (effectiveStatus(truck, runDayNum, holidayLoad) === "off") {
+                      const alreadyCovered = routeSwaps.some((s) => s.route_truck === truck.truck_number);
+                      if (alreadyCovered) {
+                        setConfirmTruck(truck);
+                      } else {
+                        setOffCoverageTruck(truck);
+                        setOffCoverageLoadOn("");
+                        setOffCoverageError(null);
+                      }
+                    } else {
+                      setConfirmTruck(truck);
+                    }
+                  } else if (filter === "oos" && !fleetMode) {
+                    if (truck.state?.priority_hold) {
+                      setHoldAlertTruck(truck);
+                      return;
+                    }
+                    setOosAssignOpen((prev) => {
+                      const next = new Set(prev);
+                      if (next.has(truck.truck_number)) next.delete(truck.truck_number);
+                      else next.add(truck.truck_number);
+                      return next;
+                    });
+                  } else if (fleetMode) {
+                    // Archive dates skip the action sheet: every control on it
+                    // mutates run_date = the viewed date, so on a past date a
+                    // stray tap would rewrite history (and Arrived would stamp
+                    // TODAY's clock onto an old row). Go straight to the
+                    // read-only detail modal instead.
+                    if (isReadOnly) setDetailNum(truck.truck_number);
+                    else setMobileActionTruck(truck);
+                  } else {
+                    setDetailNum(detailNum === truck.truck_number ? null : truck.truck_number);
+                  }
+          };
+          // The OOS page's whole job, extracted so the quiet tiles can carry
+          // it: covered display / tap-to-assign / the picker itself.
+          const renderOosAssignBlock = (truck: TruckWithState) => {
+            const cov = coveringTruckByRoute.get(truck.truck_number);
+            const spareAsgn = spareAssignments.find((a) => a.covering_route_truck === truck.truck_number);
+            const swap = routeSwaps.find((s) => s.route_truck === truck.truck_number);
+            const isOpen = oosAssignOpen.has(truck.truck_number);
+
+            // Covered display yields to the picker when the user hits
+            // Reassign (isOpen) — otherwise the read-only historical
+            // fallback would keep re-showing coverage and the picker
+            // could never open.
+            if (cov && !isOpen) {
+              return (
+                <div
+                  className="mt-1 border-t border-slate-700 pt-2"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-slate-400">Covered by</span>
+                        <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2.5 py-0.5 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
+                        #{cov.num}
+                      </span>
+                      {cov.status && (
+                        <span className={clsx("badge text-[10px] py-0", STATUS_BG[cov.status], STATUS_BADGE_TEXT[cov.status])}>
+                          {STATUS_LABELS[cov.status]}
+                        </span>
+                      )}
+                    </div>
+                    {/* Reassign: drop this cover and reopen the picker, keeping the truck OOS. */}
+                    <button
+                      className="ml-auto shrink-0 rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200 disabled:opacity-40"
+                      disabled={oosActionPending}
+                      onClick={() => {
+                        if (spareAsgn) returnSpare.mutate(spareAsgn.id);
+                        else if (swap) deleteSwap.mutate({ id: swap.id, runDate });
+                        setOosAssignOpen((prev) => new Set(prev).add(truck.truck_number));
+                      }}
+                    >
+                      Reassign
+                    </button>
+                  </div>
+                  {/* Remove from OOS: truck is back — clear OOS + free the cover. */}
+                  <div className="mt-2">{renderRemoveFromOos(truck)}</div>
+                </div>
+              );
+            }
+
+            if (!isOpen) {
+              return (
+                <div className="mt-1 space-y-1.5 border-t border-slate-700 pt-2">
+                  {/* The extra block sits outside the tile's button now, so
+                      this hint carries its own click instead of bubbling. */}
+                  <button
+                    type="button"
+                    className="block w-full text-center"
+                    onClick={() => setOosAssignOpen((prev) => new Set(prev).add(truck.truck_number))}
+                  >
+                    <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
+                  </button>
+                  {/* Remove from OOS without ever covering it (truck came back). */}
+                  {renderRemoveFromOos(truck, true)}
+                </div>
+              );
+            }
+
+            const sorted = [...(data ?? [])].sort((a, b) => a.truck_number - b.truck_number);
+            const lastUsedNums = getSwapHistory(truck.truck_number);
+            const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
+            const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
+            // Off group is SCHEDULE-based: a scheduled-off truck stays a
+            // candidate even when flags (needs-check, coverage, loaded)
+            // stop effectiveStatus from displaying it as "off".
+            const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) !== "oos" && !holidayLoad && isScheduledOff(x, runDayNum));
+            const otherTrucks = sorted.filter((x) => {
+              if (x.truck_type === "Spare") return false;
+              if (effectiveStatus(x, runDayNum, holidayLoad) === "oos") return false;
+              return holidayLoad || !isScheduledOff(x, runDayNum);
+            });
+
+            return (
+              <div
+                className="mt-1 space-y-2 border-t border-slate-700 pt-2"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <div className="flex gap-1.5">
+                  <select
+                    className="input flex-1 text-xs"
+                    value={oosCardSelects[truck.truck_number] ?? ""}
+                    onChange={(e) => setOosCardSelects((p) => ({ ...p, [truck.truck_number]: e.target.value }))}
+                  >
+                    <option value="">— assign truck —</option>
+                    {lastUsed.length > 0 && (
+                      <optgroup label="Last Used">
+                        {lastUsed.map((x) => (
+                          <option key={x.truck_number} value={x.truck_number}>
+                            #{x.truck_number} — {x.truck_type === "Spare" ? "Spare" : (x.state?.status ?? "dirty")}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {spareTrucks.length > 0 && (
+                      <optgroup label="Spare Trucks">
+                        {spareTrucks.map((x) => (
+                          <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {offTrucks.length > 0 && (
+                      <optgroup label={`Off — Day ${runDayNum}`}>
+                        {offTrucks.map((x) => (
+                          <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
+                        ))}
+                      </optgroup>
+                    )}
+                    {otherTrucks.length > 0 && (
+                      <optgroup label="Other">
+                        {otherTrucks.map((x) => (
+                          <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} ({x.state?.status ?? "dirty"})</option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+                  <button
+                    className="rounded-lg bg-green-700 px-3 text-xs font-semibold disabled:opacity-50"
+                    disabled={
+                      !oosCardSelects[truck.truck_number] ||
+                      assignSpare.isPending || createSwap.isPending
+                    }
+                    onClick={async () => {
+                      const pickedNum = Number(oosCardSelects[truck.truck_number]);
+                      const picked = (data ?? []).find((x) => x.truck_number === pickedNum);
+                      if (picked?.truck_type === "Spare") {
+                        await assignSpare.mutateAsync({
+                          run_date: runDate,
+                          spare_truck_number: pickedNum,
+                          covering_route_truck: truck.truck_number,
+                        });
+                      } else {
+                        await createSwap.mutateAsync({
+                          run_date: runDate,
+                          route_truck: truck.truck_number,
+                          load_on_truck: pickedNum,
+                          two_way: false,
+                        });
+                      }
+                      recordSwapHistory(truck.truck_number, pickedNum);
+                      setOosCardSelects((p) => { const next = { ...p }; delete next[truck.truck_number]; return next; });
+                      setOosAssignOpen((prev) => { const next = new Set(prev); next.delete(truck.truck_number); return next; });
+                    }}
+                  >
+                    {assignSpare.isPending || createSwap.isPending ? "…" : "Assign"}
+                  </button>
+                </div>
+                {/* Or skip assigning — the truck is back in service. */}
+                {renderRemoveFromOos(truck, true)}
+              </div>
+            );
+          };
+          /* Unload-style quiet tile for the live-status drill pages
+             (Dirty / Unloaded / Spare / Off / OOS). Same visual language as
+             the Unload board: mono number carrying the status colour, a
+             matching dot, one sub line, the ROUTE → TRUCK pair face for
+             coverage. Fleet mode and the Loaded page keep the big cards. */
+          const renderStatusTile = (truck: TruckWithState) => {
+            const status = effectiveWorkflowStatus(truck, runDayNum, holidayLoad, runUnloadsDay, holidayUnload);
+            const displayStatus: TruckStatus =
+              filter === "oos" && truck.truck_type !== "Spare" && truck.is_oos ? "oos" : status;
+            // Off pages colour by the UNDERLYING day status (an off truck that
+            // is already unloaded reads green), matching the old cards.
+            const toneStatus: TruckStatus =
+              displayStatus === "off" && (truck.state?.status === "dirty" || truck.state?.status === "unloaded")
+                ? (truck.state.status as TruckStatus)
+                : displayStatus;
+            const TONES: Partial<Record<TruckStatus, [string, string]>> = {
+              dirty: ["text-st-dirty", "bg-st-dirty"],
+              unfinished: ["text-st-unfinished", "bg-st-unfinished"],
+              unloaded: ["text-st-unloaded", "bg-st-unloaded"],
+              in_progress: ["text-st-inprogress", "bg-st-inprogress"],
+              loaded: ["text-st-loaded", "bg-st-loaded"],
+              spare: ["text-st-spare", "bg-st-spare"],
+              shop: ["text-st-shop", "bg-st-shop"],
+              off: ["text-st-off", "bg-st-off"],
+              oos: ["text-st-oos", "bg-st-oos"],
+            };
+            const [numberClass, dotClass] = TONES[toneStatus] ?? ["text-ink", "bg-st-off"];
+            const coverageRoute = getCoverageRouteNumber(truck) ?? coveringRouteByTruckNum.get(truck.truck_number) ?? null;
+            const splitRoute = coverageRoute == null ? (truck.route_split_route ?? null) : null;
+            const pair =
+              coverageRoute != null ? { route: coverageRoute }
+              : splitRoute != null ? { route: splitRoute, split: true }
+              : null;
+            // On the live OOS page the extra block shows coverage; on a
+            // read-only date that block is suppressed, so the sub line takes
+            // over — the historical fallback exists exactly for this display.
+            const coveredBy = coverageRoute == null && (filter !== "oos" || isReadOnly) ? coveringTruckByRoute.get(truck.truck_number) : undefined;
+            // Holiday day chip — same rule the big cards used.
+            let dayNote: string | null = null;
+            if (filter === "dirty" && holidayUnload && !(truck.truck_type === "Spare" && coverageRoute == null)) {
+              const d = isScheduledOff(truck, runUnloadsDay) ? unloadsDay2 : runUnloadsDay;
+              dayNote = `Unload Day ${d}`;
+            } else if (filter === "unloaded" && holidayLoad && !(truck.truck_type === "Spare" && coverageRoute == null)) {
+              const d = (isScheduledOff(truck, runDayNum) || isScheduledOff(truck, loadNextDay)) ? loadDay2 : runDayNum;
+              dayNote = `Load Day ${d}`;
+            }
+            const uOff = !holidayUnload && truck.truck_type !== "Spare" && isScheduledOff(truck, runUnloadsDay) && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked;
+            const lOff = !holidayLoad && truck.truck_type !== "Spare" && isScheduledOff(truck, runDayNum) && displayStatus !== "off" && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked;
+            const hold = truck.state?.priority_hold === true;
+            // Independent flags stay independent — a held truck that also
+            // needs checking shows both, joined, not just the louder one.
+            const tagParts: string[] = [];
+            if (hold) tagParts.push(filter === "dirty" ? "Request" : "Hold");
+            if (truck.state?.needs_checked) tagParts.push("Needs check");
+            if (!hold && !truck.state?.needs_checked && displayStatus === "unfinished") tagParts.push("Unfinished");
+            const tag = tagParts.length > 0 ? tagParts.join(" · ") : null;
+            const tagClass = hold
+              ? (filter === "dirty" ? "text-st-inprogress" : "text-st-dirty")
+              : truck.state?.needs_checked
+              ? "text-st-inprogress"
+              : "text-st-unfinished";
+            const offNote = filter === "off" ? (truck.state?.off_note ?? "").trim() : "";
+            const subBits: React.ReactNode[] = [];
+            // An off truck's WORDS say its underlying state (Dirty/Unloaded),
+            // exactly like the old status chip — "Off" rides along as context.
+            subBits.push(<span key="st">{STATUS_LABELS[toneStatus]}</span>);
+            if (displayStatus === "off" && toneStatus !== "off") subBits.push(<span key="offctx" className="text-ink-faint">Off</span>);
+            if (filter === "unloaded" && truck.truck_type !== "Uniform") subBits.push(<span key="ty" className="text-ink-faint">{truckTypeLabel(truck.truck_type)}</span>);
+            if (truck.state?.batch_id != null) subBits.push(<span key="b" className="text-ink-faint">Batch {truck.state.batch_id}</span>);
+            if (coveredBy != null) subBits.push(<span key="cb" className="text-sky-300">Covered by #{coveredBy.num}</span>);
+            if (uOff) subBits.push(<span key="uo" className="text-ink-faint">U Off</span>);
+            if (lOff) subBits.push(<span key="lo" className="text-ink-faint">L Off</span>);
+            if (dayNote) subBits.push(<span key="dn" className="text-amber-300">{dayNote}</span>);
+            if (offNote) subBits.push(<span key="on" className="text-ink-faint">{offNote.length > 34 ? offNote.slice(0, 33) + "…" : offNote}</span>);
+            if (truck.truck_type === "Dust" && truck.state?.has_dust_garment) {
+              subBits.push(
+                <DustGarmentIcon key="g" className="h-3 w-3 shrink-0" style={{ color: garmentHex(truck) }} />,
+              );
+            }
+            return (
+              <QuietTile
+                key={truck.truck_number}
+                id={`truck-card-${truck.truck_number}`}
+                truck={truck}
+                highlight={highlightTruck === truck.truck_number}
+                numberClass={numberClass}
+                dotClass={dotClass}
+                pair={pair}
+                tag={tag ?? undefined}
+                tagClass={tagClass}
+                onClick={isReadOnly && filter === "oos" ? undefined : () => handleTruckClick(truck)}
+                sub={<>{subBits}</>}
+                extra={
+                  filter === "oos" && displayStatus === "oos" && !isReadOnly ? (
+                    <div className="text-slate-300">{renderOosAssignBlock(truck)}</div>
+                  ) : undefined
+                }
+              />
+            );
+          };
+
           const renderTruckCard = (truck: TruckWithState, index: number) => {
             // Fleet mode uses unloads-day status directly. Non-fleet uses
             // effectiveWorkflowStatus so that dirty trucks scheduled off for the
@@ -1089,82 +1440,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   "hover:ring-2 hover:ring-blue-500 transition-shadow",
                   fleetMode && multiSelect && selectedTrucks.has(truck.truck_number) && "ring-2 ring-blue-400",
                 )}
-                onClick={() => {
-                  if (multiSelect) {
-                    setSelectedTrucks((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(truck.truck_number)) next.delete(truck.truck_number);
-                      else next.add(truck.truck_number);
-                      return next;
-                    });
-                    return;
-                  }
-                  if (filter === "dirty" && !fleetMode && truck.state?.status !== "oos") {
-                    // An "unfinished" truck was already batched/worked — clicking
-                    // it should FINISH the unload (mark unloaded), not send it back
-                    // through batch assignment. (Same as the Unload page's
-                    // "Finish unload" action.)
-                    if (truck.state?.status === "unfinished" || batchingDisabled) {
-                      upsert.mutate({
-                        truck_number: truck.truck_number,
-                        run_date: runDate,
-                        status: "unloaded",
-                        wearers: truck.state?.wearers ?? 0,
-                      });
-                    } else {
-                      navigate(`/batches?truck=${truck.truck_number}&run_date=${runDate}`);
-                    }
-                  } else if (filter === "unloaded" && !fleetMode) {
-                    if (truck.state?.priority_hold) {
-                      setHoldAlertTruck(truck);
-                      return;
-                    }
-                    if (
-                      truck.truck_type === "Spare" &&
-                      truck.route_swap_route == null &&
-                      truck.route_split_route == null &&
-                      truck.state?.oos_spare_route == null
-                    ) {
-                      // A spare only loads to cover a route — make them pick one
-                      // first. A SPLIT assignment already gives it a job.
-                      setSpareCoverageTruck(truck);
-                      setSpareCoverageRoute("");
-                      setSpareCoverageError(null);
-                    } else if (effectiveStatus(truck, runDayNum, holidayLoad) === "off") {
-                      const alreadyCovered = routeSwaps.some((s) => s.route_truck === truck.truck_number);
-                      if (alreadyCovered) {
-                        setConfirmTruck(truck);
-                      } else {
-                        setOffCoverageTruck(truck);
-                        setOffCoverageLoadOn("");
-                        setOffCoverageError(null);
-                      }
-                    } else {
-                      setConfirmTruck(truck);
-                    }
-                  } else if (filter === "oos" && !fleetMode) {
-                    if (truck.state?.priority_hold) {
-                      setHoldAlertTruck(truck);
-                      return;
-                    }
-                    setOosAssignOpen((prev) => {
-                      const next = new Set(prev);
-                      if (next.has(truck.truck_number)) next.delete(truck.truck_number);
-                      else next.add(truck.truck_number);
-                      return next;
-                    });
-                  } else if (fleetMode) {
-                    // Archive dates skip the action sheet: every control on it
-                    // mutates run_date = the viewed date, so on a past date a
-                    // stray tap would rewrite history (and Arrived would stamp
-                    // TODAY's clock onto an old row). Go straight to the
-                    // read-only detail modal instead.
-                    if (isReadOnly) setDetailNum(truck.truck_number);
-                    else setMobileActionTruck(truck);
-                  } else {
-                    setDetailNum(detailNum === truck.truck_number ? null : truck.truck_number);
-                  }
-                }}
+                onClick={() => handleTruckClick(truck)}
               >
                 <div className="flex w-full flex-col gap-0.5 md:gap-1">
                   {/* flex-wrap is the escape hatch for the route → truck coverage
@@ -1407,158 +1683,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   </div>
                 )}
 
-                {!fleetMode && filter === "oos" && displayStatus === "oos" && (() => {
-                  const cov = coveringTruckByRoute.get(truck.truck_number);
-                  const spareAsgn = spareAssignments.find((a) => a.covering_route_truck === truck.truck_number);
-                  const swap = routeSwaps.find((s) => s.route_truck === truck.truck_number);
-                  const isOpen = oosAssignOpen.has(truck.truck_number);
-
-                  // Covered display yields to the picker when the user hits
-                  // Reassign (isOpen) — otherwise the read-only historical
-                  // fallback would keep re-showing coverage and the picker
-                  // could never open.
-                  if (cov && !isOpen) {
-                    return (
-                      <div
-                        className="mt-1 border-t border-slate-700 pt-2"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                            <span className="text-xs text-slate-400">Covered by</span>
-                              <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2.5 py-0.5 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
-                              #{cov.num}
-                            </span>
-                            {cov.status && (
-                              <span className={clsx("badge text-[10px] py-0", STATUS_BG[cov.status], STATUS_BADGE_TEXT[cov.status])}>
-                                {STATUS_LABELS[cov.status]}
-                              </span>
-                            )}
-                          </div>
-                          {/* Reassign: drop this cover and reopen the picker, keeping the truck OOS. */}
-                          <button
-                            className="ml-auto shrink-0 rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200 disabled:opacity-40"
-                            disabled={oosActionPending}
-                            onClick={() => {
-                              if (spareAsgn) returnSpare.mutate(spareAsgn.id);
-                              else if (swap) deleteSwap.mutate({ id: swap.id, runDate });
-                              setOosAssignOpen((prev) => new Set(prev).add(truck.truck_number));
-                            }}
-                          >
-                            Reassign
-                          </button>
-                        </div>
-                        {/* Remove from OOS: truck is back — clear OOS + free the cover. */}
-                        <div className="mt-2">{renderRemoveFromOos(truck)}</div>
-                      </div>
-                    );
-                  }
-
-                  if (!isOpen) {
-                    return (
-                      <div className="mt-1 space-y-1.5 border-t border-slate-700 pt-2">
-                        <div className="text-center">
-                          <span className="text-[11px] font-semibold text-blue-400">Tap to assign →</span>
-                        </div>
-                        {/* Remove from OOS without ever covering it (truck came back). */}
-                        {renderRemoveFromOos(truck, true)}
-                      </div>
-                    );
-                  }
-
-                  const sorted = [...(data ?? [])].sort((a, b) => a.truck_number - b.truck_number);
-                  const lastUsedNums = getSwapHistory(truck.truck_number);
-                  const lastUsed = lastUsedNums.map((n) => sorted.find((x) => x.truck_number === n)).filter(Boolean) as typeof sorted;
-                  const spareTrucks = sorted.filter((x) => x.truck_type === "Spare");
-                  // Off group is SCHEDULE-based: a scheduled-off truck stays a
-                  // candidate even when flags (needs-check, coverage, loaded)
-                  // stop effectiveStatus from displaying it as "off".
-                  const offTrucks = sorted.filter((x) => x.truck_type !== "Spare" && effectiveStatus(x, runDayNum, holidayLoad) !== "oos" && !holidayLoad && isScheduledOff(x, runDayNum));
-                  const otherTrucks = sorted.filter((x) => {
-                    if (x.truck_type === "Spare") return false;
-                    if (effectiveStatus(x, runDayNum, holidayLoad) === "oos") return false;
-                    return holidayLoad || !isScheduledOff(x, runDayNum);
-                  });
-
-                  return (
-                    <div
-                      className="mt-1 space-y-2 border-t border-slate-700 pt-2"
-                      onClick={(e) => e.stopPropagation()}
-                    >
-                      <div className="flex gap-1.5">
-                        <select
-                          className="input flex-1 text-xs"
-                          value={oosCardSelects[truck.truck_number] ?? ""}
-                          onChange={(e) => setOosCardSelects((p) => ({ ...p, [truck.truck_number]: e.target.value }))}
-                        >
-                          <option value="">— assign truck —</option>
-                          {lastUsed.length > 0 && (
-                            <optgroup label="Last Used">
-                              {lastUsed.map((x) => (
-                                <option key={x.truck_number} value={x.truck_number}>
-                                  #{x.truck_number} — {x.truck_type === "Spare" ? "Spare" : (x.state?.status ?? "dirty")}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {spareTrucks.length > 0 && (
-                            <optgroup label="Spare Trucks">
-                              {spareTrucks.map((x) => (
-                                <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {offTrucks.length > 0 && (
-                            <optgroup label={`Off — Day ${runDayNum}`}>
-                              {offTrucks.map((x) => (
-                                <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {otherTrucks.length > 0 && (
-                            <optgroup label="Other">
-                              {otherTrucks.map((x) => (
-                                <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} ({x.state?.status ?? "dirty"})</option>
-                              ))}
-                            </optgroup>
-                          )}
-                        </select>
-                        <button
-                          className="rounded-lg bg-green-700 px-3 text-xs font-semibold disabled:opacity-50"
-                          disabled={
-                            !oosCardSelects[truck.truck_number] ||
-                            assignSpare.isPending || createSwap.isPending
-                          }
-                          onClick={async () => {
-                            const pickedNum = Number(oosCardSelects[truck.truck_number]);
-                            const picked = (data ?? []).find((x) => x.truck_number === pickedNum);
-                            if (picked?.truck_type === "Spare") {
-                              await assignSpare.mutateAsync({
-                                run_date: runDate,
-                                spare_truck_number: pickedNum,
-                                covering_route_truck: truck.truck_number,
-                              });
-                            } else {
-                              await createSwap.mutateAsync({
-                                run_date: runDate,
-                                route_truck: truck.truck_number,
-                                load_on_truck: pickedNum,
-                                two_way: false,
-                              });
-                            }
-                            recordSwapHistory(truck.truck_number, pickedNum);
-                            setOosCardSelects((p) => { const next = { ...p }; delete next[truck.truck_number]; return next; });
-                            setOosAssignOpen((prev) => { const next = new Set(prev); next.delete(truck.truck_number); return next; });
-                          }}
-                        >
-                          {assignSpare.isPending || createSwap.isPending ? "…" : "Assign"}
-                        </button>
-                      </div>
-                      {/* Or skip assigning — the truck is back in service. */}
-                      {renderRemoveFromOos(truck, true)}
-                    </div>
-                  );
-                })()}
+                {!fleetMode && filter === "oos" && displayStatus === "oos" && renderOosAssignBlock(truck)}
 
                 {fleetMode && (
                   <div className="mt-auto hidden md:flex md:flex-col md:gap-2">
@@ -1636,36 +1761,39 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
           if (!fleetMode && filter === "unloaded") {
             return [
-              <CollapsibleSection key="unloaded-running" sectionKey="unloaded-running" title={`Day ${runDayNum}`} titleClassName="text-emerald-400" sectionRows={unloadedRunningRows} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="unloaded-spare" sectionKey="unloaded-spare" title="Spare" titleClassName="text-cyan-400" sectionRows={unloadedSpareRows} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="unloaded-off" sectionKey="unloaded-off" title="Off" titleClassName="text-slate-400" sectionRows={unloadedOffRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="unloaded-running" sectionKey="unloaded-running" title={`Day ${runDayNum}`} titleClassName="text-emerald-400" sectionRows={unloadedRunningRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="unloaded-spare" sectionKey="unloaded-spare" title="Spare" titleClassName="text-cyan-400" sectionRows={unloadedSpareRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="unloaded-off" sectionKey="unloaded-off" title="Off" titleClassName="text-slate-400" sectionRows={unloadedOffRows} renderTruckCard={renderStatusTile} tileGrid />,
             ];
           }
 
           if (!fleetMode && filter === "dirty") {
             return [
-              <CollapsibleSection key="dirty-requests" sectionKey="dirty-requests" title="Requests" titleClassName="text-amber-400" sectionRows={priorityRows} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="dirty-coverages" sectionKey="dirty-coverages" title="Spares / Coverages" titleClassName="text-violet-400" sectionRows={dirtyCoverageRows} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="dirty-needs-checked" sectionKey="dirty-needs-checked" title="Needs Checked" titleClassName="text-amber-400" sectionRows={needsCheckedRows} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="dirty-dirty" sectionKey="dirty-dirty" title="Dirty" titleClassName="text-red-400" sectionRows={dirtyRouteRows} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="dirty-unfinished" sectionKey="dirty-unfinished" title="Unfinished" titleClassName="text-status-unfinished" sectionRows={unfinishedRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="dirty-requests" sectionKey="dirty-requests" title="Requests" titleClassName="text-amber-400" sectionRows={priorityRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="dirty-coverages" sectionKey="dirty-coverages" title="Spares / Coverages" titleClassName="text-violet-400" sectionRows={dirtyCoverageRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="dirty-needs-checked" sectionKey="dirty-needs-checked" title="Needs Checked" titleClassName="text-amber-400" sectionRows={needsCheckedRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="dirty-dirty" sectionKey="dirty-dirty" title="Dirty" titleClassName="text-red-400" sectionRows={dirtyRouteRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="dirty-unfinished" sectionKey="dirty-unfinished" title="Unfinished" titleClassName="text-status-unfinished" sectionRows={unfinishedRows} renderTruckCard={renderStatusTile} tileGrid />,
             ];
           }
 
           if (!fleetMode && filter === "oos") {
             return [
-              <CollapsibleSection key="oos-hold" sectionKey="oos-hold" title="Requests" titleClassName="text-amber-400" sectionRows={holdRows} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="oos-out" sectionKey="oos-out" title="Out of Service" titleClassName="text-slate-400" sectionRows={outOfServiceRows} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="oos-hold" sectionKey="oos-hold" title="Requests" titleClassName="text-amber-400" sectionRows={holdRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="oos-out" sectionKey="oos-out" title="Out of Service" titleClassName="text-slate-400" sectionRows={outOfServiceRows} renderTruckCard={renderStatusTile} tileGrid="oos" />,
             ];
           }
 
           if (!fleetMode && filter === "spare") {
             return [
-              <CollapsibleSection key="spare-cov" sectionKey="spare-cov" title="Coverage" titleClassName="text-violet-400" sectionRows={coveringSpares} renderTruckCard={renderTruckCard} />,
-              <CollapsibleSection key="spare-idle" sectionKey="spare-idle" title="Idle Spare" titleClassName="text-cyan-400" sectionRows={idleSpares} renderTruckCard={renderTruckCard} />,
+              <CollapsibleSection key="spare-cov" sectionKey="spare-cov" title="Coverage" titleClassName="text-violet-400" sectionRows={coveringSpares} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="spare-idle" sectionKey="spare-idle" title="Idle Spare" titleClassName="text-cyan-400" sectionRows={idleSpares} renderTruckCard={renderStatusTile} tileGrid />,
             ];
           }
 
+          if (!fleetMode && filter === "off") {
+            return rows.map((row) => renderStatusTile(row as TruckWithState));
+          }
           return rows.map((row, index) => {
             return renderTruckCard(row as TruckWithState, index);
           });

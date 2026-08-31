@@ -59,6 +59,7 @@ export function QuietTile({
   title,
   id,
   highlight = false,
+  extra,
 }: {
   truck: TruckWithState;
   sub: ReactNode;
@@ -78,6 +79,9 @@ export function QuietTile({
   /** DOM id, so a ?truck= deep link can scroll to it. */
   id?: string;
   highlight?: boolean;
+  /** Interactive content under the sub line (pickers, inline actions). Forces
+   *  a div root — a <button> cannot legally contain selects and buttons. */
+  extra?: ReactNode;
 }) {
   const body = (
     <>
@@ -123,7 +127,20 @@ export function QuietTile({
     disabled && "cursor-not-allowed opacity-50",
     highlight && "ring-2 ring-white/70 animate-pulse",
   );
-  if (!onClick) return <div id={id} className={cls}>{body}</div>;
+  if (!onClick) return <div id={id} className={cls}>{body}{extra}</div>;
+  if (extra) {
+    // The body stays a REAL button (keyboard + AT for free); extra sits
+    // outside it, so its selects/buttons are never presentational children
+    // of a role="button" — and never trigger the tile's own click.
+    return (
+      <div id={id} className={cls}>
+        <button type="button" className="block w-full text-left" disabled={disabled} onClick={onClick} title={title}>
+          {body}
+        </button>
+        {extra}
+      </div>
+    );
+  }
   return (
     <button id={id} type="button" className={cls} disabled={disabled} onClick={onClick} title={title}>
       {body}
