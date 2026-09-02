@@ -272,6 +272,14 @@ export function buildHistoricalCoverageFallback(
       continue;
     }
 
+    // RECENCY BOUND: the log branch only bridges ADJACENT operating days —
+    // the marker was cleared at day-init but the cover physically carried
+    // over. Two prev run days of slack absorbs a holiday. Without the bound,
+    // a route that sat OOS for a week resurrected its most recent cover from
+    // the 14-day log as if it were current — prod showed "59 → 11" (Aug 26)
+    // and "69 → 11" (Aug 27) side by side on Sep 2, both long over. Coverage
+    // older than that is history, and reads as such only in the archive.
+    const oldestBridgeable = previousRunDate(previousRunDate(asOfDate));
     let bestDate: string | null = null;
     let bestLoadOn: number | null = null;
     for (const e of swapLog) {
@@ -280,6 +288,7 @@ export function buildHistoricalCoverageFallback(
       // an idle split helper as "60 → 11 ROUTE/TRUCK").
       if (e.is_split) continue;
       if (e.route_truck !== t.truck_number || e.run_date > asOfDate) continue;
+      if (e.run_date < oldestBridgeable) continue;
       if (bestDate === null || e.run_date > bestDate) {
         bestDate = e.run_date;
         bestLoadOn = e.load_on_truck;
