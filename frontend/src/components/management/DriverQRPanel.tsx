@@ -2,6 +2,7 @@
  * Driver QR Codes panel — per-route QR codes for driver note access.
  * Extracted from Settings.tsx.
  */
+import ConfirmDialog from "../ConfirmDialog";
 import { useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { QRCodeSVG } from "qrcode.react";
@@ -20,6 +21,7 @@ export default function DriverQRPanel() {
   // spare stickers — so the sheet can be narrowed without typing numbers.
   const [typeFilter, setTypeFilter] = useState<"all" | "route" | "spare">("all");
   const [copiedTruck, setCopiedTruck] = useState<number | null>(null);
+  const [confirmRegen, setConfirmRegen] = useState<number | null>(null);
 
   const base = publicBase();
 
@@ -112,10 +114,7 @@ export default function DriverQRPanel() {
                 <button
                   className="flex-1 rounded-md bg-red-900/50 py-1 text-[11px] font-medium text-red-300 hover:bg-red-900 disabled:opacity-50"
                   disabled={isRegening}
-                  onClick={() => {
-                    if (!confirm(`Regenerate QR for #${truck.truck_number}? The old code stops working immediately.`)) return;
-                    regen.mutate(truck.truck_number);
-                  }}>
+                  onClick={() => setConfirmRegen(truck.truck_number)}>
                   {isRegening ? "…" : "Regenerate"}
                 </button>
               </div>
@@ -129,6 +128,15 @@ export default function DriverQRPanel() {
           <p className="col-span-full text-sm text-slate-500">No active trucks match that filter.</p>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmRegen != null}
+        title={`Regenerate QR for #${confirmRegen}?`}
+        description="The old code stops working immediately."
+        confirmLabel="Regenerate"
+        variant="danger"
+        onConfirm={() => { if (confirmRegen != null) regen.mutate(confirmRegen); setConfirmRegen(null); }}
+        onCancel={() => setConfirmRegen(null)}
+      />
     </div>
   );
 }

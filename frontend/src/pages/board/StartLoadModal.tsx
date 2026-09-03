@@ -6,6 +6,7 @@ import clsx from "clsx";
 import { createPortal } from "react-dom";
 import type { TruckWithState } from "../../types";
 import { truckTypeLabel } from "../../utils/truckType";
+import { AlertTriangle } from "lucide-react";
 
 export default function StartLoadModal({
   truck,
@@ -50,7 +51,7 @@ export default function StartLoadModal({
         <div className="px-6 py-5 space-y-4">
           {isBlocked ? (
             <div className="flex items-start gap-3 rounded-lg bg-amber-950/40 border border-amber-700/40 px-4 py-3">
-              <span className="mt-0.5 text-amber-400 text-lg leading-none">⚠</span>
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" aria-hidden />
               <div>
                 <p className="text-sm font-medium text-amber-300">
                   Truck #{blockedBy!.truck_number} is already loading

@@ -476,7 +476,7 @@ export default function ConnectionsPanel() {
       {health && <DbCard probe={health.db} title="Primary Database" />}
       {health?.db_fallback && (
         <div className="rounded-lg border border-amber-700/40 bg-amber-950/30 px-4 py-3 text-sm text-amber-400">
-          <span className="font-semibold">⚠ SQLite fallback active:</span> {health.db_fallback}
+          <span className="font-semibold">SQLite fallback active:</span> {health.db_fallback}
         </div>
       )}
       {health?.extra_dbs.map((probe, index) => (

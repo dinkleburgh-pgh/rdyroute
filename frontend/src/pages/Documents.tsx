@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import clsx from "clsx";
-import { File as FileIcon, FileText, Image as ImageIcon, Download, Trash2, Pencil, X, Save, Search, Link2, Plus, UploadCloud } from "lucide-react";
+import { File as FileIcon, FileText, Image as ImageIcon, Download, Trash2, Pencil, X, Save, Search, Link2, Plus, UploadCloud, Calendar, Truck } from "lucide-react";
 import {
   useDocuments,
   useUploadDocument,
@@ -169,7 +169,12 @@ function DocCard({ doc, onOpen }: { doc: DocumentItem; onOpen: (d: DocumentItem)
     setEditing(false);
   }
 
-  const linkLabel = (t: string, k: string) => (t === "truck" ? `🚚 #${k}` : t === "run_date" ? `📅 ${k}` : `${t}:${k}`);
+  // Icon + text, not OS-coloured emoji, so the chips match the app's icon set.
+  const linkLabel = (t: string, k: string) => (
+    t === "truck" ? <><Truck className="h-3 w-3 shrink-0" aria-hidden /> #{k}</>
+    : t === "run_date" ? <><Calendar className="h-3 w-3 shrink-0" aria-hidden /> {k}</>
+    : <>{t}:{k}</>
+  );
 
   return (
     <div className="flex flex-col gap-2 rounded-xl border border-slate-800 bg-slate-900 p-3">

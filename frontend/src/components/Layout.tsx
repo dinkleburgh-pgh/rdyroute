@@ -200,9 +200,14 @@ export default function Layout() {
   // Offline sync: queue + flush + connectivity state
   const toast = useToast();
   const offlineState = useOfflineSync({
+    // STICKY (durationMs 0): this is the only notice the user gets that queued
+    // offline work was dropped — permanent data loss must not fade out in
+    // 3.5 seconds. Copy stays cause-neutral: rejections aren't always "someone
+    // else updated it" (a 400/403 lands here too).
     onConflict: (n) =>
       toast.info(
-        `${n} offline change${n === 1 ? "" : "s"} couldn't be synced — already updated on the server.`,
+        `${n} offline change${n === 1 ? "" : "s"} couldn't be synced and ${n === 1 ? "was" : "were"} discarded. Check the board before redoing ${n === 1 ? "it" : "them"}.`,
+        { durationMs: 0, title: "Offline changes dropped" },
       ),
   });
 
@@ -535,12 +540,10 @@ export default function Layout() {
       ? Math.round((unloadedScheduled / totalScheduledUnload) * 100)
       : 0;
 
-  const DISPLAY_ROLE_OVERRIDE: Record<string, { label: string; cls: string }> = {
-    nate: { label: "Lead", cls: ROLE_BADGE.supervisor },
-  };
-  const roleOverride = user?.username ? DISPLAY_ROLE_OVERRIDE[user.username] : undefined;
-  const roleLabel = roleOverride?.label ?? user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
-  const roleBadgeCls = roleOverride?.cls ?? ROLE_BADGE[(user?.role ?? "guest") as AuthRole] ?? ROLE_BADGE.guest;
+  // display_role (a DB field, editable in Management → Users) is the ONLY
+  // per-person label override — a hardcoded username map lived here once.
+  const roleLabel = user?.display_role ?? ROLE_LABELS[(user?.role ?? "guest") as AuthRole] ?? user?.role ?? "";
+  const roleBadgeCls = ROLE_BADGE[(user?.role ?? "guest") as AuthRole] ?? ROLE_BADGE.guest;
   const allowed = ROLE_NAV_ACCESS[(user?.role ?? "guest") as AuthRole] ?? new Set<string>();
   const isGuest = user?.role === "guest";
   const sidebarPrimaryNav = isGuest

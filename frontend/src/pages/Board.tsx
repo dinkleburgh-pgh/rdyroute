@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { useNavigate, useSearchParams } from "react-router-dom";
+import { Link, useNavigate, useSearchParams } from "react-router-dom";
 import {
   useAuditEntries,
   useAssignSpare,
@@ -53,7 +53,7 @@ import FleetMobileActionSheet from "./board/FleetMobileActionSheet";
 import FleetUtilityBar from "./board/FleetUtilityBar";
 import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
-import { ArrowLeftRight, CalendarDays, X } from "lucide-react";
+import { ArrowLeftRight, CalendarDays, Clock, FileText, MapPin, X } from "lucide-react";
 import { truckTypeLabel } from "../utils/truckType";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
@@ -881,8 +881,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
       {filter === "loaded" && !fleetMode && (
         <div className="flex justify-end">
-          <a
-            href={counts["unloaded"] ? `/board?status=unloaded` : undefined}
+          <Link
+            to="/board?status=unloaded"
             className={clsx(
               "rounded-md border px-4 py-2 text-sm font-semibold transition-colors",
               counts["unloaded"]
@@ -893,7 +893,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             onClick={(e) => { if (!counts["unloaded"]) e.preventDefault(); }}
           >
             View Unloaded Trucks{counts["unloaded"] ? ` (${counts["unloaded"]})` : ""}
-          </a>
+          </Link>
         </div>
       )}
 
@@ -1622,20 +1622,20 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         )
                       )}
                       {fleetMode && arrivedTrackingEnabled && truck.state?.arrived_at && (
-                        <span className="inline-flex max-w-full items-center rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300 md:hidden">
-                          📍 Arrived {formatArrivedAt(truck.state.arrived_at)}
+                        <span className="inline-flex max-w-full items-center gap-1 rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5 text-[10px] font-bold text-emerald-300 md:hidden">
+                          <MapPin className="h-3 w-3 shrink-0" aria-hidden /> Arrived {formatArrivedAt(truck.state.arrived_at)}
                         </span>
                       )}
                       {(outsideTimers.has(truck.truck_number) || paperBayTimers.has(truck.truck_number)) && (
                         <div className={clsx("flex flex-wrap gap-1 pt-1", fleetMode && "md:hidden")}>
                           {outsideTimerEnabled && outsideTimers.has(truck.truck_number) && (
-                            <span className="inline-flex items-center rounded-full border border-orange-700/50 bg-orange-950/70 px-2 py-0.5 text-[10px] font-bold text-orange-300">
-                              ⏱ Outside {fmtCountdown(outsideCountdowns.get(truck.truck_number) ?? 0)}
+                            <span className="inline-flex items-center gap-1 rounded-full border border-orange-700/50 bg-orange-950/70 px-2 py-0.5 text-[10px] font-bold text-orange-300">
+                              <Clock className="h-3 w-3 shrink-0" aria-hidden /> Outside {fmtCountdown(outsideCountdowns.get(truck.truck_number) ?? 0)}
                             </span>
                           )}
                           {paperBayEnabled && paperBayTimers.has(truck.truck_number) && (
-                            <span className="inline-flex items-center rounded-full border border-violet-700/50 bg-violet-950/70 px-2 py-0.5 text-[10px] font-bold text-violet-300">
-                              📄 Paper Bay {fmtCountdown(paperBayCountdowns.get(truck.truck_number) ?? 0)}
+                            <span className="inline-flex items-center gap-1 rounded-full border border-violet-700/50 bg-violet-950/70 px-2 py-0.5 text-[10px] font-bold text-violet-300">
+                              <FileText className="h-3 w-3 shrink-0" aria-hidden /> Paper Bay {fmtCountdown(paperBayCountdowns.get(truck.truck_number) ?? 0)}
                             </span>
                           )}
                         </div>
@@ -1692,8 +1692,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         className="flex items-center gap-1.5 rounded-lg border border-orange-700/50 bg-orange-950/70 px-2 py-1.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="text-xs font-bold text-orange-300">
-                          ⏱ Outside {fmtCountdown(outsideCountdowns.get(truck.truck_number) ?? 0)}
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-orange-300">
+                          <Clock className="h-3 w-3 shrink-0" aria-hidden /> Outside {fmtCountdown(outsideCountdowns.get(truck.truck_number) ?? 0)}
                         </span>
                         <button
                           type="button"
@@ -1709,8 +1709,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         className="flex items-center gap-1.5 rounded-lg border border-violet-700/50 bg-violet-950/70 px-2 py-1.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="text-xs font-bold text-violet-300">
-                          📄 Paper Bay {fmtCountdown(paperBayCountdowns.get(truck.truck_number) ?? 0)}
+                        <span className="inline-flex items-center gap-1 text-xs font-bold text-violet-300">
+                          <FileText className="h-3 w-3 shrink-0" aria-hidden /> Paper Bay {fmtCountdown(paperBayCountdowns.get(truck.truck_number) ?? 0)}
                         </span>
                         <button
                           type="button"
@@ -1727,10 +1727,10 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                            dominated a shrunk card. Clearing still lives one tap
                            away on the action sheet's Arrived button. */
                         <span
-                          className="self-start whitespace-nowrap rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300"
+                          className="inline-flex items-center gap-1 self-start whitespace-nowrap rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-1.5 py-0.5 text-[10px] font-bold text-emerald-300"
                           title={`Arrived ${formatArrivedAt(truck.state.arrived_at)} — clear from the truck's action sheet`}
                         >
-                          📍 {formatArrivedAt(truck.state.arrived_at)}
+                          <MapPin className="h-3 w-3 shrink-0" aria-hidden /> {formatArrivedAt(truck.state.arrived_at)}
                         </span>
                       ) : (
                       <div
@@ -1739,8 +1739,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                         className="flex max-w-full flex-wrap items-center gap-x-1 gap-y-0.5 self-start rounded-xl border border-emerald-700/50 bg-emerald-950/70 px-2 py-0.5"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <span className="whitespace-nowrap text-[10px] font-bold text-emerald-300">
-                          📍 Arrived {formatArrivedAt(truck.state.arrived_at)}
+                        <span className="inline-flex items-center gap-1 whitespace-nowrap text-[10px] font-bold text-emerald-300">
+                          <MapPin className="h-3 w-3 shrink-0" aria-hidden /> Arrived {formatArrivedAt(truck.state.arrived_at)}
                         </span>
                         <button
                           type="button"

@@ -8,6 +8,8 @@
  *   queue (see api/client interceptor + useOfflineSync) instead of hanging.
  */
 import { QueryClient } from "@tanstack/react-query";
+import { errorDetail, errorStatus } from "./errors";
+import { emitToast } from "../utils/toastBridge";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -20,9 +22,19 @@ export const queryClient = new QueryClient({
     mutations: {
       networkMode: "offlineFirst",
       onError: (err) => {
-        // Default fallback: log errors from mutations that don't have their
-        // own onError handler. Call sites can override with a toast as needed.
+        // The floor of failure UX for every mutation without its own onError:
+        // a write that failed must never look like a write that worked. This
+        // used to be console.error only — 66 of 74 mutations failed silently.
+        // Offline taps never land here (the interceptor queues them as 202s),
+        // so this fires only for real server rejections and network drops.
         console.error("[mutation error]", err);
+        const detail = errorDetail(err);
+        const status = errorStatus(err);
+        emitToast(
+          detail ?? (status != null ? `That didn't save (error ${status}). Try again.` : "That didn't save — check the connection and try again."),
+          "error",
+          { durationMs: 6000 },
+        );
       },
     },
   },

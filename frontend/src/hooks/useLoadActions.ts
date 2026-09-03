@@ -1,3 +1,4 @@
+import { errorMessage } from "../api/errors";
 import { useMemo, useState } from "react";
 import {
   useBoard,
@@ -105,8 +106,7 @@ export function useLoadActions(
       // bare try/finally, so the tap silently did nothing — survivable on the
       // page where the card stays put, but on a display there is no other
       // feedback at all.
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
-      toast.error(detail ?? `Couldn't start truck #${t.truck_number}.`);
+      toast.error(errorMessage(err, `Couldn't start truck #${t.truck_number}.`));
     } finally {
       setBusy(null);
     }
@@ -142,6 +142,10 @@ export function useLoadActions(
           // history append failure shouldn't block status change
         }
       }
+    } catch (err: unknown) {
+      // Same rule as startLoad: on the wall display a silent failure has no
+      // other feedback at all — and Finish is the most-pressed button here.
+      toast.error(errorMessage(err, `Couldn't finish truck #${t.truck_number}.`));
     } finally {
       setBusy(null);
     }
@@ -159,6 +163,8 @@ export function useLoadActions(
         load_finish_time: null,
         load_duration_seconds: null,
       });
+    } catch (err: unknown) {
+      toast.error(errorMessage(err, `Couldn't cancel truck #${t.truck_number}'s load.`));
     } finally {
       setBusy(null);
     }

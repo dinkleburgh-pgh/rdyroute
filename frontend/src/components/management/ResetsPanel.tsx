@@ -7,6 +7,8 @@
  * "undo the shift" also erased the setup the shift was built on. They are
  * replaced by a single "Reset day" that rewinds to how the day started.
  */
+import ConfirmDialog from "../ConfirmDialog";
+import { errorMessage } from "../../api/errors";
 import { useState } from "react";
 import { usePurgeAbnormalDurations, useResetDay } from "../../api/hooks";
 import { todayIso } from "../../api/client";
@@ -20,10 +22,29 @@ export default function ResetsPanel() {
   const [purgeResult, setPurgeResult] = useState<string | null>(null);
   const [resetResult, setResetResult] = useState<string | null>(null);
   const [resetError, setResetError] = useState<string | null>(null);
+  const [confirmReset, setConfirmReset] = useState(false);
 
   const isPrivileged =
     user?.role === "admin" || user?.role === "fleet" || user?.role === "atl" ||
     user?.role === "supervisor" || user?.role === "lead";
+
+  function doReset() {
+    setResetError(null);
+    reset.mutate(runDate, {
+      onSuccess: (r) => {
+        setResetResult(
+          `Day reset — ${r.states_rebuilt} truck(s) back to their start-of-day status` +
+          (r.batches_cleared > 0 ? `, ${r.batches_cleared} batch assignment(s) cleared.` : "."),
+        );
+      },
+      // The server refuses a day that hasn't started (nothing to
+      // go back to). Without this the button just did nothing.
+      onError: (err) => {
+        setResetResult(null);
+        setResetError(errorMessage(err, "Couldn't reset that day — try again."));
+      },
+    });
+  }
 
   return (
     <div className="space-y-4">
@@ -67,31 +88,7 @@ export default function ResetsPanel() {
             <button
               className="shrink-0 rounded bg-red-900 px-3 py-1.5 text-sm text-red-200 hover:bg-red-800 disabled:opacity-50"
               disabled={!isPrivileged || reset.isPending}
-              onClick={() => {
-                if (!confirm(
-                  `Reset ${runDate} back to how the day started?\n\n` +
-                  "Clears: truck statuses, arrival times, holds, unloading/loading progress, wearers, batches, Next Up.\n" +
-                  "Keeps: coverage, holiday flags, and any shortages or audit entries logged today.\n\n" +
-                  "This cannot be undone.",
-                )) return;
-                setResetError(null);
-                reset.mutate(runDate, {
-                  onSuccess: (r) => {
-                    setResetResult(
-                      `Day reset — ${r.states_rebuilt} truck(s) back to their start-of-day status` +
-                      (r.batches_cleared > 0 ? `, ${r.batches_cleared} batch assignment(s) cleared.` : "."),
-                    );
-                  },
-                  // The server refuses a day that hasn't started (nothing to
-                  // go back to). Without this the button just did nothing.
-                  onError: (err) => {
-                    setResetResult(null);
-                    const detail = (err as { response?: { data?: { detail?: string } } })
-                      ?.response?.data?.detail;
-                    setResetError(detail ?? "Couldn't reset that day — try again.");
-                  },
-                });
-              }}
+              onClick={() => setConfirmReset(true)}
             >
               {reset.isPending ? "Resetting…" : "Reset day"}
             </button>
@@ -120,6 +117,16 @@ export default function ResetsPanel() {
           {resetError && <p className="mt-2 text-xs font-semibold text-amber-300">{resetError}</p>}
         </div>
       </div>
+      <ConfirmDialog
+        open={confirmReset}
+        title={`Reset ${runDate} back to how the day started?`}
+        description="Clears truck statuses, arrival times, holds, loading/unloading progress, wearers, batches and Next Up. Keeps coverage, holiday flags, and today's shortages and audit entries. This cannot be undone."
+        confirmLabel="Reset day"
+        variant="danger"
+        busy={reset.isPending}
+        onConfirm={() => { setConfirmReset(false); doReset(); }}
+        onCancel={() => setConfirmReset(false)}
+      />
     </div>
   );
 }

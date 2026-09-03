@@ -23,6 +23,9 @@ export default {
         "ink-muted":"#8a96a8",
         "ink-faint":"#7a8698",
         accent:     "#3b82f6",
+        // A real COLOUR (not just borderColor) so bg-hairline / ring-hairline
+        // exist — they were silently dead classes on eight divider rules.
+        hairline:   "rgba(255,255,255,0.06)",
         "st-dirty":       "#ef4444",
         "st-unfinished":  "#d946ef",
         "st-shop":        "#8b5cf6",

@@ -13,6 +13,7 @@
  * (see TruckDetailModal), or the QR library lands in the eager entry bundle.
  */
 import { useState } from "react";
+import ConfirmDialog from "./ConfirmDialog";
 import { QRCodeSVG } from "qrcode.react";
 import { Link } from "react-router-dom";
 import { publicBase } from "../api/client";
@@ -25,6 +26,7 @@ export default function TruckQRSection({ truckNumber }: { truckNumber: number })
   const { data: qrTokens = {}, isLoading } = useQrTokens(true);
   const regen = useRegenerateQR();
   const [copied, setCopied] = useState(false);
+  const [confirmRegen, setConfirmRegen] = useState(false);
 
   const token = qrTokens[String(truckNumber)] ?? null;
   const url = token ? `${publicBase()}/driver/${token}` : null;
@@ -88,14 +90,20 @@ export default function TruckQRSection({ truckNumber }: { truckNumber: number })
         <button
           className="w-full rounded-md bg-red-900/60 py-1.5 text-xs font-semibold text-red-300 hover:bg-red-900 disabled:opacity-50"
           disabled={regen.isPending}
-          onClick={() => {
-            if (!confirm(`Regenerate QR code for route #${truckNumber}? The old code — including the printed sticker — stops working immediately.`)) return;
-            regen.mutate(truckNumber);
-          }}
+          onClick={() => setConfirmRegen(true)}
         >
           {regen.isPending ? "Regenerating…" : "Regenerate QR Code"}
         </button>
       </div>
+      <ConfirmDialog
+        open={confirmRegen}
+        title={`Regenerate QR for #${truckNumber}?`}
+        description="The old code — including the printed sticker — stops working immediately."
+        confirmLabel="Regenerate"
+        variant="danger"
+        onConfirm={() => { regen.mutate(truckNumber); setConfirmRegen(false); }}
+        onCancel={() => setConfirmRegen(false)}
+      />
     </div>
   );
 }

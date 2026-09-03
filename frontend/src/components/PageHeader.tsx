@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import clsx from "clsx";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 type PageHeaderProps = {
   title: string;
@@ -23,6 +24,7 @@ export default function PageHeader({
   centerMobile = true,
   className,
 }: PageHeaderProps) {
+  useDocumentTitle(title);
   return (
     <div
       className={clsx(

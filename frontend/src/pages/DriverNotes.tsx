@@ -23,6 +23,8 @@ import {
 } from "../api/hooks";
 import type { NoteType, TruckNote } from "../types";
 import { format } from "date-fns";
+import ConfirmDialog from "../components/ConfirmDialog";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -266,6 +268,7 @@ function AddNoteForm({ token, onClose }: { token: string; onClose: () => void })
 
 function NoteCard({ note, token, readOnly = false }: { note: TruckNote; token: string; readOnly?: boolean }) {
   const del = useDriverDeleteNote(token);
+  const [confirmRemove, setConfirmRemove] = useState(false);
   // readOnly: another truck's notes (a covered route's). The delete endpoint
   // is token-scoped to THIS truck, so offering Remove there could only 404 —
   // and "You added this" would be claiming someone else's note.
@@ -312,15 +315,21 @@ function NoteCard({ note, token, readOnly = false }: { note: TruckNote; token: s
           <button
             className="rounded-lg bg-slate-800 px-3 py-1 text-xs font-medium text-red-400 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
             disabled={del.isPending}
-            onClick={() => {
-              if (!confirm("Remove this note?")) return;
-              del.mutate(note.id);
-            }}
+            onClick={() => setConfirmRemove(true)}
           >
             {del.isPending ? "Removing…" : "Remove"}
           </button>
         </div>
       )}
+      <ConfirmDialog
+        open={confirmRemove}
+        title="Remove this note?"
+        confirmLabel="Remove"
+        variant="danger"
+        busy={del.isPending}
+        onConfirm={() => { del.mutate(note.id); setConfirmRemove(false); }}
+        onCancel={() => setConfirmRemove(false)}
+      />
     </div>
   );
 }
@@ -550,6 +559,7 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
 }
 
 export default function DriverNotes() {
+  useDocumentTitle("Driver");
   const { token } = useParams<{ token: string }>();
   const { data: notes, isLoading, isError, error, fetchStatus, refetch } = useDriverNotes(token);
   const { data: truckInfo } = useDriverTruckInfo(token);

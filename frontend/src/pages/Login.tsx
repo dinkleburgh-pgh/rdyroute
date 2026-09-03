@@ -3,8 +3,10 @@ import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { applySession, useAuth } from "../contexts/AuthContext";
 import { useLogin, useGuestLogin } from "../api/hooks";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 export default function Login() {
+  useDocumentTitle("Sign in");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -50,7 +52,7 @@ export default function Login() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-slate-950">
+    <div className="flex min-h-screen items-center justify-center bg-app">
       <motion.div
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -93,7 +95,7 @@ export default function Login() {
             <div className="w-full border-t border-slate-700" />
           </div>
           <div className="relative flex justify-center">
-            <span className="bg-surface-1 px-3 text-xs text-slate-500">or</span>
+            <span className="bg-surface px-3 text-xs text-ink-faint">or</span>
           </div>
         </div>
 

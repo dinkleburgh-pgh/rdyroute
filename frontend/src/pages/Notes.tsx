@@ -30,6 +30,7 @@ import WorkflowNotesSection from "../components/notes/WorkflowNotesSection";
 import { workdayNumbers } from "../components/Clock";
 import { useAuth } from "../contexts/AuthContext";
 import { truckTypeLabel } from "../utils/truckType";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -247,6 +248,7 @@ function NoteCard({
   const deleteNote = useDeleteNote();
   const update     = useUpdateNote();
   const expired    = isExpired(note);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   return (
     <div
@@ -301,7 +303,7 @@ function NoteCard({
             type="button"
             title="Delete"
             onClick={() => {
-              if (confirm("Delete this note permanently?")) deleteNote.mutate(note.id);
+              setConfirmDelete(true);
             }}
             className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-red-400"
           >
@@ -311,6 +313,14 @@ function NoteCard({
       </div>
       <p className="whitespace-pre-wrap leading-snug text-slate-200">{note.body}</p>
       <p className="mt-1.5 text-[10px] text-slate-600">by {note.created_by}</p>
+      <ConfirmDialog
+        open={confirmDelete}
+        title="Delete this note permanently?"
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { deleteNote.mutate(note.id); setConfirmDelete(false); }}
+        onCancel={() => setConfirmDelete(false)}
+      />
     </div>
   );
 }

@@ -7,7 +7,7 @@
  */
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { X } from "lucide-react";
+import { StickyNote, X } from "lucide-react";
 import clsx from "clsx";
 import { garmentHex, garmentIsLoaded } from "../../utils/truckStatus";
 import type { TruckNote, TruckStatus, TruckWithState } from "../../types";
@@ -221,7 +221,7 @@ export default function TruckCard({
             aria-haspopup="dialog"
             aria-expanded={notePopoverOpen}
           >
-            📝 {visibleNotes.length}
+            <StickyNote className="h-3 w-3 shrink-0" aria-hidden /> {visibleNotes.length}
           </button>
         </div>
       )}

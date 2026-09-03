@@ -83,7 +83,7 @@ export default function DevelopmentPanel() {
   return (
     <div className="space-y-4">
       <div className="rounded-lg border border-amber-600 bg-amber-950/40 px-4 py-3 text-sm text-amber-300">
-        ⚠ These tools override the route-day logic used by Run Day, Load, and Unload pages.
+        These tools override the route-day logic used by Run Day, Load, and Unload pages.
         Only apply overrides during holiday runs when the system is computing the wrong day.
         Clear them once the holiday run is complete.
       </div>

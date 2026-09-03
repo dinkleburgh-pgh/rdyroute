@@ -21,15 +21,12 @@ const ROLE_COLORS: Record<string, string> = {
 
 const ADMIN_ROLES = new Set(["admin", "fleet", "atl", "lead", "supervisor"]);
 
-const DISPLAY_OVERRIDE: Record<string, { label: string; color: string }> = {
-  nate: { label: "lead", color: "#a855f7" },
-};
-
-function RoleBadge({ role, username }: { role?: string | null; username?: string }) {
+function RoleBadge({ role }: { role?: string | null; username?: string }) {
   if (!role) return null;
-  const override = username ? DISPLAY_OVERRIDE[username] : undefined;
-  const label = override ? override.label : role;
-  const color = override ? override.color : (ROLE_COLORS[role] ?? ROLE_COLORS.guest);
+  // sender_role now carries display_role when set, so a person's chosen label
+  // shows without any hardcoded username map (one lived here once).
+  const label = role;
+  const color = ROLE_COLORS[role.toLowerCase()] ?? ROLE_COLORS.guest;
   return (
     <span
       style={{

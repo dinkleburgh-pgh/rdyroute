@@ -1,6 +1,7 @@
 /**
  * Notices panel — post and manage team notices. Extracted from Settings.tsx.
  */
+import ConfirmDialog from "../ConfirmDialog";
 import { useState } from "react";
 import { format, parseISO } from "date-fns";
 import { useCreateNotice, useDeleteNotice, useNotices, useUpdateNotice } from "../../api/hooks";
@@ -14,6 +15,7 @@ export default function NoticesPanel({ disabled }: { disabled: boolean }) {
   const update = useUpdateNotice();
   const del    = useDeleteNotice();
   const [form, setForm] = useState({ title: "", body: "", severity: "info" as NoticeSeverity });
+  const [confirmDelete, setConfirmDelete] = useState<{ id: number; title: string } | null>(null);
 
   return (
     <div className="space-y-4">
@@ -71,7 +73,7 @@ export default function NoticesPanel({ disabled }: { disabled: boolean }) {
                 </button>
                 <button
                   className="btn-ghost text-red-400" disabled={disabled}
-                  onClick={() => { if (confirm(`Delete notice "${n.title}"?`)) del.mutate(n.id); }}
+                  onClick={() => setConfirmDelete({ id: n.id, title: n.title })}
                 >
                   Delete
                 </button>
@@ -80,6 +82,15 @@ export default function NoticesPanel({ disabled }: { disabled: boolean }) {
           ))}
         </ul>
       </div>
+      <ConfirmDialog
+        open={confirmDelete != null}
+        title="Delete this notice?"
+        description={confirmDelete ? `"${confirmDelete.title}" comes down for everyone.` : undefined}
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDelete) del.mutate(confirmDelete.id); setConfirmDelete(null); }}
+        onCancel={() => setConfirmDelete(null)}
+      />
     </div>
   );
 }

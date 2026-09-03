@@ -1,3 +1,5 @@
+import { errorMessage } from "./errors";
+import { emitToast } from "../utils/toastBridge";
 import { useMemo } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type { AxiosProgressEvent } from "axios";
@@ -315,6 +317,13 @@ export function useUpsertTruckState() {
       if (ctx?.previous !== undefined) {
         qc.setQueryData(["board", vars.run_date], ctx.previous);
       }
+      // The rollback is invisible on its own: the card flips, then flips back
+      // a beat later — which reads as a haunted board, not a failed save.
+      emitToast(
+        errorMessage(err, `Couldn't save truck #${vars.truck_number} — change reverted.`),
+        "error",
+        { durationMs: 6000, chip: `#${vars.truck_number}` },
+      );
     },
     onSuccess: (_data, vars) => {
       logDebug("mutation", `#${vars.truck_number} → ${vars.status ?? "(fields)"} @${vars.run_date}`, vars);

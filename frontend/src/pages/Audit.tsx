@@ -29,6 +29,7 @@ import { useAuth } from "../contexts/AuthContext";
 import type { AuditEntry, TruckWithState } from "../types";
 import PageHeader from "../components/PageHeader";
 import { truckTypeLabel } from "../utils/truckType";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 // ---------------------------------------------------------------------------
 // TruckPicker
@@ -792,6 +793,7 @@ function PhotosPanel({
   const [caption, setCaption]       = useState("");
   const [file, setFile]             = useState<File | null>(null);
   const [error, setError]           = useState<string | null>(null);
+  const [confirmDeletePhoto, setConfirmDeletePhoto] = useState<string | null>(null);
 
   const effectiveTruck = truck || (selectedTruck?.toString() ?? "");
 
@@ -857,13 +859,21 @@ function PhotosPanel({
               </p>
               {p.caption && <p className="line-clamp-2">{p.caption}</p>}
               <button type="button" className="text-red-400 hover:text-red-300 transition"
-                onClick={() => { if (confirm("Delete this photo?")) del.mutate(p.id); }}>
+                onClick={() => setConfirmDeletePhoto(p.id)}>
                 Delete
               </button>
             </figcaption>
           </AnimateCard>
         ))}
       </div>
+      <ConfirmDialog
+        open={confirmDeletePhoto != null}
+        title="Delete this photo?"
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDeletePhoto != null) del.mutate(confirmDeletePhoto); setConfirmDeletePhoto(null); }}
+        onCancel={() => setConfirmDeletePhoto(null)}
+      />
     </div>
   );
 }

@@ -13,10 +13,12 @@ import {
   createContext,
   useCallback,
   useContext,
+  useEffect,
   useMemo,
   useState,
   type ReactNode,
 } from "react";
+import { setToastEmitter } from "../utils/toastBridge";
 
 export type ToastVariant = "success" | "error" | "info";
 
@@ -83,6 +85,13 @@ export function ToastProvider({ children }: { children: ReactNode }) {
     },
     [dismiss],
   );
+
+  // Registers the non-React bridge (utils/toastBridge) so modules outside the
+  // tree — the query client's global onError — can raise toasts too.
+  useEffect(() => {
+    setToastEmitter(push);
+    return () => setToastEmitter(null);
+  }, [push]);
 
   const value = useMemo<ToastContextValue>(
     () => ({

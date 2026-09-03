@@ -67,7 +67,9 @@ def send_message(
         id=uuid.uuid4().hex,
         channel=payload.channel,
         username=current_user.username,
-        sender_role=current_user.role.value,
+        # The person's chosen display label when they have one — chat badges
+        # honour Management → Users instead of a hardcoded frontend map.
+        sender_role=(current_user.display_role or current_user.role.value),
         message=censored_text,
         sent_ts=time.time(),
     )

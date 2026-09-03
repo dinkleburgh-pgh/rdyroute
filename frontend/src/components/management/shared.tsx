@@ -4,7 +4,7 @@
  */
 import type { ReactNode } from "react";
 import type { TruckStatus } from "../../types";
-import { STATUS_LABELS } from "../../constants/truckStatus";
+import { STATUS_COLORS, STATUS_LABELS } from "../../constants/truckStatus";
 
 // ---------------------------------------------------------------------------
 // Value coercion helpers (settings come back as `unknown`)
@@ -68,16 +68,8 @@ export function SaveButton({
 // Shared constants
 // ---------------------------------------------------------------------------
 
-export const DEFAULT_BADGE_COLORS: Record<TruckStatus, string> = {
-  dirty: "#dc2626",
-  unfinished: "#dc2626",
-  shop: "#7400ff",
-  in_progress: "#f59e0b",
-  unloaded: "#16a34a",
-  loaded: "#2563eb",
-  off: "#6b7280",
-  oos: "#475569",
-  spare: "#a855f7",
-};
+// The canonical palette, not a private copy — this map had drifted (Unfinished
+// showed Dirty-red, Spare purple) and "reset to defaults" wrote the wrong hexes.
+export const DEFAULT_BADGE_COLORS: Record<TruckStatus, string> = STATUS_COLORS;
 
 export { STATUS_LABELS };

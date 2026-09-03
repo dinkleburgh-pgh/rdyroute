@@ -20,6 +20,7 @@ import type { BatchSummary } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
 import { capacityColor } from "../utils/batchCapacity";
+import { useDocumentTitle } from "../hooks/useDocumentTitle";
 
 const DEFAULT_WEARER_CAP = 1800;
 
@@ -186,6 +187,7 @@ function BatchCard({
 }
 
 export default function Batches() {
+  useDocumentTitle("Batches");
   const [params] = useSearchParams();
   const [runDate, setRunDate] = useState(params.get("run_date") ?? todayIso());
   const { data, isLoading } = useBatchSummary(runDate);
