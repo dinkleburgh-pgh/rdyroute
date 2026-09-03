@@ -15,3 +15,20 @@ export function capacityColor(total: number, _noCap: boolean, cap: number): { ba
 export function capacityPct(total: number, cap: number): number {
   return Math.min(100, Math.round((total / Math.max(cap, 1)) * 100));
 }
+
+/** The one default — five files used to declare their own copy of 1800. */
+export const DEFAULT_WEARER_CAP = 1800;
+
+type SettingLike = { key: string; value: unknown };
+
+/** The configured wearer cap, from the settings list every batching surface
+ *  already fetches. Same three lines that were copy-pasted five times. */
+export function resolveWearerCap(settings: SettingLike[]): number {
+  const v = Number(settings.find((s) => s.key === "wearer_cap")?.value);
+  return Number.isFinite(v) && v > 0 ? v : DEFAULT_WEARER_CAP;
+}
+
+/** Whether the cap is currently not enforced. */
+export function resolveNoCap(settings: SettingLike[]): boolean {
+  return settings.some((s) => s.key === "batch_no_cap" && s.value === true);
+}

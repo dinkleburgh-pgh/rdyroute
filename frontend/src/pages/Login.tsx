@@ -4,6 +4,7 @@ import { useNavigate } from "react-router-dom";
 import { applySession, useAuth } from "../contexts/AuthContext";
 import { useLogin, useGuestLogin } from "../api/hooks";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { errorDetail } from "../api/errors";
 
 export default function Login() {
   useDocumentTitle("Sign in");
@@ -34,8 +35,7 @@ export default function Login() {
       applySession(tok, setSession);
       nav("/", { replace: true });
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setError(e?.response?.data?.detail ?? "Login failed");
+            setError(errorDetail(err) ?? "Login failed");
     }
   }
 
@@ -46,8 +46,8 @@ export default function Login() {
       applySession(tok, setSession);
       nav("/", { replace: true });
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string }; status?: number } };
-      setError(e?.response?.data?.detail ?? `Guest access unavailable (${e?.response?.status ?? "no response"})`);
+      // No HTTP status codes on the sign-in screen — say it in words.
+      setError(errorDetail(err) ?? "Guest access isn't available right now — try signing in, or ask a lead.");
     }
   }
 

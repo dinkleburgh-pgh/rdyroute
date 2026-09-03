@@ -10,6 +10,7 @@ import { api } from "../../api/client";
 import { useToast } from "../../contexts/ToastContext";
 import ConfirmDialog from "../ConfirmDialog";
 import { DownloadIcon, TrashIcon, RefreshIcon } from "../icons";
+import { errorDetail } from "../../api/errors";
 
 interface PgBackup {
   filename: string;
@@ -64,8 +65,7 @@ export default function RecoveryPanel() {
       setBackups(res.data);
       setLoaded(true);
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } };
-      toast.error(err?.response?.data?.detail ?? "Could not load backups");
+            toast.error(errorDetail(e) ?? "Could not load backups");
     } finally {
       setLoading(false);
     }
@@ -96,8 +96,7 @@ export default function RecoveryPanel() {
       toast.success(res.data?.message ?? `Restored from ${restoreTarget}`);
       await loadBackups();
     } catch (e: unknown) {
-      const err = e as { response?: { data?: { detail?: string } } };
-      toast.error(err?.response?.data?.detail ?? "Restore failed");
+            toast.error(errorDetail(e) ?? "Restore failed");
     } finally {
       setRestoring(false);
       setRestoreTarget(null);

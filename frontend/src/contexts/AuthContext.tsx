@@ -9,6 +9,7 @@ import {
 } from "react";
 import { api } from "../api/client";
 import type { AuthRole, TokenResponse } from "../types";
+import { errorStatus } from "../api/errors";
 
 interface StoredUser {
   username: string;
@@ -80,7 +81,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(fresh);
     }).catch((err: unknown) => {
       if (cancelled) return;
-      const status = (err as { response?: { status?: number } })?.response?.status;
+      const status = errorStatus(err);
       if (status === 401 || status === 403) {
         // Server explicitly rejected the session — clear it.
         localStorage.removeItem(LS_USER_KEY);

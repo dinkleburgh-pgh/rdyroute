@@ -26,7 +26,7 @@ import OverbatchedChip from "../components/OverbatchedChip";
 import { DEFAULT_TRACKED_ITEMS, topCatOf, useCategoryPalette, useItemDisplayName } from "../components/shorts/HierarchyPicker";
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
-import { capacityColor } from "../utils/batchCapacity";
+import { capacityColor, resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
 import { ChevronLeft, ChevronRight, FileDown, Image as ImageIcon, Maximize2, Pause, Play, X } from "lucide-react";
 import ShortageSheetView from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
@@ -52,8 +52,6 @@ import {
 } from "../api/hooks";
 import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
-
-const DEFAULT_WEARER_CAP = 1800;
 
 // Tailwind class → hex, so the PDF view-model can ship concrete colours that
 // match what capacityColor / durTone / the KPI tones paint on screen.
@@ -192,12 +190,9 @@ export default function LiveReport() {
 
   // Settings-derived caps/flags.
   const { data: settings = [] } = useSettings();
-  const noCap = settings.some((s) => s.key === "batch_no_cap" && s.value === true);
+  const noCap = resolveNoCap(settings);
   const batchingDisabled = settings.some((s) => s.key === "batching_disabled" && s.value === true);
-  const cap = useMemo(() => {
-    const v = Number(settings.find((s) => s.key === "wearer_cap")?.value);
-    return Number.isFinite(v) && v > 0 ? v : DEFAULT_WEARER_CAP;
-  }, [settings]);
+  const cap = useMemo(() => resolveWearerCap(settings), [settings]);
   const recurringRules = useMemo(() => {
     // Guard against a non-array value (the setting is admin-editable) so
     // isRecurring's `.some(...)` can't throw and crash the coverage section.

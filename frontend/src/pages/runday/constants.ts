@@ -1,7 +1,7 @@
 /**
- * RunDay-specific presentation constants. Re-exports the shared status maps but
- * uses the RunDay label variant ("Loading" instead of "In Progress").
+ * RunDay-specific presentation constants — thin re-exports of the shared maps.
+ * (A "Loading vs In Progress" label variant lived here once; the app-wide
+ * rename made it identical and it's gone.)
  */
-export { STATUS_BG, STATUS_TEXT } from "../../constants/truckStatus";
-export { STATUS_LABELS_RUNDAY as STATUS_LABELS } from "../../constants/truckStatus";
+export { STATUS_BG, STATUS_LABELS, STATUS_TEXT } from "../../constants/truckStatus";
 export { DustGarmentIcon } from "../../components/icons";

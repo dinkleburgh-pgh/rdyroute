@@ -27,21 +27,11 @@ import {
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
 import { setAppNavigator } from "../utils/navigation";
-import { STATUS_LABELS } from "../constants/truckStatus";
+import { STATUS_BG, STATUS_LABELS } from "../constants/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
+import { ROLE_BADGE_CLASS, ROLE_LABELS } from "../utils/permissions";
 
-const STATUS_DOT: Record<TruckStatus, string> = {
-  dirty: "bg-status-dirty",
-  unfinished: "bg-status-unfinished",
-  shop: "bg-status-shop",
-  in_progress: "bg-status-inprogress",
-  unloaded: "bg-status-unloaded",
-  loaded: "bg-status-loaded",
-  off: "bg-status-off",
-  oos: "bg-status-oos",
-  spare: "bg-status-spare",
-};
 
 // 'spare' (truck type) and 'off' (set elsewhere) are omitted from the status filter row.
 const STATUS_ORDER: TruckStatus[] = [
@@ -105,27 +95,9 @@ const ROLE_NAV_ACCESS: Record<AuthRole, Set<string>> = {
   guest: new Set(["/fleet-schedule", "/report"]),
 };
 
-const ROLE_LABELS: Record<AuthRole, string> = {
-  admin: "Admin",
-  fleet: "Fleet",
-  atl: "ATL",
-  supervisor: "Supervisor",
-  lead: "Lead",
-  loader: "Load",
-  unloader: "Unloader",
-  guest: "Guest",
-};
-
-const ROLE_BADGE: Record<AuthRole, string> = {
-  admin:      "bg-red-950 text-red-300 ring-1 ring-red-700/50",
-  fleet:      "bg-cyan-950 text-cyan-300 ring-1 ring-cyan-700/50",
-  lead:       "bg-blue-950 text-blue-300 ring-1 ring-blue-700/50",
-  atl:        "bg-orange-950 text-orange-300 ring-1 ring-orange-700/50",
-  supervisor: "bg-purple-950 text-purple-300 ring-1 ring-purple-700/50",
-  loader:     "bg-green-950 text-green-300 ring-1 ring-green-700/50",
-  unloader:   "bg-teal-950 text-teal-300 ring-1 ring-teal-700/50",
-  guest:      "bg-surface-2 text-ink-faint ring-1 ring-hairline",
-};
+// Role labels/badges come from utils/permissions — Layout kept private
+// copies once, and they drifted (loader read "Load" here, "Loader" there).
+const ROLE_BADGE = ROLE_BADGE_CLASS;
 
 function BuildInfo() {
   const isDev = import.meta.env.DEV;
@@ -730,7 +702,7 @@ export default function Layout() {
               >
                 <span className={clsx(
                   "absolute left-2 h-3 w-3 rounded-full",
-                  STATUS_DOT[s],
+                  STATUS_BG[s],
                   s === "in_progress" && counts[s] > 0 && "animate-pulse",
                 )} />
                 {STATUS_LABELS[s]}

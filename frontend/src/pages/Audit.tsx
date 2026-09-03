@@ -30,6 +30,7 @@ import type { AuditEntry, TruckWithState } from "../types";
 import PageHeader from "../components/PageHeader";
 import { truckTypeLabel } from "../utils/truckType";
 import ConfirmDialog from "../components/ConfirmDialog";
+import { errorDetail } from "../api/errors";
 
 // ---------------------------------------------------------------------------
 // TruckPicker
@@ -815,7 +816,7 @@ function PhotosPanel({
       if (el) el.value = "";
     } catch (err: unknown) {
       const msg =
-        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? "Upload failed.";
+        errorDetail(err) ?? "Upload failed.";
       setError(msg);
     }
   }

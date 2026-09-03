@@ -10,6 +10,7 @@ import ConfirmDialog from "../ConfirmDialog";
 import { useToast } from "../../contexts/ToastContext";
 import { FieldRow } from "./shared";
 import DebugPanel from "./DebugPanel";
+import { errorDetail } from "../../api/errors";
 
 const DAY_NAMES: Record<number, string> = { 1: "Mon", 2: "Tue", 3: "Wed", 4: "Thu", 5: "Fri" };
 
@@ -74,7 +75,7 @@ export default function DevelopmentPanel() {
         }
       },
       onError: (error: unknown) => {
-        const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+        const detail = errorDetail(error);
         toast.error(detail ?? "Production sync failed.");
       },
     });

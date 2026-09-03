@@ -19,10 +19,8 @@ import { workdayNumbers } from "../components/Clock";
 import type { BatchSummary } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { capacityColor } from "../utils/batchCapacity";
+import { capacityColor, resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-
-const DEFAULT_WEARER_CAP = 1800;
 
 function BatchCard({
   batch,
@@ -192,12 +190,9 @@ export default function Batches() {
   const [runDate, setRunDate] = useState(params.get("run_date") ?? todayIso());
   const { data, isLoading } = useBatchSummary(runDate);
   const { data: settings = [] } = useSettings();
-  const noCap = settings.some((s) => s.key === "batch_no_cap" && s.value === true);
+  const noCap = resolveNoCap(settings);
   const prebatchMode = settings.some((s) => s.key === "prebatch_mode" && s.value === true);
-  const wearerCap = (() => {
-    const v = Number(settings.find((s) => s.key === "wearer_cap")?.value);
-    return Number.isFinite(v) && v > 0 ? v : DEFAULT_WEARER_CAP;
-  })();
+  const wearerCap = resolveWearerCap(settings);
   const [truck, setTruck] = useState(params.get("truck") ?? "");
   const [selectedBatch, setSelectedBatch] = useState<number | null>(null);
 

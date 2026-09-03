@@ -4,6 +4,7 @@ import { useToast } from "../contexts/ToastContext";
 import { can } from "../utils/permissions";
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckWithState } from "../types";
+import { errorDetail } from "../api/errors";
 
 /**
  * The load crew's answer on the truck the dock is emptying — in one place.
@@ -45,7 +46,7 @@ export function useLoadRequest(runDate: string): LoadRequestActions {
     } catch (err) {
       // Never silent: this write is excluded from the offline queue on purpose,
       // so a dead connection surfaces here rather than faking a success.
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const detail = errorDetail(err);
       toast.error(detail ?? "Couldn't send that — the dock didn't hear you.");
     } finally {
       setBusy(null);

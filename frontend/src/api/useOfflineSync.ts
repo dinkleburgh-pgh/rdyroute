@@ -13,6 +13,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "./client";
 import * as offlineQueue from "./offlineQueue";
+import { errorStatus } from "../api/errors";
 
 export interface OfflineSyncState {
   isOnline: boolean;
@@ -64,9 +65,8 @@ export function useOfflineSync(opts: UseOfflineSyncOptions = {}): OfflineSyncSta
           anyFlushed = true;
         } catch (err: unknown) {
           // 4xx errors are permanent client errors — discard the item and continue
-          const status =
-            (err as { response?: { status?: number } })?.response?.status;
-          if (status !== undefined && status >= 400 && status < 500) {
+          const status = errorStatus(err);
+          if (status !== null && status >= 400 && status < 500) {
             console.warn("[offlineSync] discarding permanently-rejected item", item.id, status);
             await offlineQueue.remove(item.id);
             discarded += 1;

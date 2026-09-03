@@ -3,6 +3,7 @@ import CoverageTag from "./CoverageTag";
 import { getCoverageRouteNumber } from "../utils/truckStatus";
 import { STATUS_LABELS } from "../constants/truckStatus";
 import type { TruckWithState, TruckStatus } from "../types";
+import { STATUS_BG } from "../constants/truckStatus";
 
 /**
  * Coverage/swap badges for a FLEET card, shown from BOTH sides of a relationship
@@ -16,17 +17,6 @@ import type { TruckWithState, TruckStatus } from "../types";
  * direction is resolved via the reverse map (coveringTruckByRoute).
  */
 
-const STATUS_BG: Partial<Record<TruckStatus, string>> = {
-  dirty: "bg-red-600",
-  unloaded: "bg-green-600",
-  loaded: "bg-blue-600",
-  in_progress: "bg-amber-500",
-  off: "bg-slate-500",
-  oos: "bg-slate-600",
-  shop: "bg-purple-600",
-  spare: "bg-cyan-700",
-  unfinished: "bg-fuchsia-600",
-};
 
 /** The carrier's load status — the "getting loaded vs has been loaded" cue. */
 function LoadChip({ status }: { status?: TruckStatus | null }) {

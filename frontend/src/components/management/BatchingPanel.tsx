@@ -29,10 +29,10 @@ import WearerSheetStatus from "../batching/WearerSheetStatus";
 import { useAuth } from "../../contexts/AuthContext";
 import { can } from "../../utils/permissions";
 import type { TruckWithState } from "../../types";
+import { resolveNoCap, resolveWearerCap } from "../../utils/batchCapacity";
+import { errorDetail } from "../../api/errors";
 
 const BATCH_NUMBERS = [1, 2, 3, 4, 5, 6];
-const DEFAULT_WEARER_CAP = 1800;
-
 // Always graded against the configured cap, even when the cap is not enforced.
 function capacityText(total: number, _noCap: boolean, cap: number) {
   if (total >= cap * 0.95) return "text-red-400";
@@ -61,11 +61,8 @@ export default function BatchingPanel() {
   const assign = useAssignBatch();
   const removeFromBatch = useRemoveTruckFromBatch();
 
-  const noCap = settings.some((s) => s.key === "batch_no_cap" && s.value === true);
-  const wearerCap = (() => {
-    const v = Number(settings.find((s) => s.key === "wearer_cap")?.value);
-    return Number.isFinite(v) && v > 0 ? v : DEFAULT_WEARER_CAP;
-  })();
+  const noCap = resolveNoCap(settings);
+  const wearerCap = resolveWearerCap(settings);
 
   const [yr, mo, dy] = runDate.split("-").map(Number);
   const unloadsDay = unloadsOverride ?? workdayNumbers(new Date(yr, mo - 1, dy, 12)).unloadsDay;
@@ -120,7 +117,7 @@ export default function BatchingPanel() {
         wearers: Number(draftWearers(t)) || 0,
       });
     } catch (error: unknown) {
-      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const detail = errorDetail(error);
       toast.error(detail ?? `Could not assign truck ${t.truck_number}.`);
     } finally {
       setBusyTruck(null);

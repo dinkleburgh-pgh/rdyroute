@@ -55,6 +55,7 @@ import PageHeader from "../components/PageHeader";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, CalendarDays, Clock, FileText, MapPin, X } from "lucide-react";
 import { truckTypeLabel } from "../utils/truckType";
+import { errorDetail } from "../api/errors";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -472,8 +473,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       setPendingOffLoadRoute("");
       setPendingOffLoadError(null);
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setPendingOffLoadError(e?.response?.data?.detail ?? "Failed to set loaded status.");
+            setPendingOffLoadError(errorDetail(err) ?? "Failed to set loaded status.");
     }
   }
 
@@ -1890,8 +1890,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     setOffCoverageError(null);
                     setConfirmTruck(t);
                   } catch (err: unknown) {
-                    const e = err as { response?: { data?: { detail?: string } } };
-                    setOffCoverageError(e?.response?.data?.detail ?? "Failed to create coverage.");
+                                        setOffCoverageError(errorDetail(err) ?? "Failed to create coverage.");
                   }
                 }}
               >
@@ -1976,8 +1975,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     setSpareCoverageError(null);
                     setConfirmTruck(t);
                   } catch (err: unknown) {
-                    const e = err as { response?: { data?: { detail?: string } } };
-                    setSpareCoverageError(e?.response?.data?.detail ?? "Failed to assign coverage.");
+                                        setSpareCoverageError(errorDetail(err) ?? "Failed to assign coverage.");
                   }
                 }}
               >
@@ -2058,8 +2056,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       recordSwapHistory(route, cover);
                       setPrevCovRoute(""); setPrevCovTruck(""); setPrevCovError(null);
                     } catch (err: unknown) {
-                      const e = err as { response?: { data?: { detail?: string } } };
-                      setPrevCovError(e?.response?.data?.detail ?? "Failed to save coverage.");
+                                            setPrevCovError(errorDetail(err) ?? "Failed to save coverage.");
                     }
                   }}
                 >

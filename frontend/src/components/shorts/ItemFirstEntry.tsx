@@ -36,6 +36,7 @@ import HierarchyPicker, {
   useCategoryPalette,
 } from "./HierarchyPicker";
 import { truckTypeLabel } from "../../utils/truckType";
+import { errorDetail } from "../../api/errors";
 
 /**
  * Idle time before a batch posts itself.
@@ -328,7 +329,7 @@ export default function ItemFirstEntry({
       autoBlockedRef.current = true;
       setAutoFailed(true);
       setAutoArmed(false);
-      const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const detail = errorDetail(error);
       toast.error(typeof detail === "string" ? detail : `Could not log ${label}.`);
       return false;
     }

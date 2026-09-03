@@ -35,17 +35,19 @@ export default {
         "st-off":         "#64748b",
         "st-oos":         "#6b7a90",
         "st-spare":       "#06b6d4",
-        // Legacy status colors — keep for backward compat
+        // Same hexes as st-* above — bg-status-dirty and text-st-dirty MUST
+        // agree: the board showed two different reds for "Dirty" on one card.
+        // (Two class spellings survive for now; one palette feeds both.)
         status: {
-          dirty:      "#dc2626",
-          unfinished: "#c026d3",
-          shop:       "#7400ff",
+          dirty:      "#ef4444",
+          unfinished: "#d946ef",
+          shop:       "#8b5cf6",
           inprogress: "#f59e0b",
-          unloaded:   "#16a34a",
-          loaded:     "#2563eb",
-          off:        "#6b7280",
-          oos:        "#475569",
-          spare:      "#0e7490",
+          unloaded:   "#22c55e",
+          loaded:     "#3b82f6",
+          off:        "#64748b",
+          oos:        "#6b7a90",
+          spare:      "#06b6d4",
         },
       },
       fontFamily: {

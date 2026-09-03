@@ -30,6 +30,7 @@ import { useToast } from "../../contexts/ToastContext";
 import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
 import { effectiveStatus, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
+import { errorDetail } from "../../api/errors";
 
 export default function RunDayWizard({
   runDate,
@@ -203,8 +204,7 @@ export default function RunDayWizard({
       setSwapRoute("");
       setSwapLoadOn("");
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setSwapError(e?.response?.data?.detail ?? "Failed to save swap.");
+            setSwapError(errorDetail(err) ?? "Failed to save swap.");
     }
   }
 

@@ -14,6 +14,7 @@ import { workdayNumbers } from "./Clock";
 import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import { formatRunDate } from "../utils/dates";
 import type { TruckWithState, SpareAssignment, RecurringRouteSwap } from "../types";
+import { errorDetail } from "../api/errors";
 
 const DAY_ABBR = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
@@ -159,8 +160,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
       setXFrom("");
       setXTo("");
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setXError(e?.response?.data?.detail ?? "Couldn't save the crossload.");
+            setXError(errorDetail(err) ?? "Couldn't save the crossload.");
     } finally {
       setXBusy(false);
     }
@@ -369,8 +369,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
       setLoadOnTruck("");
       setSplitMode(false);
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setError(e?.response?.data?.detail ?? "Failed to save swap.");
+            setError(errorDetail(err) ?? "Failed to save swap.");
     }
   }
 
@@ -653,8 +652,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                                   xFromStatus,
                                 );
                               } catch (err: unknown) {
-                                const e = err as { response?: { data?: { detail?: string } } };
-                                setXError(e?.response?.data?.detail ?? "Couldn't move the route.");
+                                                                setXError(errorDetail(err) ?? "Couldn't move the route.");
                               } finally {
                                 setXBusy(false);
                               }

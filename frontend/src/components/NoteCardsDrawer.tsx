@@ -13,6 +13,7 @@ import { isScheduledOff, getCoverageRouteNumber, previousRunDate, buildPrevDayCo
 import { useAuth } from "../contexts/AuthContext";
 import type { TruckNote, TruckStatus } from "../types";
 import CoverageTag from "./CoverageTag";
+import { STATUS_TEXT } from "../constants/truckStatus";
 
 const NOTE_TYPE_COLOR: Record<string, string> = {
   constant: "bg-blue-900/60 text-blue-300 ring-1 ring-blue-700/40",
@@ -30,17 +31,6 @@ const NOTE_TYPE_LABEL: Record<string, string> = {
   one_off:  "One-off",
 };
 
-const STATUS_TEXT: Partial<Record<TruckStatus, string>> = {
-  dirty:       "text-status-dirty",
-  unfinished:  "text-status-unfinished",
-  shop:        "text-status-shop",
-  in_progress: "text-status-inprogress",
-  unloaded:    "text-status-unloaded",
-  loaded:      "text-status-loaded",
-  off:         "text-status-off",
-  oos:         "text-status-oos",
-  spare:       "text-white",
-};
 
 
 export default function NoteCardsDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {

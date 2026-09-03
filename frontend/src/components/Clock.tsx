@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { APP_TIMEZONE, easternNow } from "../utils/dates";
+import { APP_TIMEZONE, easternNow, shiftRunDate } from "../utils/dates";
 
 export interface ShiftInfo {
   name: "1st" | "2nd" | "3rd";
@@ -47,21 +47,10 @@ export function todayLong(): string {
   });
 }
 
-/**
- * Returns the operational run date: backs up to the previous calendar day if
- * before 6am (still in 3rd shift), and freezes the weekend to the preceding
- * Friday — the weekend is one continuous run period that only rolls over at
- * 6am Monday (1st shift). Mirrors the run_date logic in todayIso().
- */
-export function shiftRunDate(d = easternNow()): Date {
-  let r = d.getHours() < 6
-    ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1)
-    : new Date(d.getFullYear(), d.getMonth(), d.getDate());
-  const wd = r.getDay(); // 0=Sun .. 6=Sat
-  if (wd === 6) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 1);
-  else if (wd === 0) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 2);
-  return r;
-}
+// shiftRunDate now lives in utils/dates (the one rollover implementation);
+// re-exported for the existing call sites.
+export { shiftRunDate };
+
 
 /**
  * V1's ship_day_number: Mon=1..Fri=5, Sat/Sun→1.

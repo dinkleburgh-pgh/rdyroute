@@ -98,10 +98,6 @@ export default function App() {
   );
 }
 
-function _badgeTextColor(hex: string): string {
-  return badgeTextColor(hex);
-}
-
 const STATUS_CLASS_MAP: Record<string, string> = {
   dirty:       ".bg-status-dirty",
   shop:        ".bg-status-shop",
@@ -124,7 +120,7 @@ function StatusColorApplier() {
       .filter(([k]) => typeof colors[k] === "string" && /^#[0-9a-fA-F]{6}$/i.test(colors[k] as string))
       .map(([k, cls]) => {
         const hex = colors[k] as string;
-        return `${cls} { background-color: ${hex} !important; color: ${_badgeTextColor(hex)} !important; }`;
+        return `${cls} { background-color: ${hex} !important; color: ${badgeTextColor(hex)} !important; }`;
       })
       .join("\n");
     if (!rules) return;

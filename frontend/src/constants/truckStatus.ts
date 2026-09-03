@@ -24,8 +24,7 @@ export const STATUS_LABELS: Record<TruckStatus, string> = {
   spare: "Spare",
 };
 
-/** @deprecated Same as STATUS_LABELS now that "Loading" is the app-wide word. */
-export const STATUS_LABELS_RUNDAY: Record<TruckStatus, string> = STATUS_LABELS;
+
 
 export const STATUS_BG: Record<TruckStatus, string> = {
   dirty: "bg-status-dirty",
@@ -53,13 +52,13 @@ export const STATUS_TEXT: Record<TruckStatus, string> = {
 
 /** Raw hex values for each status (mirrors tailwind.config.js `status` palette). */
 export const STATUS_COLORS: Record<TruckStatus, string> = {
-  dirty: "#dc2626",
-  unfinished: "#c026d3",
-  shop: "#7400ff",
+  dirty: "#ef4444",
+  unfinished: "#d946ef",
+  shop: "#8b5cf6",
   in_progress: "#f59e0b",
-  unloaded: "#16a34a",
-  loaded: "#2563eb",
-  off: "#6b7280",
-  oos: "#475569",
-  spare: "#0e7490",
+  unloaded: "#22c55e",
+  loaded: "#3b82f6",
+  off: "#64748b",
+  oos: "#6b7a90",
+  spare: "#06b6d4",
 };

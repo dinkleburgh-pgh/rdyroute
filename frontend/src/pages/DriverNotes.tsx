@@ -25,6 +25,7 @@ import type { NoteType, TruckNote } from "../types";
 import { format } from "date-fns";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import { errorStatus } from "../api/errors";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -155,7 +156,7 @@ function AddNoteForm({ token, onClose }: { token: string; onClose: () => void })
       // queue. Before, this call resolved as a fake 202 and onClose() ran, so
       // the form closed as if the note had saved and it was replayed by
       // nothing. The typed body is left in the box on purpose.
-      const status = (e as { response?: { status?: number } })?.response?.status;
+      const status = errorStatus(e);
       setErr(
         status == null
           ? "Not sent — no signal. Your note is still here; try again when you have a bar."
@@ -364,7 +365,7 @@ function ArrivalBlock({ token }: { token: string }) {
       const r = await arrive.mutateAsync();
       setDone({ at: r.arrived_at, already: r.already });
     } catch (e) {
-      const s = (e as { response?: { status?: number } })?.response?.status;
+      const s = errorStatus(e);
       setErr(
         s == null
           ? "Not sent — no signal. Move somewhere with a bar and tap again."
@@ -429,7 +430,7 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
       setDone(r);
       setPicking(false);
     } catch (e) {
-      const s = (e as { response?: { status?: number } })?.response?.status;
+      const s = errorStatus(e);
       setErr(
         s == null
           ? "Not sent — no signal. Move somewhere with a bar and tap again."

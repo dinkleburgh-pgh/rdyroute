@@ -11,6 +11,7 @@ import { useUpsertSetting } from "../../api/hooks";
 import { asBool, FieldRow, SaveButton } from "./shared";
 import BatchingPanel from "./BatchingPanel";
 import BatchingQuickEntry from "./BatchingQuickEntry";
+import { DEFAULT_WEARER_CAP } from "../../utils/batchCapacity";
 
 export default function BatchingSettingsPanel({ map }: { map: Map<string, unknown> }) {
   const upsert = useUpsertSetting();
@@ -19,7 +20,7 @@ export default function BatchingSettingsPanel({ map }: { map: Map<string, unknow
       batching_disabled: asBool(map.get("batching_disabled"), false),
       prebatch_mode: asBool(map.get("prebatch_mode"), false),
       batch_no_cap: asBool(map.get("batch_no_cap"), false),
-      wearer_cap: Number(map.get("wearer_cap") ?? 1800),
+      wearer_cap: Number(map.get("wearer_cap") ?? DEFAULT_WEARER_CAP),
     }),
     [map],
   );

@@ -42,6 +42,7 @@ import {
 import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
 import { formatRunDate } from "../utils/dates";
 import TruckCard from "./runday/TruckCard";
+import { errorDetail } from "../api/errors";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
@@ -203,7 +204,7 @@ export default function RunDay() {
       });
       setAssignFor((p) => { const n = { ...p }; delete n[routeTruck]; return n; });
     } catch (err: unknown) {
-      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const detail = errorDetail(err);
       setAssignError(detail ?? `Could not assign #${coveringTruck} to route #${routeTruck}.`);
       setAssignFor((p) => { const n = { ...p }; delete n[routeTruck]; return n; });
     }

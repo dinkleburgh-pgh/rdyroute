@@ -95,3 +95,25 @@ export function monthsBehind(period?: string | null, now: Date = easternNow()): 
   if (!m) return null;
   return (now.getFullYear() * 12 + now.getMonth() + 1) - (Number(m[1]) * 12 + Number(m[2]));
 }
+
+/**
+ * The operational run date as a Date: backs up to the previous calendar day
+ * before 6am (still 3rd shift), and freezes Sat/Sun to the preceding Friday —
+ * the weekend is one continuous run period that rolls over at 6am Monday.
+ * THE one implementation: todayIso() and Clock's workdayNumbers() both
+ * delegate here (each used to carry its own copy of this algorithm).
+ */
+export function shiftRunDate(d = easternNow()): Date {
+  let r = d.getHours() < 6
+    ? new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1)
+    : new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  const wd = r.getDay(); // 0=Sun .. 6=Sat
+  if (wd === 6) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 1);
+  else if (wd === 0) r = new Date(r.getFullYear(), r.getMonth(), r.getDate() - 2);
+  return r;
+}
+
+/** Local YYYY-MM-DD of a Date (no timezone conversion). */
+export function isoDate(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}

@@ -15,6 +15,7 @@ import { STATUS_BADGE_TEXT, STATUS_BG, STATUS_LABELS, STATUS_TEXT, statusStampFi
 import CoverageTag from "../../components/CoverageTag";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import { truckTypeLabel } from "../../utils/truckType";
+import { errorDetail } from "../../api/errors";
 
 /** Uppercase micro-label that opens each block of the sheet. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -217,7 +218,7 @@ export default function FleetMobileActionSheet({
       clearClaim();
       onClose();
     } catch (e) {
-      const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+      const detail = errorDetail(e);
       setClaimErr(detail ?? "Couldn't record the coverage — try the coverage editor.");
     }
   }

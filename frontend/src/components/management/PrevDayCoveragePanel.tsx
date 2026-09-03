@@ -22,6 +22,7 @@ import {
 } from "../../api/hooks";
 import { todayIso } from "../../api/client";
 import { previousRunDate, recordSwapHistory } from "../../utils/truckStatus";
+import { errorDetail } from "../../api/errors";
 
 export default function PrevDayCoveragePanel() {
   const runDate = todayIso();
@@ -82,8 +83,7 @@ export default function PrevDayCoveragePanel() {
       setTruck("");
       setError(null);
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setError(e?.response?.data?.detail ?? "Failed to save coverage.");
+            setError(errorDetail(err) ?? "Failed to save coverage.");
     }
   }
 
