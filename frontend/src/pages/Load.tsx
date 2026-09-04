@@ -58,6 +58,7 @@ import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/Quie
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
 import CollapsibleCoverage from "../components/CollapsibleCoverage";
+import Modal from "../components/Modal";
 
 /**
  * Load workflow (V1 parity):
@@ -667,16 +668,8 @@ export default function Load() {
       </div>
             <LoadActionDialogs actions={actions} />
       {/* Next Up picker — same panel the In Progress page uses */}
-      {nextUpOpen && createPortal(
-        <div
-          className="fixed inset-0 z-[80] flex items-center justify-center bg-black/70 p-4"
-          onClick={() => setNextUpOpen(false)}
-        >
-          <div
-            className="flex w-full max-w-lg flex-col rounded-xl border border-hairline bg-surface shadow-card"
-            style={{ maxHeight: "90vh" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+      {nextUpOpen && (
+        <Modal open onClose={() => setNextUpOpen(false)} size="lg" panelClassName="border-hairline bg-surface" bodyClassName="flex max-h-[85svh] flex-col">
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
               <h3 className="text-base font-bold tracking-wide">Set Next Up</h3>
               <button
@@ -698,9 +691,7 @@ export default function Load() {
                 defaultOpen
               />
             </div>
-          </div>
-        </div>,
-        document.body,
+        </Modal>
       )}
     </motion.div>
     </>

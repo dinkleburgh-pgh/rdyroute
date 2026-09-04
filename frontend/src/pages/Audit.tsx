@@ -377,7 +377,7 @@ function HierarchyPicker({
                     type="button"
                     onClick={confirmLog}
                     disabled={isPending}
-                    className="flex-1 rounded-xl bg-emerald-600 px-4 py-3 text-base font-black text-white shadow hover:bg-emerald-500 active:scale-95 transition disabled:opacity-50"
+                    className="btn-primary flex-1 rounded-xl px-4 py-3 text-base font-bold active:scale-95"
                   >
                     Log
                   </button>

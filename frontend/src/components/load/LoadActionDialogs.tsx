@@ -1,6 +1,7 @@
 import { createPortal } from "react-dom";
 import ConfirmDialog from "../ConfirmDialog";
 import type { LoadActions } from "../../hooks/useLoadActions";
+import Modal from "../Modal";
 
 /**
  * The two confirmations that guard the load workflow — "Start loading?" and
@@ -27,14 +28,7 @@ export default function LoadActionDialogs({ actions }: { actions: LoadActions })
   return (
     <>
       {confirmLoadTruck && createPortal(
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setConfirmLoadTruck(null)}
-        >
-          <div
-            className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-xl border border-hairline bg-surface p-5 shadow-card"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => setConfirmLoadTruck(null)} size="sm">
             <h3 className="mb-1 font-mono text-base font-semibold tabular-nums">
               Start Loading Truck #{confirmLoadTruck.truck_number}?
             </h3>
@@ -61,8 +55,7 @@ export default function LoadActionDialogs({ actions }: { actions: LoadActions })
                 {busy === confirmLoadTruck.truck_number ? "Starting…" : "Start Loading"}
               </button>
             </div>
-          </div>
-        </div>,
+                  </Modal>,
         document.body,
       )}
       <ConfirmDialog

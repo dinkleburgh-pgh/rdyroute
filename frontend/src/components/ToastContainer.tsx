@@ -101,10 +101,10 @@ function CardToast({ t, dismiss }: { t: Toast; dismiss: (id: number) => void }) 
 export default function ToastContainer() {
   const { toasts, dismiss } = useToast();
 
-  if (toasts.length === 0) return null;
-
+  // Always mounted (even empty): an aria-live region created at announce time
+  // is routinely missed by screen readers.
   return (
-    <div className="pointer-events-none fixed right-4 z-[100] flex max-h-[70svh] w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 overflow-y-auto overscroll-contain bottom-[calc(3.75rem+env(safe-area-inset-bottom))] md:bottom-4">
+    <div aria-live="polite" className="pointer-events-none fixed right-4 z-[100] flex max-h-[70svh] w-80 max-w-[calc(100vw-2rem)] flex-col gap-2 overflow-y-auto overscroll-contain bottom-[calc(3.75rem+env(safe-area-inset-bottom))] md:bottom-4">
       <AnimatePresence>
         {toasts.map((t) => (
           <motion.div
@@ -120,7 +120,9 @@ export default function ToastContainer() {
             ) : (
               <div
                 className={clsx(
-                  "pointer-events-auto flex items-start gap-2 rounded-lg border border-slate-800 border-l-4 bg-slate-900 px-3 py-2.5 shadow-lg",
+                  // Same surface as the rich card toast — the corner used to
+                  // stack two different designs at runtime.
+                  "pointer-events-auto flex items-start gap-2 rounded-xl border border-hairline border-l-4 bg-surface px-3 py-2.5 shadow-xl",
                   VARIANT_STYLES[t.variant].border,
                 )}
               >
@@ -129,12 +131,12 @@ export default function ToastContainer() {
                   <button
                     type="button"
                     onClick={() => { t.onClick?.(); dismiss(t.id); }}
-                    className="flex-1 text-left text-sm text-slate-200 underline decoration-slate-600 underline-offset-2 transition-colors hover:text-white hover:decoration-slate-300"
+                    className="flex-1 text-left text-sm text-ink-soft underline decoration-slate-600 underline-offset-2 transition-colors hover:text-ink hover:decoration-slate-300"
                   >
                     {t.message}
                   </button>
                 ) : (
-                  <p className="flex-1 text-sm text-slate-200">{t.message}</p>
+                  <p className="flex-1 text-sm text-ink-soft">{t.message}</p>
                 )}
                 <button
                   onClick={() => dismiss(t.id)}

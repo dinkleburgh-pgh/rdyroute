@@ -11,6 +11,7 @@ import {
 import { COLOR_PRESETS, useCategoryPalette } from "../shorts/HierarchyPicker";
 import ConfirmDialog from "../ConfirmDialog";
 import { Plus, Trash2, Save, RotateCcw, Upload, Package, X, AlertTriangle, FolderInput } from "lucide-react";
+import EmptyState from "../EmptyState";
 
 const UNIT_PRESETS = ["Case", "Bag", "Bundle", "Roll", "Box", "Pack"];
 
@@ -584,7 +585,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
             <div className="flex flex-wrap gap-2 p-3">
               {catItems.length === 0 && (
-                <span className="text-xs italic text-slate-600">No items yet.</span>
+                <EmptyState compact className="inline-flex">No items yet.</EmptyState>
               )}
               {catItems.map((it) => {
                 const isEditing = editingLabel === it.label;

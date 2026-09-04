@@ -24,6 +24,7 @@ import { todayIso } from "../../api/client";
 import { useToast } from "../../contexts/ToastContext";
 import { truckTypeLabel } from "../../utils/truckType";
 import { FieldRow } from "./shared";
+import EmptyState from "../EmptyState";
 
 const loadOrderKey = (runDate: string) => `load_order_${runDate}`;
 
@@ -118,7 +119,7 @@ export default function LoadOrderPanel() {
       </FieldRow>
 
       {order.length === 0 ? (
-        <p className="text-xs italic text-slate-600">No trucks finished loading on {runDate}.</p>
+        <EmptyState compact>No trucks finished loading on {runDate}.</EmptyState>
       ) : (
         <>
           <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-slate-500">

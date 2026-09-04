@@ -257,20 +257,7 @@ export default function Communications() {
             value={text}
             onChange={(e) => setText(e.target.value)}
             onKeyDown={handleKeyDown}
-            style={{
-              flex: 1,
-              resize: "none",
-              maxHeight: "8rem",
-              overflowY: "auto",
-              background: "#1d2636",
-              border: "1px solid rgba(255,255,255,0.08)",
-              borderRadius: "12px",
-              fontSize: "14px",
-              color: "#cdd6e2",
-              padding: "10px 14px",
-              lineHeight: "1.5",
-              outline: "none",
-            }}
+            className={"max-h-32 flex-1 resize-none overflow-y-auto rounded-xl border border-hairline bg-track px-3.5 py-2.5 text-sm leading-relaxed text-ink-soft outline-none focus-visible:ring-2 focus-visible:ring-blue-400/40"}
             onInput={(e) => {
               const el = e.currentTarget;
               el.style.height = "auto";
@@ -280,19 +267,7 @@ export default function Communications() {
           <button
             type="submit"
             disabled={send.isPending || !text.trim()}
-            style={{
-              flexShrink: 0,
-              background: "linear-gradient(135deg,#3b82f6,#2563eb)",
-              color: "#fff",
-              borderRadius: "12px",
-              padding: "11px 22px",
-              fontSize: "14px",
-              fontWeight: 600,
-              border: "none",
-              cursor: send.isPending || !text.trim() ? "not-allowed" : "pointer",
-              opacity: send.isPending || !text.trim() ? 0.5 : 1,
-              transition: "opacity 0.15s",
-            }}
+            className={"btn-primary shrink-0 rounded-xl px-5 py-2.5"}
           >
             Send
           </button>

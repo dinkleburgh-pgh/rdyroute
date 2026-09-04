@@ -7,6 +7,7 @@ import { createPortal } from "react-dom";
 import type { TruckWithState } from "../../types";
 import { truckTypeLabel } from "../../utils/truckType";
 import { AlertTriangle } from "lucide-react";
+import Modal from "../../components/Modal";
 
 export default function StartLoadModal({
   truck,
@@ -25,15 +26,8 @@ export default function StartLoadModal({
 
   // Portal to <body> so transformed ancestors can't break viewport centering;
   // clamp to the visible height so the action row stays reachable.
-  return createPortal(
-    <div
-      className="fixed inset-0 z-40 flex items-end justify-center bg-black/60 p-4 sm:items-center"
-      onClick={onClose}
-    >
-      <div
-        className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-2xl border border-slate-700 bg-slate-900 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+  return (
+    <Modal open onClose={onClose} size="sm" sheet bodyClassName="">
         {/* Header stripe */}
         <div className={clsx(
           "px-6 py-5",
@@ -85,8 +79,6 @@ export default function StartLoadModal({
             )}
           </div>
         </div>
-      </div>
-    </div>,
-    document.body,
+    </Modal>
   );
 }

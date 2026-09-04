@@ -56,6 +56,7 @@ import { motion } from "framer-motion";
 import { ArrowLeftRight, CalendarDays, Clock, FileText, MapPin, X } from "lucide-react";
 import { truckTypeLabel } from "../utils/truckType";
 import { errorDetail } from "../api/errors";
+import Modal from "../components/Modal";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -1811,14 +1812,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       )}
 
       {offCoverageTruck && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => { setOffCoverageTruck(null); setOffCoverageLoadOn(""); setOffCoverageError(null); }}
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => { setOffCoverageTruck(null); setOffCoverageLoadOn(""); setOffCoverageError(null); }} size="md">
             <h3 className="mb-1 text-base font-semibold">
               Route #{offCoverageTruck.truck_number} is off tomorrow
             </h3>
@@ -1897,19 +1891,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 {createSwap.isPending ? "Saving…" : "Assign Coverage & Start Loading"}
               </button>
             </div>
-          </div>
-        </div>
+                  </Modal>
       )}
 
       {spareCoverageTruck && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => { setSpareCoverageTruck(null); setSpareCoverageRoute(""); setSpareCoverageError(null); }}
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => { setSpareCoverageTruck(null); setSpareCoverageRoute(""); setSpareCoverageError(null); }} size="md">
             <h3 className="mb-1 text-base font-semibold">
               Spare #{spareCoverageTruck.truck_number} — which route is it covering?
             </h3>
@@ -1982,19 +1968,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 {assignSpare.isPending ? "Saving…" : "Assign Route & Start Loading"}
               </button>
             </div>
-          </div>
-        </div>
+                  </Modal>
       )}
 
       {prevCovOpen && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => { setPrevCovOpen(false); setPrevCovRoute(""); setPrevCovTruck(""); setPrevCovError(null); }}
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => { setPrevCovOpen(false); setPrevCovRoute(""); setPrevCovTruck(""); setPrevCovError(null); }} size="md">
             <h3 className="mb-1 text-base font-semibold">Previous Day Coverage</h3>
             <p className="mb-4 text-sm text-slate-400">
               Record who covered a route on the previous run day
@@ -2112,19 +2090,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 Done
               </button>
             </div>
-          </div>
-        </div>
+                  </Modal>
       )}
 
       {pendingOosTruck && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setPendingOosTruck(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => setPendingOosTruck(null)} size="sm">
             <h3 className="mb-1 text-base font-semibold">Mark Truck #{pendingOosTruck.truck_number} as OOS?</h3>
             <p className="mb-4 text-sm text-slate-400">
               Out of Service means this truck is unavailable for today's run and needs coverage.
@@ -2161,23 +2131,11 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 Confirm OOS
               </button>
             </div>
-          </div>
-        </div>
+                  </Modal>
       )}
 
       {pendingOffLoadTruck && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => {
-            setPendingOffLoadTruck(null);
-            setPendingOffLoadRoute("");
-            setPendingOffLoadError(null);
-          }}
-        >
-          <div
-            className="w-full max-w-md rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => { setPendingOffLoadTruck(null); setPendingOffLoadRoute(""); setPendingOffLoadError(null); }} size="md">
             <h3 className="mb-1 text-base font-semibold">
               Truck #{pendingOffLoadTruck.truck_number} is off-schedule
             </h3>
@@ -2238,8 +2196,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 Save with Route
               </button>
             </div>
-          </div>
-        </div>
+                  </Modal>
       )}
 
       {mobileActionTruck && fleetMode && (() => {
@@ -2311,14 +2268,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         />
       )}
       {holdAlertTruck && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          onClick={() => setHoldAlertTruck(null)}
-        >
-          <div
-            className="w-full max-w-sm rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => setHoldAlertTruck(null)} size="sm">
             <div className="mb-3 flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-900/60 text-sm">&#x1f512;</span>
               <h3 className="text-base font-semibold">Truck #{holdAlertTruck.truck_number} is on Hold</h3>
@@ -2343,8 +2293,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 OK
               </button>
             </div>
-          </div>
-        </div>
+                  </Modal>
       )}
       </motion.div>
     </div>
@@ -2353,17 +2302,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
 function OffBoardScheduleDialog({ onClose }: { onClose: () => void }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      onClick={onClose}
-    >
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-label="Fleet Schedule"
-        className="w-full max-w-5xl rounded-xl border border-slate-700 bg-slate-900 p-4 shadow-2xl"
-        onClick={(event) => event.stopPropagation()}
-      >
+    <Modal open onClose={onClose} size="xl" bodyClassName="p-4">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
             <h3 className="text-lg font-semibold text-slate-100">Fleet Schedule</h3>
@@ -2384,7 +2323,6 @@ function OffBoardScheduleDialog({ onClose }: { onClose: () => void }) {
         <div className="max-h-[75vh] overflow-auto">
           <OffDaySchedulePanel />
         </div>
-      </div>
-    </div>
+          </Modal>
   );
 }

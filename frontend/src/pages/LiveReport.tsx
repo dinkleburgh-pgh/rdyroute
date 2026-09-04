@@ -52,6 +52,7 @@ import {
 } from "../api/hooks";
 import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
+import Modal from "../components/Modal";
 
 // Tailwind class → hex, so the PDF view-model can ship concrete colours that
 // match what capacityColor / durTone / the KPI tones paint on screen.
@@ -906,17 +907,7 @@ export default function LiveReport() {
 
   const imagesPicker = imagesOpen
     ? createPortal(
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
-          onClick={() => imgBusy === null && setImagesOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Download report images"
-            className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => imgBusy === null && setImagesOpen(false)} size="sm">
             <h3 className="text-base font-semibold text-slate-100">Download report images</h3>
             <p className="mt-1 text-sm text-slate-400">
               One PNG per section, at report-page size — the short sheet gives you both the
@@ -958,25 +949,14 @@ export default function LiveReport() {
                 {imgBusy ? "Generating…" : "Download images"}
               </button>
             </div>
-          </div>
-        </div>,
+                  </Modal>,
         document.body,
       )
     : null;
 
   const sectionPicker = pickerOpen
     ? createPortal(
-        <div
-          className="fixed inset-0 z-[90] flex items-center justify-center bg-black/60 p-4"
-          onClick={() => !pdfBusy && setPickerOpen(false)}
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-label="Choose report sections"
-            className="max-h-[90svh] w-full max-w-sm overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl"
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => !pdfBusy && setPickerOpen(false)} size="sm">
             <h3 className="text-base font-semibold text-slate-100">Download report PDF</h3>
             <p className="mt-1 text-sm text-slate-400">Choose which sections to include.</p>
             <div className="mt-4 space-y-0.5">
@@ -1009,8 +989,7 @@ export default function LiveReport() {
                 {pdfBusy ? "Generating…" : "Generate PDF"}
               </button>
             </div>
-          </div>
-        </div>,
+                  </Modal>,
         document.body,
       )
     : null;

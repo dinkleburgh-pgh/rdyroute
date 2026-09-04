@@ -15,6 +15,7 @@ import { effectiveStatus, isScheduledOff } from "../utils/truckStatus";
 import { formatRunDate } from "../utils/dates";
 import type { TruckWithState, SpareAssignment, RecurringRouteSwap } from "../types";
 import { errorDetail } from "../api/errors";
+import Modal from "./Modal";
 
 const DAY_ABBR = ["", "Mon", "Tue", "Wed", "Thu", "Fri"];
 
@@ -378,15 +379,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      onClick={onClose}
-    >
-      <div
-        className="flex w-full max-w-lg flex-col rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-        style={{ maxHeight: "90vh" }}
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal open onClose={onClose} size="lg" bodyClassName="flex max-h-[85svh] flex-col">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <div>
@@ -882,7 +875,6 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
             Done
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

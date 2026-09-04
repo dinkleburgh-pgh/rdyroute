@@ -43,6 +43,7 @@ import { workdayNumbers } from "./Clock";
 import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import { truckTypeLabel } from "../utils/truckType";
+import Modal from "./Modal";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
   const { data: board } = useBoard(runDate);
@@ -390,12 +391,7 @@ function InProgressView({
 
       {/* Next Up picker modal — unchanged */}
       {pickerOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setPickerOpen(false)}>
-          <div
-            className="flex w-full max-w-lg flex-col rounded-xl border border-hairline bg-surface shadow-card"
-            style={{ maxHeight: "90vh" }}
-            onClick={(e) => e.stopPropagation()}
-          >
+        <Modal open onClose={() => setPickerOpen(false)} size="lg" panelClassName="border-hairline bg-surface" bodyClassName="flex max-h-[85svh] flex-col">
             <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
               <h3 className="text-base font-bold tracking-wide">Set Next Up</h3>
               <button onClick={() => setPickerOpen(false)} className="rounded-md p-1 text-ink-muted hover:bg-surface-2 hover:text-ink">
@@ -407,8 +403,7 @@ function InProgressView({
             <div className="overflow-y-auto p-5">
               <NextUpPanel runDate={runDate} nextUp={nextUp} unloaded={unloaded} anyInProgress={true} onPick={() => setPickerOpen(false)} defaultOpen />
             </div>
-          </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

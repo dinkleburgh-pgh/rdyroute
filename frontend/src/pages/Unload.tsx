@@ -34,6 +34,7 @@ import { MapPin } from "lucide-react";
 import { format } from "date-fns";
 import clsx from "clsx";
 import { truckTypeLabel } from "../utils/truckType";
+import Modal from "../components/Modal";
 
 /**
  * Unload workflow (V1 parity):
@@ -1107,9 +1108,8 @@ export default function Unload() {
           const carrierOnly = carrierDone(t) && st !== "unloaded";
           const carrierNum = prevDayCarriers.get(t.truck_number)?.truck_number ?? null;
           const canUndo = st === "unloaded" && !carrierOnly;
-          return createPortal(
-            <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/60 p-4" onClick={close}>
-              <div className="max-h-[90svh] w-full max-w-sm space-y-4 overflow-y-auto rounded-lg border border-slate-700 bg-slate-900 p-5 shadow-xl" onClick={(e) => e.stopPropagation()}>
+          return (
+            <Modal open onClose={close} size="sm" bodyClassName="space-y-4 p-5">
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-xl font-semibold">Truck #{t.truck_number}</h3>
@@ -1269,9 +1269,7 @@ export default function Unload() {
                     )}
                   </>
                 )}
-              </div>
-            </div>,
-            document.body,
+            </Modal>
           );
         })()}
       </motion.div>

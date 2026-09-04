@@ -36,6 +36,7 @@ import { useToast } from "../../contexts/ToastContext";
 import OverbatchedChip from "../OverbatchedChip";
 import { FieldRow } from "./shared";
 import { errorDetail } from "../../api/errors";
+import EmptyState from "../EmptyState";
 
 const BATCH_NUMBERS = [1, 2, 3, 4, 5, 6];
 export default function BatchingQuickEntry() {
@@ -321,7 +322,7 @@ export default function BatchingQuickEntry() {
           In batch {batchNo} · {current?.trucks.length ?? 0} truck{(current?.trucks.length ?? 0) === 1 ? "" : "s"}
         </p>
         {(current?.trucks.length ?? 0) === 0 ? (
-          <p className="text-xs italic text-slate-600">Nothing yet.</p>
+          <EmptyState compact>Nothing yet.</EmptyState>
         ) : (
           <div className="flex flex-wrap gap-1.5">
             {current!.trucks.map((t) => (

@@ -31,6 +31,7 @@ import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
 import { effectiveStatus, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
 import { errorDetail } from "../../api/errors";
+import Modal from "../../components/Modal";
 
 export default function RunDayWizard({
   runDate,
@@ -301,11 +302,7 @@ export default function RunDayWizard({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div
-        className="w-full max-w-md rounded-xl border border-slate-700 bg-slate-900 shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
+    <Modal open onClose={onClose} size="md" bodyClassName="">
         <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
           <span className="text-sm font-bold uppercase tracking-wide text-slate-400">Setup Day</span>
           <span className="text-xs font-semibold text-blue-400">{STEP_TITLES[step]}</span>
@@ -791,7 +788,6 @@ export default function RunDayWizard({
             />
           ))}
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
