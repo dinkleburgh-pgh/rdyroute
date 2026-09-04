@@ -3,6 +3,7 @@ import { X } from "lucide-react";
 import { useAuth } from "../contexts/AuthContext";
 import { useDocuments, useRemoveDocumentLink, type DocumentItem } from "../api/hooks";
 import DocumentViewer from "./DocumentViewer";
+import ConfirmDialog from "./ConfirmDialog";
 
 // Documents feature is leads + admins only; don't even query for other roles.
 const LEADERSHIP = new Set(["admin", "fleet", "atl", "supervisor", "lead"]);
@@ -22,6 +23,7 @@ export default function TruckDocuments({ truckNumber }: { truckNumber: number })
     enabled: canSee,
   });
   const removeLink = useRemoveDocumentLink();
+  const [confirmUnlink, setConfirmUnlink] = useState<{ documentId: string; linkId: number } | null>(null);
   const [viewerDoc, setViewerDoc] = useState<DocumentItem | null>(null);
 
   if (!canSee || docs.length === 0) return null;
@@ -51,7 +53,7 @@ export default function TruckDocuments({ truckNumber }: { truckNumber: number })
                 <button
                   className="shrink-0 rounded p-0.5 text-slate-500 hover:text-red-400"
                   title="Unlink from this truck"
-                  onClick={() => removeLink.mutate({ documentId: d.id, linkId: link.id })}
+                  onClick={() => setConfirmUnlink({ documentId: d.id, linkId: link.id })}
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -62,6 +64,15 @@ export default function TruckDocuments({ truckNumber }: { truckNumber: number })
       </ul>
 
       <DocumentViewer doc={viewerDoc} onClose={() => setViewerDoc(null)} />
+      <ConfirmDialog
+        open={confirmUnlink != null}
+        title="Unlink this document from the truck?"
+        description="The document stays in the library."
+        confirmLabel="Unlink"
+        variant="danger"
+        onConfirm={() => { if (confirmUnlink) removeLink.mutate(confirmUnlink); setConfirmUnlink(null); }}
+        onCancel={() => setConfirmUnlink(null)}
+      />
     </div>
   );
 }

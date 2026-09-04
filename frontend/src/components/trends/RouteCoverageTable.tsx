@@ -83,7 +83,7 @@ export default function RouteCoverageTable({ data, isLoading, days }: Props) {
         <DataTable
           columns={columns}
           data={data}
-          searchPlaceholder="Search trucks or dates..."
+          searchPlaceholder="Search trucks or dates…"
           pageSize={20}
         />
       )}

@@ -43,6 +43,7 @@ import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday
 import { formatRunDate } from "../utils/dates";
 import TruckCard from "./runday/TruckCard";
 import { errorDetail } from "../api/errors";
+import PageStatus, { pageStatusFor } from "../components/PageStatus";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
@@ -60,7 +61,8 @@ function isLoadDone(s: TruckStatus) {
 
 export default function RunDay() {
   const runDate = todayIso();
-  const { data: board = [] } = useBoard(runDate);
+  const boardQuery = useBoard(runDate);
+  const { data: board = [] } = boardQuery;
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
   const { data: holidayUnload = false } = useHolidayUnload(runDate);
   const { data: allNotes = [] } = useTruckNotes({ activeOnly: true });
@@ -378,6 +380,10 @@ export default function RunDay() {
     }
     return s;
   }, [prevCoverage, boardByNum]);
+
+  // Loading / dead-connection gate — never render the fake empty day.
+  const pageGate = pageStatusFor(boardQuery);
+  if (pageGate) return <PageStatus {...pageGate} />;
 
   return (
     <>

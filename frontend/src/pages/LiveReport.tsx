@@ -53,6 +53,7 @@ import {
 import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
 import Modal from "../components/Modal";
+import PageStatus, { pageStatusFor } from "../components/PageStatus";
 
 // Tailwind class → hex, so the PDF view-model can ship concrete colours that
 // match what capacityColor / durTone / the KPI tones paint on screen.
@@ -202,7 +203,8 @@ export default function LiveReport() {
   }, [settings]);
 
   // Per-run-date data (all keyed by runDate; poll/WS keep them live).
-  const { data: board = [] } = useBoard(runDate);
+  const boardQuery = useBoard(runDate);
+  const { data: board = [] } = boardQuery;
   const { data: batches = [] } = useBatchSummary(runDate);
   const { data: shorts = [] } = useShortages(runDate);
   const { data: auditEntries = [] } = useAuditEntries(runDate);
@@ -1413,6 +1415,10 @@ export default function LiveReport() {
       </div>
     </div>
   );
+
+  // Loading / dead-connection gate — never render the fake empty day.
+  const pageGate = pageStatusFor(boardQuery);
+  if (pageGate) return <PageStatus {...pageGate} />;
 
   return (
     <>

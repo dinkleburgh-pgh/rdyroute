@@ -42,7 +42,7 @@ const DAY_NAMES: Record<number, string> = {
 const TYPE_LABEL: Record<NoteType, string> = {
   constant: "Always",
   workday:  "Workday",
-  one_off:  "Set Until...",
+  one_off:  "Set Until…",
 };
 
 const TYPE_COLOR: Record<NoteType, string> = {

@@ -59,6 +59,7 @@ import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
 import CollapsibleCoverage from "../components/CollapsibleCoverage";
 import Modal from "../components/Modal";
+import PageStatus, { pageStatusFor } from "../components/PageStatus";
 
 /**
  * Load workflow (V1 parity):
@@ -70,7 +71,8 @@ import Modal from "../components/Modal";
  */
 export default function Load() {
   const runDate = todayIso();
-  const { data } = useBoard(runDate);
+  const boardQuery = useBoard(runDate);
+  const { data } = boardQuery;
   const { data: pace } = usePaceAverage(30);
   // The URL is the source of truth for the display, so /load?display=1 is
   // bookmarkable and the device comes back up straight into it.
@@ -335,6 +337,10 @@ export default function Load() {
       </>
     );
   }
+
+  // Loading / dead-connection gate — never render the fake empty day.
+  const pageGate = pageStatusFor(boardQuery);
+  if (pageGate) return <PageStatus {...pageGate} />;
 
   return (
     <>

@@ -5,6 +5,7 @@ import { useAuth } from "../contexts/AuthContext";
 import PageHeader from "../components/PageHeader";
 
 import { format, parseISO } from "date-fns";
+import ConfirmDialog from "../components/ConfirmDialog";
 
 const CHANNELS = ["Team"];
 
@@ -72,6 +73,7 @@ export default function Communications() {
   const { data, isLoading } = useMessages(channel);
   const send = useSendMessage();
   const deleteMsg = useDeleteMessage();
+  const [confirmDeleteMsg, setConfirmDeleteMsg] = useState<string | null>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const [hoveredId, setHoveredId] = useState<string | null>(null);
   const isAdmin = ADMIN_ROLES.has(user?.role ?? "");
@@ -200,7 +202,7 @@ export default function Communications() {
                       </span>
                       {canDelete && hoveredId === m.id && (
                         <DeleteButton
-                          onClick={() => deleteMsg.mutate({ id: m.id, username: user!.username, role: user!.role })}
+                          onClick={() => setConfirmDeleteMsg(m.id)}
                         />
                       )}
                     </div>
@@ -228,7 +230,7 @@ export default function Communications() {
                     {/* Delete on hover for continuation messages (no metadata line) */}
                     {canDelete && isContinuation && hoveredId === m.id && (
                       <DeleteButton
-                        onClick={() => deleteMsg.mutate({ id: m.id, username: user!.username, role: user!.role })}
+                        onClick={() => setConfirmDeleteMsg(m.id)}
                       />
                     )}
                   </div>
@@ -267,6 +269,15 @@ export default function Communications() {
           Enter to send · Shift+Enter for new line
         </p>
       </div>
+      <ConfirmDialog
+        open={confirmDeleteMsg != null}
+        title="Delete this message?"
+        description="It shows as [deleted] for everyone in the channel."
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDeleteMsg != null) deleteMsg.mutate({ id: confirmDeleteMsg, username: user!.username, role: user!.role }); setConfirmDeleteMsg(null); }}
+        onCancel={() => setConfirmDeleteMsg(null)}
+      />
     </div>
   );
 }

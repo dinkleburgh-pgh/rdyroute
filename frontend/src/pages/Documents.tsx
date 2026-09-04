@@ -154,6 +154,7 @@ function DocCard({ doc, onOpen }: { doc: DocumentItem; onOpen: (d: DocumentItem)
   const del = useDeleteDocument();
   const addLink = useAddDocumentLink();
   const removeLink = useRemoveDocumentLink();
+  const [confirmUnlink, setConfirmUnlink] = useState<{ documentId: string; linkId: number } | null>(null);
   const [editing, setEditing] = useState(false);
   const [confirmDel, setConfirmDel] = useState(false);
   const [form, setForm] = useState({ title: doc.title, category: doc.category, tags: doc.tags.join(", ") });
@@ -215,7 +216,7 @@ function DocCard({ doc, onOpen }: { doc: DocumentItem; onOpen: (d: DocumentItem)
             {doc.links.map((lk) => (
               <span key={lk.id} className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">
                 {linkLabel(lk.target_type, lk.target_key)}
-                <button className="text-slate-500 hover:text-red-400" title="Unlink" onClick={() => removeLink.mutate({ documentId: doc.id, linkId: lk.id })}><X className="h-2.5 w-2.5" /></button>
+                <button className="text-slate-500 hover:text-red-400" title="Unlink" onClick={() => setConfirmUnlink({ documentId: doc.id, linkId: lk.id })}><X className="h-2.5 w-2.5" /></button>
               </span>
             ))}
           </div>
@@ -237,6 +238,15 @@ function DocCard({ doc, onOpen }: { doc: DocumentItem; onOpen: (d: DocumentItem)
         variant="danger"
         onConfirm={() => { del.mutate(doc.id); setConfirmDel(false); }}
         onCancel={() => setConfirmDel(false)}
+      />
+      <ConfirmDialog
+        open={confirmUnlink != null}
+        title="Unlink this document?"
+        description="The document stays in the library — only this link is removed."
+        confirmLabel="Unlink"
+        variant="danger"
+        onConfirm={() => { if (confirmUnlink) removeLink.mutate(confirmUnlink); setConfirmUnlink(null); }}
+        onCancel={() => setConfirmUnlink(null)}
       />
     </div>
   );

@@ -57,6 +57,7 @@ import { ArrowLeftRight, CalendarDays, Clock, FileText, MapPin, X } from "lucide
 import { truckTypeLabel } from "../utils/truckType";
 import { errorDetail } from "../api/errors";
 import Modal from "../components/Modal";
+import PageStatus from "../components/PageStatus";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -169,7 +170,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const isArchive = runDate < todayIso();
   const isFuture  = runDate > todayIso();
   const isReadOnly = runDate !== todayIso();
-  const { data, isLoading, error } = useBoard(runDate);
+  const { data, isLoading, error, refetch } = useBoard(runDate);
   // Fleet is the master view — all of today's coverage (spares + one-way/two-way
   // swaps + splits) AND the previous-day coverage, via the shared selector.
   const fleetCoverage = useCoverageForRole("fleet", runDate, data ?? []);

@@ -516,7 +516,7 @@ function ColumnDraftCard({
           }}
           className="btn-primary"
         >
-          {createPending ? "Adding..." : "Add missing item"}
+          {createPending ? "Adding…" : "Add missing item"}
         </button>
       </div>
 
@@ -861,7 +861,7 @@ export default function ShortageImportPanel({
           if (total && loaded >= total) {
             setUploadPhase("processing");
             setUploadPercent(100);
-            setUploadStatusText("Upload complete. Server is processing the sheet, extracting rows, and building the review queue...");
+            setUploadStatusText("Upload complete. Server is processing the sheet, extracting rows, and building the review queue…");
             return;
           }
           setUploadPhase("uploading");
@@ -1163,7 +1163,7 @@ export default function ShortageImportPanel({
               </div>
             )}
             <button type="button" disabled={uploadMutation.isPending || uploadFiles.length === 0} onClick={handleUpload} className="btn-primary">
-              {uploadPhase === "processing" ? "Processing..." : uploadMutation.isPending ? "Uploading..." : "Create import"}
+              {uploadPhase === "processing" ? "Processing…" : uploadMutation.isPending ? "Uploading…" : "Create import"}
             </button>
           </div>
 
@@ -1196,7 +1196,7 @@ export default function ShortageImportPanel({
                           disabled={exportingMemory}
                           onClick={handleDownloadOcrExport}
                         >
-                          {exportingMemory ? "Exporting..." : "Download training export"}
+                          {exportingMemory ? "Exporting…" : "Download training export"}
                         </button>
                         <button
                           type="button"
@@ -1204,7 +1204,7 @@ export default function ShortageImportPanel({
                           disabled={exportingDataset}
                           onClick={handleDownloadOcrDataset}
                         >
-                          {exportingDataset ? "Building dataset..." : "Download crop dataset ZIP"}
+                          {exportingDataset ? "Building dataset…" : "Download crop dataset ZIP"}
                         </button>
                       </div>
                     </div>
@@ -1236,7 +1236,7 @@ export default function ShortageImportPanel({
                           disabled={exportingHeaderMemory}
                           onClick={handleDownloadHeaderOcrExport}
                         >
-                          {exportingHeaderMemory ? "Exporting..." : "Download header export"}
+                          {exportingHeaderMemory ? "Exporting…" : "Download header export"}
                         </button>
                         <button
                           type="button"
@@ -1244,7 +1244,7 @@ export default function ShortageImportPanel({
                           disabled={exportingHeaderDataset}
                           onClick={handleDownloadHeaderOcrDataset}
                         >
-                          {exportingHeaderDataset ? "Building dataset..." : "Download header dataset ZIP"}
+                          {exportingHeaderDataset ? "Building dataset…" : "Download header dataset ZIP"}
                         </button>
                         <button
                           type="button"
@@ -1252,7 +1252,7 @@ export default function ShortageImportPanel({
                           disabled={clearingHeaderMemory}
                           onClick={handleClearHeaderMemory}
                         >
-                          {clearingHeaderMemory ? "Clearing..." : "Clear remembered headers"}
+                          {clearingHeaderMemory ? "Clearing…" : "Clear remembered headers"}
                         </button>
                       </div>
                     </div>
@@ -1279,7 +1279,7 @@ export default function ShortageImportPanel({
           <div className="card p-4">
             <div className="mb-3 flex items-center justify-between gap-2">
               <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Queue</p>
-              {importsQuery.isFetching && <span className="text-[11px] text-slate-500">Refreshing...</span>}
+              {importsQuery.isFetching && <span className="text-[11px] text-slate-500">Refreshing…</span>}
             </div>
             {importsQuery.isError ? (
               <div className="rounded-xl border border-red-900/60 bg-red-950/30 p-3 text-sm text-red-200">{parseError(importsQuery.error)}</div>
@@ -1336,13 +1336,13 @@ export default function ShortageImportPanel({
                   </div>
                   <div className="flex flex-wrap gap-2">
                     <button type="button" disabled={approveMutation.isPending || selectedImport.status === "approved" || selectedImport.status === "rejected"} onClick={handleApprove} className="btn-primary">
-                      {approveMutation.isPending ? "Applying..." : "Approve and import"}
+                      {approveMutation.isPending ? "Applying…" : "Approve and import"}
                     </button>
                     <button type="button" disabled={rejectMutation.isPending || selectedImport.status === "approved" || selectedImport.status === "rejected"} onClick={handleReject} className="btn-ghost">
                       Reject
                     </button>
                     <button type="button" disabled={deleteImportMutation.isPending} onClick={handleDeleteImport} className="btn-ghost">
-                      {deleteImportMutation.isPending ? "Deleting..." : "Delete import"}
+                      {deleteImportMutation.isPending ? "Deleting…" : "Delete import"}
                     </button>
                   </div>
                 </div>
@@ -1368,7 +1368,7 @@ export default function ShortageImportPanel({
 
               <div className="space-y-3">
                 {detailQuery.isLoading ? (
-                  <div className="card p-6 text-sm text-slate-500">Loading draft rows...</div>
+                  <div className="card p-6 text-sm text-slate-500">Loading draft rows…</div>
                 ) : selectedImport.rows.length === 0 && selectedImport.header_columns.length === 0 ? (
                   <div className="card p-6 text-sm text-slate-500">No draft rows yet. Use a column card below to add the missing items.</div>
                 ) : (

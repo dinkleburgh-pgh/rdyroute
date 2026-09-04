@@ -25,7 +25,7 @@ interface Props<T> {
 export default function DataTable<T extends object>({
   columns,
   data,
-  searchPlaceholder = "Search...",
+  searchPlaceholder = "Search…",
   searchColumn,
   pageSize = 20,
   compact = false,

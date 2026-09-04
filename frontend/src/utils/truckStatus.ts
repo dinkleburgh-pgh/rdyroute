@@ -680,7 +680,7 @@ export interface OperationalDayContext {
  * "Ready to load" grid or the progress bar.
  *
  * Deliberately derived, never stored: it is a fact about the schedule, not a
- * decision someone made, and storing it would put "Load crew asked..." in the
+ * decision someone made, and storing it would put "Load crew asked…" in the
  * activity log ~30 times a shift with no human behind it.
  */
 export interface LoadNeed {

@@ -763,7 +763,7 @@ export default function RunDayWizard({
               <textarea
                 className="input w-full resize-none text-sm"
                 rows={4}
-                placeholder="Enter any notes about today's run day..."
+                placeholder="Enter any notes about today's run day…"
                 value={notesText ?? dailyNotes}
                 onChange={(e) => setNotesText(e.target.value)}
               />

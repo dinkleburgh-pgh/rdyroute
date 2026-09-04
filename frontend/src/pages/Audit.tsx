@@ -483,6 +483,7 @@ function ItemLogger({
 }) {
   const create      = useCreateAuditEntry();
   const deleteEntry = useDeleteAuditEntry();
+  const [confirmDeleteEntry, setConfirmDeleteEntry] = useState<string | null>(null);
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
 
@@ -598,7 +599,7 @@ function ItemLogger({
                 className="input w-full"
                 value={note}
                 onChange={(e) => setNote(e.target.value)}
-                placeholder="Optional note..."
+                placeholder="Optional note…"
               />
             </label>
             <label className="text-sm">
@@ -658,7 +659,7 @@ function ItemLogger({
                   )}
                   <button
                     type="button"
-                    onClick={() => deleteEntry.mutate(e.id)}
+                    onClick={() => setConfirmDeleteEntry(e.id)}
                     className="shrink-0 rounded-lg bg-red-900/60 px-3 py-1.5 text-sm font-semibold text-red-300 hover:bg-red-800/60 transition"
                   >
                     Delete
@@ -669,6 +670,14 @@ function ItemLogger({
           </section>
         )}
       </div>
+      <ConfirmDialog
+        open={confirmDeleteEntry != null}
+        title="Delete this audit entry?"
+        confirmLabel="Delete"
+        variant="danger"
+        onConfirm={() => { if (confirmDeleteEntry != null) deleteEntry.mutate(confirmDeleteEntry); setConfirmDeleteEntry(null); }}
+        onCancel={() => setConfirmDeleteEntry(null)}
+      />
     </div>
   );
 }
@@ -843,7 +852,7 @@ function PhotosPanel({
         <button className="btn-primary" disabled={upload.isPending}>Upload</button>
       </form>
       {error && <p className="text-xs text-red-400">{error}</p>}
-      {isLoading && <p className="text-xs text-slate-500">Loading photos...</p>}
+      {isLoading && <p className="text-xs text-slate-500">Loading photos…</p>}
       {!isLoading && (photos ?? []).length === 0 && (
         <p className="text-xs text-slate-500">No photos for this day.</p>
       )}

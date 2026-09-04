@@ -35,6 +35,7 @@ import { format } from "date-fns";
 import clsx from "clsx";
 import { truckTypeLabel } from "../utils/truckType";
 import Modal from "../components/Modal";
+import PageStatus, { pageStatusFor } from "../components/PageStatus";
 
 /**
  * Unload workflow (V1 parity):
@@ -65,7 +66,8 @@ export default function Unload() {
   const loadDay = loadDayOverride ?? computedLoadDay;
   const { data: holidayUnload } = useHolidayUnload(runDate);
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
-  const { data } = useBoard(runDate);
+  const boardQuery = useBoard(runDate);
+  const { data } = boardQuery;
   const { data: batches } = useBatchSummary(runDate);
   const { data: settings } = useSettings();
   // Previous-day coverage: the loads being unloaded today were covered on the
@@ -827,6 +829,10 @@ export default function Unload() {
       <button type="button" onClick={() => setStylePref("list")} className={clsx("border-l border-hairline px-2.5 py-1 transition-colors", style === "list" ? "bg-accent text-white" : "bg-surface-2 text-ink-muted hover:bg-surface")}>List</button>
     </div>
   );
+
+  // Loading / dead-connection gate — never render the fake empty day.
+  const pageGate = pageStatusFor(boardQuery);
+  if (pageGate) return <PageStatus {...pageGate} />;
 
   return (
     <>

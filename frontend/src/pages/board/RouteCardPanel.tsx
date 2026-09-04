@@ -280,7 +280,7 @@ export default function RouteCardPanel({ data, runDate, startExpanded = false }:
                             disabled={selectedSpare === "" || assignSpare.isPending || createSwap.isPending}
                             onClick={handleAssign}
                           >
-                            {assignSpare.isPending || createSwap.isPending ? "Assigning..." : "Assign"}
+                            {assignSpare.isPending || createSwap.isPending ? "Assigning…" : "Assign"}
                           </button>
                         </div>
                       </motion.div>
