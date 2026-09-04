@@ -166,25 +166,25 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
             "inline-flex shrink-0 items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors",
             editing
               ? "border-amber-500/60 bg-amber-900/40 text-amber-300 hover:bg-amber-900/60"
-              : "border-slate-600 bg-slate-800 text-slate-300 hover:bg-slate-700",
+              : "border-hairline bg-surface-2 text-ink-soft hover:bg-track",
           )}
         >
           {editing ? <Lock className="h-3.5 w-3.5" /> : <Pencil className="h-3.5 w-3.5" />}
           {editing ? "Done — Lock" : "Edit Schedule"}
         </button>
       </div>
-      <div className="overflow-x-auto rounded-xl border border-slate-700 bg-slate-900/60">
+      <div className="overflow-x-auto rounded-xl border border-hairline bg-surface/60">
         <table className="w-full text-sm">
           <thead>
-            <tr className="bg-slate-800 text-left text-xs uppercase tracking-widest text-slate-400">
+            <tr className="bg-surface-2 text-left text-xs uppercase tracking-widest text-ink-muted">
               {showDriverCol && (
-                <th className="sticky left-0 z-10 hidden w-36 border border-slate-700/50 bg-slate-800 px-2 py-1.5 text-left sm:table-cell">
+                <th className="sticky left-0 z-10 hidden w-36 border border-hairline bg-surface-2 px-2 py-1.5 text-left sm:table-cell">
                   SSR
                 </th>
               )}
               <th
                 className={clsx(
-                  "sticky left-0 z-10 border border-slate-700/50 bg-slate-800 px-1 py-1.5 text-center",
+                  "sticky left-0 z-10 border border-hairline bg-surface-2 px-1 py-1.5 text-center",
                   showDriverCol && "sm:left-36",
                 )}
               >
@@ -194,7 +194,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                 <th
                   key={day}
                   className={clsx(
-                    "border border-slate-700/50 px-1 py-1 text-center transition-colors cursor-pointer select-none",
+                    "border border-hairline px-1 py-1 text-center transition-colors cursor-pointer select-none",
                     pinnedDay === day && "bg-blue-900/30",
                     isLoadDay(day) && "ring-2 ring-blue-500/40 animate-pulse",
                     isUnloadDay(day) && "ring-2 ring-emerald-500/40 animate-pulse",
@@ -204,8 +204,8 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                   onMouseLeave={() => setHoveredDay(null)}
                   onClick={() => togglePinDay(day)}
                 >
-                  <div className="font-semibold text-slate-300">Day {day}</div>
-                  <div className="text-[10px] font-normal text-slate-500">
+                  <div className="font-semibold text-ink-soft">Day {day}</div>
+                  <div className="text-[10px] font-normal text-ink-muted">
                     {DAY_LABELS[day - 1]}
                     {isLoadDay(day) && <span className="ml-1 text-blue-400">L</span>}
                     {isUnloadDay(day) && <span className="ml-1 text-emerald-400">U</span>}
@@ -217,7 +217,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
           <tbody>
             {rows.length === 0 ? (
               <tr>
-                <td colSpan={showDriverCol ? 7 : 6} className="border border-slate-700/50 px-1 py-10 text-center text-xs text-slate-500">
+                <td colSpan={showDriverCol ? 7 : 6} className="border border-hairline px-1 py-10 text-center text-xs text-ink-muted">
                   No active route trucks found.
                 </td>
               </tr>
@@ -225,13 +225,13 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
               rows.map((t, i) => (
                 <tr
                   key={t.truck_number}
-                  className={clsx("transition-colors", i % 2 === 1 && "bg-slate-800/20")}
+                  className={clsx("transition-colors", i % 2 === 1 && "bg-surface-2/20")}
                 >
                   {showDriverCol && (
                     <td
                       className={clsx(
-                        "sticky left-0 z-10 hidden w-36 truncate border border-slate-700/50 bg-slate-900 px-2 py-1.5 text-left text-xs text-slate-300 transition-colors sm:table-cell",
-                        activeRow === t.truck_number && "!bg-blue-900/40 text-slate-100",
+                        "sticky left-0 z-10 hidden w-36 truncate border border-hairline bg-surface px-2 py-1.5 text-left text-xs text-ink-soft transition-colors sm:table-cell",
+                        activeRow === t.truck_number && "!bg-blue-900/40 text-ink",
                       )}
                       onMouseEnter={() => setHoveredRow(t.truck_number)}
                       onMouseLeave={() => setHoveredRow(null)}
@@ -243,7 +243,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                     >
                       {editing ? (
                         <input
-                          className="w-full rounded border border-slate-700 bg-slate-800 px-1.5 py-0.5 text-xs text-slate-100 outline-none focus:border-blue-500"
+                          className="w-full rounded border border-hairline bg-surface-2 px-1.5 py-0.5 text-xs text-ink outline-none focus:border-blue-500"
                           value={driverDrafts[t.truck_number] ?? driverByRoute.get(t.truck_number) ?? ""}
                           placeholder="—"
                           maxLength={120}
@@ -265,13 +265,13 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                           }}
                         />
                       ) : (
-                        driverByRoute.get(t.truck_number) ?? <span className="text-slate-600">—</span>
+                        driverByRoute.get(t.truck_number) ?? <span className="text-ink-faint">—</span>
                       )}
                     </td>
                   )}
                   <td
                     className={clsx(
-                      "sticky left-0 z-10 border border-slate-700/50 bg-blue-900/30 px-1 py-1.5 text-center font-bold leading-5 text-slate-200 transition-colors cursor-pointer select-none",
+                      "sticky left-0 z-10 border border-hairline bg-blue-900/30 px-1 py-1.5 text-center font-bold leading-5 text-ink-soft transition-colors cursor-pointer select-none",
                       showDriverCol && "sm:left-36",
                       activeRow === t.truck_number && "!bg-blue-800/40",
                     )}
@@ -286,7 +286,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                     <span className="flex h-5 items-center justify-center gap-0.5 leading-5">
                       <span className="text-xl leading-5 tabular-nums">#{t.truck_number}</span>
                       {TYPE_SHORT[t.truck_type] && (
-                        <span className="text-[10px] font-semibold text-slate-400">
+                        <span className="text-[10px] font-semibold text-ink-muted">
                           {TYPE_SHORT[t.truck_type]}
                         </span>
                       )}
@@ -302,7 +302,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                         key={day}
                         onClick={() => toggleOffDay(t.truck_number, day, t.scheduled_off_days ?? [])}
                         className={clsx(
-                          "border border-slate-700/50 px-1 py-1 text-center font-mono text-xs font-semibold transition-all select-none",
+                          "border border-hairline px-1 py-1 text-center font-mono text-xs font-semibold transition-all select-none",
                           editing ? "cursor-pointer" : "cursor-default",
                           compact && !showInCompact(day) && "hidden md:table-cell",
                           isSaving
@@ -310,10 +310,10 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                             : off
                               ? clsx(
                                   highlight ? "bg-red-800/60 text-red-200" : "bg-red-900/50 text-red-300",
-                                  editing && "hover:bg-slate-700/60 hover:text-slate-300",
+                                  editing && "hover:bg-track/60 hover:text-ink-soft",
                                 )
                               : clsx(
-                                  highlight ? "bg-slate-700/70 text-slate-300" : "bg-slate-800/50 text-slate-500",
+                                  highlight ? "bg-track/70 text-ink-soft" : "bg-surface-2/50 text-ink-muted",
                                   editing && "hover:bg-red-900/40 hover:text-red-300/80",
                                 ),
                         )}
@@ -328,13 +328,13 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
           </tbody>
           {rows.length > 0 && (
             <tfoot>
-              <tr className="bg-slate-800/60 text-xs font-semibold uppercase tracking-wide text-slate-400">
+              <tr className="bg-surface-2/60 text-xs font-semibold uppercase tracking-wide text-ink-muted">
                 {showDriverCol && (
-                  <td className="sticky left-0 z-10 hidden w-36 border border-slate-700/50 bg-slate-800/80 px-2 py-1.5 sm:table-cell" />
+                  <td className="sticky left-0 z-10 hidden w-36 border border-hairline bg-surface-2/80 px-2 py-1.5 sm:table-cell" />
                 )}
                 <td
                   className={clsx(
-                    "sticky left-0 z-10 border border-slate-700/50 bg-slate-800/80 px-1 py-1.5 text-center text-[10px] text-slate-500",
+                    "sticky left-0 z-10 border border-hairline bg-surface-2/80 px-1 py-1.5 text-center text-[10px] text-ink-muted",
                     showDriverCol && "sm:left-36",
                   )}
                 >
@@ -346,13 +346,13 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
                     <td
                       key={day}
                       className={clsx(
-                        "border border-slate-700/50 px-1 py-1.5 text-center font-mono tabular-nums transition-colors",
+                        "border border-hairline px-1 py-1.5 text-center font-mono tabular-nums transition-colors",
                         compact && !showInCompact(day) && "hidden md:table-cell",
                         isLoadDay(day)
                           ? "bg-blue-900/30 text-blue-300"
                           : isUnloadDay(day)
                           ? "bg-emerald-900/30 text-emerald-300"
-                          : "text-slate-300",
+                          : "text-ink-soft",
                       )}
                     >
                       {count}
@@ -364,7 +364,7 @@ export default function OffDaySchedulePanel({ compact }: { compact?: boolean }) 
           )}
         </table>
         {rows.length > 0 && (
-          <div className="border-t border-slate-800 px-3 py-1.5 text-[10px] text-slate-500">
+          <div className="border-t border-hairline px-3 py-1.5 text-[10px] text-ink-muted">
             <span className="text-blue-400">{runningToday}</span> running <span className="text-blue-400">Day {loadDay}{holidayLoad ? `+${loadNextDay}` : ""}</span> · <span className="text-emerald-400">{rows.filter((t) => !isScheduledOff(t, unloadsDay)).length}</span> unloading <span className="text-emerald-400">Day {unloadsDay}{holidayUnload ? `+${unloadPrevDay}` : ""}</span> · {rows.length} total route trucks
           </div>
         )}

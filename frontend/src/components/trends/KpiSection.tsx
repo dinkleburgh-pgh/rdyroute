@@ -49,9 +49,9 @@ export default function KpiSection({ summary, isLoading, swapCount, days }: Prop
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
         {Array.from({ length: 6 }).map((_, i) => (
           <div key={i} className="card animate-pulse">
-            <div className="mb-2 h-3 w-16 rounded bg-slate-800" />
-            <div className="mb-1 h-7 w-20 rounded bg-slate-800" />
-            <div className="h-3 w-12 rounded bg-slate-800" />
+            <div className="mb-2 h-3 w-16 rounded bg-surface-2" />
+            <div className="mb-1 h-7 w-20 rounded bg-surface-2" />
+            <div className="h-3 w-12 rounded bg-surface-2" />
           </div>
         ))}
       </div>

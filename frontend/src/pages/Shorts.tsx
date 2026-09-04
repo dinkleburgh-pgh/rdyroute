@@ -72,7 +72,7 @@ function TruckPicker({
   const runningLogged = running.filter((t) => shortsByTruck.has(t.truck_number)).length;
 
   if (running.length === 0 && withShorts.length === 0) {
-    return <p className="p-6 text-sm text-slate-500">No routes running for this date.</p>;
+    return <p className="p-6 text-sm text-ink-muted">No routes running for this date.</p>;
   }
 
   return (
@@ -90,7 +90,7 @@ function TruckPicker({
       {withoutShorts.length > 0 && (
         <section className="flex flex-col gap-2">
           {withShorts.length > 0 && (
-            <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Routes</h3>
+            <h3 className="text-xs font-bold uppercase tracking-widest text-ink-muted">Routes</h3>
           )}
           <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-3">
             {withoutShorts.map((t, i) => (
@@ -98,7 +98,7 @@ function TruckPicker({
                 key={t.truck_number}
                 type="button"
                 onClick={() => onSelect(t)}
-                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-slate-700 text-white shadow hover:bg-slate-600 hover:shadow-lg"
+                className="flex aspect-square flex-col items-center justify-center rounded-xl bg-track text-white shadow hover:bg-track hover:shadow-lg"
                 initial={{ opacity: 0, scale: 0.9 }}
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ type: "spring", stiffness: 400, damping: 30, delay: i * 0.02 }}
@@ -106,7 +106,7 @@ function TruckPicker({
                 whileTap={{ scale: 0.93 }}
               >
                 <span className="text-2xl font-black leading-none">{t.truck_number}</span>
-                <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
+                <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-muted">
                   {truckTypeLabel(t.truck_type)}
                 </span>
               </motion.button>
@@ -118,7 +118,7 @@ function TruckPicker({
       {/* Routes with shortages logged */}
       {withShorts.length > 0 && (
         <section className="space-y-2">
-          <h3 className="text-xs font-bold uppercase tracking-widest text-slate-500">Logged</h3>
+          <h3 className="text-xs font-bold uppercase tracking-widest text-ink-muted">Logged</h3>
           <div className="grid gap-2 sm:grid-cols-6 md:grid-cols-9 lg:grid-cols-12 grid-cols-3">
             {withShorts.map((t, i) => {
               const count = shortsByTruck.get(t.truck_number)?.length ?? 0;
@@ -175,18 +175,18 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
 
   return (
     <section className="space-y-2">
-      <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Logged this session</h4>
+      <h4 className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Logged this session</h4>
       <div className="flex flex-wrap gap-2">
         {[...shorts].reverse().map((s) => {
           const label = s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category;
           if (editId === s.id) {
             return (
               <AnimateCard key={s.id} className="flex items-center gap-2 rounded-xl border border-amber-700/60 bg-amber-950/40 px-3 py-2">
-                <span className="text-xs font-semibold text-slate-200">
+                <span className="text-xs font-semibold text-ink-soft">
                   {label}
                   {(() => {
                     const unit = findTrackedItem(items, s.item_category, s.item_detail)?.unit_label;
-                    return unit ? <span className="ml-1 font-normal text-slate-500">({unit}s)</span> : null;
+                    return unit ? <span className="ml-1 font-normal text-ink-muted">({unit}s)</span> : null;
                   })()}
                 </span>
                 <input
@@ -210,7 +210,7 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
                 <button
                   type="button"
                   onClick={() => setEditId(null)}
-                  className="rounded-lg bg-slate-700 px-2.5 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-600 transition"
+                  className="rounded-lg bg-track px-2.5 py-1 text-xs font-semibold text-ink-soft hover:bg-track transition"
                 >
                   ✕
                 </button>
@@ -218,8 +218,8 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
               );
             }
             return (
-              <AnimateCard key={s.id} className="flex flex-wrap items-center gap-2 rounded-2xl border border-slate-700 bg-slate-800/60 px-4 py-3 w-full sm:w-auto">
-              <span className="flex-1 min-w-0 text-sm font-semibold text-slate-200">{label}</span>
+              <AnimateCard key={s.id} className="flex flex-wrap items-center gap-2 rounded-2xl border border-hairline bg-surface-2/60 px-4 py-3 w-full sm:w-auto">
+              <span className="flex-1 min-w-0 text-sm font-semibold text-ink-soft">{label}</span>
               <span className="shrink-0 text-xl font-black text-white">
                 ×{qtyWithUnit(items, s.item_category, s.item_detail, s.quantity)}
               </span>
@@ -227,7 +227,7 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
                 <button
                   type="button"
                   onClick={() => startEdit(s)}
-                  className="rounded-lg bg-slate-700 px-3 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-600 transition"
+                  className="rounded-lg bg-track px-3 py-1.5 text-sm font-semibold text-ink-soft hover:bg-track transition"
                 >
                   Edit
                 </button>
@@ -311,7 +311,7 @@ export function ShortageLogger({
     return (
       <div className="space-y-5">
         <div className="flex items-center gap-2">
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-400">Shortages</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-muted">Shortages</h3>
           {shorts.length > 0 && (
             <span className="rounded-full bg-amber-900/70 px-2.5 py-0.5 text-xs font-semibold text-amber-300">
               {shorts.length} logged
@@ -320,7 +320,7 @@ export function ShortageLogger({
         </div>
         {recentItems && recentItems.length > 0 && (
           <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Shorted</p>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Recently Shorted</p>
             {/* Wraps rather than scrolls: a horizontal scroller on a phone hid
                 half the chips behind a swipe, and the ones off-screen were the
                 whole point of the row. */}
@@ -350,11 +350,11 @@ export function ShortageLogger({
   return (
     <div className="flex min-h-0 flex-col">
        {/* Sticky header */}
-      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-slate-800 bg-slate-950/95 px-3 py-3 backdrop-blur-sm md:px-6">
+      <div className="sticky top-0 z-10 flex items-center gap-3 border-b border-hairline bg-surface-3/95 px-3 py-3 backdrop-blur-sm md:px-6">
         <button
           type="button"
           onClick={onBack}
-          className="flex items-center gap-1.5 rounded-lg bg-slate-800 px-4 py-2 text-sm font-semibold text-slate-300 hover:bg-slate-700 hover:text-slate-100 transition"
+          className="flex items-center gap-1.5 rounded-lg bg-surface-2 px-4 py-2 text-sm font-semibold text-ink-soft hover:bg-track hover:text-ink transition"
         >
           ← Back
         </button>
@@ -375,7 +375,7 @@ export function ShortageLogger({
         {/* Recently shorted items quick-list */}
         {recentItems && recentItems.length > 0 && (
           <div>
-            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Recently Shorted</p>
+            <p className="mb-1 text-[10px] font-semibold uppercase tracking-wide text-ink-muted">Recently Shorted</p>
             {/* Wraps rather than scrolls: a horizontal scroller on a phone hid
                 half the chips behind a swipe, and the ones off-screen were the
                 whole point of the row. */}
@@ -534,7 +534,7 @@ export function ShortsWorkspace() {
             {/* One sizing rule for all four, so the selected tab isn't the only
                 one that looks like a button. Equal min-width keeps "Sheet" the
                 same size as "Import sheets". */}
-            <div className="flex gap-1 rounded-lg border border-slate-800 bg-slate-900/70 p-1">
+            <div className="flex gap-1 rounded-lg border border-hairline bg-surface/70 p-1">
               {VIEW_MODES.map((m) => (
                 <button
                   key={m.id}
@@ -548,7 +548,7 @@ export function ShortsWorkspace() {
                     "w-32 shrink-0 whitespace-nowrap rounded-md border px-2 py-1.5 text-center text-sm font-medium transition",
                     viewMode === m.id
                       ? "border-blue-500 bg-blue-600 text-white"
-                      : "border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-500 hover:text-slate-100",
+                      : "border-hairline bg-surface-2/60 text-ink-soft hover:border-slate-500 hover:text-ink",
                   )}
                 >
                   {m.label}
@@ -561,7 +561,7 @@ export function ShortsWorkspace() {
 
       {/* Mobile: the date + mode toggle above live in PageHeader's actions, which
           are hidden below md — surface them here so every entry option is reachable. */}
-      <div className="flex flex-col gap-2 border-b border-hairline bg-slate-950/40 p-3 md:hidden">
+      <div className="flex flex-col gap-2 border-b border-hairline bg-surface-3/40 p-3 md:hidden">
         <select
           className="input w-full py-1.5 text-sm"
           value={runDate}
@@ -572,7 +572,7 @@ export function ShortsWorkspace() {
             <option key={d} value={d}>{d}</option>
           ))}
         </select>
-        <div className="grid grid-cols-2 gap-1 rounded-lg border border-slate-800 bg-slate-900/70 p-1">
+        <div className="grid grid-cols-2 gap-1 rounded-lg border border-hairline bg-surface/70 p-1">
           {VIEW_MODES.map((m) => (
             <button
               key={m.id}
@@ -582,7 +582,7 @@ export function ShortsWorkspace() {
                 "rounded-md border px-3 py-2 text-center text-sm font-medium transition",
                 viewMode === m.id
                   ? "border-blue-500 bg-blue-600 text-white"
-                  : "border-slate-700 bg-slate-800/60 text-slate-300 hover:border-slate-500 hover:text-slate-100",
+                  : "border-hairline bg-surface-2/60 text-ink-soft hover:border-slate-500 hover:text-ink",
               )}
             >
               {m.label}

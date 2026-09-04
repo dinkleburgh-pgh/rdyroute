@@ -29,7 +29,7 @@ export default function KpiCard({ label, value, change, direction, higherIsBette
   const rising = (change ?? 0) > 0;
   const changeColor =
     change == null || change === 0
-      ? "text-slate-400"
+      ? "text-ink-muted"
       : (higherIsBetter ? rising : !rising)
         ? "text-emerald-400"
         : "text-red-400";
@@ -41,14 +41,14 @@ export default function KpiCard({ label, value, change, direction, higherIsBette
       whileHover={{ scale: 1.02 }}
       className="card group relative flex flex-col gap-2 transition-shadow hover:shadow-lg hover:shadow-blue-900/10">
       <div className="flex items-start justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-slate-400">
+        <span className="text-xs font-medium uppercase tracking-wider text-ink-muted">
           {label}
         </span>
-        {icon && <span className="text-slate-500">{icon}</span>}
+        {icon && <span className="text-ink-muted">{icon}</span>}
       </div>
 
       <div className="flex min-w-0 flex-col gap-0.5">
-        <span className="truncate text-2xl font-bold tabular-nums text-slate-100">{value}</span>
+        <span className="truncate text-2xl font-bold tabular-nums text-ink">{value}</span>
         {change != null && (
           <span className={"flex items-center gap-0.5 text-xs font-semibold tabular-nums " + changeColor}>
             {arrow === "up" && <ArrowUp className="h-3 w-3" strokeWidth={2.5} />}

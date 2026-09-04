@@ -131,7 +131,7 @@ export default function ToastContainer() {
                   <button
                     type="button"
                     onClick={() => { t.onClick?.(); dismiss(t.id); }}
-                    className="flex-1 text-left text-sm text-ink-soft underline decoration-slate-600 underline-offset-2 transition-colors hover:text-ink hover:decoration-slate-300"
+                    className="flex-1 text-left text-sm text-ink-soft underline decoration-ink-faint underline-offset-2 transition-colors hover:text-ink hover:decoration-ink-soft"
                   >
                     {t.message}
                   </button>
@@ -140,7 +140,7 @@ export default function ToastContainer() {
                 )}
                 <button
                   onClick={() => dismiss(t.id)}
-                  className="shrink-0 text-slate-500 transition-colors hover:text-slate-300"
+                  className="shrink-0 text-ink-muted transition-colors hover:text-ink-soft"
                   aria-label="Dismiss"
                 >
                   <XIcon className="h-3.5 w-3.5" />

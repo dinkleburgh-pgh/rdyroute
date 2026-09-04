@@ -20,7 +20,7 @@ import type { TruckWithState } from "../../types";
  */
 /** The alternative action — same weight in both states of the strip. */
 const ACTION_BTN =
-  "min-h-[44px] rounded-lg border border-slate-600 bg-surface-2 px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface disabled:opacity-50";
+  "min-h-[44px] rounded-lg border border-hairline bg-surface-2 px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface disabled:opacity-50";
 /**
  * Backing out is the one answer that takes work off the dock's plan, so it
  * carries the app's red. Pulling forward keeps the neutral treatment — it
@@ -99,7 +99,7 @@ export default function NowUnloadingStrip({
                     "inline-flex min-h-[32px] w-full items-center justify-center gap-1 sm:w-auto sm:flex-1 sm:justify-start",
                     need.needed
                       ? "bg-emerald-600/15 text-emerald-300 ring-1 ring-emerald-600/40"
-                      : "bg-slate-600/25 text-slate-200 ring-1 ring-slate-500/40",
+                      : "bg-track/25 text-ink-soft ring-1 ring-slate-500/40",
                   )}
                 >
                   {need.needed ? "Pull it forward" : "Back it out"}
@@ -138,7 +138,7 @@ export default function NowUnloadingStrip({
                     "inline-flex min-h-[32px] w-full items-center justify-center gap-1 sm:w-auto sm:flex-1 sm:justify-start",
                     req === "want"
                       ? "bg-emerald-600/20 text-emerald-300 ring-1 ring-emerald-600/40"
-                      : "bg-slate-600/30 text-slate-200 ring-1 ring-slate-500/40",
+                      : "bg-track/30 text-ink-soft ring-1 ring-slate-500/40",
                   )}
                 >
                   {req === "want" ? "Asked to pull forward" : "Asked to back out"}

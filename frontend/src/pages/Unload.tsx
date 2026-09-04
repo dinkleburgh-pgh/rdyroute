@@ -1113,7 +1113,7 @@ export default function Unload() {
                 <div className="flex items-start justify-between">
                   <div>
                     <h3 className="text-xl font-semibold">Truck #{t.truck_number}</h3>
-                    <p className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
+                    <p className="mt-0.5 flex items-center gap-2 text-xs text-ink-muted">
                       {truckTypeLabel(t.truck_type)}
                       {isUnfin ? " · Unfinished" : ""}
                       {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
@@ -1133,11 +1133,11 @@ export default function Unload() {
                 {done ? (
                   <>
                     {canUndo ? (
-                      <button className="w-full rounded-lg border border-slate-600 bg-slate-800 py-3.5 text-sm font-semibold text-slate-200 transition-colors hover:bg-slate-700 disabled:opacity-50" disabled={isBusy} onClick={async () => { await undoUnload(t.truck_number); close(); }}>
+                      <button className="w-full rounded-lg border border-hairline bg-surface-2 py-3.5 text-sm font-semibold text-ink-soft transition-colors hover:bg-track disabled:opacity-50" disabled={isBusy} onClick={async () => { await undoUnload(t.truck_number); close(); }}>
                         {isBusy ? "…" : "Undo — back to Dirty"}
                       </button>
                     ) : (
-                      <p className="rounded-lg border border-slate-700 bg-slate-800/60 px-3 py-3 text-sm leading-snug text-slate-300">
+                      <p className="rounded-lg border border-hairline bg-surface-2/60 px-3 py-3 text-sm leading-snug text-ink-soft">
                         {carrierOnly
                           ? carrierNum != null
                             ? `Unloaded on truck #${carrierNum}, which carried this route. Undo it there.`
@@ -1160,7 +1160,7 @@ export default function Unload() {
                         </p>
                         <div className="grid grid-cols-6 gap-1.5">
                           {[1, 2, 3, 4, 5, 6].map((n) => (
-                            <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"}>{n}</button>
+                            <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-track py-2 text-center text-base font-bold text-ink-soft hover:bg-track"}>{n}</button>
                           ))}
                         </div>
                         <input type="number" min={0} className="input mt-2" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />
@@ -1209,7 +1209,7 @@ export default function Unload() {
                           "rounded-lg border px-3 py-2.5 text-xs leading-snug",
                           need.needed
                             ? "border-cyan-700/30 bg-cyan-950/20 text-cyan-300/90"
-                            : "border-slate-600/40 bg-slate-800/40 text-slate-300",
+                            : "border-hairline bg-surface-2/40 text-ink-soft",
                         )}>
                           <span className="font-semibold">
                             {need.needed ? "Loads tomorrow" : "Not loading tomorrow"}
@@ -1238,11 +1238,11 @@ export default function Unload() {
                     {/* The escape hatch: a truck that cannot be finished
                         tonight leaves the flow here instead of via batching. */}
                     {isUnfin ? (
-                      <button className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-slate-300 transition-colors hover:bg-slate-700" onClick={() => { upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); close(); }}>
+                      <button className="w-full rounded-lg border border-hairline bg-surface-2/60 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-track" onClick={() => { upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); close(); }}>
                         Back to Dirty
                       </button>
                     ) : (
-                      <button className="w-full rounded-lg border border-slate-700 bg-slate-800/60 py-2.5 text-sm font-medium text-st-unfinished transition-colors hover:bg-slate-700 disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnfinished(t); close(); }}>
+                      <button className="w-full rounded-lg border border-hairline bg-surface-2/60 py-2.5 text-sm font-medium text-st-unfinished transition-colors hover:bg-track disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnfinished(t); close(); }}>
                         Mark Unfinished
                       </button>
                     )}
@@ -1258,7 +1258,7 @@ export default function Unload() {
                         </p>
                         <div className="grid grid-cols-6 gap-1.5">
                           {[1, 2, 3, 4, 5, 6].map((n) => (
-                            <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-slate-700 py-2 text-center text-base font-bold text-slate-300 hover:bg-slate-600"}>{n}</button>
+                            <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-track py-2 text-center text-base font-bold text-ink-soft hover:bg-track"}>{n}</button>
                           ))}
                         </div>
                         <input type="number" min={0} className="input mt-2" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />

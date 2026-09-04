@@ -20,7 +20,7 @@ import { errorDetail } from "../../api/errors";
 /** Uppercase micro-label that opens each block of the sheet. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-slate-500">{children}</p>
+    <p className="mb-2.5 text-[11px] font-bold uppercase tracking-[0.14em] text-ink-muted">{children}</p>
   );
 }
 
@@ -45,19 +45,19 @@ function FlagRow({
       aria-checked={on}
       disabled={disabled}
       onClick={onToggle}
-      className="flex w-full items-center gap-3 rounded-xl border border-slate-700/60 bg-slate-800/40 px-4 py-3 text-left transition-colors hover:bg-slate-800 disabled:opacity-50"
+      className="flex w-full items-center gap-3 rounded-xl border border-hairline bg-surface-2/40 px-4 py-3 text-left transition-colors hover:bg-surface-2 disabled:opacity-50"
     >
       {/* Label over hint, and the hint WRAPS. On one line the hint truncated
           mid-word on every phone ("Keep on dock after u…"), which read as a
           rendering bug rather than a description. */}
       <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-bold leading-tight text-slate-100">{label}</span>
-        <span className="mt-0.5 block text-[12px] leading-snug text-slate-500">{hint}</span>
+        <span className="block text-[15px] font-bold leading-tight text-ink">{label}</span>
+        <span className="mt-0.5 block text-[12px] leading-snug text-ink-muted">{hint}</span>
       </span>
       <span
         className={clsx(
           "ml-auto flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors",
-          on ? "bg-emerald-600" : "bg-slate-600",
+          on ? "bg-emerald-600" : "bg-track",
         )}
       >
         <span
@@ -105,7 +105,7 @@ function TimerButton({
       className={clsx(
         "rounded-xl border px-2 py-3 text-center transition-colors disabled:opacity-40",
         active ? TIMER_TONES[tone].on : TIMER_TONES[tone].idle,
-        !active && "bg-slate-800/30 hover:bg-slate-800",
+        !active && "bg-surface-2/30 hover:bg-surface-2",
       )}
     >
       <div className="text-[15px] font-bold">{title}</div>
@@ -236,18 +236,18 @@ export default function FleetMobileActionSheet({
           edge, squared bottom corners — and a centred dialog from sm: up.
           Floating a rounded box mid-screen on a phone is what made this
           window feel oddly sized. */}
-      <div className="relative w-full max-w-md overflow-hidden overflow-y-auto rounded-t-2xl border border-slate-700 bg-slate-900 shadow-xl max-h-[92svh] sm:rounded-2xl sm:max-h-[90vh]">
+      <div className="relative w-full max-w-md overflow-hidden overflow-y-auto rounded-t-2xl border border-hairline bg-surface shadow-xl max-h-[92svh] sm:rounded-2xl sm:max-h-[90vh]">
         {/* The truck's status, stated before anything else — the rule and the
             numeral carry it, so you know what you tapped without reading. */}
         <div className={clsx("h-[3px] w-full", STATUS_BG[status])} />
-        <div className="flex items-center gap-3 border-b border-slate-800 px-5 py-4">
+        <div className="flex items-center gap-3 border-b border-hairline px-5 py-4">
           <span className={clsx("font-mono text-[44px] font-black leading-none tabular-nums", STATUS_TEXT[status])}>
             {truck.truck_number}
           </span>
           <span className={clsx("badge shrink-0", STATUS_BG[status], STATUS_BADGE_TEXT[status])}>
             {STATUS_LABELS[status]}
           </span>
-          <span className="min-w-0 truncate text-sm text-slate-400">
+          <span className="min-w-0 truncate text-sm text-ink-muted">
             {truckTypeLabel(truck.truck_type)}
             {truck.truck_type === "Uniform" && truck.uniform_size != null ? ` · ${truck.uniform_size}ft` : ""}
           </span>
@@ -259,7 +259,7 @@ export default function FleetMobileActionSheet({
             type="button"
             onClick={onClose}
             aria-label="Close"
-            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-slate-700 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+            className="ml-auto flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-hairline text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
           >
             <X className="h-4 w-4" />
           </button>
@@ -297,7 +297,7 @@ export default function FleetMobileActionSheet({
                     clearClaim();
                     onClose();
                   }}
-                  className="rounded-md border border-slate-700/60 bg-slate-800/60 px-3 py-2 text-xs font-semibold text-slate-300 transition-colors hover:bg-slate-700 disabled:opacity-50"
+                  className="rounded-md border border-hairline bg-surface-2/60 px-3 py-2 text-xs font-semibold text-ink-soft transition-colors hover:bg-track disabled:opacity-50"
                 >
                   Dismiss
                 </button>
@@ -347,8 +347,8 @@ export default function FleetMobileActionSheet({
                     className={clsx(
                       "flex flex-col items-center gap-1.5 rounded-xl border px-1 py-3 text-[13px] font-bold transition-colors",
                       isCurrent
-                        ? "border-slate-600 bg-slate-800 text-slate-500"
-                        : "border-slate-700/60 bg-slate-800/40 text-slate-100 hover:bg-slate-700/60",
+                        ? "border-hairline bg-surface-2 text-ink-muted"
+                        : "border-hairline bg-surface-2/40 text-ink hover:bg-track/60",
                     )}
                   >
                     <span className={clsx("h-2.5 w-2.5 rounded-full", STATUS_BG[s])} />

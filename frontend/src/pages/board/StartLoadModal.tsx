@@ -31,15 +31,15 @@ export default function StartLoadModal({
         {/* Header stripe */}
         <div className={clsx(
           "px-6 py-5",
-          isBlocked ? "bg-amber-950/60" : "bg-slate-800",
+          isBlocked ? "bg-amber-950/60" : "bg-surface-2",
         )}>
-          <p className="text-xs font-semibold uppercase tracking-widest text-slate-400">
+          <p className="text-xs font-semibold uppercase tracking-widest text-ink-muted">
             {isBlocked ? "Blocked" : "Start Loading"}
           </p>
-          <h2 className="mt-1 text-2xl font-bold text-slate-100">
+          <h2 className="mt-1 text-2xl font-bold text-ink">
             Truck #{truck.truck_number}
           </h2>
-          <p className="mt-0.5 text-sm text-slate-400">{truckTypeLabel(truck.truck_type)}</p>
+          <p className="mt-0.5 text-sm text-ink-muted">{truckTypeLabel(truck.truck_type)}</p>
         </div>
 
         <div className="px-6 py-5 space-y-4">
@@ -56,14 +56,14 @@ export default function StartLoadModal({
               </div>
             </div>
           ) : (
-            <p className="text-sm text-slate-400">
-              Mark this truck as <span className="font-semibold text-slate-200">Loading</span> and begin the load timer?
+            <p className="text-sm text-ink-muted">
+              Mark this truck as <span className="font-semibold text-ink-soft">Loading</span> and begin the load timer?
             </p>
           )}
 
           <div className="flex gap-2 pt-1">
             <button
-              className="flex-1 rounded-lg border border-slate-700 bg-slate-800 py-2.5 text-sm font-medium text-slate-300 hover:bg-slate-700 transition"
+              className="flex-1 rounded-lg border border-hairline bg-surface-2 py-2.5 text-sm font-medium text-ink-soft hover:bg-track transition"
               onClick={onClose}
             >
               Cancel

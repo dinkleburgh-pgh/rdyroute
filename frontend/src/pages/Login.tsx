@@ -92,7 +92,7 @@ export default function Login() {
 
         <div className="relative">
           <div className="absolute inset-0 flex items-center">
-            <div className="w-full border-t border-slate-700" />
+            <div className="w-full border-t border-hairline" />
           </div>
           <div className="relative flex justify-center">
             <span className="bg-surface px-3 text-xs text-ink-faint">or</span>
@@ -103,7 +103,7 @@ export default function Login() {
           type="button"
           onClick={onGuest}
           disabled={guestLogin.isPending}
-          className="w-full rounded-lg border border-slate-700 py-2 text-sm text-slate-400 transition-colors hover:border-slate-500 hover:text-slate-200 disabled:opacity-50"
+          className="w-full rounded-lg border border-hairline py-2 text-sm text-ink-muted transition-colors hover:border-slate-500 hover:text-ink-soft disabled:opacity-50"
         >
           {guestLogin.isPending ? "Loading…" : "Continue as Guest"}
         </button>

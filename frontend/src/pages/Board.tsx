@@ -91,20 +91,20 @@ function CollapsibleSection({
         const val = (e.target as HTMLDetailsElement).open;
         try { localStorage.setItem(`readyroutev2_collapse_board-${sectionKey}`, String(val)); } catch { }
       }}
-      className="group col-span-full overflow-hidden rounded-2xl border border-slate-800 bg-slate-950/50"
+      className="group col-span-full overflow-hidden rounded-2xl border border-hairline bg-surface-3/50"
     >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-slate-900/80 px-4 py-3">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-surface/80 px-4 py-3">
         <div className="min-w-0">
           <div className={clsx("text-xl font-black uppercase tracking-[0.3em] sm:text-2xl", titleClassName)}>
             {title}
           </div>
-          <div className="text-xs font-medium text-slate-500">
+          <div className="text-xs font-medium text-ink-muted">
             {sectionRows.length} truck{sectionRows.length !== 1 ? "s" : ""}
           </div>
         </div>
-        <span className="text-lg text-slate-500 transition-transform group-open:rotate-180">⌄</span>
+        <span className="text-lg text-ink-muted transition-transform group-open:rotate-180">⌄</span>
       </summary>
-      <div className="border-t border-slate-800/80 p-3">
+      <div className="border-t border-hairline p-3">
         <div className={clsx(
           tileGrid === "oos"
             ? "grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3"
@@ -251,7 +251,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
     return (
       <div className="flex gap-1.5" onClick={(e) => e.stopPropagation()}>
         <button
-          className={clsx("flex-1 rounded-lg border border-slate-600 bg-slate-800 font-semibold text-slate-300 hover:bg-slate-700", pad)}
+          className={clsx("flex-1 rounded-lg border border-hairline bg-surface-2 font-semibold text-ink-soft hover:bg-track", pad)}
           onClick={() => disarmRemoveOos(truck.truck_number)}
         >
           Cancel
@@ -797,9 +797,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 <button
                   type="button"
                   onClick={() => setOffScheduleDialogOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-800"
+                  className="inline-flex items-center justify-center gap-2 rounded-md border border-hairline bg-surface/60 px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-hairline hover:bg-surface-2"
                 >
-                  <CalendarDays className="h-4 w-4 text-slate-400" />
+                  <CalendarDays className="h-4 w-4 text-ink-muted" />
                   View Schedule
                 </button>
               ) : undefined
@@ -859,15 +859,15 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           <button
             type="button"
             onClick={() => setPrevCovOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-slate-700 bg-slate-900/60 px-4 py-2 text-sm font-semibold text-slate-200 transition-colors hover:border-slate-600 hover:bg-slate-800"
+            className="inline-flex items-center justify-center gap-2 rounded-md border border-hairline bg-surface/60 px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-hairline hover:bg-surface-2"
           >
-            <ArrowLeftRight className="h-4 w-4 text-slate-400" />
+            <ArrowLeftRight className="h-4 w-4 text-ink-muted" />
             Previous Day Coverage
           </button>
         </div>
       )}
 
-      {isLoading && <p className="text-slate-400">Loading…</p>}
+      {isLoading && <p className="text-ink-muted">Loading…</p>}
       {error && (
         <p className="text-red-400">Failed to load board. Is the backend running?</p>
       )}
@@ -888,7 +888,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               "rounded-md border px-4 py-2 text-sm font-semibold transition-colors",
               counts["unloaded"]
                 ? "border-blue-500/60 bg-blue-950/40 text-blue-300 hover:bg-blue-900/40"
-                : "cursor-not-allowed border-slate-700 bg-slate-800/40 text-slate-600",
+                : "cursor-not-allowed border-hairline bg-surface-2/40 text-ink-faint",
             )}
             aria-disabled={!counts["unloaded"]}
             onClick={(e) => { if (!counts["unloaded"]) e.preventDefault(); }}
@@ -902,8 +902,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       <>
       {fleetMode && (
         <div className="-mt-1 flex items-center justify-end gap-2">
-          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-slate-500">Card size</span>
-          <div className="inline-flex overflow-hidden rounded-lg border border-slate-700/70 text-[11px] font-semibold">
+          <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Card size</span>
+          <div className="inline-flex overflow-hidden rounded-lg border border-hairline text-[11px] font-semibold">
             {(["s", "m", "l"] as const).map((v, i) => (
               <button
                 key={v}
@@ -912,8 +912,8 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 title={v === "s" ? "Small — fit the most trucks" : v === "l" ? "Large — read from across the room" : "Medium"}
                 className={clsx(
                   "px-2.5 py-1 uppercase transition-colors",
-                  i > 0 && "border-l border-slate-700/70",
-                  cardSize === v ? "bg-slate-700 text-white" : "bg-slate-950/50 text-slate-400 hover:text-slate-200",
+                  i > 0 && "border-l border-hairline",
+                  cardSize === v ? "bg-track text-white" : "bg-surface-3/50 text-ink-muted hover:text-ink-soft",
                 )}
               >
                 {v}
@@ -1097,12 +1097,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             if (cov && !isOpen) {
               return (
                 <div
-                  className="mt-1 border-t border-slate-700 pt-2"
+                  className="mt-1 border-t border-hairline pt-2"
                   onClick={(e) => e.stopPropagation()}
                 >
                   <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
                     <div className="flex min-w-0 flex-wrap items-center gap-1.5">
-                      <span className="text-xs text-slate-400">Covered by</span>
+                      <span className="text-xs text-ink-muted">Covered by</span>
                         <span className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2.5 py-0.5 text-sm font-bold text-sky-300 ring-1 ring-sky-700/40">
                         #{cov.num}
                       </span>
@@ -1114,7 +1114,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     </div>
                     {/* Reassign: drop this cover and reopen the picker, keeping the truck OOS. */}
                     <button
-                      className="ml-auto shrink-0 rounded px-2 py-1 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200 disabled:opacity-40"
+                      className="ml-auto shrink-0 rounded px-2 py-1 text-xs text-ink-muted hover:bg-track hover:text-ink-soft disabled:opacity-40"
                       disabled={oosActionPending}
                       onClick={() => {
                         if (spareAsgn) returnSpare.mutate(spareAsgn.id);
@@ -1133,7 +1133,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
             if (!isOpen) {
               return (
-                <div className="mt-1 space-y-1.5 border-t border-slate-700 pt-2">
+                <div className="mt-1 space-y-1.5 border-t border-hairline pt-2">
                   {/* The extra block sits outside the tile's button now, so
                       this hint carries its own click instead of bubbling. */}
                   <button
@@ -1165,7 +1165,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
 
             return (
               <div
-                className="mt-1 space-y-2 border-t border-slate-700 pt-2"
+                className="mt-1 space-y-2 border-t border-hairline pt-2"
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="flex gap-1.5">
@@ -1336,7 +1336,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                 sub={<>{subBits}</>}
                 extra={
                   filter === "oos" && displayStatus === "oos" && !isReadOnly ? (
-                    <div className="text-slate-300">{renderOosAssignBlock(truck)}</div>
+                    <div className="text-ink-soft">{renderOosAssignBlock(truck)}</div>
                   ) : undefined
                 }
               />
@@ -1489,7 +1489,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                             <span className={clsx("text-lg font-extrabold tracking-tight tabular-nums md:text-3xl", numberColor)}>
                               {showCoverageBadge ? truck.truck_number : coveredBy!.num}
                             </span>
-                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-slate-500 md:text-[10px]">truck</span>
+                            <span className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-ink-muted md:text-[10px]">truck</span>
                           </span>
                         </div>
                       ) : (
@@ -1524,14 +1524,14 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                       )}
                       {/* 2. U Off chip — route trucks only; spares are always off unless assigned */}
                       {fleetMode && status === "off" && truck.truck_type !== "Spare" && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
-                        <span className="badge bg-slate-600 text-slate-200">U Off</span>
+                        <span className="badge bg-track text-ink-soft">U Off</span>
                       )}
                       {!fleetMode && !holidayUnload && truck.truck_type !== "Spare" && isScheduledOff(truck, runUnloadsDay) && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
-                        <span className="badge bg-slate-700 text-slate-300">U Off</span>
+                        <span className="badge bg-track text-ink-soft">U Off</span>
                       )}
                       {/* 3. L Off chip — route trucks only */}
                       {!holidayLoad && truck.truck_type !== "Spare" && isScheduledOff(truck, runDayNum) && status !== "off" && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
-                        <span className="badge bg-slate-600 text-slate-200">L Off</span>
+                        <span className="badge bg-track text-ink-soft">L Off</span>
                       )}
                       {/* 4. Fleet coverage/swap badges (both sides) moved to the
                           detail block below via <CoverageCardBadges>. */}
@@ -1574,7 +1574,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     </span>
                   </div>
                   {fleetMode && (
-                    <div className="text-[10px] text-slate-400 space-y-0.5 md:text-xs">
+                    <div className="text-[10px] text-ink-muted space-y-0.5 md:text-xs">
                       <div>
                         {truckTypeLabel(truck.truck_type)}
                         {truck.truck_type === "Uniform" && truck.uniform_size != null && ` · ${truck.uniform_size}ft`}
@@ -1650,23 +1650,23 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                   )}
                 </div>
                 {!fleetMode && filter === "unloaded" && (
-                  <div className="text-xs text-slate-400">
+                  <div className="text-xs text-ink-muted">
                     {truckTypeLabel(truck.truck_type)}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
                   </div>
                 )}
                 {filter === "loaded" ? (
                   <>
-                    <div className="text-xs text-slate-400">
+                    <div className="text-xs text-ink-muted">
                       {truckTypeLabel(truck.truck_type)}{truck.state?.batch_id != null ? ` · Batch ${truck.state.batch_id}` : ""}
                     </div>
                     {truck.state?.load_finish_time && (
-                      <div className="mt-auto pt-1 text-xs text-slate-500">
+                      <div className="mt-auto pt-1 text-xs text-ink-muted">
                         Done {format(new Date(truck.state.load_finish_time * 1000), "h:mm a")}
                       </div>
                     )}
                   </>
                 ) : truck.state?.batch_id != null && !fleetMode && filter !== "unloaded" && (
-                  <div className="text-xs text-slate-400">Batch {truck.state.batch_id}</div>
+                  <div className="text-xs text-ink-muted">Batch {truck.state.batch_id}</div>
                 )}
 
                 {/* Spares have no scheduled day, so a day chip only makes sense
@@ -1764,7 +1764,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             return [
               <CollapsibleSection key="unloaded-running" sectionKey="unloaded-running" title={`Day ${runDayNum}`} titleClassName="text-emerald-400" sectionRows={unloadedRunningRows} renderTruckCard={renderStatusTile} tileGrid />,
               <CollapsibleSection key="unloaded-spare" sectionKey="unloaded-spare" title="Spare" titleClassName="text-cyan-400" sectionRows={unloadedSpareRows} renderTruckCard={renderStatusTile} tileGrid />,
-              <CollapsibleSection key="unloaded-off" sectionKey="unloaded-off" title="Off" titleClassName="text-slate-400" sectionRows={unloadedOffRows} renderTruckCard={renderStatusTile} tileGrid />,
+              <CollapsibleSection key="unloaded-off" sectionKey="unloaded-off" title="Off" titleClassName="text-ink-muted" sectionRows={unloadedOffRows} renderTruckCard={renderStatusTile} tileGrid />,
             ];
           }
 
@@ -1781,7 +1781,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           if (!fleetMode && filter === "oos") {
             return [
               <CollapsibleSection key="oos-hold" sectionKey="oos-hold" title="Requests" titleClassName="text-amber-400" sectionRows={holdRows} renderTruckCard={renderStatusTile} tileGrid />,
-              <CollapsibleSection key="oos-out" sectionKey="oos-out" title="Out of Service" titleClassName="text-slate-400" sectionRows={outOfServiceRows} renderTruckCard={renderStatusTile} tileGrid="oos" />,
+              <CollapsibleSection key="oos-out" sectionKey="oos-out" title="Out of Service" titleClassName="text-ink-muted" sectionRows={outOfServiceRows} renderTruckCard={renderStatusTile} tileGrid="oos" />,
             ];
           }
 
@@ -1800,7 +1800,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           });
         })()}
         {!isLoading && filtered.length === 0 && (
-          <p className="col-span-full text-slate-500">No trucks match this filter.</p>
+          <p className="col-span-full text-ink-muted">No trucks match this filter.</p>
         )}
       </div>
 
@@ -1816,7 +1816,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             <h3 className="mb-1 text-base font-semibold">
               Route #{offCoverageTruck.truck_number} is off tomorrow
             </h3>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-ink-muted">
               This route is not scheduled for the next load day. Assign the truck or spare
               that will cover it so the load can proceed. Coverage is required.
             </p>
@@ -1899,7 +1899,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             <h3 className="mb-1 text-base font-semibold">
               Spare #{spareCoverageTruck.truck_number} — which route is it covering?
             </h3>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-ink-muted">
               A spare only loads to cover another truck's route. Pick the route it's running
               so the load can proceed. Coverage is required.
             </p>
@@ -1974,9 +1974,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       {prevCovOpen && (
         <Modal open onClose={() => { setPrevCovOpen(false); setPrevCovRoute(""); setPrevCovTruck(""); setPrevCovError(null); }} size="md">
             <h3 className="mb-1 text-base font-semibold">Previous Day Coverage</h3>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-ink-muted">
               Record who covered a route on the previous run day
-              {" "}(<span className="font-semibold text-slate-300">{format(new Date(`${prevRunDate}T12:00:00`), "EEE MMM d")}</span>).
+              {" "}(<span className="font-semibold text-ink-soft">{format(new Date(`${prevRunDate}T12:00:00`), "EEE MMM d")}</span>).
               This surfaces on the Day Overview, Unload board, and Reminders so returning loads are unloaded as the right route.
             </p>
             <div className="space-y-3">
@@ -2044,21 +2044,21 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             </div>
 
             {/* Existing previous-day coverage */}
-            <div className="mt-4 border-t border-slate-800 pt-3">
-              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+            <div className="mt-4 border-t border-hairline pt-3">
+              <div className="mb-2 text-[11px] font-semibold uppercase tracking-wide text-ink-muted">
                 Set for {format(new Date(`${prevRunDate}T12:00:00`), "EEE MMM d")}
               </div>
               {(prevSwaps.length === 0 && prevSpares.filter((s) => !s.returned).length === 0) ? (
-                <p className="text-sm text-slate-500">No coverage recorded for the previous day yet.</p>
+                <p className="text-sm text-ink-muted">No coverage recorded for the previous day yet.</p>
               ) : (
                 <div className="space-y-1.5">
                   {prevSwaps.slice().sort((a, b) => a.route_truck - b.route_truck).map((s) => (
-                    <div key={`sw-${s.id}`} className="flex items-center gap-2 rounded-md bg-slate-800/60 px-2.5 py-1.5 text-sm">
+                    <div key={`sw-${s.id}`} className="flex items-center gap-2 rounded-md bg-surface-2/60 px-2.5 py-1.5 text-sm">
                       <span className="font-black text-red-300">#{s.route_truck}</span>
-                      <ArrowLeftRight className="h-3.5 w-3.5 text-slate-600" />
+                      <ArrowLeftRight className="h-3.5 w-3.5 text-ink-faint" />
                       <span className="font-black text-amber-200">#{s.load_on_truck}</span>
                       <button
-                        className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300"
+                        className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 hover:bg-track hover:text-red-300"
                         onClick={() => deleteSwap.mutate({ id: s.id, runDate: prevRunDate })}
                       >
                         Remove
@@ -2066,12 +2066,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
                     </div>
                   ))}
                   {prevSpares.filter((s) => !s.returned).sort((a, b) => a.covering_route_truck - b.covering_route_truck).map((s) => (
-                    <div key={`sp-${s.id}`} className="flex items-center gap-2 rounded-md bg-slate-800/60 px-2.5 py-1.5 text-sm">
+                    <div key={`sp-${s.id}`} className="flex items-center gap-2 rounded-md bg-surface-2/60 px-2.5 py-1.5 text-sm">
                       <span className="font-black text-red-300">#{s.covering_route_truck}</span>
-                      <ArrowLeftRight className="h-3.5 w-3.5 text-slate-600" />
-                      <span className="font-black text-cyan-200">#{s.spare_truck_number}<span className="ml-1 text-[10px] text-slate-500">spare</span></span>
+                      <ArrowLeftRight className="h-3.5 w-3.5 text-ink-faint" />
+                      <span className="font-black text-cyan-200">#{s.spare_truck_number}<span className="ml-1 text-[10px] text-ink-muted">spare</span></span>
                       <button
-                        className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 hover:bg-slate-700 hover:text-red-300"
+                        className="ml-auto rounded px-2 py-0.5 text-xs text-red-400 hover:bg-track hover:text-red-300"
                         onClick={() => returnSpare.mutate(s.id)}
                       >
                         Remove
@@ -2096,7 +2096,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       {pendingOosTruck && (
         <Modal open onClose={() => setPendingOosTruck(null)} size="sm">
             <h3 className="mb-1 text-base font-semibold">Mark Truck #{pendingOosTruck.truck_number} as OOS?</h3>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-ink-muted">
               Out of Service means this truck is unavailable for today's run and needs coverage.
               This is not a routine status change.
             </p>
@@ -2139,7 +2139,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
             <h3 className="mb-1 text-base font-semibold">
               Truck #{pendingOffLoadTruck.truck_number} is off-schedule
             </h3>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-ink-muted">
               This truck is not scheduled today. Select the route it ran, or just mark it
               as <span className="font-semibold text-amber-300">Ran Special</span> if no specific
               route applies. Either way the truck will be marked Loaded and the note saved.
@@ -2273,12 +2273,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
               <span className="flex h-7 w-7 items-center justify-center rounded-full bg-red-900/60 text-sm">&#x1f512;</span>
               <h3 className="text-base font-semibold">Truck #{holdAlertTruck.truck_number} is on Hold</h3>
             </div>
-            <p className="mb-4 text-sm text-slate-400">
+            <p className="mb-4 text-sm text-ink-muted">
               This truck has been flagged as "Do Not Load". Check with a Fleet Supervisor before proceeding.
             </p>
             <div className="flex justify-end gap-2">
               <button
-                className="rounded-md bg-slate-700 px-4 py-1.5 text-sm font-semibold text-slate-300 hover:bg-slate-600 transition"
+                className="rounded-md bg-track px-4 py-1.5 text-sm font-semibold text-ink-soft hover:bg-track transition"
                 onClick={() => {
                   setHoldAlertTruck(null);
                   navigate(`/fleet?truck=${holdAlertTruck.truck_number}`);
@@ -2305,15 +2305,15 @@ function OffBoardScheduleDialog({ onClose }: { onClose: () => void }) {
     <Modal open onClose={onClose} size="xl" bodyClassName="p-4">
         <div className="mb-4 flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-lg font-semibold text-slate-100">Fleet Schedule</h3>
-            <p className="mt-1 text-sm text-slate-400">
+            <h3 className="text-lg font-semibold text-ink">Fleet Schedule</h3>
+            <p className="mt-1 text-sm text-ink-muted">
               Review route truck run and off days without leaving the off board.
             </p>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-md p-2 text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-200"
+            className="rounded-md p-2 text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink-soft"
             aria-label="Close schedule dialog"
           >
             <X className="h-5 w-5" />

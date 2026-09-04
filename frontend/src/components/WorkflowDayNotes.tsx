@@ -42,7 +42,7 @@ export default function WorkflowDayNotes({
             needing a second heading. */}
         {persistent.map((l, i) => (
           <li key={`p${i}`} className="flex gap-1.5 text-xs leading-relaxed text-ink-soft">
-            <span className="shrink-0 text-slate-500" title="Every day">◦</span>
+            <span className="shrink-0 text-ink-muted" title="Every day">◦</span>
             <span>{l}</span>
           </li>
         ))}

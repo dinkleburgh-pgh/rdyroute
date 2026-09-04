@@ -406,7 +406,7 @@ export default function RunDay() {
           "rounded-xl border px-4 py-3",
           dailyNotes
             ? "border-amber-700/40 bg-amber-950/20"
-            : "border-slate-700/40 bg-slate-800/20",
+            : "border-hairline bg-surface-2/20",
         )}>
           <div className="mb-1.5 flex items-center gap-2">
             <Clock className="h-4 w-4 shrink-0 text-amber-400" />
@@ -415,7 +415,7 @@ export default function RunDay() {
               <button
                 type="button"
                 onClick={() => { setNotesDraft(dailyNotes); setNotesEditing(true); }}
-                className="ml-auto rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200 transition-colors"
+                className="ml-auto rounded px-2 py-0.5 text-xs text-ink-muted hover:bg-track hover:text-ink-soft transition-colors"
               >
                 Edit
               </button>
@@ -424,7 +424,7 @@ export default function RunDay() {
           {notesEditing ? (
             <div className="space-y-2">
               <textarea
-                className="w-full rounded-lg border border-slate-600 bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:border-amber-500 focus:outline-none"
+                className="w-full rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-sm text-ink placeholder-ink-muted focus:border-amber-500 focus:outline-none"
                 rows={3}
                 placeholder="Add shift handoff notes for the next team…"
                 value={notesDraft}
@@ -446,7 +446,7 @@ export default function RunDay() {
                 <button
                   type="button"
                   onClick={() => setNotesEditing(false)}
-                  className="rounded-lg bg-slate-700 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:bg-slate-600 transition-colors"
+                  className="rounded-lg bg-track px-3 py-1.5 text-xs font-semibold text-ink-soft hover:bg-track transition-colors"
                 >
                   Cancel
                 </button>
@@ -455,7 +455,7 @@ export default function RunDay() {
           ) : dailyNotes ? (
             <p className="whitespace-pre-wrap text-sm text-amber-100/90">{dailyNotes}</p>
           ) : (
-            <p className="text-xs text-slate-500 italic">No shift notes for today. Click Edit to add.</p>
+            <p className="text-xs text-ink-muted italic">No shift notes for today. Click Edit to add.</p>
           )}
         </div>
       )}
@@ -467,19 +467,19 @@ export default function RunDay() {
           className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
         >
           <Calendar
-            className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", unloadCollapsed && "-rotate-90")}
+            className={clsx("h-4 w-4 shrink-0 text-ink-muted transition-transform", unloadCollapsed && "-rotate-90")}
           />
-          <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
+          <h2 className="w-44 shrink-0 text-lg font-semibold text-ink-soft">
             Unload &mdash; Day {holidayUnload ? `${unloadsDay2} + ` : ""}{unloadsDay}
           </h2>
-          <span className="w-24 shrink-0 text-sm text-slate-400">
+          <span className="w-24 shrink-0 text-sm text-ink-muted">
             {unloadDone} / {unloadTotal} done
             {unloadSpareCount > 0 && (
-              <span className="ml-1 text-slate-500">· {unloadSpareCount} spare{unloadSpareCount === 1 ? "" : "s"}</span>
+              <span className="ml-1 text-ink-muted">· {unloadSpareCount} spare{unloadSpareCount === 1 ? "" : "s"}</span>
             )}
           </span>
           {unloadTotal > 0 && (
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
               <div
                 className="h-full rounded-full bg-emerald-500 transition-all"
                 style={{ width: `${Math.round((unloadDone / unloadTotal) * 100)}%` }}
@@ -581,19 +581,19 @@ export default function RunDay() {
           className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
         >
           <Check
-            className={clsx("h-4 w-4 shrink-0 text-slate-400 transition-transform", loadCollapsed && "-rotate-90")}
+            className={clsx("h-4 w-4 shrink-0 text-ink-muted transition-transform", loadCollapsed && "-rotate-90")}
           />
-          <h2 className="w-44 shrink-0 text-lg font-semibold text-slate-200">
+          <h2 className="w-44 shrink-0 text-lg font-semibold text-ink-soft">
             Load &mdash; Day {loadDay}{holidayLoad ? ` + ${loadNextDay}` : ""}
           </h2>
-          <span className="w-24 shrink-0 text-sm text-slate-400">
+          <span className="w-24 shrink-0 text-sm text-ink-muted">
             {loadDone} / {loadTotal} done
             {loadSpareCount > 0 && (
-              <span className="ml-1 text-slate-500">&middot; {loadSpareCount} spare{loadSpareCount === 1 ? "" : "s"}</span>
+              <span className="ml-1 text-ink-muted">&middot; {loadSpareCount} spare{loadSpareCount === 1 ? "" : "s"}</span>
             )}
           </span>
           {loadTotal > 0 && (
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
               <div
                 className="h-full rounded-full bg-blue-500 transition-all"
                 style={{ width: `${Math.round((loadDone / loadTotal) * 100)}%` }}
@@ -626,11 +626,11 @@ export default function RunDay() {
               {needsAssignment.map((t) => (
                 <div
                   key={t.truck_number}
-                  className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-slate-900/60 px-2.5 py-1.5"
+                  className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-surface/60 px-2.5 py-1.5"
                 >
                   <span className="text-sm font-black text-amber-300">#{t.truck_number}</span>
                   <span className="text-[9px] font-semibold uppercase tracking-wide text-amber-500">OOS</span>
-                  <span className="text-slate-600">→</span>
+                  <span className="text-ink-faint">→</span>
                   <select
                     className="input min-w-0 flex-1 py-1 text-xs"
                     value={assignFor[t.truck_number] ?? ""}
@@ -689,7 +689,7 @@ export default function RunDay() {
                 return (
                   <div
                     key={c.routeNum}
-                    className="flex items-center gap-2 rounded-md border border-sky-800/30 bg-slate-900/50 px-2.5 py-1.5"
+                    className="flex items-center gap-2 rounded-md border border-sky-800/30 bg-surface/50 px-2.5 py-1.5"
                   >
                     <span className="text-sm font-black text-red-400">#{c.routeNum}</span>
                     <span className="text-[9px] font-semibold uppercase tracking-wide text-red-400/70">
@@ -697,7 +697,7 @@ export default function RunDay() {
                     </span>
                     {c.kind === "split"
                       ? <span className="shrink-0 text-sm font-bold text-amber-500">+</span>
-                      : <ArrowLeftRight className="h-3 w-3 shrink-0 text-slate-600" />}
+                      : <ArrowLeftRight className="h-3 w-3 shrink-0 text-ink-faint" />}
                     <span className={clsx("text-sm font-black", c.kind === "split" ? "text-amber-200" : "text-sky-300")}>#{c.cover.truck_number}</span>
                     <span className={clsx(
                       "rounded-full px-1.5 py-0.5 text-[9px] font-semibold ring-1",

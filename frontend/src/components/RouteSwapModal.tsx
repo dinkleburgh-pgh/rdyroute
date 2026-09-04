@@ -381,13 +381,13 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
   return (
     <Modal open onClose={onClose} size="lg" bodyClassName="flex max-h-[85svh] flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-700 px-5 py-4">
+        <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
           <div>
-            <h2 className="text-base font-bold text-slate-100">Route Swaps</h2>
-            <p className="text-xs text-slate-400">{formatRunDate(runDate)}</p>
+            <h2 className="text-base font-bold text-ink">Route Swaps</h2>
+            <p className="text-xs text-ink-muted">{formatRunDate(runDate)}</p>
           </div>
           <button
-            className="rounded p-1 text-slate-500 hover:text-slate-200"
+            className="rounded p-1 text-ink-muted hover:text-ink-soft"
             onClick={onClose}
             aria-label="Close"
           >
@@ -405,11 +405,11 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                 <span className="rounded-full bg-amber-700/50 px-2 py-0.5 text-[10px] font-bold text-amber-300">{unswappedOos.length}</span>
               </div>
               {unswappedOos.map((t) => (
-                <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-slate-900/60 px-3 py-2">
+                <div key={t.truck_number} className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-surface/60 px-3 py-2">
                   <span className="whitespace-nowrap text-sm font-black text-amber-300">
                     #{t.truck_number} <span className="text-[10px] font-semibold text-amber-500">OOS</span>
                   </span>
-                  <span className="text-sm text-slate-500">→</span>
+                  <span className="text-sm text-ink-muted">→</span>
                   <select
                     className="input flex-1 text-sm"
                     value={oosLoadOns[t.truck_number] ?? ""}
@@ -429,14 +429,14 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
 
           {/* Current swaps */}
           <section>
-            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">
               Active swaps {swaps.length > 0 && <span className="ml-1 rounded-full bg-blue-800/60 px-2 py-0.5 text-blue-300">{swaps.length}</span>}
             </p>
 
             {swapsLoading ? (
-              <p className="text-sm text-slate-500">Loading…</p>
+              <p className="text-sm text-ink-muted">Loading…</p>
             ) : swaps.length === 0 ? (
-              <p className="rounded-md border border-slate-700 bg-slate-800/50 px-4 py-3 text-center text-sm text-slate-500">
+              <p className="rounded-md border border-hairline bg-surface-2/50 px-4 py-3 text-center text-sm text-ink-muted">
                 No swaps set for today.
               </p>
             ) : (
@@ -444,16 +444,16 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                 {swaps.map((s) => (
                   <div
                     key={s.id}
-                    className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-800/60 px-4 py-3"
+                    className="flex items-center justify-between gap-3 rounded-lg border border-hairline bg-surface-2/60 px-4 py-3"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <span className="text-xl font-black text-red-400">#{s.covering_route_truck}</span>
-                      <span className="text-base font-bold text-slate-500">→</span>
+                      <span className="text-base font-bold text-ink-muted">→</span>
                       <span className="text-xl font-black text-blue-300">#{s.spare_truck_number}</span>
-                      <span className="text-xs text-slate-500">covers route</span>
+                      <span className="text-xs text-ink-muted">covers route</span>
                     </div>
                     <button
-                      className="rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                      className="rounded px-2 py-1 text-xs text-red-500 hover:bg-track hover:text-red-300 disabled:opacity-40"
                       disabled={deleteSpare.isPending}
                       onClick={() => handleDelete(s)}
                     >
@@ -479,12 +479,12 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-3">
                       <span className="text-xl font-black text-amber-300">#{r.route_truck}</span>
-                      <span className="text-base font-bold text-slate-500">+</span>
+                      <span className="text-base font-bold text-ink-muted">+</span>
                       <span className="text-xl font-black text-blue-300">#{r.load_on_truck}</span>
-                      <span className="text-xs text-slate-500">route runs on both trucks</span>
+                      <span className="text-xs text-ink-muted">route runs on both trucks</span>
                     </div>
                     <button
-                      className="rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                      className="rounded px-2 py-1 text-xs text-red-500 hover:bg-track hover:text-red-300 disabled:opacity-40"
                       disabled={deleteSwap.isPending}
                       onClick={() => deleteSwap.mutate({ id: r.id, runDate })}
                     >
@@ -514,7 +514,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
               <div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-400/80">
                   Route Truck
-                  <span className="ml-1 hidden normal-case font-normal text-slate-500 sm:inline">(whose route?)</span>
+                  <span className="ml-1 hidden normal-case font-normal text-ink-muted sm:inline">(whose route?)</span>
                 </label>
                 <select
                   className="input w-full text-sm"
@@ -550,7 +550,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
               <div>
                 <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-sky-400/80">
                   Load On
-                  <span className="ml-1 hidden normal-case font-normal text-slate-500 sm:inline">(who loads it?)</span>
+                  <span className="ml-1 hidden normal-case font-normal text-ink-muted sm:inline">(who loads it?)</span>
                 </label>
                 <select
                   className="input w-full text-sm"
@@ -613,7 +613,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
             </button>
             {openSection === "crossload" && (
               <div className="space-y-3 px-4 pb-4">
-                <p className="text-[11px] leading-relaxed text-slate-400">
+                <p className="text-[11px] leading-relaxed text-ink-muted">
                   Flag a truck whose freight has to be moved onto another truck, or move the
                   route across right now.
                 </p>
@@ -626,7 +626,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                         key={t.truck_number}
                         className="flex items-center gap-2 rounded-lg border border-fuchsia-800/40 bg-fuchsia-950/30 px-3 py-2"
                       >
-                        <span className="font-mono text-sm font-bold text-slate-100">#{t.truck_number}</span>
+                        <span className="font-mono text-sm font-bold text-ink">#{t.truck_number}</span>
                         <span className="text-fuchsia-400">&#8594;</span>
                         <span className="font-mono text-sm font-bold text-fuchsia-200">
                           #{t.state?.crossload_to_truck}
@@ -655,7 +655,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                           </button>
                           <button
                             type="button"
-                            className="rounded-md px-2 py-1 text-[11px] text-slate-500 hover:text-slate-200 disabled:opacity-40"
+                            className="rounded-md px-2 py-1 text-[11px] text-ink-muted hover:text-ink-soft disabled:opacity-40"
                             disabled={xBusy}
                             onClick={() => void setCrossloadFlag(t.truck_number, null)}
                           >
@@ -716,14 +716,14 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                           "flex-1 rounded-md border px-2 py-1.5 text-[11px] font-semibold capitalize transition-colors",
                           xFromStatus === v
                             ? "border-fuchsia-500 bg-fuchsia-600/30 text-fuchsia-100"
-                            : "border-slate-700 bg-slate-800/40 text-slate-400 hover:text-slate-200",
+                            : "border-hairline bg-surface-2/40 text-ink-muted hover:text-ink-soft",
                         )}
                       >
                         {v === "oos" ? "OOS" : v}
                       </button>
                     ))}
                   </div>
-                  <p className="mt-1 text-[10px] text-slate-500">
+                  <p className="mt-1 text-[10px] text-ink-muted">
                     The receiving truck is set to Loaded and takes the route&rsquo;s coverage.
                   </p>
                 </div>
@@ -774,15 +774,15 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
             </button>
             {openSection === "recurring" && (
             <div className="space-y-3 px-4 pb-4">
-            <p className="text-[11px] text-slate-500">Applied automatically when the board is set up for a matching load day.</p>
+            <p className="text-[11px] text-ink-muted">Applied automatically when the board is set up for a matching load day.</p>
 
             {recurringRules.length > 0 ? (
               <div className="space-y-1.5">
                 {recurringRules.map((rule, idx) => (
-                  <div key={`${rule.route_truck}-${idx}`} className="flex items-center gap-2 rounded-lg border border-violet-800/40 bg-slate-900/60 px-3 py-2">
+                  <div key={`${rule.route_truck}-${idx}`} className="flex items-center gap-2 rounded-lg border border-violet-800/40 bg-surface/60 px-3 py-2">
                     <span className="text-base font-black text-violet-300">{rule.route_truck}</span>
-                    <span className="text-sm font-bold text-slate-500">→</span>
-                    <span className="text-base font-black text-slate-100">{rule.load_on_truck}</span>
+                    <span className="text-sm font-bold text-ink-muted">→</span>
+                    <span className="text-base font-black text-ink">{rule.load_on_truck}</span>
                     <span className="ml-2 flex flex-wrap gap-1">
                       {[1, 2, 3, 4, 5].map((d) => (
                         <span
@@ -790,7 +790,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                           className={
                             rule.days.includes(d)
                               ? "rounded bg-violet-500 px-1.5 py-0.5 text-[10px] font-semibold text-white"
-                              : "px-1.5 py-0.5 text-[10px] text-slate-600"
+                              : "px-1.5 py-0.5 text-[10px] text-ink-faint"
                           }
                         >
                           {DAY_ABBR[d][0]}
@@ -798,7 +798,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                       ))}
                     </span>
                     <button
-                      className="ml-auto rounded px-2 py-1 text-xs text-red-500 hover:bg-slate-700 hover:text-red-300 disabled:opacity-40"
+                      className="ml-auto rounded px-2 py-1 text-xs text-red-500 hover:bg-track hover:text-red-300 disabled:opacity-40"
                       disabled={upsertSetting.isPending}
                       onClick={() => removeRule(idx)}
                       aria-label="Remove rule"
@@ -809,13 +809,13 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                 ))}
               </div>
             ) : (
-              <p className="rounded-md border border-violet-800/30 bg-slate-800/50 px-4 py-3 text-center text-xs text-slate-500">
+              <p className="rounded-md border border-violet-800/30 bg-surface-2/50 px-4 py-3 text-center text-xs text-ink-muted">
                 No recurring rules.
               </p>
             )}
 
             {/* Add rule form */}
-            <div className="space-y-2 rounded-lg border border-violet-800/30 bg-slate-900/40 p-3">
+            <div className="space-y-2 rounded-lg border border-violet-800/30 bg-surface/40 p-3">
               <div className="grid grid-cols-2 items-end gap-3">
                 <div>
                   <label className="mb-1 block text-[11px] font-semibold uppercase tracking-wide text-violet-400/80">Route</label>
@@ -837,7 +837,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-1.5">
-                <span className="mr-1 text-[11px] text-slate-500">Days:</span>
+                <span className="mr-1 text-[11px] text-ink-muted">Days:</span>
                 {[1, 2, 3, 4, 5].map((d) => (
                   <button
                     key={d}
@@ -846,7 +846,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
                     className={
                       ruleDays.has(d)
                         ? "rounded-md bg-violet-500 px-2.5 py-1 text-xs font-semibold text-white"
-                        : "rounded-md border border-slate-700 px-2.5 py-1 text-xs text-slate-300 hover:bg-slate-800"
+                        : "rounded-md border border-hairline px-2.5 py-1 text-xs text-ink-soft hover:bg-surface-2"
                     }
                   >
                     {DAY_ABBR[d]}
@@ -870,7 +870,7 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
         </div>
 
         {/* Footer */}
-        <div className="border-t border-slate-800 px-5 py-3">
+        <div className="border-t border-hairline px-5 py-3">
           <button className="btn-ghost w-full text-sm" onClick={onClose}>
             Done
           </button>

@@ -908,8 +908,8 @@ export default function LiveReport() {
   const imagesPicker = imagesOpen
     ? createPortal(
         <Modal open onClose={() => imgBusy === null && setImagesOpen(false)} size="sm">
-            <h3 className="text-base font-semibold text-slate-100">Download report images</h3>
-            <p className="mt-1 text-sm text-slate-400">
+            <h3 className="text-base font-semibold text-ink">Download report images</h3>
+            <p className="mt-1 text-sm text-ink-muted">
               One PNG per section, at report-page size — the short sheet gives you both the
               grid and the paper sheet. Your browser may ask to allow multiple downloads.
             </p>
@@ -917,7 +917,7 @@ export default function LiveReport() {
               {sectionDefs.map((sec) => (
                 <label
                   key={sec.key}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-800/60"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-2/60"
                 >
                   <input
                     type="checkbox"
@@ -926,8 +926,8 @@ export default function LiveReport() {
                     onChange={(e) => setSelected((prev) => ({ ...prev, [sec.key]: e.target.checked }))}
                     className="h-4 w-4 accent-blue-600"
                   />
-                  <span className="flex-1 text-sm text-slate-200">{sec.label}</span>
-                  {sec.hint && <span className="text-[11px] text-slate-500">{sec.hint}</span>}
+                  <span className="flex-1 text-sm text-ink-soft">{sec.label}</span>
+                  {sec.hint && <span className="text-[11px] text-ink-muted">{sec.hint}</span>}
                 </label>
               ))}
             </div>
@@ -957,13 +957,13 @@ export default function LiveReport() {
   const sectionPicker = pickerOpen
     ? createPortal(
         <Modal open onClose={() => !pdfBusy && setPickerOpen(false)} size="sm">
-            <h3 className="text-base font-semibold text-slate-100">Download report PDF</h3>
-            <p className="mt-1 text-sm text-slate-400">Choose which sections to include.</p>
+            <h3 className="text-base font-semibold text-ink">Download report PDF</h3>
+            <p className="mt-1 text-sm text-ink-muted">Choose which sections to include.</p>
             <div className="mt-4 space-y-0.5">
               {sectionDefs.map((s) => (
                 <label
                   key={s.key}
-                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-800/60"
+                  className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-surface-2/60"
                 >
                   <input
                     type="checkbox"
@@ -971,8 +971,8 @@ export default function LiveReport() {
                     onChange={(e) => setSelected((p) => ({ ...p, [s.key]: e.target.checked }))}
                     className="h-4 w-4 accent-blue-600"
                   />
-                  <span className="flex-1 text-sm text-slate-200">{s.label}</span>
-                  {s.hint && <span className="text-[11px] text-slate-500">{s.hint}</span>}
+                  <span className="flex-1 text-sm text-ink-soft">{s.label}</span>
+                  {s.hint && <span className="text-[11px] text-ink-muted">{s.hint}</span>}
                 </label>
               ))}
             </div>
@@ -1286,7 +1286,7 @@ export default function LiveReport() {
                               <span
                                 className={clsx(
                                   "shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase",
-                                  e.warning_applied ? "bg-slate-700 text-slate-300" : "bg-amber-500/20 text-amber-300",
+                                  e.warning_applied ? "bg-track text-ink-soft" : "bg-amber-500/20 text-amber-300",
                                 )}
                               >
                                 warn
@@ -1367,7 +1367,7 @@ export default function LiveReport() {
               title={sectionDefs.find((d) => d.key === k)?.label}
               className={clsx(
                 "h-1.5 rounded-full transition-all",
-                i === kioskIdx ? "w-8 bg-sky-400" : "w-3 bg-slate-600 hover:bg-slate-500",
+                i === kioskIdx ? "w-8 bg-sky-400" : "w-3 bg-track hover:bg-slate-500",
               )}
             />
           ))}
@@ -1422,7 +1422,7 @@ export default function LiveReport() {
         <div className="fixed inset-0 z-[95] flex flex-col overflow-hidden bg-app pt-[env(safe-area-inset-top)]">
           {kioskBar}
           {/* progress through the current slide */}
-          <div className="h-0.5 w-full bg-slate-800">
+          <div className="h-0.5 w-full bg-surface-2">
             <div
               className="h-full bg-sky-500"
               style={{ width: `${Math.round(kioskTick * 100)}%`, transition: "width 0.1s linear" }}

@@ -27,21 +27,12 @@ function RoleBadge({ role }: { role?: string | null; username?: string }) {
   // shows without any hardcoded username map (one lived here once).
   const label = role;
   const color = ROLE_COLORS[role.toLowerCase()] ?? ROLE_COLORS.guest;
+  // Classes carry the shape; only the per-role colour stays inline (it is
+  // genuinely dynamic). Sub-pixel 9.5px type joins the scale at 10px.
   return (
     <span
-      style={{
-        display: "inline-flex",
-        alignItems: "center",
-        padding: "1px 8px",
-        borderRadius: "999px",
-        fontSize: "9.5px",
-        fontWeight: 700,
-        letterSpacing: "0.06em",
-        textTransform: "uppercase",
-        background: color + "1a",
-        border: `1px solid ${color}33`,
-        color: color,
-      }}
+      className="inline-flex items-center rounded-full border px-2 py-px text-[10px] font-bold uppercase tracking-wider"
+      style={{ background: color + "1a", borderColor: color + "33", color }}
     >
       {label}
     </span>
@@ -170,9 +161,9 @@ export default function Communications() {
           <div key={day}>
             {/* Day separator */}
             <div className="my-4 flex items-center gap-3">
-              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.07)" }} />
+              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
               <span className="shrink-0 text-[11.5px] font-medium text-ink-faint">{day}</span>
-              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.07)" }} />
+              <div className="h-px flex-1" style={{ background: "rgba(255,255,255,0.06)" }} />
             </div>
 
             {msgs.map((m, idx) => {

@@ -156,7 +156,7 @@ function NoteForm({
               "flex-1 rounded-lg px-3 py-1.5 text-xs font-semibold transition-colors",
               type === t
                 ? NOTE_TYPE_COLOR[t]
-                : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                : "bg-surface-2 text-ink-muted hover:bg-track",
             )}
           >
             {NOTE_TYPE_LABEL[t]}
@@ -170,13 +170,13 @@ function NoteForm({
         value={body}
         onChange={(e) => setBody(e.target.value)}
         placeholder="Note text…"
-        className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100 placeholder-slate-500 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500"
+        className="w-full rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink placeholder-ink-muted ring-1 ring-hairline focus:outline-none focus:ring-blue-500"
       />
 
       {/* Workday picker */}
       {type === "workday" && (
         <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-400">Applies on</label>
+          <label className="mb-1 block text-xs font-semibold text-ink-muted">Applies on</label>
           <div className="flex gap-2">
             {([1, 2, 3, 4, 5] as const).map((d) => (
               <button
@@ -187,7 +187,7 @@ function NoteForm({
                   "flex-1 rounded-md py-1.5 text-xs font-semibold transition-colors",
                   days.has(d)
                     ? "bg-violet-700 text-white"
-                    : "bg-slate-800 text-slate-400 hover:bg-slate-700",
+                    : "bg-surface-2 text-ink-muted hover:bg-track",
                 )}
               >
                 Day {d}
@@ -195,7 +195,7 @@ function NoteForm({
             ))}
           </div>
           {days.size > 0 && (
-            <p className="mt-1 text-xs text-slate-500">
+            <p className="mt-1 text-xs text-ink-muted">
               {[...days].sort().map((d) => DAY_NAMES[d]).join(", ")}
             </p>
           )}
@@ -205,12 +205,12 @@ function NoteForm({
       {/* Expiry date */}
       {type === "one_off" && (
         <div>
-          <label className="mb-1 block text-xs font-semibold text-slate-400">Show until (inclusive)</label>
+          <label className="mb-1 block text-xs font-semibold text-ink-muted">Show until (inclusive)</label>
           <input
             type="date"
             value={exp}
             onChange={(e) => setExp(e.target.value)}
-            className="w-full rounded-lg bg-slate-800 px-3 py-2 text-sm text-slate-100 ring-1 ring-slate-700 focus:outline-none focus:ring-amber-500"
+            className="w-full rounded-lg bg-surface-2 px-3 py-2 text-sm text-ink ring-1 ring-hairline focus:outline-none focus:ring-amber-500"
           />
         </div>
       )}
@@ -264,20 +264,20 @@ function NoteCard({
             {NOTE_TYPE_LABEL[note.note_type]}
           </span>
           {note.note_type === "workday" && note.workday_num && (
-            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-semibold text-ink-soft">
               Day {note.workday_num} · {DAY_NAMES[note.workday_num]}
             </span>
           )}
           {note.note_type === "one_off" && note.expires_on && (
             <span className={clsx(
               "rounded-full px-2 py-0.5 text-[10px] font-semibold",
-              expired ? "bg-red-900/60 text-red-400" : "bg-slate-800 text-slate-300",
+              expired ? "bg-red-900/60 text-red-400" : "bg-surface-2 text-ink-soft",
             )}>
               {expired ? "Expired" : `Until ${note.expires_on}`}
             </span>
           )}
           {!note.is_active && (
-            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] font-semibold text-slate-500">
+            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-semibold text-ink-muted">
               Archived
             </span>
           )}
@@ -287,7 +287,7 @@ function NoteCard({
             type="button"
             title={note.is_active ? "Archive" : "Restore"}
             onClick={() => update.mutate({ id: note.id, is_active: !note.is_active })}
-            className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-slate-300"
+            className="rounded p-1 text-ink-muted hover:bg-surface-2 hover:text-ink-soft"
           >
             {note.is_active ? "⊘" : "↩"}
           </button>
@@ -295,7 +295,7 @@ function NoteCard({
             type="button"
             title="Edit"
             onClick={() => onEdit(note)}
-            className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-blue-300"
+            className="rounded p-1 text-ink-muted hover:bg-surface-2 hover:text-blue-300"
           >
             ✎
           </button>
@@ -305,14 +305,14 @@ function NoteCard({
             onClick={() => {
               setConfirmDelete(true);
             }}
-            className="rounded p-1 text-slate-500 hover:bg-slate-800 hover:text-red-400"
+            className="rounded p-1 text-ink-muted hover:bg-surface-2 hover:text-red-400"
           >
             ✕
           </button>
         </div>
       </div>
-      <p className="whitespace-pre-wrap leading-snug text-slate-200">{note.body}</p>
-      <p className="mt-1.5 text-[10px] text-slate-600">by {note.created_by}</p>
+      <p className="whitespace-pre-wrap leading-snug text-ink-soft">{note.body}</p>
+      <p className="mt-1.5 text-[10px] text-ink-faint">by {note.created_by}</p>
       <ConfirmDialog
         open={confirmDelete}
         title="Delete this note permanently?"
@@ -360,10 +360,10 @@ function TruckNotePanel({
           onClick={onOpen}
           className="flex min-w-0 flex-1 items-center gap-2 text-left"
         >
-          <span className="text-xl font-black text-slate-100">#{truck.truck_number}</span>
-          <span className="text-xs text-slate-500">{truckTypeLabel(truck.truck_type)}</span>
+          <span className="text-xl font-black text-ink">#{truck.truck_number}</span>
+          <span className="text-xs text-ink-muted">{truckTypeLabel(truck.truck_type)}</span>
           {visible.length > 0 && (
-            <span className="rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
+            <span className="rounded-full bg-track px-2 py-0.5 text-[10px] font-semibold text-ink-soft">
               {visible.length}
             </span>
           )}
@@ -385,7 +385,7 @@ function TruckNotePanel({
             <button
               type="button"
               onClick={() => setAdding(true)}
-              className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1 text-xs font-semibold text-slate-300 hover:bg-slate-700 hover:text-slate-100"
+              className="rounded-lg border border-hairline bg-surface-2 px-3 py-1 text-xs font-semibold text-ink-soft hover:bg-track hover:text-ink"
             >
               + Add note
             </button>
@@ -422,7 +422,7 @@ function TruckNotePanel({
             </div>
           ) : (
             !adding && !editing && (
-              <p className="text-xs text-slate-600">No notes yet.</p>
+              <p className="text-xs text-ink-faint">No notes yet.</p>
             )
           )}
         </>
@@ -532,7 +532,7 @@ export default function NotesBoard() {
             <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.one_off)}>
               {totalOneOff} Set Until...
             </span>
-            <span className="rounded-full bg-slate-800 px-2.5 py-0.5 font-semibold text-slate-300">
+            <span className="rounded-full bg-surface-2 px-2.5 py-0.5 font-semibold text-ink-soft">
               {totalActive} Active
             </span>
           </div>
@@ -575,11 +575,11 @@ export default function NotesBoard() {
           placeholder="Search truck #…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="w-32 rounded-lg bg-slate-800 px-3 py-1.5 text-sm text-slate-100 ring-1 ring-slate-700 focus:outline-none focus:ring-blue-500"
+          className="w-32 rounded-lg bg-surface-2 px-3 py-1.5 text-sm text-ink ring-1 ring-hairline focus:outline-none focus:ring-blue-500"
         />
 
         {/* Type filter */}
-        <div className="flex overflow-hidden rounded-lg border border-slate-700 text-xs font-semibold">
+        <div className="flex overflow-hidden rounded-lg border border-hairline text-xs font-semibold">
           {(["all", "constant", "workday", "one_off"] as const).map((t) => (
             <button
               key={t}
@@ -587,10 +587,10 @@ export default function NotesBoard() {
               onClick={() => setTypeFilter(t)}
               className={clsx(
                 "px-3 py-1.5 transition-colors",
-                t !== "all" && "border-l border-slate-700",
+                t !== "all" && "border-l border-hairline",
                 typeFilter === t
                   ? "bg-blue-700 text-white"
-                  : "bg-slate-900 text-slate-400 hover:bg-slate-800",
+                  : "bg-surface text-ink-muted hover:bg-surface-2",
               )}
             >
               {t === "all" ? "All types" : NOTE_TYPE_LABEL[t]}
@@ -598,7 +598,7 @@ export default function NotesBoard() {
           ))}
         </div>
 
-        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-400">
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-muted">
           <input
             type="checkbox"
             checked={onlyWithNotes}
@@ -608,7 +608,7 @@ export default function NotesBoard() {
           Only trucks with notes
         </label>
 
-        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-slate-400">
+        <label className="flex cursor-pointer items-center gap-1.5 text-xs text-ink-muted">
           <input
             type="checkbox"
             checked={showArchived}
@@ -621,7 +621,7 @@ export default function NotesBoard() {
 
       {/* Truck grid */}
       {filtered.length === 0 ? (
-        <p className="text-sm text-slate-500">No trucks match the current filters.</p>
+        <p className="text-sm text-ink-muted">No trucks match the current filters.</p>
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {filtered.map((t, idx) => (

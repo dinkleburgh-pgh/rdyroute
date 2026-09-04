@@ -133,7 +133,7 @@ export default function Modal({
         aria-modal="true"
         tabIndex={-1}
         className={clsx(
-          "w-full overflow-y-auto border border-slate-700 bg-slate-900 shadow-xl outline-none",
+          "w-full overflow-y-auto border border-hairline bg-surface shadow-xl outline-none",
           SIZES[size],
           sheet
             ? "max-h-[92svh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] sm:max-h-[90svh] sm:rounded-2xl sm:pb-0"
@@ -143,13 +143,13 @@ export default function Modal({
         onClick={(e) => e.stopPropagation()}
       >
         {title != null && (
-          <div className="flex items-center justify-between gap-3 border-b border-slate-800 px-5 py-4">
-            <h3 className="min-w-0 text-base font-bold text-slate-100">{title}</h3>
+          <div className="flex items-center justify-between gap-3 border-b border-hairline px-5 py-4">
+            <h3 className="min-w-0 text-base font-bold text-ink">{title}</h3>
             <button
               type="button"
               onClick={onClose}
               aria-label="Close"
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-slate-400 transition-colors hover:bg-slate-800 hover:text-slate-100"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
             >
               <X className="h-4 w-4" />
             </button>

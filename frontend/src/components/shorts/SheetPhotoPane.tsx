@@ -97,16 +97,16 @@ export default function SheetPhotoPane({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-400 hover:text-slate-200"
+        className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-ink-muted hover:text-ink-soft"
       >
         <span className={clsx("transition", open ? "rotate-90" : "rotate-0")}>▸</span>
         Sheet photo
       </button>
       {open && photos.length > 1 && (
-        <div className="flex items-center gap-1 text-xs text-slate-400">
+        <div className="flex items-center gap-1 text-xs text-ink-muted">
           <button
             type="button"
-            className="rounded px-1.5 py-0.5 hover:bg-slate-800 disabled:opacity-40"
+            className="rounded px-1.5 py-0.5 hover:bg-surface-2 disabled:opacity-40"
             disabled={photoIdx <= 0}
             onClick={() => setPhotoIdx((i) => Math.max(0, i - 1))}
           >
@@ -117,7 +117,7 @@ export default function SheetPhotoPane({
           </span>
           <button
             type="button"
-            className="rounded px-1.5 py-0.5 hover:bg-slate-800 disabled:opacity-40"
+            className="rounded px-1.5 py-0.5 hover:bg-surface-2 disabled:opacity-40"
             disabled={photoIdx >= photos.length - 1}
             onClick={() => setPhotoIdx((i) => Math.min(photos.length - 1, i + 1))}
           >
@@ -129,19 +129,19 @@ export default function SheetPhotoPane({
   );
 
   return (
-    <div className={clsx("overflow-hidden rounded-xl border border-slate-800 bg-slate-900/60", className)}>
+    <div className={clsx("overflow-hidden rounded-xl border border-hairline bg-surface/60", className)}>
       {header}
 
       {!open ? null : isLoading || (importId && detail.isLoading) ? (
-        <p className="px-3 py-6 text-sm text-slate-500">Loading the day's sheet photo…</p>
+        <p className="px-3 py-6 text-sm text-ink-muted">Loading the day's sheet photo…</p>
       ) : !photo ? (
         <div className="space-y-2 px-3 py-6">
-          <p className="text-sm text-slate-500">No sheet photo uploaded for {runDate}.</p>
+          <p className="text-sm text-ink-muted">No sheet photo uploaded for {runDate}.</p>
           {onOpenImports && (
             <button
               type="button"
               onClick={onOpenImports}
-              className="rounded-md border border-slate-700 bg-slate-800/60 px-3 py-1.5 text-xs font-medium text-slate-200 hover:border-slate-500"
+              className="rounded-md border border-hairline bg-surface-2/60 px-3 py-1.5 text-xs font-medium text-ink-soft hover:border-slate-500"
             >
               Upload one in Import sheets
             </button>
@@ -153,18 +153,18 @@ export default function SheetPhotoPane({
             <div className="flex items-center gap-1">
               <button
                 type="button"
-                className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-surface-2 disabled:opacity-40"
                 disabled={zoom <= MIN_ZOOM}
                 onClick={() => setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP))}
               >
                 −
               </button>
-              <span className="w-12 text-center text-xs tabular-nums text-slate-400">
+              <span className="w-12 text-center text-xs tabular-nums text-ink-muted">
                 {Math.round(zoom * 100)}%
               </span>
               <button
                 type="button"
-                className="rounded px-2 py-0.5 text-sm text-slate-300 hover:bg-slate-800 disabled:opacity-40"
+                className="rounded px-2 py-0.5 text-sm text-ink-soft hover:bg-surface-2 disabled:opacity-40"
                 disabled={zoom >= MAX_ZOOM}
                 onClick={() => setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP))}
               >
@@ -173,7 +173,7 @@ export default function SheetPhotoPane({
               {zoom > MIN_ZOOM && (
                 <button
                   type="button"
-                  className="ml-1 rounded px-2 py-0.5 text-xs text-slate-400 hover:bg-slate-800"
+                  className="ml-1 rounded px-2 py-0.5 text-xs text-ink-muted hover:bg-surface-2"
                   onClick={() => setZoom(MIN_ZOOM)}
                 >
                   Fit
@@ -214,7 +214,7 @@ export default function SheetPhotoPane({
             onPointerUp={endDrag}
             onPointerCancel={endDrag}
             className={clsx(
-              "max-h-[70vh] overflow-auto bg-slate-950/60",
+              "max-h-[70vh] overflow-auto bg-surface-3/60",
               zoom > MIN_ZOOM ? "cursor-grab active:cursor-grabbing" : "",
             )}
           >
@@ -226,7 +226,7 @@ export default function SheetPhotoPane({
               className="block select-none"
             />
           </div>
-          <p className="truncate border-t border-hairline px-3 py-1.5 text-[11px] text-slate-500">
+          <p className="truncate border-t border-hairline px-3 py-1.5 text-[11px] text-ink-muted">
             {photo.file_name}
           </p>
         </>
