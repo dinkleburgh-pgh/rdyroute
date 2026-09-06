@@ -7,6 +7,45 @@
 import type { TruckStatus, TruckType, TruckWithState } from "../types";
 
 /** Previous workday in the 1–5 day-number system (Mon→Fri on day 1). */
+// In-file helpers (no longer exported — nothing outside imports them).
+/**
+ * A PURE day-init seed: status "unloaded" written by the auto seeder, never
+ * touched by the workflow (no unloaded_at). The fleet SCHEDULE is the truth
+ * for what must be unloaded — a scheduled truck the seeder guessed clean
+ * stays in the denominator as pending work, but nobody unloaded it, so it
+ * must not count as done (a stale board otherwise started at 6/28 done).
+ */
+function isPureUnloadSeed(t: TruckWithState): boolean {
+  return (
+    t.state?.status === "unloaded" &&
+    t.state?.state_source === "auto" &&
+    t.state?.unloaded_at == null
+  );
+}
+
+/**
+ * Did this truck actually get unloaded today, per the DURABLE stamp?
+ *
+ * `status` is transient — a truck that unloads and is then marked OOS (or shop,
+ * or off) carries that status instead, and counting on status alone silently
+ * took its progress back off the bar. `unloaded_at` is only written by a real
+ * unload and is only cleared by a genuine undo (back to dirty/in_progress/
+ * unfinished), so it survives whatever happens to the truck afterwards.
+ */
+function hasUnloadedStamp(t: TruckWithState): boolean {
+  return t.state?.unloaded_at != null;
+}
+
+/**
+ * Did this truck actually finish loading today, per the DURABLE stamp? Same
+ * reasoning as {@link hasUnloadedStamp}: `load_finish_time` is stamped at
+ * finish and cleared on cancel, so a truck marked OOS after loading keeps its
+ * credit on the load bar.
+ */
+function hasLoadFinishStamp(t: TruckWithState): boolean {
+  return t.state?.load_finish_time != null;
+}
+
 export function previousWorkday(dayNum: number): number {
   return dayNum === 1 ? 5 : dayNum - 1;
 }
@@ -93,20 +132,6 @@ export function countLoaded(
   return loadedTruckNumbers(board, loadDayNum, holidayLoad, unloadsDayNum, holidayUnload).length;
 }
 
-/**
- * A PURE day-init seed: status "unloaded" written by the auto seeder, never
- * touched by the workflow (no unloaded_at). The fleet SCHEDULE is the truth
- * for what must be unloaded — a scheduled truck the seeder guessed clean
- * stays in the denominator as pending work, but nobody unloaded it, so it
- * must not count as done (a stale board otherwise started at 6/28 done).
- */
-export function isPureUnloadSeed(t: TruckWithState): boolean {
-  return (
-    t.state?.status === "unloaded" &&
-    t.state?.state_source === "auto" &&
-    t.state?.unloaded_at == null
-  );
-}
 
 /**
  * Does a previous-day CARRIER count as having unloaded its covered route's
@@ -123,28 +148,7 @@ export function carrierCountsAsUnloaded(carrier: TruckWithState): boolean {
   return raw === "unloaded" || raw === "in_progress" || raw === "loaded";
 }
 
-/**
- * Did this truck actually get unloaded today, per the DURABLE stamp?
- *
- * `status` is transient — a truck that unloads and is then marked OOS (or shop,
- * or off) carries that status instead, and counting on status alone silently
- * took its progress back off the bar. `unloaded_at` is only written by a real
- * unload and is only cleared by a genuine undo (back to dirty/in_progress/
- * unfinished), so it survives whatever happens to the truck afterwards.
- */
-export function hasUnloadedStamp(t: TruckWithState): boolean {
-  return t.state?.unloaded_at != null;
-}
 
-/**
- * Did this truck actually finish loading today, per the DURABLE stamp? Same
- * reasoning as {@link hasUnloadedStamp}: `load_finish_time` is stamped at
- * finish and cleared on cancel, so a truck marked OOS after loading keeps its
- * credit on the load bar.
- */
-export function hasLoadFinishStamp(t: TruckWithState): boolean {
-  return t.state?.load_finish_time != null;
-}
 
 /**
  * Count of unloaded trucks from an already-built unload OperationalDayContext.

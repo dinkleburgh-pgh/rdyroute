@@ -19,12 +19,6 @@ export const TRUCK_TYPE_LABEL: Record<TruckType, string> = {
   Spare: "Spare",
 };
 
-/** Spelled-out form, for headings and prose where the abbreviation is cryptic. */
-export const TRUCK_TYPE_LONG_LABEL: Record<TruckType, string> = {
-  Uniform: "Uniform",
-  Dust: "Facility Services",
-  Spare: "Spare",
-};
 
 /** Single-letter tag used where space is tight (e.g. the off-day schedule grid). */
 export const TRUCK_TYPE_SHORT_LABEL: Record<TruckType, string> = {
@@ -38,7 +32,3 @@ export function truckTypeLabel(t: TruckType | string | null | undefined): string
   return TRUCK_TYPE_LABEL[t as TruckType] ?? String(t);
 }
 
-export function truckTypeLongLabel(t: TruckType | string | null | undefined): string {
-  if (!t) return "";
-  return TRUCK_TYPE_LONG_LABEL[t as TruckType] ?? String(t);
-}

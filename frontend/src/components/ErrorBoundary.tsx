@@ -89,7 +89,7 @@ export default function ErrorBoundary() {
 
       {/* Bottom wordmark */}
       <p className="relative z-10 mt-8 text-xs text-slate-700 select-none">
-        ReadyRoute V2
+        ReadyRoute
       </p>
     </div>
   );

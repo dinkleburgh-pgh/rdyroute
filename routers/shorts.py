@@ -15,6 +15,7 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
+from routers.trends_common import days_back_query
 from routers.auth import get_current_user, require_non_guest
 from routers.trends_common import half_split_change, prior_bounds, window_bounds
 from models import Shortage, User
@@ -226,7 +227,7 @@ def clear_shortages_for_truck(
 
 @router.get("/trends/daily", response_model=list[ShortageDailyPoint])
 def shortage_daily_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -250,7 +251,7 @@ def shortage_daily_trend(
 
 @router.get("/trends/by-category", response_model=list[ShortageCategoryPoint])
 def shortage_by_category_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -273,7 +274,7 @@ def shortage_by_category_trend(
 
 @router.get("/trends/by-item", response_model=list[ShortageItemPoint])
 def shortage_by_item_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -306,7 +307,7 @@ def shortage_by_item_trend(
 
 @router.get("/trends/by-truck", response_model=list[ShortageTruckPoint])
 def shortage_by_truck_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -331,7 +332,7 @@ def shortage_by_truck_trend(
 
 @router.get("/trends/summary", response_model=ShortageSummary)
 def shortage_trend_summary(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     compare_days_back: int | None = Query(default=None, ge=1, le=365),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

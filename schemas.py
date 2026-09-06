@@ -1092,6 +1092,27 @@ class TrendDailyPoint(BaseModel):
     entry_count: int
 
 
+class AuditDailyPoint(BaseModel):
+    """One day of audit removals (/audit/trends/daily)."""
+    run_date: date
+    total_qty: int
+    entry_count: int
+
+
+class AuditRouteItemRow(BaseModel):
+    """Removals grouped by route x item (/audit/trends/by-route)."""
+    route: int
+    item_label: str
+    total_qty: int
+
+
+class AuditTruckItemRow(BaseModel):
+    """Removals grouped by truck x item (/audit/trends/by-truck)."""
+    truck_number: int
+    item_label: str
+    total_qty: int
+
+
 class TrendSummary(BaseModel):
     total_qty: int
     avg_per_day: float

@@ -105,7 +105,7 @@ function mergeCurrentOption(options: string[], currentValue: string): string[] {
 
 function formatColumnLabel(column: ShortageSheetColumnDraft): string {
   const parts = [`Column ${column.column_index}`];
-  if (column.truck_number != null) parts.push(`Truck ${column.truck_number}`);
+  if (column.truck_number != null) parts.push(`Truck #${column.truck_number}`);
   if (column.route_number != null) parts.push(`Route ${column.route_number}`);
   return parts.join(" · ");
 }

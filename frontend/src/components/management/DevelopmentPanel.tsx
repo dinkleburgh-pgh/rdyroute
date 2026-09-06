@@ -90,7 +90,7 @@ export default function DevelopmentPanel() {
       </div>
 
       <div className="card space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300">Day Number Override</h3>
+        <h3 className="text-sm font-semibold text-slate-300">Day number override</h3>
         <p className="text-xs text-slate-500">
           Overrides the load-day and unloads-day numbers used to filter which trucks appear on the
           Run Day, Load, and Unload pages.
@@ -145,7 +145,7 @@ export default function DevelopmentPanel() {
 
       <div className="card space-y-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-300">Production Mirror Sync</h3>
+          <h3 className="text-sm font-semibold text-slate-300">Production mirror sync</h3>
           <p className="mt-1 text-xs text-slate-500">
             Pulls the live production export into this local database so the dev app can inspect the day using real data.
             This replaces the local operational snapshot and is hard-blocked unless the app is reached over loopback or a private LAN address.

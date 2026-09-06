@@ -14,6 +14,7 @@ import mimetypes
 import re
 import shutil
 import uuid
+from typing import Callable
 import zipfile
 from datetime import datetime, timezone, date
 from pathlib import Path
@@ -307,17 +308,23 @@ def _load_ocr_correction_memory(db: Session) -> list[dict[str, object]]:
     return memory
 
 
-def _store_ocr_correction_memory(db: Session, examples: list[dict[str, object]]) -> None:
+def _store_correction_memory(db: Session, setting_key: str, examples: list[dict[str, object]]) -> None:
+    """One store for both correction memories (row and header) — they were
+    byte-identical functions differing only in the setting key."""
     trimmed = examples[:_OCR_CORRECTION_MEMORY_LIMIT]
     payload = {
         "version": 1,
         "examples": trimmed,
         "updated_at": _now_utc().isoformat(),
     }
-    _upsert_app_setting(db, _OCR_CORRECTION_MEMORY_KEY, payload)
+    _upsert_app_setting(db, setting_key, payload)
 
 
-def _dedupe_ocr_correction_examples(examples: list[dict[str, object]]) -> list[dict[str, object]]:
+def _dedupe_correction_examples(
+    examples: list[dict[str, object]],
+    fingerprint: "Callable[[dict[str, object]], tuple[object, ...]]",
+) -> list[dict[str, object]]:
+    """Newest-first dedupe shared by both memories; only the fingerprint differs."""
     deduped: list[dict[str, object]] = []
     seen: set[tuple[object, ...]] = set()
     for entry in sorted(
@@ -325,20 +332,43 @@ def _dedupe_ocr_correction_examples(examples: list[dict[str, object]]) -> list[d
         key=lambda item: _normalise_text(item.get("reviewed_at")),
         reverse=True,
     ):
-        fingerprint = (
-            _normalise_text(entry.get("template_id")),
-            _normalise_text(entry.get("row_key")),
-            _normalise_text(entry.get("item_category")).lower(),
-            _normalise_text(entry.get("item_detail")).lower(),
-            _coerce_int(entry.get("quantity")),
-            _normalise_text(entry.get("raw_text")).lower(),
-            _coerce_int(entry.get("source_column_index")),
-        )
-        if fingerprint in seen:
+        fp = fingerprint(entry)
+        if fp in seen:
             continue
-        seen.add(fingerprint)
+        seen.add(fp)
         deduped.append(entry)
     return deduped
+
+
+def _row_example_fingerprint(entry: dict[str, object]) -> tuple[object, ...]:
+    return (
+        _normalise_text(entry.get("template_id")),
+        _normalise_text(entry.get("row_key")),
+        _normalise_text(entry.get("item_category")).lower(),
+        _normalise_text(entry.get("item_detail")).lower(),
+        _coerce_int(entry.get("quantity")),
+        _normalise_text(entry.get("raw_text")).lower(),
+        _coerce_int(entry.get("source_column_index")),
+    )
+
+
+def _header_example_fingerprint(entry: dict[str, object]) -> tuple[object, ...]:
+    return (
+        _normalise_text(entry.get("template_id")),
+        _coerce_int(entry.get("column_index")),
+        _coerce_int(entry.get("truck_number")),
+        _coerce_int(entry.get("route_number")),
+        _normalise_text(entry.get("initials")).upper(),
+        _normalise_text(entry.get("source_photo_id")),
+    )
+
+
+def _dedupe_row_examples(examples: list[dict[str, object]]) -> list[dict[str, object]]:
+    return _dedupe_correction_examples(examples, _row_example_fingerprint)
+
+
+def _dedupe_header_examples(examples: list[dict[str, object]]) -> list[dict[str, object]]:
+    return _dedupe_correction_examples(examples, _header_example_fingerprint)
 
 
 def _build_ocr_correction_example(
@@ -389,7 +419,7 @@ def _remember_ocr_correction_example(
         return
     memory = _load_ocr_correction_memory(db)
     memory.append(example)
-    _store_ocr_correction_memory(db, _dedupe_ocr_correction_examples(memory))
+    _store_correction_memory(db, _OCR_CORRECTION_MEMORY_KEY, _dedupe_row_examples(memory))
 
 
 def _remember_import_ocr_corrections(
@@ -407,7 +437,7 @@ def _remember_import_ocr_corrections(
         )
         if example is not None:
             memory.append(example)
-    _store_ocr_correction_memory(db, _dedupe_ocr_correction_examples(memory))
+    _store_correction_memory(db, _OCR_CORRECTION_MEMORY_KEY, _dedupe_row_examples(memory))
 
 
 def _load_or_seed_ocr_correction_memory(db: Session) -> list[dict[str, object]]:
@@ -430,9 +460,9 @@ def _load_or_seed_ocr_correction_memory(db: Session) -> list[dict[str, object]]:
             )
             if example is not None:
                 memory.append(example)
-    deduped = _dedupe_ocr_correction_examples(memory)
+    deduped = _dedupe_row_examples(memory)
     if deduped:
-        _store_ocr_correction_memory(db, deduped)
+        _store_correction_memory(db, _OCR_CORRECTION_MEMORY_KEY, deduped)
     return deduped
 
 
@@ -466,39 +496,6 @@ def _load_header_ocr_correction_memory(db: Session) -> list[dict[str, object]]:
             continue
         memory.append(normalized)
     return memory
-
-
-def _store_header_ocr_correction_memory(db: Session, examples: list[dict[str, object]]) -> None:
-    trimmed = examples[:_OCR_CORRECTION_MEMORY_LIMIT]
-    payload = {
-        "version": 1,
-        "examples": trimmed,
-        "updated_at": _now_utc().isoformat(),
-    }
-    _upsert_app_setting(db, _OCR_HEADER_CORRECTION_MEMORY_KEY, payload)
-
-
-def _dedupe_header_ocr_correction_examples(examples: list[dict[str, object]]) -> list[dict[str, object]]:
-    deduped: list[dict[str, object]] = []
-    seen: set[tuple[object, ...]] = set()
-    for entry in sorted(
-        examples,
-        key=lambda item: _normalise_text(item.get("reviewed_at")),
-        reverse=True,
-    ):
-        fingerprint = (
-            _normalise_text(entry.get("template_id")),
-            _coerce_int(entry.get("column_index")),
-            _coerce_int(entry.get("truck_number")),
-            _coerce_int(entry.get("route_number")),
-            _normalise_text(entry.get("initials")).upper(),
-            _normalise_text(entry.get("source_photo_id")),
-        )
-        if fingerprint in seen:
-            continue
-        seen.add(fingerprint)
-        deduped.append(entry)
-    return deduped
 
 
 def _build_header_ocr_correction_example(
@@ -552,7 +549,7 @@ def _remember_header_ocr_correction_example(
         return
     memory = _load_header_ocr_correction_memory(db)
     memory.append(example)
-    _store_header_ocr_correction_memory(db, _dedupe_header_ocr_correction_examples(memory))
+    _store_correction_memory(db, _OCR_HEADER_CORRECTION_MEMORY_KEY, _dedupe_header_examples(memory))
 
 
 def _remember_import_header_ocr_corrections(
@@ -570,7 +567,7 @@ def _remember_import_header_ocr_corrections(
         )
         if example is not None:
             memory.append(example)
-    _store_header_ocr_correction_memory(db, _dedupe_header_ocr_correction_examples(memory))
+    _store_correction_memory(db, _OCR_HEADER_CORRECTION_MEMORY_KEY, _dedupe_header_examples(memory))
 
 
 def _load_or_seed_header_ocr_correction_memory(db: Session) -> list[dict[str, object]]:
@@ -593,9 +590,9 @@ def _load_or_seed_header_ocr_correction_memory(db: Session) -> list[dict[str, ob
             )
             if example is not None:
                 memory.append(example)
-    deduped = _dedupe_header_ocr_correction_examples(memory)
+    deduped = _dedupe_header_examples(memory)
     if deduped:
-        _store_header_ocr_correction_memory(db, deduped)
+        _store_correction_memory(db, _OCR_HEADER_CORRECTION_MEMORY_KEY, deduped)
     return deduped
 
 

@@ -307,7 +307,7 @@ export default function ConnectionsPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-300">Backend Connections</h3>
+        <h3 className="text-sm font-semibold text-slate-300">Backend connections</h3>
         <button className="btn-ghost text-xs" onClick={check} disabled={loading}>
           {loading ? "Checking…" : "Refresh"}
         </button>

@@ -60,10 +60,6 @@ export function can(role: AuthRole | undefined | null, action: PermissionAction)
   return ACTION_ROLES[action].includes(role);
 }
 
-/** True for manager-level roles (admin/fleet/atl/supervisor/lead). */
-export function isManager(role: AuthRole | undefined | null): boolean {
-  return !!role && MANAGER_ROLES.includes(role);
-}
 
 // ---------------------------------------------------------------------------
 // Role display metadata (badge colors + human labels)

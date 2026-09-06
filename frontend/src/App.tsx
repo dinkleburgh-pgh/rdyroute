@@ -27,7 +27,7 @@ const Shorts = lazy(() => import("./pages/Shorts"));
 const Audit = lazy(() => import("./pages/Audit"));
 const Trends = lazy(() => import("./pages/Trends"));
 const TrendDetail = lazy(() => import("./pages/trends/TrendDetail"));
-const Management = lazy(() => import("./pages/Settings"));
+const Management = lazy(() => import("./pages/Management"));
 const Communications = lazy(() => import("./pages/Communications"));
 const NotesBoard = lazy(() => import("./pages/Notes"));
 const DriverNotes = lazy(() => import("./pages/DriverNotes"));

@@ -491,7 +491,7 @@ export default function BatchingWizard() {
       <ConfirmDialog
         open={confirmMove != null}
         title={`Move truck ${confirmMove?.truck} to Batch ${step}?`}
-        description={`Truck ${confirmMove?.truck} is currently in Batch ${confirmMove?.from}. Moving it here removes it from Batch ${confirmMove?.from}.`}
+        description={`Truck #${confirmMove?.truck} is currently in Batch ${confirmMove?.from}. Moving it here removes it from Batch ${confirmMove?.from}.`}
         confirmLabel={`Move to Batch ${step}`}
         onConfirm={() => {
           const m = confirmMove;
@@ -505,7 +505,7 @@ export default function BatchingWizard() {
         open={confirmRemove != null}
         variant="danger"
         title={`Remove truck ${confirmRemove?.truck} from Batch ${confirmRemove?.from}?`}
-        description={`Truck ${confirmRemove?.truck} will no longer be assigned to a batch.`}
+        description={`Truck #${confirmRemove?.truck} will no longer be assigned to a batch.`}
         confirmLabel="Remove"
         onConfirm={() => {
           const m = confirmRemove;

@@ -26,6 +26,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
+from routers.trends_common import days_back_query
 from routers.auth import get_current_user, require_non_guest
 from routers.trends_common import (
     completed_load_filter,
@@ -35,6 +36,9 @@ from routers.trends_common import (
 )
 from models import AuditEntry, AuditPhoto, TruckState, User
 from schemas import (
+    AuditTruckItemRow,
+    AuditRouteItemRow,
+    AuditDailyPoint,
     AnomalyDay,
     AuditEntryCreate,
     AuditEntryOut,
@@ -157,9 +161,9 @@ def delete_audit_entry(entry_id: str, background_tasks: BackgroundTasks, _user: 
 # Trend / analytics endpoints
 # ---------------------------------------------------------------------------
 
-@router.get("/trends/daily")
+@router.get("/trends/daily", response_model=list[AuditDailyPoint])
 def audit_daily_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -183,7 +187,7 @@ def audit_daily_trend(
 
 @router.get("/trends/quality-rate", response_model=QualityRateSummary)
 def audit_quality_rate(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     compare_days_back: int | None = Query(default=None, ge=1, le=365),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -276,9 +280,9 @@ def audit_quality_rate(
     )
 
 
-@router.get("/trends/by-route")
+@router.get("/trends/by-route", response_model=list[AuditRouteItemRow])
 def audit_by_route(
-    days_back: int = Query(default=30, ge=1, le=365),
+    days_back: int = days_back_query(30),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -300,9 +304,9 @@ def audit_by_route(
     return [{"route": r.route, "item_label": r.item_label, "total_qty": r.total_qty} for r in rows]
 
 
-@router.get("/trends/by-truck")
+@router.get("/trends/by-truck", response_model=list[AuditTruckItemRow])
 def audit_by_truck(
-    days_back: int = Query(default=30, ge=1, le=365),
+    days_back: int = days_back_query(30),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -324,9 +328,9 @@ def audit_by_truck(
     return [{"truck_number": r.truck_number, "item_label": r.item_label, "total_qty": r.total_qty} for r in rows]
 
 
-@router.get("/trends/summary")
+@router.get("/trends/summary", response_model=TrendSummary)
 def trend_summary(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     compare_days_back: int | None = Query(default=None, ge=1, le=365),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -392,10 +396,10 @@ def trend_summary(
     )
 
 
-@router.get("/trends/by-truck/{truck_number}")
+@router.get("/trends/by-truck/{truck_number}", response_model=list[TrendTruckPoint])
 def trend_by_truck(
     truck_number: int,
-    days_back: int = Query(default=30, ge=1, le=365),
+    days_back: int = days_back_query(30),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -419,10 +423,10 @@ def trend_by_truck(
     ]
 
 
-@router.get("/trends/by-route/{route_number}")
+@router.get("/trends/by-route/{route_number}", response_model=list[TrendRoutePoint])
 def trend_by_route(
     route_number: int,
-    days_back: int = Query(default=30, ge=1, le=365),
+    days_back: int = days_back_query(30),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -447,9 +451,9 @@ def trend_by_route(
     ]
 
 
-@router.get("/trends/comparison")
+@router.get("/trends/comparison", response_model=TrendComparison)
 def trend_comparison(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -620,7 +624,7 @@ def delete_audit_photo(photo_id: str, _user: User = Depends(require_non_guest), 
 
 @router.get("/trends/anomalies", response_model=list[AnomalyDay])
 def audit_anomalies(
-    days_back: int = Query(default=90, ge=14, le=365),
+    days_back: int = days_back_query(90, ge=14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

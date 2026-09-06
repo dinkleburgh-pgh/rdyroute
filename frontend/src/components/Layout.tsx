@@ -53,7 +53,7 @@ const SIDEBAR_PRIMARY_NAV = [
 
 const SIDEBAR_SECONDARY_NAV = [
   { to: "/report", label: "Report" },
-  { to: "/fleet-schedule", label: "Fleet Schedule" },
+  { to: "/fleet-schedule", label: "Fleet schedule" },
   { to: "/batching", label: "Batching" },
   { to: "/shorts", label: "Short sheet" },
   { to: "/audit", label: "Audit" },
@@ -65,10 +65,10 @@ const SIDEBAR_SECONDARY_NAV = [
 ];
 
 const MOBILE_PRIMARY_NAV = [
-  { to: "/fleet-schedule", label: "Fleet Sch." },
+  { to: "/fleet-schedule", label: "Fleet sch." },
   { to: "/audit", label: "Audit" },
   { to: "/communications", label: "Communications" },
-  { to: "/shorts", label: "Short Sheet" },
+  { to: "/shorts", label: "Short sheet" },
 ];
 
 const MOBILE_SECONDARY_NAV = [
@@ -114,7 +114,7 @@ function BuildInfo() {
   return (
     <div className="pt-2 text-center text-[10px] leading-tight text-ink-faint">
       <p>
-        ReadyRoute V2 · {isDev ? `${version} · dev` : version}
+        ReadyRoute · {isDev ? `${version} · dev` : version}
       </p>
       {(shortCommit || dateLabel) && !isDev && (
         <p className="text-ink-faint/60">
@@ -561,7 +561,7 @@ export default function Layout() {
               R
             </div>
             <div className="leading-tight">
-              <p className="text-base font-bold text-white">rdyroute.app</p>
+              <p className="text-base font-bold text-white">ReadyRoute</p>
               <p className="font-mono text-xs text-ink-faint">{appVersion}</p>
             </div>
           </div>

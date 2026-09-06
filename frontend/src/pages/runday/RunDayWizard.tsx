@@ -155,10 +155,8 @@ export default function RunDayWizard({
   const specialTrucks = [...returningTrucks, ...spareTrucks].filter(
     (t, i, arr) => arr.findIndex((x) => x.truck_number === t.truck_number) === i,
   );
-  // Wizard always overrides — including workflow-touched trucks
-  const canWizardMutateTruck = (_t: TruckWithState) => true;
-  const editableDustTrucks = dustTrucks.filter(canWizardMutateTruck);
-  const editableSpecialTrucks = specialTrucks.filter(canWizardMutateTruck);
+  const editableDustTrucks = dustTrucks;
+  const editableSpecialTrucks = specialTrucks;
   const [absentSelected, setAbsentSelected] = useState<Set<number>>(new Set());
 
   function toggleDust(num: number) {

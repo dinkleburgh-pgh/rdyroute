@@ -17,6 +17,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
+from routers.trends_common import days_back_query
 from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import MAX_LOAD_SECONDS, MIN_LOAD_SECONDS, window_bounds
 from models import AppSetting, LoadDuration, TruckState, User
@@ -35,7 +36,7 @@ _MAX_VALID_SECONDS = MAX_LOAD_SECONDS
 def list_durations(
     run_date: date | None = Query(default=None),
     truck_number: int | None = Query(default=None),
-    days_back: int = Query(default=_DEFAULT_LOOKBACK_DAYS, ge=1, le=365),
+    days_back: int = days_back_query(_DEFAULT_LOOKBACK_DAYS),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -122,7 +123,7 @@ def purge_abnormal(
 
 @router.get("/trends/daily", response_model=list[PaceDailyPoint])
 def load_pace_daily_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -148,7 +149,7 @@ def load_pace_daily_trend(
 
 @router.get("/sequence-suggestions")
 def sequence_suggestions(
-    days_back: int = Query(14, ge=1, le=60),
+    days_back: int = days_back_query(14),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):

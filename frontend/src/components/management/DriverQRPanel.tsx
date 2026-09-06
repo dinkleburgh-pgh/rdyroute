@@ -1,5 +1,5 @@
 /**
- * Driver QR Codes panel — per-route QR codes for driver note access.
+ * Driver QR codes panel — per-route QR codes for driver note access.
  * Extracted from Settings.tsx.
  */
 import ConfirmDialog from "../ConfirmDialog";
@@ -53,7 +53,7 @@ export default function DriverQRPanel() {
   return (
     <div className="space-y-4">
       <div className="card space-y-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Driver QR Codes</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Driver QR codes</h3>
         <p className="text-xs text-slate-500">
           Each driver scans their truck&apos;s QR code to mark themselves back and read their
           notes without logging in — on a spare it also asks which route they ran. Print or

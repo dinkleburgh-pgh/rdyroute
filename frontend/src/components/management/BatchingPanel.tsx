@@ -154,7 +154,7 @@ export default function BatchingPanel() {
       <div className="card space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-300">End-of-Day Batching</h3>
+            <h3 className="text-sm font-semibold text-slate-300">End-of-day batching</h3>
             <p className="mt-1 text-xs text-slate-500">
               Assign each returning truck to a batch for the run date. Tap a batch number on a truck's row;
               tap it again (or ✕) to unassign. Wearer totals update live against the Operations wearer cap.

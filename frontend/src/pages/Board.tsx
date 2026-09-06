@@ -58,6 +58,8 @@ import { truckTypeLabel } from "../utils/truckType";
 import { errorDetail } from "../api/errors";
 import Modal from "../components/Modal";
 import PageStatus from "../components/PageStatus";
+import CollapsibleSection from "./board/CollapsibleSection";
+import OffBoardScheduleDialog from "./board/OffBoardScheduleDialog";
 
 // A collapsible board section (Dirty/Unloaded/OOS/Spare sub-groups). Defined at
 // MODULE scope, not inside Board's render — otherwise React sees a brand-new
@@ -65,60 +67,6 @@ import PageStatus from "../components/PageStatus";
 // it (replaying entrance animations and re-reading localStorage) on every 5s
 // poll, websocket push, and 1s timer tick. renderTruckCard is passed in as a
 // prop since it closes over Board's render state.
-function CollapsibleSection({
-  sectionKey,
-  title,
-  titleClassName,
-  sectionRows,
-  renderTruckCard,
-  tileGrid,
-}: {
-  sectionKey: string;
-  title: string;
-  titleClassName: string;
-  sectionRows: TruckWithState[];
-  renderTruckCard: (truck: TruckWithState, index: number) => ReactNode;
-  /** Quiet-tile grid (denser); "oos" leaves room for the inline picker. */
-  tileGrid?: boolean | "oos";
-}) {
-  const initOpen = useRef(
-    localStorage.getItem(`readyroutev2_collapse_board-${sectionKey}`) !== "false"
-  ).current;
-  if (sectionRows.length === 0) return null;
-  return (
-    <details
-      open={initOpen ? true : undefined}
-      onToggle={(e) => {
-        const val = (e.target as HTMLDetailsElement).open;
-        try { localStorage.setItem(`readyroutev2_collapse_board-${sectionKey}`, String(val)); } catch { }
-      }}
-      className="group col-span-full overflow-hidden rounded-2xl border border-hairline bg-surface-3/50"
-    >
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 bg-surface/80 px-4 py-3">
-        <div className="min-w-0">
-          <div className={clsx("text-xl font-black uppercase tracking-[0.3em] sm:text-2xl", titleClassName)}>
-            {title}
-          </div>
-          <div className="text-xs font-medium text-ink-muted">
-            {sectionRows.length} truck{sectionRows.length !== 1 ? "s" : ""}
-          </div>
-        </div>
-        <span className="text-lg text-ink-muted transition-transform group-open:rotate-180">⌄</span>
-      </summary>
-      <div className="border-t border-hairline p-3">
-        <div className={clsx(
-          tileGrid === "oos"
-            ? "grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-3"
-            : tileGrid
-            ? "grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5"
-            : "grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
-        )}>
-          {sectionRows.map((truck, sectionIndex) => renderTruckCard(truck, sectionIndex))}
-        </div>
-      </div>
-    </details>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Board
@@ -2301,29 +2249,3 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   );
 }
 
-function OffBoardScheduleDialog({ onClose }: { onClose: () => void }) {
-  return (
-    <Modal open onClose={onClose} size="xl" bodyClassName="p-4">
-        <div className="mb-4 flex items-start justify-between gap-3">
-          <div>
-            <h3 className="text-lg font-semibold text-ink">Fleet Schedule</h3>
-            <p className="mt-1 text-sm text-ink-muted">
-              Review route truck run and off days without leaving the off board.
-            </p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-md p-2 text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink-soft"
-            aria-label="Close schedule dialog"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
-
-        <div className="max-h-[75vh] overflow-auto">
-          <OffDaySchedulePanel />
-        </div>
-          </Modal>
-  );
-}

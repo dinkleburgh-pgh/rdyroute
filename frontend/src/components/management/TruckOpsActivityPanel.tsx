@@ -99,7 +99,7 @@ export default function TruckOpsActivityPanel({
         <div className="rounded-xl border border-slate-800 bg-slate-900/70 p-3 sm:p-4">
           <div className="flex flex-wrap items-start justify-between gap-3">
             <div>
-              <h3 className="text-base font-semibold text-white">History & Activity</h3>
+              <h3 className="text-base font-semibold text-white">History & activity</h3>
               <p className="mt-1 text-sm text-slate-400">
                 Append-only truck and operations history for debugging, accountability, and workflow tracing.
               </p>

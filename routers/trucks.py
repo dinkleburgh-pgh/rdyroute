@@ -29,6 +29,7 @@ from activity_log import add_related_truck_context, append_activity_event, appen
 from database import get_db, settings as app_settings
 from models import AppSetting, GarmentDayLog, RouteSwap, RouteSwapLog, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, send_web_push, truck_arrived_notification, truck_hold_notification, truck_oos_notification
+from routers.trends_common import days_back_query
 from routers.auth import get_current_user, require_admin, require_non_guest
 from routers.trends_common import (
     MAX_LOAD_SECONDS,
@@ -1252,7 +1253,7 @@ def _completion_roster_agg(db: Session, start: date, end: date) -> dict[date, li
 
 @router.get("/trends/completion", response_model=list[CompletionDailyPoint])
 def truck_completion_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -1273,7 +1274,7 @@ def truck_completion_trend(
 
 @router.get("/trends/wearers", response_model=list[WearersDailyPoint])
 def truck_wearers_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -1310,7 +1311,7 @@ def truck_wearers_trend(
 
 @router.get("/trends/cycle", response_model=list[CycleDailyPoint])
 def truck_cycle_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -1345,7 +1346,7 @@ def truck_cycle_trend(
 
 @router.get("/trends/unload", response_model=list[UnloadDailyPoint])
 def truck_unload_trend(
-    days_back: int = Query(default=14, ge=1, le=365),
+    days_back: int = days_back_query(14),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):
@@ -1395,7 +1396,7 @@ def truck_unload_trend(
 
 @router.get("/trends/anomalies", response_model=list[AnomalyDay])
 def truck_anomalies(
-    days_back: int = Query(default=90, ge=14, le=365),
+    days_back: int = days_back_query(90, ge=14),
     db: Session = Depends(get_db),
     _user: User = Depends(get_current_user),
 ):

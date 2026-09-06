@@ -384,7 +384,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       {/* Header bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Tracked Items</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Tracked items</h3>
           <p className="text-xs text-slate-500">
             {draft.length} item{draft.length !== 1 ? "s" : ""} across {categories.length} categor{categories.length !== 1 ? "ies" : "y"}
             {needsConfigCount > 0 && (

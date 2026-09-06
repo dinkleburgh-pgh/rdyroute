@@ -17,6 +17,8 @@ router and produced wrong numbers:
 
 from __future__ import annotations
 
+from fastapi import Query
+
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 
@@ -129,3 +131,9 @@ def operational_running_filter():
     return is_running_filter() & ~(
         (Truck.truck_type == TruckType.spare) & TruckState.oos_spare_route.is_(None)
     )
+
+# Shared `days_back` query parameter. Twenty-two endpoints hand-declared this
+# with slightly different bounds (one capped at 60 days for no stated reason);
+# every trend window now takes the same 1-365 day range.
+def days_back_query(default: int, *, ge: int = 1):
+    return Query(default=default, ge=ge, le=365)

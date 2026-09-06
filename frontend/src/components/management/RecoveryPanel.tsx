@@ -150,7 +150,7 @@ export default function RecoveryPanel() {
       <div className="card space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">PostgreSQL Backups</h3>
+            <h3 className="text-sm font-semibold text-slate-200">PostgreSQL backups</h3>
             <p className="mt-0.5 text-xs text-slate-500">
               Automatic pg_dump SQL backups created every 30 minutes. Stored at{" "}
               <span className="font-mono text-slate-400">/app/.data/backups/</span>

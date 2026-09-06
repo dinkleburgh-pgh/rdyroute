@@ -29,12 +29,6 @@ export async function captureNodeToPngBlob(node: HTMLElement): Promise<Blob> {
   }
 }
 
-/** Capture to a base64 PNG (no `data:` prefix) — the form the report PDF
- *  endpoint expects. */
-export async function captureNodeToPngBase64(node: HTMLElement): Promise<string> {
-  const blob = await captureNodeToPngBlob(node);
-  return blobToBase64(blob);
-}
 
 async function toPngBlob(clone: HTMLElement): Promise<Blob> {
   expandForCapture(clone);
