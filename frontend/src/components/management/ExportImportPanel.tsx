@@ -48,8 +48,8 @@ export default function ExportImportPanel() {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-300">Quick exports</h3>
-        <p className="mb-3 text-xs text-slate-500">Download individual data tables as JSON files.</p>
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-ink-soft">Quick exports</h3>
+        <p className="mb-3 text-xs text-ink-muted">Download individual data tables as JSON files.</p>
         <div className="flex flex-wrap gap-2">
           <button className="btn-ghost text-sm" onClick={() => downloadFile("/exports/load-durations.json")}>Download load durations JSON</button>
           <button className="btn-ghost text-sm" onClick={() => downloadFile("/exports/truck-states.json")}>Download current-day state JSON</button>
@@ -59,8 +59,8 @@ export default function ExportImportPanel() {
       </div>
 
       <div className="card">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-300">Backup package</h3>
-        <p className="mb-3 text-xs text-slate-500">
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-ink-soft">Backup package</h3>
+        <p className="mb-3 text-xs text-ink-muted">
           A single ZIP archive containing the core operational snapshot — fleet, load durations,
           truck states, audit entries, shortages, batches, and packaged activity history.
         </p>
@@ -70,7 +70,7 @@ export default function ExportImportPanel() {
       </div>
 
       <div className="card space-y-3">
-        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-slate-300">Import tools</h3>
+        <h3 className="mb-1 text-sm font-semibold uppercase tracking-wide text-ink-soft">Import tools</h3>
         {importStatus && (
           <p className={`rounded px-3 py-2 text-sm ${importStatus.startsWith("Error") ? "bg-red-900/40 text-red-300" : "bg-emerald-900/40 text-emerald-300"}`}>
             {importStatus}

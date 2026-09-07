@@ -71,9 +71,9 @@ export default function ActivityPanel() {
   return (
     <div className="space-y-4">
       {/* Callout */}
-      <div className="flex items-start gap-2.5 rounded-lg border border-slate-800 bg-slate-800/40 px-3 py-2.5">
+      <div className="flex items-start gap-2.5 rounded-lg border border-hairline bg-surface-2/40 px-3 py-2.5">
         <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-amber-400" />
-        <p className="text-xs text-slate-400">
+        <p className="text-xs text-ink-muted">
           This feed shows account-access events. Full audit logging (logins, role changes,
           assignment edits, IP/device) requires a server-side audit log, which isn't implemented
           yet.
@@ -82,7 +82,7 @@ export default function ActivityPanel() {
 
       {/* Filter */}
       <div className="flex items-center gap-2">
-        <span className="text-xs uppercase tracking-wide text-slate-500">Filter</span>
+        <span className="text-xs uppercase tracking-wide text-ink-muted">Filter</span>
         {(["all", "pending", "approved", "denied"] as FilterValue[]).map((f) => (
           <button
             key={f}
@@ -91,7 +91,7 @@ export default function ActivityPanel() {
               "rounded-full px-2.5 py-1 text-xs font-medium capitalize transition-colors",
               filter === f
                 ? "bg-blue-600 text-white"
-                : "bg-slate-800 text-slate-400 hover:text-slate-200",
+                : "bg-surface-2 text-ink-muted hover:text-ink-soft",
             )}
           >
             {f}
@@ -101,20 +101,20 @@ export default function ActivityPanel() {
 
       {/* Feed */}
       <div className="card p-0">
-        {isLoading && <p className="px-3 py-4 text-sm text-slate-400">Loading…</p>}
+        {isLoading && <p className="px-3 py-4 text-sm text-ink-muted">Loading…</p>}
         {!isLoading && filtered.length === 0 && (
-          <p className="px-3 py-10 text-center text-sm text-slate-500">No activity recorded.</p>
+          <p className="px-3 py-10 text-center text-sm text-ink-muted">No activity recorded.</p>
         )}
-        <ul className="divide-y divide-slate-800">
+        <ul className="divide-y divide-hairline">
           {filtered.map((e) => (
             <li key={e.id} className="flex items-center justify-between gap-3 px-3 py-3">
               <div className="flex min-w-0 items-center gap-2.5">
                 <UserAvatar name={e.displayName} username={e.username} size={32} />
                 <div className="min-w-0">
-                  <p className="truncate text-sm text-slate-200">
-                    <span className="font-medium text-slate-100">{e.username}</span> — {e.action}
+                  <p className="truncate text-sm text-ink-soft">
+                    <span className="font-medium text-ink">{e.username}</span> — {e.action}
                   </p>
-                  <p className="text-xs text-slate-500">{format(parseISO(e.ts), "PPpp")}</p>
+                  <p className="text-xs text-ink-muted">{format(parseISO(e.ts), "PPpp")}</p>
                 </div>
               </div>
               <span

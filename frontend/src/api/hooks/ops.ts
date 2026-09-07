@@ -783,3 +783,16 @@ export function useTrendComparison(daysBack = 14) {
   });
 }
 
+export interface LastAuditedRow {
+  truck_number: number;
+  last_run_date: string | null;
+}
+
+/** Audit-rotation steering — least-recently-audited route trucks first. */
+export function useLastAudited() {
+  return useQuery({
+    queryKey: ["audit-last-audited"],
+    queryFn: async () => (await api.get<LastAuditedRow[]>("/audit/last-audited")).data,
+    staleTime: 60_000,
+  });
+}

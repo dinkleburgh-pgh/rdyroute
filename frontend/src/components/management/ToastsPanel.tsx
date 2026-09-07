@@ -125,10 +125,10 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
 
       <div className={clsx("mt-2", !form.enabled && "opacity-50")}>
-        <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+        <p className="text-xs font-semibold uppercase tracking-wide text-ink-muted">
           Per alert
         </p>
-        <p className="mb-2 text-xs text-slate-500">
+        <p className="mb-2 text-xs text-ink-muted">
           How long each kind stays on screen. Set 0 seconds to make one stay until it's
           dismissed — use that for anything that must be acknowledged.
         </p>
@@ -143,7 +143,7 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                 id={`toast-kind-${kind}`}
                 className={clsx(
                   "rounded-lg border px-3 py-2.5 transition-colors",
-                  cfg.enabled ? "border-slate-700 bg-slate-900/60" : "border-slate-800 bg-slate-900/20",
+                  cfg.enabled ? "border-hairline bg-surface/60" : "border-hairline bg-surface/20",
                   highlight === kind && "ring-2 ring-white/70 animate-pulse",
                 )}
               >
@@ -156,8 +156,8 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                       onChange={(e) => setKind(kind, { enabled: e.target.checked })}
                     />
                     <span className="min-w-0">
-                      <span className="block text-sm font-medium text-slate-200">{meta.label}</span>
-                      <span className="block text-xs leading-snug text-slate-500">{meta.hint}</span>
+                      <span className="block text-sm font-medium text-ink-soft">{meta.label}</span>
+                      <span className="block text-xs leading-snug text-ink-muted">{meta.hint}</span>
                     </span>
                   </label>
 
@@ -174,11 +174,11 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                         setKind(kind, { seconds: n });
                       }}
                     />
-                    <span className="w-32 text-xs text-slate-500">{describe(cfg.seconds)}</span>
+                    <span className="w-32 text-xs text-ink-muted">{describe(cfg.seconds)}</span>
                     {/* Only kinds whose DEFAULT defines a sound offer the
                         checkbox — a chime on chat messages would be noise. */}
                     {TOAST_DEFAULTS[kind].sound !== undefined && (
-                      <label className="flex items-center gap-1 text-xs text-slate-400">
+                      <label className="flex items-center gap-1 text-xs text-ink-muted">
                         <input
                           type="checkbox"
                           checked={cfg.sound === true}
@@ -203,7 +203,7 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                         "rounded border px-2 py-0.5 text-[11px] font-semibold transition-colors disabled:opacity-40",
                         cfg.seconds === p.seconds
                           ? "border-blue-500 bg-blue-900/50 text-blue-100"
-                          : "border-slate-700 bg-slate-800/60 text-slate-400 hover:border-slate-500",
+                          : "border-hairline bg-surface-2/60 text-ink-muted hover:border-ink-faint",
                       )}
                     >
                       {p.label}
@@ -217,7 +217,7 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                       "rounded border px-2 py-0.5 text-[11px] font-semibold transition-colors disabled:opacity-40",
                       cfg.seconds === 0
                         ? "border-amber-500 bg-amber-900/50 text-amber-100"
-                        : "border-slate-700 bg-slate-800/60 text-slate-400 hover:border-slate-500",
+                        : "border-hairline bg-surface-2/60 text-ink-muted hover:border-ink-faint",
                     )}
                   >
                     Until dismissed
@@ -234,7 +234,7 @@ export default function ToastsPanel({ map }: { map: Map<string, unknown> }) {
                         durationMs: cfg.seconds * 1000,
                       });
                     }}
-                    className="ml-auto rounded border border-slate-700 bg-slate-800/60 px-2 py-0.5 text-[11px] font-semibold text-slate-400 transition-colors hover:border-slate-500 disabled:opacity-40"
+                    className="ml-auto rounded border border-hairline bg-surface-2/60 px-2 py-0.5 text-[11px] font-semibold text-ink-muted transition-colors hover:border-ink-faint disabled:opacity-40"
                   >
                     Preview
                   </button>

@@ -60,6 +60,7 @@ import { motion } from "framer-motion";
 import CollapsibleCoverage from "../components/CollapsibleCoverage";
 import Modal from "../components/Modal";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
+import EmptyState from "../components/EmptyState";
 
 /**
  * Load workflow (V1 parity):
@@ -483,7 +484,7 @@ export default function Load() {
                 );
               })}
               {ready.length === 0 && (
-                <p className="col-span-full text-sm text-ink-muted">No trucks ready to load.</p>
+                <EmptyState className="col-span-full">No trucks ready to load.</EmptyState>
               )}
             </div>
           </div>

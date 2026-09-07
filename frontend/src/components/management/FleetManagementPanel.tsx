@@ -41,7 +41,7 @@ export default function FleetManagementPanel() {
     );
   }
 
-  if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (isLoading) return <p className="text-sm text-ink-muted">Loading…</p>;
 
   return (
     <div className="card space-y-5">
@@ -88,7 +88,7 @@ export default function FleetManagementPanel() {
               Active
             </label>
           </FieldRow>
-          <div className="border-t border-slate-800 pt-3">
+          <div className="border-t border-hairline pt-3">
             {confirmDelete ? (
               <div className="flex items-center gap-2">
                 <p className="text-sm text-red-400">Remove truck #{selected.truck_number} permanently?</p>
@@ -99,7 +99,7 @@ export default function FleetManagementPanel() {
                   Confirm
                 </button>
                 <button
-                  className="rounded bg-slate-700 px-3 py-1 text-sm text-slate-300 hover:bg-slate-600"
+                  className="rounded bg-track px-3 py-1 text-sm text-ink-soft hover:bg-track"
                   onClick={() => setConfirmDelete(false)}
                 >
                   Cancel
@@ -107,7 +107,7 @@ export default function FleetManagementPanel() {
               </div>
             ) : (
               <button
-                className="rounded bg-slate-800 px-3 py-1 text-sm text-slate-400 hover:bg-slate-700 hover:text-red-400"
+                className="rounded bg-surface-2 px-3 py-1 text-sm text-ink-muted hover:bg-track hover:text-red-400"
                 onClick={() => setConfirmDelete(true)}
               >
                 Remove truck
@@ -117,8 +117,8 @@ export default function FleetManagementPanel() {
         </>
       )}
 
-      <div className="border-t border-slate-700 pt-4">
-        <p className="mb-3 text-sm font-medium text-slate-300">Add truck</p>
+      <div className="border-t border-hairline pt-4">
+        <p className="mb-3 text-sm font-medium text-ink-soft">Add truck</p>
         <div className="flex gap-2">
           <input
             type="number" min={1} max={9999} placeholder="Truck #"

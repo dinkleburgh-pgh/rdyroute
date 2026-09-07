@@ -150,10 +150,10 @@ export default function RecoveryPanel() {
       <div className="card space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-slate-200">PostgreSQL backups</h3>
-            <p className="mt-0.5 text-xs text-slate-500">
+            <h3 className="text-sm font-semibold text-ink-soft">PostgreSQL backups</h3>
+            <p className="mt-0.5 text-xs text-ink-muted">
               Automatic pg_dump SQL backups created every 30 minutes. Stored at{" "}
-              <span className="font-mono text-slate-400">/app/.data/backups/</span>
+              <span className="font-mono text-ink-muted">/app/.data/backups/</span>
             </p>
           </div>
           <button
@@ -167,16 +167,16 @@ export default function RecoveryPanel() {
         </div>
 
         {loaded && backups.length === 0 && (
-          <p className="text-sm text-slate-500">
+          <p className="text-sm text-ink-muted">
             No backup files found in <span className="font-mono">/app/.data/backups/</span>.
             Backups are created automatically every 30 minutes when the app is running against PostgreSQL.
           </p>
         )}
 
         {backups.length > 0 && (
-          <div className="overflow-x-auto rounded-lg border border-slate-800">
+          <div className="overflow-x-auto rounded-lg border border-hairline">
             <table className="w-full text-sm">
-              <thead className="bg-slate-800/60 text-left text-xs uppercase tracking-wide text-slate-400">
+              <thead className="bg-surface-2/60 text-left text-xs uppercase tracking-wide text-ink-muted">
                 <tr>
                   <th className="px-3 py-2.5">File</th>
                   <th className="px-3 py-2.5 text-right">Size</th>
@@ -186,10 +186,10 @@ export default function RecoveryPanel() {
               </thead>
               <tbody>
                 {backups.map((b) => (
-                  <tr key={b.filename} className="border-t border-slate-800 hover:bg-slate-800/30">
-                    <td className="px-3 py-2.5 font-mono text-xs text-slate-300">{b.filename}</td>
-                    <td className="px-3 py-2.5 text-right text-xs text-slate-400">{fmtBytes(b.size_bytes)}</td>
-                    <td className="px-3 py-2.5 text-xs text-slate-400">{fmtDate(b.created_at)}</td>
+                  <tr key={b.filename} className="border-t border-hairline hover:bg-surface-2/30">
+                    <td className="px-3 py-2.5 font-mono text-xs text-ink-soft">{b.filename}</td>
+                    <td className="px-3 py-2.5 text-right text-xs text-ink-muted">{fmtBytes(b.size_bytes)}</td>
+                    <td className="px-3 py-2.5 text-xs text-ink-muted">{fmtDate(b.created_at)}</td>
                     <td className="px-3 py-2.5 text-right">
                       <div className="flex items-center justify-end gap-1">
                         <button
@@ -202,14 +202,14 @@ export default function RecoveryPanel() {
                         </button>
                         <button
                           title="Download"
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+                          className="rounded p-1.5 text-ink-muted transition-colors hover:bg-track hover:text-ink-soft"
                           onClick={() => downloadBackup(b.filename)}
                         >
                           <DownloadIcon className="h-4 w-4" />
                         </button>
                         <button
                           title="Delete"
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-red-500/10 hover:text-red-400"
+                          className="rounded p-1.5 text-ink-muted transition-colors hover:bg-red-500/10 hover:text-red-400"
                           disabled={!isPrivileged}
                           onClick={() => setDeleteTarget(b.filename)}
                         >
@@ -221,21 +221,21 @@ export default function RecoveryPanel() {
                 ))}
               </tbody>
             </table>
-            <p className="border-t border-slate-800 px-3 py-2 text-xs text-slate-600">
+            <p className="border-t border-hairline px-3 py-2 text-xs text-ink-faint">
               {backups.length} backup{backups.length !== 1 ? "s" : ""} · newest first · keeping last 48
             </p>
           </div>
         )}
 
         {!loaded && (
-          <p className="text-xs text-slate-600">Click "Load backups" to list available backup files.</p>
+          <p className="text-xs text-ink-faint">Click "Load backups" to list available backup files.</p>
         )}
       </div>
 
       {/* ZIP backup restore */}
       <div className="card space-y-3">
-        <h3 className="text-sm font-semibold text-slate-200">Restore from ZIP backup</h3>
-        <p className="text-xs text-slate-500">
+        <h3 className="text-sm font-semibold text-ink-soft">Restore from ZIP backup</h3>
+        <p className="text-xs text-ink-muted">
           Upload a <span className="font-mono">readyroute_backup_*.zip</span> file exported from
           Data &amp; Reports → Export &amp; Import. Restores the core operational snapshot including
           fleet, truck states, shortages, batches, load durations, and any packaged activity history.

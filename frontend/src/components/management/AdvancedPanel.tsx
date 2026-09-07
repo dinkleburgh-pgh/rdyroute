@@ -43,8 +43,8 @@ export default function AdvancedPanel({ settings }: { settings: AppSetting[] }) 
   return (
     <div className="space-y-4">
       <div className="card space-y-3">
-        <h3 className="text-sm font-semibold text-slate-300">Upsert raw setting</h3>
-        <p className="text-xs text-slate-500">
+        <h3 className="text-sm font-semibold text-ink-soft">Upsert raw setting</h3>
+        <p className="text-xs text-ink-muted">
           For keys not surfaced on the other tabs. Value is parsed as JSON if possible,
           otherwise stored as a raw string.
         </p>
@@ -65,7 +65,7 @@ export default function AdvancedPanel({ settings }: { settings: AppSetting[] }) 
 
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800 text-left text-xs uppercase text-slate-400">
+          <thead className="bg-surface-2 text-left text-xs uppercase text-ink-muted">
             <tr>
               <th className="px-3 py-2">Key</th>
               <th className="px-3 py-2">Value</th>
@@ -74,18 +74,18 @@ export default function AdvancedPanel({ settings }: { settings: AppSetting[] }) 
           </thead>
           <tbody>
             {settings.filter((s) => !HIDDEN_KEYS.has(s.key)).map((s) => (
-              <tr key={s.key} className={clsx("border-t border-slate-800", WELL_KNOWN_KEYS.has(s.key) && "opacity-60")}>
+              <tr key={s.key} className={clsx("border-t border-hairline", WELL_KNOWN_KEYS.has(s.key) && "opacity-60")}>
                 <td className="px-3 py-2 font-mono text-xs">{s.key}</td>
-                <td className="px-3 py-2 font-mono text-xs text-slate-300">{JSON.stringify(s.value)}</td>
-                <td className="px-3 py-2 text-slate-400">{format(parseISO(s.updated_at), "PPpp")}</td>
+                <td className="px-3 py-2 font-mono text-xs text-ink-soft">{JSON.stringify(s.value)}</td>
+                <td className="px-3 py-2 text-ink-muted">{format(parseISO(s.updated_at), "PPpp")}</td>
               </tr>
             ))}
             {settings.length === 0 && (
-              <tr><td className="px-3 py-3 text-slate-500" colSpan={3}>No settings stored.</td></tr>
+              <tr><td className="px-3 py-3 text-ink-muted" colSpan={3}>No settings stored.</td></tr>
             )}
           </tbody>
         </table>
-        <p className="px-3 py-2 text-xs text-slate-500">Dimmed rows are managed by the other tabs.</p>
+        <p className="px-3 py-2 text-xs text-ink-muted">Dimmed rows are managed by the other tabs.</p>
       </div>
     </div>
   );

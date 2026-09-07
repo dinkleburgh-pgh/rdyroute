@@ -88,7 +88,8 @@ def list_notes(
     active_only: bool = Query(default=True),
     load_day: int | None = Query(default=None, ge=1, le=5,
                                   description="If provided, include workday notes matching this day"),
-    _user: User = Depends(get_current_user),
+    # Guests see the schedule and the report, not the crew's notes.
+    _user: User = Depends(require_non_guest),
     db: Session = Depends(get_db),
 ):
     """

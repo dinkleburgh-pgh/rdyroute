@@ -43,29 +43,29 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
 
   return (
     <div className="card">
-      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Display</p>
+      <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Display</p>
       <FieldRow
         label="Style — Unload page"
         hint="Unload List = one row per truck with inline actions. Fleet Grid = compact fleet-style cards; tapping a truck opens an action menu (Mark Unloaded, Batch, Unfinished)."
       >
-        <div className="inline-flex overflow-hidden rounded-lg border border-slate-600 text-sm font-semibold">
+        <div className="inline-flex overflow-hidden rounded-lg border border-hairline text-sm font-semibold">
           <button
             type="button"
             onClick={() => setForm({ ...form, unload_page_style: "list" })}
-            className={form.unload_page_style === "list" ? "bg-blue-600 px-3 py-1.5 text-white" : "bg-slate-800 px-3 py-1.5 text-slate-300 hover:bg-slate-700"}
+            className={form.unload_page_style === "list" ? "bg-blue-600 px-3 py-1.5 text-white" : "bg-surface-2 px-3 py-1.5 text-ink-soft hover:bg-track"}
           >
             Unload List
           </button>
           <button
             type="button"
             onClick={() => setForm({ ...form, unload_page_style: "grid" })}
-            className={form.unload_page_style === "grid" ? "border-l border-slate-600 bg-blue-600 px-3 py-1.5 text-white" : "border-l border-slate-600 bg-slate-800 px-3 py-1.5 text-slate-300 hover:bg-slate-700"}
+            className={form.unload_page_style === "grid" ? "border-l border-hairline bg-blue-600 px-3 py-1.5 text-white" : "border-l border-hairline bg-surface-2 px-3 py-1.5 text-ink-soft hover:bg-track"}
           >
             Fleet Grid
           </button>
         </div>
       </FieldRow>
-      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Timers</p>
+      <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Timers</p>
       <FieldRow
         label="Outside timer"
         hint="Lets fleet mark a truck as 'Outside' — a countdown that auto-transitions to Unloaded."
@@ -85,7 +85,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, outside_timer_minutes: Number(e.target.value) || 20 })}
             className="input ml-2 w-16"
           />
-          <span className="text-xs text-slate-500">min</span>
+          <span className="text-xs text-ink-muted">min</span>
         </label>
       </FieldRow>
       <FieldRow
@@ -107,10 +107,10 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, paper_bay_timer_minutes: Number(e.target.value) || 25 })}
             className="input ml-2 w-16"
           />
-          <span className="text-xs text-slate-500">min</span>
+          <span className="text-xs text-ink-muted">min</span>
         </label>
       </FieldRow>
-      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Tracking</p>
+      <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Tracking</p>
       <FieldRow
         label="Arrived tracking"
         hint="Records when each truck parks back in the yard — drivers tap 'I'm Back' on their QR page, or a lead taps Arrived on the board. Never auto-stamped."
@@ -137,7 +137,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           Push on arrival
         </label>
       </FieldRow>
-      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Notes</p>
+      <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Notes</p>
       <FieldRow
         label="Note Cards"
         hint="Shows a persistent Note Cards drawer on the fleet board, displaying all active truck notes in compact card rectangles."
@@ -166,7 +166,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       </FieldRow>
       {/* Pop-up alerts moved to their own Operations → Pop-ups tab, where each
           kind gets its own dwell time. One switch in one place. */}
-      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Quick actions</p>
+      <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Quick actions</p>
       <FieldRow
         label="Calendar FAB"
         hint="Show a floating calendar button that opens the Fleet Schedule page."
@@ -193,7 +193,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
           Enable calculator
         </label>
       </FieldRow>
-      <p className="mt-4 border-t border-slate-800 pt-3 text-[11px] font-bold uppercase tracking-widest text-slate-500 first:mt-0 first:border-0 first:pt-0">Day rollover</p>
+      <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Day rollover</p>
       <FieldRow
         label="Auto-unload all trucks (end of day)"
         hint="When enabled, every truck is treated as Unloaded at the end of each run day, so the next day starts clean — dirty/unfinished trucks are cleared. OOS and shop trucks are left as-is."

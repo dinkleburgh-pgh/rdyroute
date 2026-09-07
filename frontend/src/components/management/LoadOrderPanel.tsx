@@ -100,8 +100,8 @@ export default function LoadOrderPanel() {
   return (
     <div className="card space-y-4">
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Load order</h3>
-        <p className="mt-1 text-xs text-slate-500">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">Load order</h3>
+        <p className="mt-1 text-xs text-ink-muted">
           The order this day's trucks were loaded in, taken from their finish times. Reorder it when
           trucks were marked out of sequence — the load times themselves are left untouched, so
           durations and pace stay accurate.
@@ -122,7 +122,7 @@ export default function LoadOrderPanel() {
         <EmptyState compact>No trucks finished loading on {runDate}.</EmptyState>
       ) : (
         <>
-          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-slate-500">
+          <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-ink-muted">
             <span>{order.length} trucks</span>
             {stored && <span className="text-amber-400">Corrected order saved</span>}
           </div>
@@ -137,25 +137,25 @@ export default function LoadOrderPanel() {
                   key={n}
                   className={clsx(
                     "flex items-center gap-2 rounded-lg border px-2.5 py-1.5",
-                    shifted ? "border-amber-600/50 bg-amber-950/20" : "border-slate-700 bg-slate-900/50",
+                    shifted ? "border-amber-600/50 bg-amber-950/20" : "border-hairline bg-surface/50",
                   )}
                 >
-                  <span className="w-6 shrink-0 text-center text-xs font-bold tabular-nums text-slate-500">
+                  <span className="w-6 shrink-0 text-center text-xs font-bold tabular-nums text-ink-muted">
                     {i + 1}
                   </span>
-                  <span className="w-12 shrink-0 font-mono text-base font-black tabular-nums text-slate-100">
+                  <span className="w-12 shrink-0 font-mono text-base font-black tabular-nums text-ink">
                     #{n}
                   </span>
-                  <span className="min-w-0 flex-1 truncate text-xs text-slate-500">
+                  <span className="min-w-0 flex-1 truncate text-xs text-ink-muted">
                     {t ? truckTypeLabel(t.truck_type) : "—"}
-                    <span className="ml-2 text-slate-600">finished {clock(t?.state?.load_finish_time)}</span>
+                    <span className="ml-2 text-ink-faint">finished {clock(t?.state?.load_finish_time)}</span>
                     {shifted && (
                       <span className="ml-2 text-amber-400">was #{movedFrom + 1}</span>
                     )}
                   </span>
                   <button
                     type="button"
-                    className="rounded-md border border-slate-700 p-1 text-slate-400 transition-colors hover:bg-slate-800 disabled:opacity-30"
+                    className="rounded-md border border-hairline p-1 text-ink-muted transition-colors hover:bg-surface-2 disabled:opacity-30"
                     disabled={i === 0}
                     onClick={() => move(i, -1)}
                     title="Move earlier"
@@ -164,7 +164,7 @@ export default function LoadOrderPanel() {
                   </button>
                   <button
                     type="button"
-                    className="rounded-md border border-slate-700 p-1 text-slate-400 transition-colors hover:bg-slate-800 disabled:opacity-30"
+                    className="rounded-md border border-hairline p-1 text-ink-muted transition-colors hover:bg-surface-2 disabled:opacity-30"
                     disabled={i === order.length - 1}
                     onClick={() => move(i, 1)}
                     title="Move later"

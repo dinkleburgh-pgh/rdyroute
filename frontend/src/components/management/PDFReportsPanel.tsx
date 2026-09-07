@@ -25,8 +25,8 @@ export default function PDFReportsPanel() {
   return (
     <div className="card space-y-4">
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Day report PDF</h3>
-        <p className="mt-1 text-xs text-slate-500">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">Day report PDF</h3>
+        <p className="mt-1 text-xs text-ink-muted">
           The full run report — route coverage, shortages, the short sheet, load times, batches and
           audit — rendered as a dark, selectable PDF. Same report as the Report page.
         </p>
@@ -58,9 +58,9 @@ export default function PDFReportsPanel() {
         </button>
       </div>
 
-      <p className="text-[11px] text-slate-600">
+      <p className="text-[11px] text-ink-faint">
         Download opens the report and saves the PDF straight away. Use{" "}
-        <span className="text-slate-500">Open report</span> to read it on screen or pick which
+        <span className="text-ink-muted">Open report</span> to read it on screen or pick which
         sections to include.
       </p>
     </div>

@@ -611,6 +611,26 @@ def create_truck_state(
         _assert_no_other_in_progress(truck_number, payload.run_date, db)
         _assert_spare_has_coverage(truck, payload.run_date, db)
 
+    # The unloading marker obeys the same rules on CREATE as on update —
+    # useUpsertTruckState falls back to POST on a 404, and this path used to
+    # apply none of them, so a Start-Unloading tap on a row-less truck could
+    # bypass the one-at-a-time sweep and leave two trucks marked unloading.
+    if payload.unloading_started_at is not None:
+        created_status = payload.status or TruckStatus.dirty
+        if created_status not in _UNLOAD_WORKABLE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"Truck {truck_number} is {created_status.value} on {payload.run_date} — nothing to unload.",
+            )
+        for other in db.scalars(
+            select(TruckState).where(
+                TruckState.run_date == payload.run_date,
+                TruckState.truck_number != truck_number,
+                TruckState.unloading_started_at.is_not(None),
+            )
+        ).all():
+            _end_unloading(other)
+
     row_payload = payload.model_dump()
     row_payload["state_source"] = payload.state_source or TruckStateSource.workflow.value
     row = TruckState(**row_payload)

@@ -194,8 +194,8 @@ export default function BatchingQuickEntry() {
   return (
     <div className="card space-y-4">
       <div>
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Quick entry</h3>
-        <p className="mt-1 text-xs text-slate-500">
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">Quick entry</h3>
+        <p className="mt-1 text-xs text-ink-muted">
           Type a truck, press Enter, confirm the wearers, press Enter. Built for working straight
           down the paper batch sheet without leaving the number keys.
         </p>
@@ -226,11 +226,11 @@ export default function BatchingQuickEntry() {
                 "flex min-w-[74px] flex-col items-center rounded-lg border px-2.5 py-1.5 transition-colors",
                 active
                   ? "border-blue-500 bg-blue-950/40"
-                  : "border-slate-700 bg-slate-900/60 hover:border-slate-600",
+                  : "border-hairline bg-surface/60 hover:border-ink-faint",
               )}
             >
-              <span className="text-xs font-bold text-slate-200">Batch {n}</span>
-              <span className={clsx("text-[10px] tabular-nums", total > cap ? "text-red-400" : "text-slate-500")}>
+              <span className="text-xs font-bold text-ink-soft">Batch {n}</span>
+              <span className={clsx("text-[10px] tabular-nums", total > cap ? "text-red-400" : "text-ink-muted")}>
                 {total.toLocaleString()}
               </span>
             </button>
@@ -240,16 +240,16 @@ export default function BatchingQuickEntry() {
 
       {/* Running total for the batch being filled */}
       <div className="space-y-1">
-        <div className="flex items-baseline justify-between text-xs text-slate-400">
+        <div className="flex items-baseline justify-between text-xs text-ink-muted">
           <span className="flex items-center gap-2">
             Batch {batchNo} <OverbatchedChip show={currentTotal > cap} />
           </span>
           <span>
             <span className={clsx("text-lg font-extrabold tabular-nums", text)}>{currentTotal.toLocaleString()}</span>
-            <span className="text-slate-500"> / {noCap ? "∞" : cap.toLocaleString()}</span>
+            <span className="text-ink-muted"> / {noCap ? "∞" : cap.toLocaleString()}</span>
           </span>
         </div>
-        <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+        <div className="h-2 w-full overflow-hidden rounded-full bg-surface-2">
           <div className={clsx("h-full rounded-full transition-all", bar)} style={{ width: `${capacityPct(currentTotal, cap)}%` }} />
         </div>
       </div>
@@ -257,7 +257,7 @@ export default function BatchingQuickEntry() {
       {/* The two fields */}
       <div className="flex flex-wrap items-end gap-2">
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Truck</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Truck</span>
           <input
             ref={truckRef}
             className="input w-24 text-center text-xl font-black"
@@ -269,9 +269,9 @@ export default function BatchingQuickEntry() {
             onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitTruck(); } }}
           />
         </label>
-        <span className="pb-3 text-slate-600">→</span>
+        <span className="pb-3 text-ink-faint">→</span>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Wearers</span>
+          <span className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Wearers</span>
           <input
             ref={wearersRef}
             className="input w-28 text-center text-xl font-black"
@@ -306,7 +306,7 @@ export default function BatchingQuickEntry() {
             #{truck} carried route #{redirectedTo} — batching as #{redirectedTo} (one card per load).
           </span>
         ) : broughtBackBy != null ? (
-          <span className="text-slate-400">
+          <span className="text-ink-muted">
             Route #{truck} came back on #{broughtBackBy} — this is its one card.
           </span>
         ) : movingFrom != null && movingFrom !== batchNo ? (
@@ -317,8 +317,8 @@ export default function BatchingQuickEntry() {
       </div>
 
       {/* What is already in this batch, newest last, each removable */}
-      <div className="space-y-1.5 border-t border-slate-800 pt-3">
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
+      <div className="space-y-1.5 border-t border-hairline pt-3">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">
           In batch {batchNo} · {current?.trucks.length ?? 0} truck{(current?.trucks.length ?? 0) === 1 ? "" : "s"}
         </p>
         {(current?.trucks.length ?? 0) === 0 ? (
@@ -328,14 +328,14 @@ export default function BatchingQuickEntry() {
             {current!.trucks.map((t) => (
               <span
                 key={t.truck_number}
-                className="inline-flex items-center gap-1.5 rounded-full bg-slate-800 px-2.5 py-1 text-slate-200"
+                className="inline-flex items-center gap-1.5 rounded-full bg-surface-2 px-2.5 py-1 text-ink-soft"
               >
                 <span className="text-sm font-black tabular-nums text-white">#{t.truck_number}</span>
-                <span className="text-[11px] text-slate-400">({t.wearers})</span>
+                <span className="text-[11px] text-ink-muted">({t.wearers})</span>
                 <button
                   type="button"
                   onClick={() => void undo(t.truck_number)}
-                  className="text-slate-500 transition-colors hover:text-red-300"
+                  className="text-ink-muted transition-colors hover:text-red-300"
                   title="Remove from batch"
                 >
                   ✕

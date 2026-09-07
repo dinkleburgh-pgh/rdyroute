@@ -55,10 +55,10 @@ export default function DebugPanel() {
         label="Board consistency (live)"
         hint="Computed from the same shared counting functions every page uses. If a page shows a different number than this, that page has drifted."
       >
-        <div className="space-y-1 font-mono text-xs text-slate-300">
+        <div className="space-y-1 font-mono text-xs text-ink-soft">
           <div>buckets: {consistency.buckets || "—"}</div>
           <div>load bar: {consistency.load} · unload bar: {consistency.unload}</div>
-          <div className="text-slate-500">run {runDate} · load day {loadDay} · unload day {unloadsDay}</div>
+          <div className="text-ink-muted">run {runDate} · load day {loadDay} · unload day {unloadsDay}</div>
         </div>
       </FieldRow>
       <FieldRow
@@ -71,13 +71,13 @@ export default function DebugPanel() {
             <button className="btn-ghost text-xs" onClick={copyLog}>{copied ? "Copied!" : "Copy"}</button>
             <button className="btn-danger text-xs" onClick={() => { clearDebugLog(); setTick((t) => t + 1); }}>Clear</button>
           </div>
-          <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-slate-800 bg-slate-950/60 p-2 font-mono text-[11px]">
+          <div className="max-h-72 space-y-1 overflow-y-auto rounded-lg border border-hairline bg-app/60 p-2 font-mono text-[11px]">
             {log.length === 0 ? (
-              <p className="text-slate-500">No events yet on this device.</p>
+              <p className="text-ink-muted">No events yet on this device.</p>
             ) : (
               log.map((e, i) => (
                 <div key={i} className="flex gap-2">
-                  <span className="shrink-0 text-slate-500">
+                  <span className="shrink-0 text-ink-muted">
                     {new Date(e.ts).toLocaleTimeString([], { hour12: false })}
                   </span>
                   <span className={
@@ -89,7 +89,7 @@ export default function DebugPanel() {
                   }>
                     {e.cat}
                   </span>
-                  <span className="min-w-0 break-all text-slate-300">{e.msg}</span>
+                  <span className="min-w-0 break-all text-ink-soft">{e.msg}</span>
                 </div>
               ))
             )}

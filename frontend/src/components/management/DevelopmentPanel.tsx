@@ -90,8 +90,8 @@ export default function DevelopmentPanel() {
       </div>
 
       <div className="card space-y-4">
-        <h3 className="text-sm font-semibold text-slate-300">Day number override</h3>
-        <p className="text-xs text-slate-500">
+        <h3 className="text-sm font-semibold text-ink-soft">Day number override</h3>
+        <p className="text-xs text-ink-muted">
           Overrides the load-day and unloads-day numbers used to filter which trucks appear on the
           Run Day, Load, and Unload pages.
         </p>
@@ -100,13 +100,13 @@ export default function DevelopmentPanel() {
           <input type="date" className="input" value={runDate} onChange={(e) => setRunDate(e.target.value)} />
         </FieldRow>
 
-        <div className="grid grid-cols-2 gap-4 rounded-lg bg-slate-800/50 p-3 text-sm">
+        <div className="grid grid-cols-2 gap-4 rounded-lg bg-surface-2/50 p-3 text-sm">
           <div>
-            <p className="mb-1 text-xs text-slate-500">Computed load day</p>
+            <p className="mb-1 text-xs text-ink-muted">Computed load day</p>
             <p className="font-semibold text-white">{DAY_NAMES[computedNums.loadDay]} ({computedNums.loadDay})</p>
           </div>
           <div>
-            <p className="mb-1 text-xs text-slate-500">Computed unloads day</p>
+            <p className="mb-1 text-xs text-ink-muted">Computed unloads day</p>
             <p className="font-semibold text-white">{DAY_NAMES[computedNums.unloadsDay]} ({computedNums.unloadsDay})</p>
           </div>
         </div>
@@ -145,27 +145,27 @@ export default function DevelopmentPanel() {
 
       <div className="card space-y-4">
         <div>
-          <h3 className="text-sm font-semibold text-slate-300">Production mirror sync</h3>
-          <p className="mt-1 text-xs text-slate-500">
+          <h3 className="text-sm font-semibold text-ink-soft">Production mirror sync</h3>
+          <p className="mt-1 text-xs text-ink-muted">
             Pulls the live production export into this local database so the dev app can inspect the day using real data.
             This replaces the local operational snapshot and is hard-blocked unless the app is reached over loopback or a private LAN address.
           </p>
         </div>
 
-        <div className="grid gap-3 rounded-lg bg-slate-800/50 p-3 text-sm sm:grid-cols-3">
+        <div className="grid gap-3 rounded-lg bg-surface-2/50 p-3 text-sm sm:grid-cols-3">
           <div>
-            <p className="mb-1 text-xs text-slate-500">Current host</p>
+            <p className="mb-1 text-xs text-ink-muted">Current host</p>
             <p className="font-semibold text-white">{currentHost || "unknown"}</p>
           </div>
           <div>
-            <p className="mb-1 text-xs text-slate-500">Sync allowed</p>
+            <p className="mb-1 text-xs text-ink-muted">Sync allowed</p>
             <p className={`font-semibold ${isLoopbackHost ? "text-emerald-300" : "text-amber-300"}`}>
               {isLoopbackHost ? "Yes" : "No"}
             </p>
           </div>
           <div>
-            <p className="mb-1 text-xs text-slate-500">Source</p>
-            <p className="truncate font-mono text-xs text-slate-300">
+            <p className="mb-1 text-xs text-ink-muted">Source</p>
+            <p className="truncate font-mono text-xs text-ink-soft">
               {syncProductionData.data?.source ?? "https://rdyroute.app/api/exports"}
             </p>
           </div>

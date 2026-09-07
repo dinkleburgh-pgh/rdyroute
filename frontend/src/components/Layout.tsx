@@ -1,4 +1,4 @@
-import { NavLink, Outlet, useNavigate, useLocation, useSearchParams } from "react-router-dom";
+import { NavLink, Outlet, useNavigate, useLocation, useSearchParams, useBlocker } from "react-router-dom";
 import { AnimatePresence, motion } from "framer-motion";
 import { useCallback, useMemo, useState, useEffect, useRef } from "react";
 import clsx from "clsx";
@@ -31,6 +31,7 @@ import { STATUS_BG, STATUS_LABELS } from "../constants/truckStatus";
 import Clock, { todayLong, workdayNumbers, shipDayNumber, currentShift } from "./Clock";
 import { Menu, X } from "lucide-react";
 import { ROLE_BADGE_CLASS, ROLE_LABELS } from "../utils/permissions";
+import { closeTopModal, hasOpenModal } from "../utils/modalStack";
 
 
 // 'spare' (truck type) and 'off' (set elsewhere) are omitted from the status filter row.
@@ -128,6 +129,17 @@ function BuildInfo() {
 }
 
 export default function Layout() {
+  // ONE router blocker for every open modal: Android/PWA Back closes the top
+  // modal instead of navigating away mid-task. Predicate reads module state at
+  // nav time; only POPs are intercepted so in-app links keep working.
+  const modalBlocker = useBlocker(({ historyAction }) => historyAction === "POP" && hasOpenModal());
+  useEffect(() => {
+    if (modalBlocker.state === "blocked") {
+      closeTopModal();
+      modalBlocker.reset();
+    }
+  }, [modalBlocker]);
+
   const { user, logout } = useAuth();
   const resolvedVersion = typeof __APP_VERSION__ !== "undefined" ? __APP_VERSION__ : "dev";
   // In dev show the predicted next build label (from vite.config) with a marker

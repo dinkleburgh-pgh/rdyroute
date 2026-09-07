@@ -26,6 +26,7 @@ import { format } from "date-fns";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
 import { errorStatus } from "../api/errors";
+import EmptyState from "../components/EmptyState";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -713,10 +714,7 @@ export default function DriverNotes() {
 
         {/* Empty state */}
         {!adding && driverNotes.length === 0 && staffNotes.length === 0 && (
-          <div className="mt-8 text-center text-slate-500">
-            <p className="text-lg">No notes yet.</p>
-            <p className="mt-1 text-sm">Tap the button above to add one.</p>
-          </div>
+          <EmptyState className="mt-8">No notes yet. Tap the button above to add one.</EmptyState>
         )}
       </div>
 

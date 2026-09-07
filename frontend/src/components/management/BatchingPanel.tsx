@@ -154,8 +154,8 @@ export default function BatchingPanel() {
       <div className="card space-y-4">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h3 className="text-sm font-semibold text-slate-300">End-of-day batching</h3>
-            <p className="mt-1 text-xs text-slate-500">
+            <h3 className="text-sm font-semibold text-ink-soft">End-of-day batching</h3>
+            <p className="mt-1 text-xs text-ink-muted">
               Assign each returning truck to a batch for the run date. Tap a batch number on a truck's row;
               tap it again (or ✕) to unassign. Wearer totals update live against the Operations wearer cap.
               Every change saves instantly — there is no separate save or apply step.
@@ -212,27 +212,27 @@ export default function BatchingPanel() {
             const total = b?.total_wearers ?? 0;
             const count = b?.trucks.length ?? 0;
             return (
-              <div key={n} className="rounded-lg border border-slate-800 bg-slate-900/60 p-2">
+              <div key={n} className="rounded-lg border border-hairline bg-surface/60 p-2">
                 <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1">
-                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-bold text-slate-300">
+                  <span className="flex flex-wrap items-center gap-x-1.5 gap-y-1 text-xs font-bold text-ink-soft">
                     Batch {n}
                     <OverbatchedChip show={total > wearerCap} />
                   </span>
                   {count > 0 && (
                     <button
-                      className="text-[10px] text-slate-500 hover:text-red-400"
+                      className="text-[10px] text-ink-muted hover:text-red-400"
                       onClick={() => setConfirmClear(n)}
                     >
                       clear
                     </button>
                   )}
                 </div>
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 text-xs text-ink-muted">
                   {count} truck{count !== 1 ? "s" : ""} ·{" "}
                   <span className={clsx("font-semibold tabular-nums", capacityText(total, noCap, wearerCap))}>
                     {total}
                   </span>
-                  <span className="text-slate-600"> / {noCap ? "∞" : wearerCap}</span>
+                  <span className="text-ink-faint"> / {noCap ? "∞" : wearerCap}</span>
                 </p>
               </div>
             );
@@ -242,7 +242,7 @@ export default function BatchingPanel() {
 
       <div className="card space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <h3 className="text-sm font-semibold text-slate-300">
+          <h3 className="text-sm font-semibold text-ink-soft">
             Trucks ({rosterTrucks.length})
             {unassigned > 0 && <span className="ml-2 text-xs font-normal text-amber-300">{unassigned} unassigned</span>}
             {unassigned === 0 && rosterTrucks.length > 0 && (
@@ -250,11 +250,11 @@ export default function BatchingPanel() {
             )}
           </h3>
           <div className="flex items-center gap-4">
-            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            <label className="flex items-center gap-1.5 text-xs text-ink-muted">
               <input type="checkbox" checked={sortByBatch} onChange={(e) => setSortByBatch(e.target.checked)} />
               Sort by batch
             </label>
-            <label className="flex items-center gap-1.5 text-xs text-slate-400">
+            <label className="flex items-center gap-1.5 text-xs text-ink-muted">
               <input type="checkbox" checked={showAll} onChange={(e) => setShowAll(e.target.checked)} />
               Show entire fleet
             </label>
@@ -262,7 +262,7 @@ export default function BatchingPanel() {
         </div>
 
         {rosterTrucks.length === 0 ? (
-          <p className="text-sm text-slate-500">No trucks on the unload roster for this date.</p>
+          <p className="text-sm text-ink-muted">No trucks on the unload roster for this date.</p>
         ) : (
           <div className="space-y-4">
             {displayGroups.map((g) => (
@@ -271,7 +271,7 @@ export default function BatchingPanel() {
                   <p
                     className={clsx(
                       "text-[10px] font-semibold uppercase tracking-wide",
-                      g.label === "Unbatched" ? "text-amber-300" : "text-slate-500",
+                      g.label === "Unbatched" ? "text-amber-300" : "text-ink-muted",
                     )}
                   >
                     {g.label} · {g.trucks.length} truck{g.trucks.length !== 1 ? "s" : ""}
@@ -285,13 +285,13 @@ export default function BatchingPanel() {
                   key={t.truck_number}
                   className={clsx(
                     "flex flex-wrap items-center gap-2 rounded-lg border px-2 py-1.5",
-                    current != null ? "border-slate-800 bg-slate-900/40" : "border-amber-800/50 bg-amber-950/20",
+                    current != null ? "border-hairline bg-surface/40" : "border-amber-800/50 bg-amber-950/20",
                   )}
                 >
                   <span className="w-12 shrink-0 text-lg font-black tabular-nums text-white">
                     #{t.truck_number}
                   </span>
-                  <span className="w-20 shrink-0 text-xs capitalize text-slate-500">
+                  <span className="w-20 shrink-0 text-xs capitalize text-ink-muted">
                     {t.state?.status?.replace("_", " ") ?? "—"}
                   </span>
                   <input
@@ -324,7 +324,7 @@ export default function BatchingPanel() {
                           "h-7 w-7 rounded-md text-xs font-bold transition-colors",
                           current === n
                             ? "bg-blue-600 text-white"
-                            : "bg-slate-800 text-slate-400 hover:bg-slate-700 hover:text-white",
+                            : "bg-surface-2 text-ink-muted hover:bg-track hover:text-white",
                           busy && "opacity-50",
                         )}
                         onClick={() => (current === n ? unassignTruck(t.truck_number) : assignTruck(t, n))}
@@ -335,7 +335,7 @@ export default function BatchingPanel() {
                     {current != null && (
                       <button
                         disabled={busy}
-                        className="ml-1 h-7 w-7 rounded-md bg-slate-800 text-xs text-slate-500 hover:bg-red-900/60 hover:text-red-300"
+                        className="ml-1 h-7 w-7 rounded-md bg-surface-2 text-xs text-ink-muted hover:bg-red-900/60 hover:text-red-300"
                         title="Remove from batch"
                         onClick={() => unassignTruck(t.truck_number)}
                       >

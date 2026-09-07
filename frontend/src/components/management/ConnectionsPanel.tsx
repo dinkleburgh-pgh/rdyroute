@@ -80,22 +80,22 @@ function DbCard({ probe, title }: { probe: DbProbe; title: string }) {
   return (
     <div className={clsx("card space-y-3 border", border)}>
       <div className="flex items-center justify-between">
-        <h4 className="text-sm font-semibold text-slate-200">{title}</h4>
+        <h4 className="text-sm font-semibold text-ink-soft">{title}</h4>
         <span className={clsx("text-sm font-bold", color)}>● {probe.ok ? "Connected" : "Error"}</span>
       </div>
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-          <p className="mb-0.5 text-xs text-slate-500">Type</p>
-          <p className="font-semibold capitalize text-slate-200">{probe.type}</p>
+        <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+          <p className="mb-0.5 text-xs text-ink-muted">Type</p>
+          <p className="font-semibold capitalize text-ink-soft">{probe.type}</p>
         </div>
-        <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-          <p className="mb-0.5 text-xs text-slate-500">Query Latency</p>
-          <p className="font-semibold text-slate-200">{probe.latency_ms != null ? `${probe.latency_ms} ms` : "—"}</p>
+        <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+          <p className="mb-0.5 text-xs text-ink-muted">Query Latency</p>
+          <p className="font-semibold text-ink-soft">{probe.latency_ms != null ? `${probe.latency_ms} ms` : "—"}</p>
         </div>
       </div>
-      <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-        <p className="mb-0.5 text-xs text-slate-500">Connection URL</p>
-        <p className="break-all font-mono text-xs text-slate-300">{probe.url}</p>
+      <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+        <p className="mb-0.5 text-xs text-ink-muted">Connection URL</p>
+        <p className="break-all font-mono text-xs text-ink-soft">{probe.url}</p>
       </div>
       {probe.error && (
         <div className="rounded-lg border border-red-700/40 bg-red-950/30 px-3 py-2 text-xs text-red-400">
@@ -105,21 +105,21 @@ function DbCard({ probe, title }: { probe: DbProbe; title: string }) {
       {Object.keys(probe.pool).length > 0 && (
         <div className="grid grid-cols-3 gap-2 text-sm">
           {probe.pool.size != null && (
-            <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-center">
-              <p className="text-xs text-slate-500">Pool Size</p>
-              <p className="font-bold text-slate-200">{probe.pool.size}</p>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2 text-center">
+              <p className="text-xs text-ink-muted">Pool Size</p>
+              <p className="font-bold text-ink-soft">{probe.pool.size}</p>
             </div>
           )}
           {probe.pool.checked_out != null && (
-            <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-center">
-              <p className="text-xs text-slate-500">In Use</p>
-              <p className="font-bold text-slate-200">{probe.pool.checked_out}</p>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2 text-center">
+              <p className="text-xs text-ink-muted">In Use</p>
+              <p className="font-bold text-ink-soft">{probe.pool.checked_out}</p>
             </div>
           )}
           {probe.pool.overflow != null && (
-            <div className="rounded-lg bg-slate-800/60 px-3 py-2 text-center">
-              <p className="text-xs text-slate-500">Overflow</p>
-              <p className="font-bold text-slate-200">{probe.pool.overflow}</p>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2 text-center">
+              <p className="text-xs text-ink-muted">Overflow</p>
+              <p className="font-bold text-ink-soft">{probe.pool.overflow}</p>
             </div>
           )}
         </div>
@@ -139,9 +139,9 @@ function SettingField({
 }) {
   return (
     <label className="space-y-1">
-      <span className="text-xs font-medium text-slate-400">{label}</span>
+      <span className="text-xs font-medium text-ink-muted">{label}</span>
       {children}
-      {hint && <span className="block text-[11px] text-slate-500">{hint}</span>}
+      {hint && <span className="block text-[11px] text-ink-muted">{hint}</span>}
     </label>
   );
 }
@@ -302,17 +302,17 @@ export default function ConnectionsPanel() {
     ? "text-emerald-400"
     : health?.status === "degraded"
     ? "text-amber-400"
-    : "text-slate-400";
+    : "text-ink-muted";
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-semibold text-slate-300">Backend connections</h3>
+        <h3 className="text-sm font-semibold text-ink-soft">Backend connections</h3>
         <button className="btn-ghost text-xs" onClick={check} disabled={loading}>
           {loading ? "Checking…" : "Refresh"}
         </button>
       </div>
-      {lastChecked && <p className="text-xs text-slate-600">Last checked: {lastChecked.toLocaleTimeString()}</p>}
+      {lastChecked && <p className="text-xs text-ink-faint">Last checked: {lastChecked.toLocaleTimeString()}</p>}
       {error && (
         <div className="rounded-lg border border-red-700/40 bg-red-950/30 px-4 py-3 text-sm text-red-400">{error}</div>
       )}
@@ -322,37 +322,37 @@ export default function ConnectionsPanel() {
 
       <div className="card space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-sm font-semibold text-slate-200">Main Backend</h4>
+          <h4 className="text-sm font-semibold text-ink-soft">Main Backend</h4>
           {health && <span className={clsx("text-sm font-bold capitalize", statusColor)}>● {health.status}</span>}
-          {loading && <span className="text-xs text-slate-500">Checking…</span>}
+          {loading && <span className="text-xs text-ink-muted">Checking…</span>}
         </div>
         {health && (
           <div className="grid grid-cols-2 gap-3 text-sm">
-            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-              <p className="mb-0.5 text-xs text-slate-500">Version</p>
-              <p className="font-mono font-semibold text-slate-200">{health.version}</p>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-ink-muted">Version</p>
+              <p className="font-mono font-semibold text-ink-soft">{health.version}</p>
             </div>
-            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-              <p className="mb-0.5 text-xs text-slate-500">Uptime</p>
-              <p className="font-semibold text-slate-200">{formatUptime(health.uptime_seconds)}</p>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-ink-muted">Uptime</p>
+              <p className="font-semibold text-ink-soft">{formatUptime(health.uptime_seconds)}</p>
             </div>
-            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-              <p className="mb-0.5 text-xs text-slate-500">Python</p>
-              <p className="font-mono font-semibold text-slate-200">{health.python}</p>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-ink-muted">Python</p>
+              <p className="font-mono font-semibold text-ink-soft">{health.python}</p>
             </div>
-            <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-              <p className="mb-0.5 text-xs text-slate-500">API Round-trip</p>
-              <p className="font-semibold text-slate-200">{apiLatencyMs != null ? `${apiLatencyMs} ms` : "—"}</p>
+            <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+              <p className="mb-0.5 text-xs text-ink-muted">API Round-trip</p>
+              <p className="font-semibold text-ink-soft">{apiLatencyMs != null ? `${apiLatencyMs} ms` : "—"}</p>
             </div>
           </div>
         )}
       </div>
 
-      <div className="card space-y-4 border border-slate-700/50">
+      <div className="card space-y-4 border border-hairline/50">
         <div className="flex items-center justify-between gap-3">
           <div>
-            <h4 className="text-sm font-semibold text-slate-200">Ollama OCR Connection</h4>
-            <p className="mt-1 text-xs text-slate-500">
+            <h4 className="text-sm font-semibold text-ink-soft">Ollama OCR Connection</h4>
+            <p className="mt-1 text-xs text-ink-muted">
               These settings drive shortage-sheet OCR imports. They override `.env` values at runtime.
             </p>
           </div>
@@ -364,7 +364,7 @@ export default function ConnectionsPanel() {
                   ? "text-emerald-400"
                   : ollama.configured
                   ? "text-amber-400"
-                  : "text-slate-400",
+                  : "text-ink-muted",
               )}
             >
               ● {ollama.reachable && ollama.model_available ? "Connected" : ollama.configured ? "Needs attention" : "Not configured"}
@@ -375,7 +375,7 @@ export default function ConnectionsPanel() {
         <div className="grid gap-3 sm:grid-cols-2">
           <SettingField label="Base URL" hint="Verified host: http://192.168.1.132:30068">
             <input
-              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-hairline bg-surface/60 px-3 py-2 text-sm text-ink outline-none focus:border-blue-500"
               value={form.baseUrl}
               onChange={(event) => setForm((prev) => ({ ...prev, baseUrl: event.target.value }))}
               placeholder="http://192.168.1.132:30068"
@@ -383,7 +383,7 @@ export default function ConnectionsPanel() {
           </SettingField>
           <SettingField label="Model" hint="Verified model: minicpm-v:latest">
             <input
-              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-hairline bg-surface/60 px-3 py-2 text-sm text-ink outline-none focus:border-blue-500"
               value={form.model}
               onChange={(event) => setForm((prev) => ({ ...prev, model: event.target.value }))}
               placeholder="minicpm-v:latest"
@@ -391,7 +391,7 @@ export default function ConnectionsPanel() {
           </SettingField>
           <SettingField label="Timeout Seconds">
             <input
-              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-hairline bg-surface/60 px-3 py-2 text-sm text-ink outline-none focus:border-blue-500"
               type="number"
               min={1}
               value={form.timeoutSeconds}
@@ -400,7 +400,7 @@ export default function ConnectionsPanel() {
           </SettingField>
           <SettingField label="Low Confidence Threshold" hint="Values below this go through the repair/review path.">
             <input
-              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-hairline bg-surface/60 px-3 py-2 text-sm text-ink outline-none focus:border-blue-500"
               type="number"
               min={0}
               max={1}
@@ -411,7 +411,7 @@ export default function ConnectionsPanel() {
           </SettingField>
           <SettingField label="Preprocess Max Image Side" hint="Upper bound used during sheet normalization before OCR.">
             <input
-              className="w-full rounded-lg border border-slate-700 bg-slate-900/60 px-3 py-2 text-sm text-slate-100 outline-none focus:border-blue-500"
+              className="w-full rounded-lg border border-hairline bg-surface/60 px-3 py-2 text-sm text-ink outline-none focus:border-blue-500"
               type="number"
               min={600}
               value={form.preprocessMaxImageSide}
@@ -421,30 +421,30 @@ export default function ConnectionsPanel() {
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3">
-          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <p className="mb-0.5 text-xs text-slate-500">Configured</p>
-            <p className={clsx("font-semibold", ollama?.configured ? "text-emerald-300" : "text-slate-300")}>
+          <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+            <p className="mb-0.5 text-xs text-ink-muted">Configured</p>
+            <p className={clsx("font-semibold", ollama?.configured ? "text-emerald-300" : "text-ink-soft")}>
               {ollama?.configured ? "Yes" : "No"}
             </p>
           </div>
-          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <p className="mb-0.5 text-xs text-slate-500">Reachable</p>
-            <p className={clsx("font-semibold", ollama?.reachable ? "text-emerald-300" : "text-slate-300")}>
+          <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+            <p className="mb-0.5 text-xs text-ink-muted">Reachable</p>
+            <p className={clsx("font-semibold", ollama?.reachable ? "text-emerald-300" : "text-ink-soft")}>
               {ollama?.reachable ? "Yes" : "No"}
             </p>
           </div>
-          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <p className="mb-0.5 text-xs text-slate-500">Model Installed</p>
-            <p className={clsx("font-semibold", ollama?.model_available ? "text-emerald-300" : "text-slate-300")}>
+          <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+            <p className="mb-0.5 text-xs text-ink-muted">Model Installed</p>
+            <p className={clsx("font-semibold", ollama?.model_available ? "text-emerald-300" : "text-ink-soft")}>
               {ollama?.model_available ? "Yes" : "No"}
             </p>
           </div>
         </div>
 
         {ollama?.available_models && ollama.available_models.length > 0 && (
-          <div className="rounded-lg bg-slate-800/60 px-3 py-2">
-            <p className="mb-1 text-xs text-slate-500">Available Models</p>
-            <p className="break-words text-sm text-slate-300">{ollama.available_models.join(", ")}</p>
+          <div className="rounded-lg bg-surface-2/60 px-3 py-2">
+            <p className="mb-1 text-xs text-ink-muted">Available Models</p>
+            <p className="break-words text-sm text-ink-soft">{ollama.available_models.join(", ")}</p>
           </div>
         )}
         {ollama?.error && (
@@ -483,8 +483,8 @@ export default function ConnectionsPanel() {
         <DbCard key={index} probe={probe} title={probe.label ?? `Extra DB ${index + 1}`} />
       ))}
       {health && health.extra_dbs.length === 0 && (
-        <p className="text-xs text-slate-600">
-          No backup databases configured. Set <span className="font-mono text-slate-400">BACKUP_DATABASE_URL</span> in <span className="font-mono text-slate-400">.env</span> to add one.
+        <p className="text-xs text-ink-faint">
+          No backup databases configured. Set <span className="font-mono text-ink-muted">BACKUP_DATABASE_URL</span> in <span className="font-mono text-ink-muted">.env</span> to add one.
         </p>
       )}
 
@@ -514,7 +514,7 @@ export default function ConnectionsPanel() {
         </div>
       )}
       {health && !health.last_backup && (
-        <p className="text-xs text-slate-600">
+        <p className="text-xs text-ink-faint">
           No backup run yet this session — first backup runs within 30 minutes.
         </p>
       )}

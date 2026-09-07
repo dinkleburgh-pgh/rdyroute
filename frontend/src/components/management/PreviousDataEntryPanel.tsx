@@ -20,7 +20,7 @@ export default function PreviousDataEntryPanel() {
           <ClipboardList className="h-5 w-5 shrink-0 text-amber-400" />
           <div className="min-w-0">
             <p className="text-sm font-semibold text-amber-300">Log shortages</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-muted">
               Opens the Short Sheet — the "By item" mode is built for transcribing paper sheets.
             </p>
           </div>
@@ -29,11 +29,11 @@ export default function PreviousDataEntryPanel() {
       </Link>
 
       <section className="space-y-3">
-        <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Previous Day Coverage</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">Previous Day Coverage</h3>
         <PrevDayCoveragePanel />
       </section>
 
-      <section className="space-y-3 border-t border-slate-800 pt-5">
+      <section className="space-y-3 border-t border-hairline pt-5">
         <LoadOrderPanel />
       </section>
 
@@ -42,18 +42,18 @@ export default function PreviousDataEntryPanel() {
           when back-filling a previous day, and batching is part of that job. */}
       <Link
         to="/management?group=ops&tab=batching"
-        className="flex items-center justify-between gap-3 rounded-lg border border-slate-700 bg-slate-900/40 px-4 py-3 transition-colors hover:bg-slate-800/60"
+        className="flex items-center justify-between gap-3 rounded-lg border border-hairline bg-surface/40 px-4 py-3 transition-colors hover:bg-surface-2/60"
       >
         <div className="flex min-w-0 items-center gap-3">
-          <Layers className="h-5 w-5 shrink-0 text-slate-400" />
+          <Layers className="h-5 w-5 shrink-0 text-ink-muted" />
           <div className="min-w-0">
-            <p className="text-sm font-semibold text-slate-300">Batching</p>
-            <p className="text-xs text-slate-500">
+            <p className="text-sm font-semibold text-ink-soft">Batching</p>
+            <p className="text-xs text-ink-muted">
               Assign trucks to batches for any run date — now under Operations, with its settings.
             </p>
           </div>
         </div>
-        <span className="shrink-0 text-sm font-semibold text-slate-400">Open →</span>
+        <span className="shrink-0 text-sm font-semibold text-ink-muted">Open →</span>
       </Link>
     </div>
   );

@@ -31,10 +31,10 @@ export function FieldRow({
   children: ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2 border-t border-slate-800 py-3 sm:grid-cols-[260px_1fr] sm:items-center">
+    <div className="grid grid-cols-1 gap-2 border-t border-hairline py-3 sm:grid-cols-[260px_1fr] sm:items-center">
       <div>
-        <p className="text-sm font-medium text-slate-200">{label}</p>
-        {hint && <p className="text-xs text-slate-500">{hint}</p>}
+        <p className="text-sm font-medium text-ink-soft">{label}</p>
+        {hint && <p className="text-xs text-ink-muted">{hint}</p>}
       </div>
       <div>{children}</div>
     </div>

@@ -31,6 +31,9 @@ import PageHeader from "../components/PageHeader";
 import { truckTypeLabel } from "../utils/truckType";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { errorDetail } from "../api/errors";
+import { useLastAudited } from "../api/hooks";
+import { format } from "date-fns";
+import EmptyState from "../components/EmptyState";
 
 // ---------------------------------------------------------------------------
 // TruckPicker
@@ -113,7 +116,7 @@ function TruckPicker({
       )}
 
       {trucks.length === 0 && (
-        <p className="text-sm text-slate-500">No trucks found for this date.</p>
+        <EmptyState>No trucks found for this date.</EmptyState>
       )}
 
       {/* Top items */}
@@ -686,6 +689,41 @@ function ItemLogger({
 // Root page
 // ---------------------------------------------------------------------------
 
+
+/**
+ * Audit-rotation nudge. Audits cluster on a few trucks (no route has more
+ * than three ever), which makes "does route X ever use product Y" forever
+ * unanswerable. This names the routes that have waited longest so the
+ * rotation self-corrects — hit each route roughly weekly and the question
+ * becomes answerable in about three weeks.
+ */
+function AuditRotationStrip() {
+  const { data: rows } = useLastAudited();
+  // Guard against a poisoned persisted cache entry (e.g. an HTML fallback
+  // response stored before the endpoint existed) — never crash the page.
+  const due = Array.isArray(rows) ? rows.slice(0, 6) : [];
+  if (due.length === 0) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-hairline bg-surface px-3.5 py-2.5">
+      <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-muted">
+        Longest since audit
+      </span>
+      {due.map((r) => (
+        <span
+          key={r.truck_number}
+          className="inline-flex items-baseline gap-1.5 rounded-pill border border-hairline bg-surface-2 px-2 py-0.5 font-mono text-[12px] font-bold tabular-nums"
+        >
+          <span className="text-ink">#{r.truck_number}</span>
+          <span className="font-sans text-[10px] font-semibold text-ink-faint">
+            {r.last_run_date == null ? "never" : format(new Date(`${r.last_run_date}T12:00:00`), "MMM d")}
+          </span>
+        </span>
+      ))}
+      <span className="text-[11px] text-ink-faint">— audit these next to keep the rotation even.</span>
+    </div>
+  );
+}
+
 export default function Audit() {
   const navigate = useNavigate();
   const [runDate, setRunDate]        = useState(todayIso());
@@ -744,6 +782,8 @@ export default function Audit() {
         title="Audit"
         subtitle="Review route item counts, track truck audits, and manage supporting photos."
       />
+
+      <AuditRotationStrip />
 
       {/* Main content */}
       {selectedTruck === null ? (
@@ -852,9 +892,9 @@ function PhotosPanel({
         <button className="btn-primary" disabled={upload.isPending}>Upload</button>
       </form>
       {error && <p className="text-xs text-red-400">{error}</p>}
-      {isLoading && <p className="text-xs text-slate-500">Loading photos…</p>}
+      {isLoading && <p className="text-xs text-ink-muted">Loading photos…</p>}
       {!isLoading && (photos ?? []).length === 0 && (
-        <p className="text-xs text-slate-500">No photos for this day.</p>
+        <EmptyState compact>No photos for this day.</EmptyState>
       )}
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6">
         {(photos ?? []).map((p) => (

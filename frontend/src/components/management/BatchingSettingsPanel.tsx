@@ -41,7 +41,7 @@ export default function BatchingSettingsPanel({ map }: { map: Map<string, unknow
   return (
     <div className="space-y-4">
       <div className="card space-y-1">
-        <h3 className="text-sm font-semibold text-slate-300">Batching settings</h3>
+        <h3 className="text-sm font-semibold text-ink-soft">Batching settings</h3>
         <FieldRow
           label="Batching disabled"
           hint="Hide the Batches workflow entirely (mirrors V1 batching_disabled)."
@@ -93,7 +93,7 @@ export default function BatchingSettingsPanel({ map }: { map: Map<string, unknow
               value={form.wearer_cap}
               onChange={(e) => setForm({ ...form, wearer_cap: Number(e.target.value) })}
             />
-            <span className="text-xs text-slate-500">wearers</span>
+            <span className="text-xs text-ink-muted">wearers</span>
           </div>
         </FieldRow>
         <SaveButton dirty={dirty} saving={upsert.isPending} onSave={save} onRevert={() => setForm(initial)} />

@@ -34,8 +34,9 @@ from routers.trends_common import (
     prior_bounds,
     window_bounds,
 )
-from models import AuditEntry, AuditPhoto, TruckState, User
+from models import AuditEntry, AuditPhoto, Truck, TruckState, TruckType, User
 from schemas import (
+    LastAuditedRow,
     AuditTruckItemRow,
     AuditRouteItemRow,
     AuditDailyPoint,
@@ -155,6 +156,37 @@ def delete_audit_entry(entry_id: str, background_tasks: BackgroundTasks, _user: 
     db.delete(entry)
     db.commit()
     background_tasks.add_task(manager.broadcast, {"type": "audit_updated"})
+
+
+@router.get("/last-audited", response_model=list[LastAuditedRow])
+def last_audited(
+    _user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """When each active route truck was last audited (null = never).
+
+    Exists to steer the audit rotation: audits currently cluster (no truck has
+    more than a few ever), so per-route "never uses product X" questions are
+    unanswerable. Surfacing the least-recently-audited trucks makes the
+    rotation self-correcting.
+    """
+    last_by_truck = dict(
+        db.execute(
+            select(AuditEntry.truck_number, func.max(AuditEntry.run_date))
+            .group_by(AuditEntry.truck_number)
+        ).all()
+    )
+    trucks = db.scalars(
+        select(Truck).where(Truck.is_active == True, Truck.truck_type != TruckType.spare)
+        .order_by(Truck.truck_number)
+    ).all()
+    rows = [
+        LastAuditedRow(truck_number=t.truck_number, last_run_date=last_by_truck.get(t.truck_number))
+        for t in trucks
+    ]
+    # Never-audited first, then oldest date first.
+    rows.sort(key=lambda r: (r.last_run_date is not None, r.last_run_date or date.min, r.truck_number))
+    return rows
 
 
 # ---------------------------------------------------------------------------

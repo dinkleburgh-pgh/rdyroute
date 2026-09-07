@@ -98,20 +98,20 @@ export default function UserDrawer({ open, editUser, onClose }: UserDrawerProps)
   return (
     <div className="fixed inset-0 z-[80] flex justify-end bg-black/50" onClick={onClose}>
       <div
-        className="flex h-full w-full max-w-md flex-col border-l border-slate-800 bg-slate-900 shadow-xl"
+        className="flex h-full w-full max-w-md flex-col border-l border-hairline bg-surface shadow-xl"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-modal="true"
         aria-label={isEdit ? "Edit user" : "Add user"}
       >
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-slate-800 px-5 py-4">
-          <h3 className="text-lg font-semibold text-slate-100">
+        <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
+          <h3 className="text-lg font-semibold text-ink">
             {isEdit ? "Edit user" : "Add user"}
           </h3>
           <button
             onClick={onClose}
-            className="text-slate-500 transition-colors hover:text-slate-300"
+            className="text-ink-muted transition-colors hover:text-ink-soft"
             aria-label="Close"
           >
             <XIcon className="h-5 w-5" />
@@ -141,7 +141,7 @@ export default function UserDrawer({ open, editUser, onClose }: UserDrawerProps)
               disabled={isEdit}
             />
             {isEdit && (
-              <p className="mt-1 text-xs text-slate-500">Usernames cannot be changed.</p>
+              <p className="mt-1 text-xs text-ink-muted">Usernames cannot be changed.</p>
             )}
           </div>
 
@@ -174,12 +174,12 @@ export default function UserDrawer({ open, editUser, onClose }: UserDrawerProps)
           </div>
 
           {isEdit && (
-            <label className="flex items-center gap-2 text-sm text-slate-300">
+            <label className="flex items-center gap-2 text-sm text-ink-soft">
               <input
                 type="checkbox"
                 checked={enabled}
                 onChange={(e) => setEnabled(e.target.checked)}
-                className="h-4 w-4 rounded border-slate-600 bg-slate-800"
+                className="h-4 w-4 rounded border-hairline bg-surface-2"
               />
               Account enabled
             </label>
@@ -187,7 +187,7 @@ export default function UserDrawer({ open, editUser, onClose }: UserDrawerProps)
         </div>
 
         {/* Footer */}
-        <div className="flex justify-end gap-2 border-t border-slate-800 px-5 py-4">
+        <div className="flex justify-end gap-2 border-t border-hairline px-5 py-4">
           <button className="btn-ghost" onClick={onClose} disabled={busy}>
             Cancel
           </button>

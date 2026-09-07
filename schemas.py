@@ -1092,6 +1092,12 @@ class TrendDailyPoint(BaseModel):
     entry_count: int
 
 
+class LastAuditedRow(BaseModel):
+    """Audit-rotation steering: when a route truck was last audited."""
+    truck_number: int
+    last_run_date: date | None = None
+
+
 class AuditDailyPoint(BaseModel):
     """One day of audit removals (/audit/trends/daily)."""
     run_date: date

@@ -36,7 +36,7 @@ export default function ColorsPanel({ map }: { map: Map<string, unknown> }) {
           <div className="flex items-center gap-3">
             <input
               type="color"
-              className="h-9 w-14 cursor-pointer rounded border border-slate-700 bg-slate-900"
+              className="h-9 w-14 cursor-pointer rounded border border-hairline bg-surface"
               value={form[k]}
               onChange={(e) => setForm({ ...form, [k]: e.target.value })}
             />

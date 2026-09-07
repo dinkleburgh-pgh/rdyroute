@@ -121,7 +121,7 @@ export default function UsersPanel() {
         <div className="flex flex-wrap items-center gap-2">
           {/* Search */}
           <div className="relative">
-            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
+            <SearchIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-ink-muted" />
             <input
               className="input w-56 pl-8"
               placeholder="Search users…"
@@ -161,7 +161,7 @@ export default function UsersPanel() {
       </div>
 
       {/* Count */}
-      <p className="text-xs text-slate-500">
+      <p className="text-xs text-ink-muted">
         {isLoading
           ? "Loading…"
           : `${filtered.length} of ${users.length} user${users.length !== 1 ? "s" : ""} · ${activeCount} active`}
@@ -170,7 +170,7 @@ export default function UsersPanel() {
       {/* Table */}
       <div className="card overflow-x-auto p-0">
         <table className="w-full text-sm">
-          <thead className="bg-slate-800/70 text-left text-xs uppercase tracking-wide text-slate-400">
+          <thead className="bg-surface-2/70 text-left text-xs uppercase tracking-wide text-ink-muted">
             <tr>
               <th className="px-3 py-2.5">User</th>
               <th className="px-3 py-2.5">Role</th>
@@ -182,9 +182,9 @@ export default function UsersPanel() {
           <tbody>
             {isLoading &&
               [0, 1, 2].map((i) => (
-                <tr key={i} className="border-t border-slate-800">
+                <tr key={i} className="border-t border-hairline">
                   <td className="px-3 py-3" colSpan={5}>
-                    <div className="h-6 w-full animate-pulse rounded bg-slate-800" />
+                    <div className="h-6 w-full animate-pulse rounded bg-surface-2" />
                   </td>
                 </tr>
               ))}
@@ -192,7 +192,7 @@ export default function UsersPanel() {
             {!isLoading && filtered.length === 0 && (
               <tr>
                 <td colSpan={5} className="px-3 py-10 text-center">
-                  <p className="text-sm text-slate-400">No users match your filters.</p>
+                  <p className="text-sm text-ink-muted">No users match your filters.</p>
                   {users.length === 0 && (
                     <button className="btn-primary mx-auto mt-3 gap-1.5" onClick={openAdd}>
                       <PlusIcon className="h-4 w-4" />
@@ -210,7 +210,7 @@ export default function UsersPanel() {
                   <tr
                     key={u.username}
                     className={clsx(
-                      "border-t border-slate-800 transition-colors hover:bg-slate-800/40",
+                      "border-t border-hairline transition-colors hover:bg-surface-2/40",
                       !u.is_enabled && "opacity-60",
                     )}
                   >
@@ -218,13 +218,13 @@ export default function UsersPanel() {
                       <div className="flex items-center gap-2.5">
                         <UserAvatar name={u.display_name ?? u.username} username={u.username} />
                         <div className="min-w-0">
-                          <p className="truncate font-medium text-slate-100">
+                          <p className="truncate font-medium text-ink">
                             {u.display_name || u.username}
                             {isSelf && (
-                              <span className="ml-1.5 text-xs font-normal text-slate-500">(you)</span>
+                              <span className="ml-1.5 text-xs font-normal text-ink-muted">(you)</span>
                             )}
                           </p>
-                          <p className="truncate font-mono text-xs text-slate-500">{u.username}</p>
+                          <p className="truncate font-mono text-xs text-ink-muted">{u.username}</p>
                         </div>
                       </div>
                     </td>
@@ -238,26 +238,26 @@ export default function UsersPanel() {
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-slate-700/40 px-2 py-0.5 text-xs font-medium text-slate-400">
-                          <span className="h-1.5 w-1.5 rounded-full bg-slate-500" />
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-track/40 px-2 py-0.5 text-xs font-medium text-ink-muted">
+                          <span className="h-1.5 w-1.5 rounded-full bg-ink-faint" />
                           Disabled
                         </span>
                       )}
                     </td>
-                    <td className="px-3 py-2.5 text-xs text-slate-400">
+                    <td className="px-3 py-2.5 text-xs text-ink-muted">
                       {u.created_at ? format(parseISO(u.created_at), "PP") : "—"}
                     </td>
                     <td className="px-3 py-2.5">
                       <div className="flex items-center justify-end gap-1">
                         <button
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+                          className="rounded p-1.5 text-ink-muted transition-colors hover:bg-track hover:text-ink-soft"
                           title="Edit"
                           onClick={() => openEdit(u)}
                         >
                           <EditIcon className="h-4 w-4" />
                         </button>
                         <button
-                          className="rounded p-1.5 text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-200"
+                          className="rounded p-1.5 text-ink-muted transition-colors hover:bg-track hover:text-ink-soft"
                           title="Change password"
                           onClick={() => {
                             setPwUser(u.username);
@@ -300,7 +300,7 @@ export default function UsersPanel() {
       {/* Inline change-password */}
       {pwUser && (
         <div className="card flex flex-wrap items-end gap-3">
-          <p className="w-full text-sm font-medium text-slate-300">
+          <p className="w-full text-sm font-medium text-ink-soft">
             Change password for <span className="font-mono">{pwUser}</span>
           </p>
           <input

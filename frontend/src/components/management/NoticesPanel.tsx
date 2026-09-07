@@ -20,7 +20,7 @@ export default function NoticesPanel({ disabled }: { disabled: boolean }) {
   return (
     <div className="space-y-4">
       <div className="card">
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">Post a new notice</h3>
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-soft">Post a new notice</h3>
         <form
           className="space-y-2"
           onSubmit={(e) => {
@@ -51,19 +51,19 @@ export default function NoticesPanel({ disabled }: { disabled: boolean }) {
       </div>
 
       <div className="card">
-        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-slate-300">All notices</h3>
-        {isLoading && <p className="text-slate-400">Loading…</p>}
-        {!isLoading && (notices ?? []).length === 0 && <p className="text-sm text-slate-500">No notices yet.</p>}
-        <ul className="divide-y divide-slate-800">
+        <h3 className="mb-2 text-sm font-semibold uppercase tracking-wide text-ink-soft">All notices</h3>
+        {isLoading && <p className="text-ink-muted">Loading…</p>}
+        {!isLoading && (notices ?? []).length === 0 && <p className="text-sm text-ink-muted">No notices yet.</p>}
+        <ul className="divide-y divide-hairline">
           {(notices ?? []).map((n) => (
             <li key={n.id} className="flex items-start justify-between gap-3 py-3">
               <div className="flex-1">
                 <p className="font-semibold">
-                  <span className="mr-2 inline-block rounded bg-slate-800 px-1.5 py-0.5 text-[10px] uppercase">{n.severity}</span>
+                  <span className="mr-2 inline-block rounded bg-surface-2 px-1.5 py-0.5 text-[10px] uppercase">{n.severity}</span>
                   {n.title}
                 </p>
-                {n.body && <p className="mt-1 whitespace-pre-wrap text-sm text-slate-400">{n.body}</p>}
-                <p className="mt-1 text-[10px] uppercase tracking-wide text-slate-500">
+                {n.body && <p className="mt-1 whitespace-pre-wrap text-sm text-ink-muted">{n.body}</p>}
+                <p className="mt-1 text-[10px] uppercase tracking-wide text-ink-muted">
                   {n.created_by} · {format(parseISO(n.created_at), "PPpp")} · {n.is_active ? "Active" : "Hidden"}
                 </p>
               </div>

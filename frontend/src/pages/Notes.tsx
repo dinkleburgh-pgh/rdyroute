@@ -31,6 +31,7 @@ import { workdayNumbers } from "../components/Clock";
 import { useAuth } from "../contexts/AuthContext";
 import { truckTypeLabel } from "../utils/truckType";
 import ConfirmDialog from "../components/ConfirmDialog";
+import EmptyState from "../components/EmptyState";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -422,7 +423,7 @@ function TruckNotePanel({
             </div>
           ) : (
             !adding && !editing && (
-              <p className="text-xs text-ink-faint">No notes yet.</p>
+              <EmptyState compact>No notes yet.</EmptyState>
             )
           )}
         </>

@@ -247,7 +247,7 @@ export default function Management() {
           subtitle="Settings, reports, imports, and operational controls."
         />
         <div className="p-6">
-          <p className="text-sm text-slate-400">
+          <p className="text-sm text-ink-muted">
             Access is restricted to Fleet / Supervisor / Lead / ATL roles.
           </p>
         </div>
@@ -273,7 +273,7 @@ export default function Management() {
   }, [activeGroupDef]);
 
   function renderPanel() {
-    if (isLoading) return <p className="text-sm text-slate-500">Loading…</p>;
+    if (isLoading) return <p className="text-sm text-ink-muted">Loading…</p>;
     switch (activeTab) {
       case "colors":         return <ColorsPanel map={map} />;
       case "workflows":      return <WorkflowsPanel map={map} />;
@@ -339,15 +339,15 @@ export default function Management() {
                 }
               }}
               className={clsx(
-                "rounded-lg border border-slate-700/60 border-l-4 p-3 text-left transition hover:brightness-110 sm:p-4",
+                "rounded-lg border border-hairline/60 border-l-4 p-3 text-left transition hover:brightness-110 sm:p-4",
                 group.borderColor,
                 group.bgTint,
                 isActive ? "ring-2 ring-white/20" : "",
               )}
             >
               <p className="text-sm font-bold text-white sm:text-base">{group.label}</p>
-              <p className="mt-1 text-xs leading-snug text-slate-300 sm:hidden">{group.mobileDesc}</p>
-              <p className="mt-1.5 hidden truncate text-sm text-slate-300 sm:block">{group.desc}</p>
+              <p className="mt-1 text-xs leading-snug text-ink-soft sm:hidden">{group.mobileDesc}</p>
+              <p className="mt-1.5 hidden truncate text-sm text-ink-soft sm:block">{group.desc}</p>
             </motion.button>
           );
         })}
@@ -364,7 +364,7 @@ export default function Management() {
               exit={{ opacity: 0, y: -8 }}
               transition={{ duration: 0.2 }}
             >
-              <div className="-mx-3 overflow-x-auto border-b border-slate-800 px-3 sm:mx-0 sm:px-0">
+              <div className="-mx-3 overflow-x-auto border-b border-hairline px-3 sm:mx-0 sm:px-0">
                 <div className="flex min-w-max gap-1">
                 {activeTabs.map((tab) => (
                   <button
@@ -374,8 +374,8 @@ export default function Management() {
                     className={clsx(
                       "whitespace-nowrap rounded-t-md px-3 py-2 text-xs font-medium transition-colors sm:px-4 sm:text-sm",
                       activeTab === tab.id
-                        ? "border-b-2 border-blue-500 bg-slate-900/50 text-blue-300"
-                        : "text-slate-400 hover:bg-slate-900/40 hover:text-slate-200",
+                        ? "border-b-2 border-blue-500 bg-surface/50 text-blue-300"
+                        : "text-ink-muted hover:bg-surface/40 hover:text-ink-soft",
                     )}
                   >
                     {tab.label}
@@ -407,10 +407,10 @@ function FieldRow({
   children: React.ReactNode;
 }) {
   return (
-    <div className="grid grid-cols-1 gap-2 border-t border-slate-800 py-3 sm:grid-cols-[260px_1fr] sm:items-center">
+    <div className="grid grid-cols-1 gap-2 border-t border-hairline py-3 sm:grid-cols-[260px_1fr] sm:items-center">
       <div>
-        <p className="text-sm font-medium text-slate-200">{label}</p>
-        {hint && <p className="text-xs text-slate-500">{hint}</p>}
+        <p className="text-sm font-medium text-ink-soft">{label}</p>
+        {hint && <p className="text-xs text-ink-muted">{hint}</p>}
       </div>
       <div>{children}</div>
     </div>

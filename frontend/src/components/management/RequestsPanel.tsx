@@ -44,10 +44,10 @@ export default function RequestsPanel({ disabled }: { disabled: boolean }) {
     <div className="card space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">
             {showAll ? "All account requests" : "Pending account requests"}
           </h3>
-          <p className="text-xs text-slate-500">Self-registration access requests.</p>
+          <p className="text-xs text-ink-muted">Self-registration access requests.</p>
         </div>
         <button
           className="text-xs font-medium text-blue-400 hover:text-blue-300"
@@ -57,25 +57,25 @@ export default function RequestsPanel({ disabled }: { disabled: boolean }) {
         </button>
       </div>
 
-      {isLoading && <p className="text-sm text-slate-400">Loading…</p>}
+      {isLoading && <p className="text-sm text-ink-muted">Loading…</p>}
       {!isLoading && list.length === 0 && (
-        <p className="py-6 text-center text-sm text-slate-500">
+        <p className="py-6 text-center text-sm text-ink-muted">
           {showAll ? "No requests on record." : "No pending requests."}
         </p>
       )}
 
-      <ul className="divide-y divide-slate-800">
+      <ul className="divide-y divide-hairline">
         {list.map((r) => (
           <li key={r.id} className="flex items-center justify-between gap-3 py-3">
             <div className="flex min-w-0 items-center gap-2.5">
               <UserAvatar name={r.display_name || r.username} username={r.username} size={32} />
               <div className="min-w-0">
-                <p className="flex items-center gap-1.5 truncate font-medium text-slate-100">
+                <p className="flex items-center gap-1.5 truncate font-medium text-ink">
                   {r.username}
-                  <span className="text-xs font-normal text-slate-500">wants</span>
+                  <span className="text-xs font-normal text-ink-muted">wants</span>
                   <RoleBadge role={r.requested_role} />
                 </p>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-ink-muted">
                   Requested {format(parseISO(r.requested_at), "PPpp")}
                   {r.resolved_at && r.resolved_by && (
                     <>

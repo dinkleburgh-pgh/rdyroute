@@ -44,7 +44,7 @@ function ColorSwatchPicker({ value, onChange, disabled }: { value: string; onCha
         title="Auto (best-guess color)"
         onClick={() => onChange("")}
         className={clsx(
-          "flex h-6 w-6 items-center justify-center rounded-full border border-slate-600 bg-slate-800 text-[10px] font-bold text-slate-400",
+          "flex h-6 w-6 items-center justify-center rounded-full border border-hairline bg-surface-2 text-[10px] font-bold text-ink-muted",
           value === "" && "ring-2 ring-white",
         )}
       >
@@ -377,15 +377,15 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
   const saving = save.isPending || saveCats.isPending;
 
-  if (isLoading || catsLoading) return <p className="text-sm text-slate-500">Loading…</p>;
+  if (isLoading || catsLoading) return <p className="text-sm text-ink-muted">Loading…</p>;
 
   return (
     <div className="space-y-4">
       {/* Header bar */}
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide text-slate-300">Tracked items</h3>
-          <p className="text-xs text-slate-500">
+          <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">Tracked items</h3>
+          <p className="text-xs text-ink-muted">
             {draft.length} item{draft.length !== 1 ? "s" : ""} across {categories.length} categor{categories.length !== 1 ? "ies" : "y"}
             {needsConfigCount > 0 && (
               <button onClick={() => setActiveTab("__needscfg__")} className="ml-2 inline-flex items-center gap-1 text-amber-400 hover:underline">
@@ -410,11 +410,11 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       </div>
 
       {/* Category filter tabs */}
-      <div className="flex flex-wrap gap-1 border-b border-slate-800 pb-1.5">
+      <div className="flex flex-wrap gap-1 border-b border-hairline pb-1.5">
         {[["__all__", `All (${draft.length})`], ...groups.map(([k, its]) => [k, `${(k || "None").replace(" > ", " › ")} (${(its as TrackedItem[]).length})`])].map(([tab, label]) => (
           <button key={tab} onClick={() => setActiveTab(tab)}
             className={clsx("rounded-md px-3 py-1 text-xs font-semibold transition-colors",
-              activeTab === tab ? "bg-blue-600 text-white" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200")}>
+              activeTab === tab ? "bg-blue-600 text-white" : "text-ink-muted hover:bg-surface-2 hover:text-ink-soft")}>
             {label}
           </button>
         ))}
@@ -428,15 +428,15 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       </div>
 
       {draft.length === 0 && (
-        <div className="rounded-lg border border-dashed border-slate-700 py-10 text-center">
-          <p className="text-sm text-slate-500">No tracked items yet.</p>
-          <p className="mt-1 text-xs text-slate-600">Add a category first, then add items inside it.</p>
+        <div className="rounded-lg border border-dashed border-hairline py-10 text-center">
+          <p className="text-sm text-ink-muted">No tracked items yet.</p>
+          <p className="mt-1 text-xs text-ink-faint">Add a category first, then add items inside it.</p>
         </div>
       )}
 
       {/* Add category / subcategory */}
-      <div className="rounded-lg border border-slate-800 bg-slate-900 p-3">
-        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">Add category / subcategory</p>
+      <div className="rounded-lg border border-hairline bg-surface p-3">
+        <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-ink-muted">Add category / subcategory</p>
         <div className="grid grid-cols-1 gap-2 sm:flex sm:items-end">
           <div className="min-w-0 sm:min-w-[12rem] sm:flex-1">
             <label className="label">Name</label>
@@ -457,7 +457,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
           </button>
         </div>
         <div className="mt-2 flex items-center gap-2">
-          <span className="text-xs text-slate-500">Color</span>
+          <span className="text-xs text-ink-muted">Color</span>
           <ColorSwatchPicker value={newCategoryColor} onChange={setNewCategoryColor} disabled={disabled} />
         </div>
       </div>
@@ -481,12 +481,12 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
           <div
             key={cat || "__none__"}
             className={clsx(
-              "overflow-hidden rounded-lg border border-slate-800 bg-slate-900",
+              "overflow-hidden rounded-lg border border-hairline bg-surface",
               isSub && "ml-4 border-l-2 border-l-blue-800/60",
             )}
           >
-            <div className="flex items-center justify-between gap-2 border-b border-slate-800 bg-slate-900 px-4 py-2.5">
-              <span className="flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-wide text-slate-400">
+            <div className="flex items-center justify-between gap-2 border-b border-hairline bg-surface px-4 py-2.5">
+              <span className="flex min-w-0 items-center gap-2 text-xs font-bold uppercase tracking-wide text-ink-muted">
                 {cat !== "" && (
                   <button
                     type="button"
@@ -499,18 +499,18 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                 <span className="truncate">
                   {isSub ? (
                     <>
-                      <span className="font-normal text-slate-600">{topLevelOf(cat)} › </span>
+                      <span className="font-normal text-ink-faint">{topLevelOf(cat)} › </span>
                       {sub}
                     </>
                   ) : (
                     cat || "Uncategorised"
                   )}
                 </span>
-                <span className="font-normal text-slate-600">{catItems.length}</span>
+                <span className="font-normal text-ink-faint">{catItems.length}</span>
               </span>
               <div className="flex shrink-0 items-center gap-1.5">
                 {!disabled && cat !== "" && !isSub && (
-                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                  <button className="flex items-center gap-1 rounded-md bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-track hover:text-ink"
                     title="Add a subcategory under this category"
                     onClick={() => {
                       setNewCategoryParent(cat);
@@ -522,21 +522,21 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                   </button>
                 )}
                 {!disabled && canMove && (
-                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                  <button className="flex items-center gap-1 rounded-md bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-track hover:text-ink"
                     title="Move this category under another (e.g. group the mat sizes under 'Mats')"
                     onClick={() => { if (movingCat === cat) closeMove(); else { closeMove(); setMovingCat(cat); } }}>
                     <FolderInput className="h-3 w-3" /> Move
                   </button>
                 )}
                 {!disabled && cat !== "" && (
-                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-400 transition-colors hover:bg-red-900/50 hover:text-red-300"
+                  <button className="flex items-center gap-1 rounded-md bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-muted transition-colors hover:bg-red-900/50 hover:text-red-300"
                     title={catItems.length === 0 ? "Remove this empty category" : "Remove this category…"}
                     onClick={() => (catItems.length === 0 ? removeEmptyCategory(cat) : setConfirmRemoveCat(cat))}>
                     <Trash2 className="h-3 w-3" />
                   </button>
                 )}
                 {!disabled && cat !== "" && (
-                  <button className="flex items-center gap-1 rounded-md bg-slate-800 px-2.5 py-1 text-xs font-medium text-slate-300 transition-colors hover:bg-slate-700 hover:text-slate-100"
+                  <button className="flex items-center gap-1 rounded-md bg-surface-2 px-2.5 py-1 text-xs font-medium text-ink-soft transition-colors hover:bg-track hover:text-ink"
                     onClick={() => { setAddingToCategory(isAdding ? null : cat); setAddForm({ label: "", packSize: "", unitLabel: "" }); }}>
                     <Plus className="h-3 w-3" /> {isAdding ? "Cancel" : "Add Item"}
                   </button>
@@ -545,8 +545,8 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
             </div>
 
             {colorPickerFor === cat && !disabled && (
-              <div className="flex items-center gap-2 border-b border-slate-800/60 bg-slate-800/20 px-4 py-2">
-                <span className="text-xs text-slate-500">Color</span>
+              <div className="flex items-center gap-2 border-b border-hairline/60 bg-surface-2/20 px-4 py-2">
+                <span className="text-xs text-ink-muted">Color</span>
                 <ColorSwatchPicker
                   value={catMeta[cat]?.color ?? ""}
                   onChange={(c) => setCategoryColor(cat, c)}
@@ -555,7 +555,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
             )}
 
             {movingCat === cat && !disabled && (
-              <div className="flex flex-wrap items-end gap-2 border-b border-slate-800/60 bg-slate-800/20 px-4 py-2.5">
+              <div className="flex flex-wrap items-end gap-2 border-b border-hairline/60 bg-surface-2/20 px-4 py-2.5">
                 <div className="min-w-[10rem]">
                   <label className="label">Move under</label>
                   <select className="input w-full" value={moveParent} onChange={(e) => setMoveParent(e.target.value)}>
@@ -594,7 +594,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
                 if (isEditing) {
                   return (
-                    <div key={it.label} className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-blue-600/50 bg-slate-800/60 p-2.5">
+                    <div key={it.label} className="flex w-full flex-wrap items-end gap-2 rounded-lg border border-blue-600/50 bg-surface-2/60 p-2.5">
                       <div className="min-w-0 flex-[2]">
                         <label className="label">Label</label>
                         <input className="input w-full" value={editForm.label} autoFocus
@@ -623,7 +623,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                         </div>
                       )}
                       <div className="flex w-full items-center gap-2">
-                        <span className="text-xs text-slate-500">Color</span>
+                        <span className="text-xs text-ink-muted">Color</span>
                         <ColorSwatchPicker value={editForm.color} onChange={(c) => setEditForm({ ...editForm, color: c })} />
                       </div>
                       <div className="flex gap-1 pb-0.5">
@@ -635,7 +635,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                 }
 
                 return (
-                  <div key={it.label} className="group flex items-center gap-1 rounded-full border border-slate-700 bg-slate-800 pl-3 pr-1 py-1 text-sm text-slate-200 transition-colors hover:border-slate-600">
+                  <div key={it.label} className="group flex items-center gap-1 rounded-full border border-hairline bg-surface-2 pl-3 pr-1 py-1 text-sm text-ink-soft transition-colors hover:border-ink-faint">
                     {it.color && COLOR_PRESETS[it.color] && (
                       <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", COLOR_PRESETS[it.color].swatch)} />
                     )}
@@ -650,7 +650,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                           ? "bg-amber-900/40 text-amber-400 hover:bg-amber-900/60"
                           : hasPack
                             ? "bg-emerald-900/40 text-emerald-400"
-                            : "bg-slate-700/50 text-slate-500 hover:bg-slate-700 hover:text-slate-300",
+                            : "bg-track/50 text-ink-muted hover:bg-track hover:text-ink-soft",
                       )}
                       title={missingUnit ? "Pack size set but no unit name — click to add (Case/Bag/…)" : hasPack ? `${it.pack_size} per ${it.unit_label}` : "Click to set pieces per pack"}
                     >
@@ -659,7 +659,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                     </button>
                     {!disabled && (
                       <button onClick={() => removeItem(it.label)}
-                        className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full text-slate-600 opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100" title="Remove">
+                        className="ml-0.5 flex h-5 w-5 items-center justify-center rounded-full text-ink-faint opacity-0 transition-all hover:bg-red-500/20 hover:text-red-400 group-hover:opacity-100" title="Remove">
                         <Trash2 className="h-3 w-3" />
                       </button>
                     )}
@@ -670,7 +670,7 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
             {/* Add item form */}
             {isAdding && !disabled && cat !== "" && (
-              <div className="border-t border-slate-800/60 bg-slate-800/20 px-4 py-3">
+              <div className="border-t border-hairline/60 bg-surface-2/20 px-4 py-3">
                 <div className="grid grid-cols-1 gap-3 sm:flex sm:items-end sm:gap-2">
                   <div className="sm:min-w-[12rem] sm:flex-1">
                     <label className="label">Label</label>
@@ -717,10 +717,10 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
       </div>
 
       {importOpen && (
-        <div className="rounded-lg border border-slate-800 bg-slate-900 p-4 space-y-2">
-          <p className="text-xs font-semibold text-slate-300">Bulk import</p>
-          <p className="text-xs text-slate-500">Paste a JSON object mapping category names to arrays of item labels (use "Top &gt; Sub" for subcategories):</p>
-          <pre className="rounded bg-slate-800/60 px-3 py-2 text-xs text-slate-400">{`{\n  "Bulk > Dust Mops": ["24\"", "36\"", "46\""],\n  "Towels": ["Terry", "Glass", "Premium"]\n}`}</pre>
+        <div className="rounded-lg border border-hairline bg-surface p-4 space-y-2">
+          <p className="text-xs font-semibold text-ink-soft">Bulk import</p>
+          <p className="text-xs text-ink-muted">Paste a JSON object mapping category names to arrays of item labels (use "Top &gt; Sub" for subcategories):</p>
+          <pre className="rounded bg-surface-2/60 px-3 py-2 text-xs text-ink-muted">{`{\n  "Bulk > Dust Mops": ["24\"", "36\"", "46\""],\n  "Towels": ["Terry", "Glass", "Premium"]\n}`}</pre>
           <textarea className="input w-full font-mono text-xs" rows={5} placeholder='{ "Category": ["item1", "item2"] }'
             value={importText} onChange={(e) => setImportText(e.target.value)} />
           <div className="flex gap-2">

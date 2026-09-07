@@ -8,8 +8,9 @@
  *   - one backdrop (black/60), sizes sm/md/lg, layer from utils/z
  *   - Escape closes; Tab cycles inside; focus returns to the opener on close
  *   - body scroll locks while any modal is open (ref-counted)
- *   - (Back-button close is deferred: raw pushState fights the router's own
- *     history handling — it lands router-integrated in a later phase)
+ *   - the phone's Back button closes the top modal instead of leaving the
+ *     page (one router blocker in Layout + utils/modalStack — raw pushState
+ *     here fought the router and StrictMode)
  *   - `sheet` docks to the bottom edge on phones with the safe-area inset
  *     (the FleetMobileActionSheet treatment), centred dialog from sm: up
  *
@@ -21,6 +22,7 @@ import { useEffect, useRef, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { X } from "lucide-react";
 import { Z, type ZLayer } from "../utils/z";
+import { registerOpenModal } from "../utils/modalStack";
 
 const SIZES = { sm: "max-w-sm", md: "max-w-md", lg: "max-w-lg", xl: "max-w-2xl" } as const;
 
@@ -73,6 +75,9 @@ export default function Modal({
     if (!open) return;
     openerRef.current = document.activeElement;
     lockScroll();
+    // Back-button close: Layout's single router blocker closes the top open
+    // modal on a POP instead of leaving the page (see utils/modalStack).
+    const unregister = registerOpenModal(() => onCloseRef.current());
 
     const onKey = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
@@ -108,6 +113,7 @@ export default function Modal({
     }, 0);
 
     return () => {
+      unregister();
       window.removeEventListener("keydown", onKey, true);
       window.clearTimeout(t);
       unlockScroll();

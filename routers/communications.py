@@ -35,7 +35,8 @@ def list_messages(
     channel: str = Query(default="Team"),
     include_deleted: bool = Query(default=False),
     limit: int = Query(default=_MAX_MESSAGES, ge=1, le=1000),
-    _user: User = Depends(get_current_user),
+    # Guests have no chat surface; the log is crew-internal.
+    _user: User = Depends(require_non_guest),
     db: Session = Depends(get_db),
 ):
     q = (

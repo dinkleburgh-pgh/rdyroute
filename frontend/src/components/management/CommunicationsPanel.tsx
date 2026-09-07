@@ -22,11 +22,11 @@ export default function CommunicationsPanel() {
   return (
     <div className="card space-y-4">
       <div>
-        <p className="text-sm font-semibold text-slate-300">Profanity filter</p>
-        <p className="text-xs text-slate-500">
+        <p className="text-sm font-semibold text-ink-soft">Profanity filter</p>
+        <p className="text-xs text-ink-muted">
           Messages are filtered with a built-in word list. Custom additions managed here.
           {!editing && words.length > 0 && (
-            <span className="ml-1 text-slate-600">({words.length} custom words)</span>
+            <span className="ml-1 text-ink-faint">({words.length} custom words)</span>
           )}
         </p>
       </div>
@@ -57,9 +57,9 @@ export default function CommunicationsPanel() {
             </button>
           </div>
           {isLoading ? (
-            <p className="text-sm text-slate-500">Loading…</p>
+            <p className="text-sm text-ink-muted">Loading…</p>
           ) : words.length > 0 ? (
-            <p className="text-xs text-slate-500">
+            <p className="text-xs text-ink-muted">
               {words.length} custom word{words.length !== 1 ? "s" : ""} active.{" "}
               <button
                 className="text-red-400 hover:text-red-300 underline"
@@ -70,7 +70,7 @@ export default function CommunicationsPanel() {
               </button>
             </p>
           ) : (
-            <p className="text-xs text-slate-500">No custom words configured.</p>
+            <p className="text-xs text-ink-muted">No custom words configured.</p>
           )}
           <div className="flex gap-2">
             <button
