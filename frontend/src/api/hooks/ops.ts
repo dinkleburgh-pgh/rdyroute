@@ -796,3 +796,50 @@ export function useLastAudited() {
     staleTime: 60_000,
   });
 }
+
+// ---------------------------------------------------------------------------
+// Day gap — unlogged weekdays between the last used day and a run date.
+// ---------------------------------------------------------------------------
+
+export interface DayGapDay {
+  date: string;
+  closed: boolean;
+}
+
+export interface DayGapOut {
+  prev_data_date: string | null;
+  gap_days: DayGapDay[];
+}
+
+/** Unlogged weekdays before this run date, with their plant-closed flags. */
+export function useDayGap(runDate: string) {
+  return useQuery({
+    queryKey: ["day-gap", runDate],
+    queryFn: async () =>
+      (await api.get<DayGapOut>("/trucks/day-gap", { params: { run_date: runDate } })).data,
+    staleTime: 60_000,
+  });
+}
+
+/** Record which gap days the plant was closed; reseeds the day when untouched. */
+export function useApplyDayGap() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (payload: { run_date: string; closed_dates: string[]; reseed?: boolean }) =>
+      (
+        await api.post<{ gap_days: DayGapDay[]; reseeded: boolean; reason: string | null }>(
+          "/trucks/day-gap",
+          payload,
+        )
+      ).data,
+    onSuccess: (data, vars) => {
+      // The response carries the authoritative flags — seed the cache with
+      // them so the banner can't render a stale window between invalidation
+      // and refetch.
+      qc.setQueryData(["day-gap", vars.run_date], (old: DayGapOut | undefined) =>
+        old ? { ...old, gap_days: data.gap_days } : old,
+      );
+      qc.invalidateQueries({ queryKey: ["board"] });
+    },
+  });
+}

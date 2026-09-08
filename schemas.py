@@ -1092,6 +1092,30 @@ class TrendDailyPoint(BaseModel):
     entry_count: int
 
 
+class DayGapDay(BaseModel):
+    """One unlogged weekday between the last data day and a run date."""
+    date: date
+    closed: bool
+
+
+class DayGapOut(BaseModel):
+    """What Setup Day shows when the app skipped operational days."""
+    prev_data_date: date | None
+    gap_days: list[DayGapDay]
+
+
+class DayGapApplyIn(BaseModel):
+    run_date: date
+    closed_dates: list[date] = []
+    reseed: bool = True
+
+
+class DayGapApplyOut(BaseModel):
+    gap_days: list[DayGapDay]
+    reseeded: bool
+    reason: str | None = None
+
+
 class LastAuditedRow(BaseModel):
     """Audit-rotation steering: when a route truck was last audited."""
     truck_number: int

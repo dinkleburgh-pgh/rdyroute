@@ -25,6 +25,9 @@ import {
   useUpsertSetting,
   useUpsertTruckState,
 } from "../../api/hooks";
+import { useApplyDayGap, useDayGap } from "../../api/hooks";
+import { useAuth } from "../../contexts/AuthContext";
+import { format } from "date-fns";
 import { workdayNumbers } from "../../components/Clock";
 import { useToast } from "../../contexts/ToastContext";
 import { DustGarmentIcon } from "../../components/icons";
@@ -48,6 +51,42 @@ export default function RunDayWizard({
 }) {
   const [step, setStep] = useState(1);
   const toast = useToast();
+  const { user } = useAuth();
+  // Mirrors the backend's _ADMIN_ROLES gate on POST /trucks/day-gap.
+  const canApplyGap = ["admin", "fleet", "supervisor"].includes(user?.role ?? "");
+  // Unlogged workdays since the last day the app was used. Unmarked days count
+  // as normal run days (trucks come back dirty per the schedule); marking one
+  // closed and applying reseeds today's board with that day skipped.
+  const { data: dayGap } = useDayGap(runDate);
+  const applyDayGap = useApplyDayGap();
+  const gapDays = dayGap?.gap_days ?? [];
+  const [closedPicks, setClosedPicks] = useState<Set<string> | null>(null);
+  const pickedClosed = closedPicks ?? new Set(gapDays.filter((d) => d.closed).map((d) => d.date));
+  function toggleClosed(iso: string) {
+    const next = new Set(pickedClosed);
+    if (next.has(iso)) next.delete(iso); else next.add(iso);
+    setClosedPicks(next);
+  }
+  const gapDirty =
+    closedPicks != null &&
+    (gapDays.some((d) => pickedClosed.has(d.date) !== d.closed));
+  async function applyGap() {
+    try {
+      const res = await applyDayGap.mutateAsync({
+        run_date: runDate,
+        closed_dates: [...pickedClosed],
+      });
+      setClosedPicks(null);
+      if (res.reseeded) toast.success("Closed days saved — today's board reseeded.");
+      else if (res.reason === "day-already-worked")
+        toast.push("Closed days saved, but today already has work on it — use Management → Reset Day to rebuild.", "info");
+      else toast.success("Closed days saved.");
+    } catch {
+      // The global mutation onError already toasts the failure — this catch
+      // only stops the rejection from bubbling out of the click handler.
+    }
+  }
+  const gapDayLabel = (iso: string) => format(new Date(`${iso}T12:00:00`), "EEE MMM d");
   const { data: holidayMode = false } = useHolidayMode(runDate);
   const setHolidayMode = useSetHolidayMode();
   const { data: holidayLoad = false } = useHolidayLoad(runDate);
@@ -125,7 +164,14 @@ export default function RunDayWizard({
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
 
   const { loadDay: todayLoad } = workdayNumbers(new Date(`${runDate}T12:00:00`));
-  const prevDay = previousWorkday(todayLoad);
+  // "Yesterday" must skip plant-closed gap days: a truck scheduled off on a
+  // closed day's number never sat out a run day at all, so the returning-
+  // trucks list would otherwise clean trucks that are genuinely dirty.
+  const prevDay = useMemo(() => {
+    let d = previousWorkday(todayLoad);
+    for (const g of gapDays) if (g.closed) d = previousWorkday(d);
+    return d;
+  }, [todayLoad, gapDays]);
 
   // Trucks that physically RAN yesterday despite being off the schedule —
   // because they carried someone else's route, or took a split's overflow.
@@ -311,6 +357,48 @@ export default function RunDayWizard({
           {/* Step 1: Run Mode */}
           {step === 1 && (
             <div className="space-y-4">
+              {gapDays.length > 0 && (
+                <div className="space-y-2 rounded-lg border border-[rgba(245,158,11,0.30)] bg-[rgba(245,158,11,0.08)] p-3">
+                  <p className="text-sm font-bold text-[#fbbf5c]">
+                    The app wasn't used on {gapDays.length} workday{gapDays.length === 1 ? "" : "s"}
+                    {dayGap?.prev_data_date ? ` since ${gapDayLabel(dayGap.prev_data_date)}` : ""}.
+                  </p>
+                  <p className="text-xs text-ink-muted">
+                    Unmarked days count as normal run days — trucks come back dirty per the
+                    schedule. Tap any day the plant was closed{canApplyGap ? ", then apply" : " (a supervisor applies this)"}.
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {gapDays.map((d) => (
+                      <button
+                        key={d.date}
+                        type="button"
+                        disabled={!canApplyGap}
+                        onClick={() => toggleClosed(d.date)}
+                        className={clsx(
+                          "rounded-full border px-2.5 py-1 text-xs font-semibold transition-colors",
+                          pickedClosed.has(d.date)
+                            ? "border-red-500/50 bg-red-900/40 text-red-200"
+                            : "border-hairline bg-surface-2 text-ink-soft",
+                          canApplyGap && "hover:bg-track",
+                        )}
+                      >
+                        {gapDayLabel(d.date)}
+                        {pickedClosed.has(d.date) ? " · closed" : ""}
+                      </button>
+                    ))}
+                  </div>
+                  {canApplyGap && (gapDirty || gapDays.some((d) => d.closed)) && (
+                    <button
+                      type="button"
+                      onClick={applyGap}
+                      disabled={applyDayGap.isPending || !gapDirty}
+                      className="btn-primary w-full rounded-lg px-3 py-1.5 text-xs font-bold disabled:opacity-50"
+                    >
+                      {applyDayGap.isPending ? "Applying…" : "Apply closed days & reseed today"}
+                    </button>
+                  )}
+                </div>
+              )}
               <p className="text-center text-xl font-extrabold text-ink">Set today's run mode.</p>
               <p className="text-center text-xs text-ink-muted">
                 Load and Unload can run independently on holiday. Load is for tomorrow's ship,

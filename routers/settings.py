@@ -177,6 +177,9 @@ _USER_READABLE_PREFIXES: tuple[str, ...] = (
     "unloads_day_override_",
     "runday_next_up_",
     "day_setup_source_",
+    # Whether the plant was closed on an unlogged day — day-init reads it, the
+    # Setup Day gap banner shows it. Writes go through /trucks/day-gap (admin).
+    "plant_closed_",
     # Read so any surface can show the corrected order; WRITING still needs an
     # admin role, which is what makes this supervisor-only.
     "load_order_",
@@ -399,6 +402,15 @@ def upsert_setting(
     setting = db.get(AppSetting, key)
     before_value = setting.value if setting is not None else None
 
+    # plant_closed_* is managed state: the only write path is POST
+    # /trucks/day-gap, which validates gap membership, reseeds the day, and
+    # logs day_gap_applied. A raw settings write would bypass all three.
+    if key.startswith("plant_closed_"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plant-closed days are set from Setup Day (POST /trucks/day-gap).",
+        )
+
     # Server-stamped keys ignore most of what the client sent. Everything below
     # writes new_value, never payload.value.
     new_value = payload.value
@@ -486,6 +498,13 @@ def bulk_upsert_settings(
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Managed key — use PUT /settings/{WEARER_DEFAULTS_REVIEW_KEY}",
+            )
+        if key.startswith("plant_closed_"):
+            # Managed like the review key: only POST /trucks/day-gap may write
+            # these (it validates gap membership, reseeds, and logs the change).
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Plant-closed days are set from Setup Day (POST /trucks/day-gap).",
             )
         setting = db.get(AppSetting, key)
         if setting is None:

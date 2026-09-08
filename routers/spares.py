@@ -225,7 +225,7 @@ def assign_spare(
     return row
 
 
-def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int) -> list[SpareAssignment]:
+def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int, seeding: bool = False) -> list[SpareAssignment]:
     """Auto-apply recurring coverage rules whose day matches the load day.
 
     Reads the ``recurring_route_swaps`` app setting — a list of
@@ -239,6 +239,11 @@ def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int) -> lis
     covering truck on this date, so re-initializing a day is safe and manual
     swaps are preserved. Called once per run-date from ``_ensure_day_initialized``.
     The caller is responsible for committing the surrounding transaction.
+
+    ``seeding=True`` marks the touched state rows as auto-seeded rather than
+    workflow: applied from day-init they ARE part of automatic seeding, and
+    stamping them "workflow" made every day with a matching recurring rule
+    look human-touched (which blocked the day-gap reseed guard).
     """
     setting = db.get(AppSetting, "recurring_route_swaps")
     rules = setting.value if (setting is not None and isinstance(setting.value, list)) else []
@@ -293,6 +298,7 @@ def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int) -> lis
                 TruckState.run_date == run_date,
             )
         ).first()
+        source = TruckStateSource.auto.value if seeding else TruckStateSource.workflow.value
         if st is None:
             db.add(TruckState(
                 truck_number=load_on_truck,
@@ -300,13 +306,13 @@ def apply_recurring_swaps(db: Session, run_date: date, load_day_num: int) -> lis
                 status=TruckStatus.dirty,
                 wearers=0,
                 oos_spare_route=route_truck,
-                state_source=TruckStateSource.workflow.value,
+                state_source=source,
             ))
         else:
             if st.status in (TruckStatus.spare, TruckStatus.dirty):
                 st.status = TruckStatus.dirty
             st.oos_spare_route = route_truck
-            st.state_source = TruckStateSource.workflow.value
+            st.state_source = source
         covered_routes.add(route_truck)
         used_spares.add(load_on_truck)
         applied.append(row)

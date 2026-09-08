@@ -21,7 +21,7 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
-from sqlalchemy import case, delete, func, select
+from sqlalchemy import case, delete, func, or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -41,6 +41,10 @@ from routers.trends_common import (
 )
 from schemas import (
     AnomalyDay,
+    DayGapApplyIn,
+    DayGapApplyOut,
+    DayGapDay,
+    DayGapOut,
     LoadRequestIn,
     CompletionDailyPoint,
     CycleDailyPoint,
@@ -72,6 +76,27 @@ def _ship_day_number(value: date) -> int:
 
 def _load_day_number(run_date: date) -> int:
     return _ship_day_number(run_date + timedelta(days=1))
+
+
+def _plant_closed(db: Session, day: date) -> bool:
+    row = db.get(AppSetting, f"plant_closed_{day}")
+    return row is not None and row.value is True
+
+
+def _unlogged_gap_days(prev_run_date: date | None, run_date: date) -> list[date]:
+    """Weekdays strictly between the last data day and run_date — operational
+    days the fleet may have run with the app never opened. Unlogged weekends
+    stay non-operational: a weekend the fleet DID run gets rows of its own and
+    becomes the data day itself."""
+    if prev_run_date is None:
+        return []
+    days: list[date] = []
+    d = prev_run_date + timedelta(days=1)
+    while d < run_date:
+        if d.weekday() <= 4:
+            days.append(d)
+        d += timedelta(days=1)
+    return days
 
 
 def _end_unloading(state: TruckState) -> None:
@@ -132,16 +157,27 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     prev_run_date = db.scalar(
         select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
     )
-    # Load-day number for the previous run date — used to determine whether a
+    # ---- Unlogged-gap model -------------------------------------------------
+    # prev_run_date is the last date with DATA, not the previous operational
+    # day: weekdays in between with no rows are days the fleet may well have
+    # run with the app closed. Each one counts as OPERATED unless a
+    # plant_closed_{date} setting says the plant was closed (Setup Day asks).
+    # Dispatch inference anchors on the LAST operated evening before run_date
+    # — whoever was loaded that evening comes back dirty today. With no gap
+    # (the everyday case) the anchor is prev_run_date and nothing changes.
+    gap_days = _unlogged_gap_days(prev_run_date, run_date)
+    operated_gap_days = [d for d in gap_days if not _plant_closed(db, d)]
+    dispatch_anchor_day = operated_gap_days[-1] if operated_gap_days else prev_run_date
+    # Load-day number for the anchor evening — used to determine whether a
     # truck with prior status "unloaded" was scheduled off that day (and therefore
     # didn't run a route) vs. was active and dispatched (and came back dirty).
-    prev_load_day_num = _load_day_number(prev_run_date) if prev_run_date is not None else None
-    # Did the previous run day load on a holiday? If so, TWO ship days ran in one
-    # shift (prev load day + the next ship day), so a truck only sat out if it was
+    prev_load_day_num = _load_day_number(dispatch_anchor_day) if dispatch_anchor_day is not None else None
+    # Did the anchor run day load on a holiday? If so, TWO ship days ran in one
+    # shift (anchor load day + the next ship day), so a truck only sat out if it was
     # scheduled off BOTH days — everything else ran and comes back dirty today.
     prev_holiday_load = False
-    if prev_run_date is not None:
-        _hl = db.get(AppSetting, f"holiday_load_{prev_run_date}")
+    if dispatch_anchor_day is not None:
+        _hl = db.get(AppSetting, f"holiday_load_{dispatch_anchor_day}")
         prev_holiday_load = _hl is not None and _hl.value is True
     prev_second_load_day = (
         (1 if prev_load_day_num == 5 else prev_load_day_num + 1)
@@ -171,10 +207,16 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                 select(TruckState).where(TruckState.run_date == prev_run_date)
             ).all()
         }
+        # Evidence windows span the whole unlogged gap, not just the last data
+        # day — coverage recorded on a day nobody otherwise opened the app
+        # (or via the driver QR surface) still proves the truck dispatched.
         prev_loaded_on = {
             row.load_on_truck
             for row in db.scalars(
-                select(RouteSwap).where(RouteSwap.run_date == prev_run_date)
+                select(RouteSwap).where(
+                    RouteSwap.run_date >= prev_run_date,
+                    RouteSwap.run_date < run_date,
+                )
             ).all()
         }
         # Every truck that carried someone else's freight yesterday, gathered
@@ -188,13 +230,19 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
         prev_spares_used = {
             row.spare_truck_number
             for row in db.scalars(
-                select(SpareAssignment).where(SpareAssignment.run_date == prev_run_date)
+                select(SpareAssignment).where(
+                    SpareAssignment.run_date >= prev_run_date,
+                    SpareAssignment.run_date < run_date,
+                )
             ).all()
         }
         prev_spares_used |= {
             row.load_on_truck
             for row in db.scalars(
-                select(RouteSwapLog).where(RouteSwapLog.run_date == prev_run_date)
+                select(RouteSwapLog).where(
+                    RouteSwapLog.run_date >= prev_run_date,
+                    RouteSwapLog.run_date < run_date,
+                )
             ).all()
         }
         prev_spares_used |= {
@@ -306,7 +354,46 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
             or truck.truck_number in prev_crossload_targets
         )
 
-        if prior is not None:
+        if operated_gap_days:
+            # At least one operational day passed with the app never opened,
+            # so the fleet cycled (ran, unloaded, reloaded) without leaving
+            # rows — a prior "loaded"/"dirty" describes a day that is no
+            # longer yesterday. Persistent statuses survive; recorded
+            # coverage anywhere in the gap is proof of dispatch; otherwise
+            # the schedule anchored on the last operated evening decides.
+            # Ambiguity resolves toward dirty — a wrongly dirty card costs
+            # one tap, a wrongly clean one silently drops the truck out of
+            # the crew's unload list.
+            if prior is not None:
+                shop_note = prior.shop_note or ""
+            if prior is not None and prior.status in {TruckStatus.oos, TruckStatus.shop}:
+                status = prior.status
+            elif ran_on_record:
+                used_yesterday = True
+                status = TruckStatus.dirty
+            elif truck.truck_type == "Spare":
+                # Spares have no schedule — they run only on recorded
+                # coverage, and none was recorded anywhere in the gap.
+                status = TruckStatus.unloaded
+            else:
+                off_days = truck.scheduled_off_days or []
+                if prev_holiday_load and prev_load_day_num is not None:
+                    anchor_sched_off = (
+                        prev_load_day_num in off_days
+                        and (prev_second_load_day is None or prev_second_load_day in off_days)
+                    )
+                else:
+                    anchor_sched_off = (
+                        prev_load_day_num is not None and prev_load_day_num in off_days
+                    )
+                if not anchor_sched_off:
+                    used_yesterday = True
+                    status = TruckStatus.dirty
+                elif scheduled_off_today:
+                    status = TruckStatus.off
+                else:
+                    status = TruckStatus.unloaded
+        elif prior is not None:
             # needs_checked and ran-special off_note are intentionally NOT carried
             # forward — both reset each day.
             shop_note = prior.shop_note or ""
@@ -422,7 +509,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     )
     # Auto-apply recurring route-swap rules for this load day (once per run-date).
     from routers.spares import apply_recurring_swaps
-    apply_recurring_swaps(db, run_date, load_day_num)
+    apply_recurring_swaps(db, run_date, load_day_num, seeding=True)
     # Day init is a check-then-act with no lock: at rollover two concurrent board
     # polls can both pass the "already initialized" check at the top and both try
     # to insert the same sentinel / TruckState rows here. The whole init is one
@@ -453,6 +540,155 @@ def get_prev_operating_day(
         select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
     )
     return {"prev_run_date": prev.isoformat() if prev is not None else None}
+
+
+@router.get("/day-gap", response_model=DayGapOut)
+def get_day_gap(
+    run_date: date = Query(..., description="Operational run-date (YYYY-MM-DD)"),
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_non_guest),
+):
+    """Unlogged weekdays between the last data day and *run_date*, with their
+    plant-closed flags. Non-empty means the fleet may have run with the app
+    closed — Setup Day surfaces these so a closure can be recorded before the
+    schedule-anchored seeding treats the day as operated."""
+    prev_data_date = db.scalar(
+        select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
+    )
+    days = _unlogged_gap_days(prev_data_date, run_date)
+    return DayGapOut(
+        prev_data_date=prev_data_date,
+        gap_days=[DayGapDay(date=d, closed=_plant_closed(db, d)) for d in days],
+    )
+
+
+@router.post("/day-gap", response_model=DayGapApplyOut)
+def apply_day_gap(
+    payload: DayGapApplyIn,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    _admin: User = Depends(require_admin),
+):
+    """Record which unlogged gap days the plant was CLOSED (the rest count as
+    operated) and reseed *run_date* so the flags take effect. Reseeding only
+    happens while the day is untouched — every state row still auto-seeded and
+    no batches — because it rebuilds the day the way Reset Day does; a day
+    with work on it needs the explicit admin Reset Day instead."""
+    from models import Batch  # local import avoids circular (matches reset_day)
+
+    run_date = payload.run_date
+    if run_date > operational_today():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="That run day hasn't started yet.",
+        )
+    prev_data_date = db.scalar(
+        select(func.max(TruckState.run_date)).where(TruckState.run_date < run_date)
+    )
+    days = _unlogged_gap_days(prev_data_date, run_date)
+    closed = {d for d in payload.closed_dates if d in set(days)}
+    for d in days:
+        key = f"plant_closed_{d}"
+        row = db.get(AppSetting, key)
+        if d in closed:
+            if row is None:
+                db.add(AppSetting(key=key, value=True))
+            else:
+                row.value = True
+        elif row is not None:
+            db.delete(row)
+    # The flags commit on their own: they are user-entered state and must
+    # survive whatever happens to the reseed below — day-init swallows a
+    # racing board poll's IntegrityError by rolling the whole session back.
+    db.commit()
+
+    reseeded = False
+    reason: str | None = None
+    if payload.reseed and days:
+        touched = db.scalar(
+            select(func.count(TruckState.id)).where(
+                TruckState.run_date == run_date,
+                or_(
+                    TruckState.state_source != TruckStateSource.auto.value,
+                    # The driver-QR surfaces stamp these without changing the
+                    # source — real shift work the reseed must not erase.
+                    TruckState.arrived_at.is_not(None),
+                    TruckState.driver_claimed_route.is_not(None),
+                    TruckState.needs_checked == True,
+                ),
+            )
+        ) or 0
+        batch_count = db.scalar(
+            select(func.count(Batch.id)).where(Batch.run_date == run_date)
+        ) or 0
+        if touched or batch_count:
+            reason = "day-already-worked"
+        else:
+            # Delete only auto-seeded rows; anything else that landed between
+            # the guard and here (a racing workflow write) aborts the reseed
+            # instead of being clobbered.
+            db.execute(
+                delete(TruckState).where(
+                    TruckState.run_date == run_date,
+                    TruckState.state_source == TruckStateSource.auto.value,
+                )
+            )
+            leftover = db.scalar(
+                select(func.count(TruckState.id)).where(TruckState.run_date == run_date)
+            ) or 0
+            if leftover:
+                db.rollback()
+                reason = "day-already-worked"
+            else:
+                for key in (
+                    f"day_setup_source_{run_date}",
+                    f"runday_next_up_{run_date}",
+                    f"load_order_{run_date}",
+                ):
+                    stale = db.get(AppSetting, key)
+                    if stale is not None:
+                        db.delete(stale)
+                db.flush()
+                _ensure_day_initialized(run_date, db)
+                # Init commits internally and swallows a racing
+                # IntegrityError by rolling back, so confirm the day really
+                # exists before claiming success. If a racing board poll won
+                # the race, its seeding already ran with the flags committed
+                # above — the same outcome for the caller.
+                if db.get(AppSetting, f"day_setup_source_{run_date}") is not None:
+                    reseeded = True
+                else:
+                    reason = "reseed-conflict"
+
+    append_activity_event(
+        db,
+        actor_user=_admin,
+        event_family="setup",
+        event_type="day_gap_applied",
+        run_date=run_date,
+        summary=(
+            f"Recorded {len(closed)} closed day(s) in the {len(days)}-day gap before {run_date}"
+            + (" and reseeded the board" if reseeded else "")
+        ),
+        diff_json={
+            "gap_days": [str(d) for d in days],
+            "closed_dates": sorted(str(d) for d in closed),
+            "reseeded": reseeded,
+            "reason": reason,
+        },
+    )
+    db.commit()
+
+    if reseeded:
+        background_tasks.add_task(
+            manager.broadcast,
+            {"type": "truck_state_updated", "run_date": str(run_date)},
+        )
+    return DayGapApplyOut(
+        gap_days=[DayGapDay(date=d, closed=d in closed) for d in days],
+        reseeded=reseeded,
+        reason=reason,
+    )
 
 
 @router.get("/garment-log", response_model=list[GarmentDayLogOut])
