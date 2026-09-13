@@ -18,6 +18,89 @@ const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri"];
 const isSpare = (t: Truck) => t.truck_type === "Spare";
 const offDays = (t: Truck) => (isSpare(t) ? [] : t.scheduled_off_days ?? []);
 
+/**
+ * Curated mnemonics for the schedule as of 2026-09-12, each one fact-checked
+ * against that snapshot. They are prose about SPECIFIC numbers, so they can't
+ * be computed from live data — instead TIPS_FINGERPRINT pins the schedule they
+ * describe, and the Tips tab falls back to the always-computed basics the
+ * moment any truck's off day changes.
+ */
+const TIPS_FINGERPRINT =
+  "4:2,7:3,50:1,51:1,52:5,53:1,54:2,55:4,56:1,57:4,58:2,59:5,60:3,61:5,62:3,64:4,65:2,66:5,68:5,69:1,70:5,73:2,75:5,80:2,81:4,82:1,83:3,84:3,85:1,86:2,87:1,88:3,89:5,91:1,92:5,93:4,94:5,95:1";
+
+const TIPS: { group: "learn" | "pattern"; title: string; tip: string }[] = [
+  {
+    group: "learn",
+    title: "Climb the ladder",
+    tip: "Learn days smallest-first: Thu 5 → Wed 6 → Tue 7 → then Mon and Fri (10 each). Once the three small days are solid, everything left is automatically a Monday or Friday truck.",
+  },
+  {
+    group: "learn",
+    title: "The checksum",
+    tip: "Mon 10 · Tue 7 · Wed 6 · Thu 5 · Fri 10. Recite today's off list each morning, then count what you named — a wrong count means you dropped or added a truck, no answer key needed.",
+  },
+  {
+    group: "learn",
+    title: "Keep it fresh",
+    tip: "Run Who's Off on today's day before each shift. Once the deck feels easy, do one cold full write-out a week and send anything you misplace back through the flashcards.",
+  },
+  {
+    group: "pattern",
+    title: "Thursday's short list",
+    tip: "Only five trucks sit out Thursday: the odd pair 55 & 57, then 64, and F.S. 81 & 93. If you name a sixth Thursday truck, you've made a mistake.",
+  },
+  {
+    group: "pattern",
+    title: "Wednesday six",
+    tip: "Lucky truck 7, the even pair 60 & 62, and the F.S. trio 83-84-88. Guardrail: no 50-something truck is ever off on Wednesday.",
+  },
+  {
+    group: "pattern",
+    title: "The 50s",
+    tip: "Monday takes four: 50, 51, 53, 56. The rest come in pairs — 54 & 58 Tuesday, 55 & 57 Thursday, 52 & 59 Friday. That's all ten.",
+  },
+  {
+    group: "pattern",
+    title: "60s: evens forward, odds backward",
+    tip: "Even 60s slide later as they climb: 60 & 62 Wed, 64 Thu, 66 & 68 Fri. Odd 60s run the week backwards: 61 Fri, 65 Tue, 69 Mon.",
+  },
+  {
+    group: "pattern",
+    title: "The 80s",
+    tip: "Monday trio 82-85-87, Tuesday pair 80 & 86, Wednesday trio 83-84-88, and a loner at each end of the week: 81 is the only 80s Thursday, 89 the only 80s Friday.",
+  },
+  {
+    group: "pattern",
+    title: "The 90s mirror",
+    tip: "A mirror centered on 93 (Thursday): one step out either way is Friday (92 & 94), two steps out is Monday (91 & 95).",
+  },
+  {
+    group: "pattern",
+    title: "Ends-in-3 ladder",
+    tip: "Trucks ending in 3 climb one rung per decade: 53 Monday, 73 Tuesday, 83 Wednesday, 93 Thursday.",
+  },
+  {
+    group: "pattern",
+    title: "Bookends",
+    tip: "The fleet opens on Tuesday and closes on Monday: the lowest trucks of each type (4 and 80) are off Tuesday, the highest (91 and 95) are off Monday.",
+  },
+  {
+    group: "pattern",
+    title: "Monday block",
+    tip: "Monday's uniform group is the low-50s run 50-51-53-56 plus 69 and big 91; the F.S. Monday four are 82, 85, 87, 95.",
+  },
+  {
+    group: "pattern",
+    title: "Friday hooks",
+    tip: "The even run 66-68-70 (odd 69 skips out to Monday), and 59 & 61 sandwiching Wednesday's 60. Add 52 and 75, then F.S. 89, 92, 94.",
+  },
+  {
+    group: "pattern",
+    title: "Tuesday seven",
+    tip: "The two openers 4 & 80, the 54 & 58 pair, loners 65 and 73, and F.S. 86. Seven total.",
+  },
+];
+
 const store = {
   get<T>(k: string, d: T): T {
     try {
@@ -98,12 +181,53 @@ function offText(t: Truck) {
   );
 }
 
+function TipsSection({ fingerprintMatches, dayCounts }: { fingerprintMatches: boolean; dayCounts: number[] }) {
+  const groups: { id: "learn" | "pattern"; heading: string }[] = [
+    { id: "learn", heading: "How to learn it" },
+    { id: "pattern", heading: "Number patterns" },
+  ];
+  return (
+    <div className="space-y-3">
+      {!fingerprintMatches && (
+        <div className="rounded-xl border border-amber-500/30 bg-amber-950/20 px-3.5 py-3 text-[13px] text-amber-200">
+          The schedule has changed since these patterns were written, so the pattern tips are hidden —
+          they may no longer be true. The counts below are live. Ask for a tips refresh when the new
+          schedule settles.
+        </div>
+      )}
+      <div className="rounded-xl border border-hairline bg-surface px-3.5 py-3">
+        <p className="mb-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-muted">
+          Off-counts by day
+        </p>
+        <p className="font-mono text-sm font-bold text-ink-soft">
+          {DAYS.map((nm, i) => `${nm} ${dayCounts[i]}`).join(" · ")}
+        </p>
+        <p className="mt-1 text-[12.5px] text-ink-muted">
+          Every route truck is off exactly one day — use these counts to self-check any list you recite.
+        </p>
+      </div>
+      {fingerprintMatches &&
+        groups.map((g) => (
+          <div key={g.id} className="space-y-2">
+            <p className="pt-1 text-[13px] font-semibold uppercase tracking-[0.06em] text-ink-muted">{g.heading}</p>
+            {TIPS.filter((t) => t.group === g.id).map((t) => (
+              <div key={t.title} className="rounded-xl border border-hairline bg-surface px-3.5 py-3">
+                <p className="text-sm font-bold text-ink">{t.title}</p>
+                <p className="mt-0.5 text-[13.5px] leading-relaxed text-ink-soft">{t.tip}</p>
+              </div>
+            ))}
+          </div>
+        ))}
+    </div>
+  );
+}
+
 export default function OffDayDrillsPanel() {
   const { data: fleet } = useFleet(false);
   const trucks = useMemo(() => (fleet ?? []).slice().sort((a, b) => a.truck_number - b.truck_number), [fleet]);
   const routeTrucks = useMemo(() => trucks.filter((t) => !isSpare(t)), [trucks]);
 
-  const [mode, setMode] = useState<"cards" | "quiz" | "who" | "board">("cards");
+  const [mode, setMode] = useState<"cards" | "quiz" | "who" | "board" | "tips">("cards");
 
   // ---- flashcards (3-box Leitner) ----
   const [boxes, setBoxes] = useState<Record<number, number>>(() => store.get("boxes", {}));
@@ -211,11 +335,12 @@ export default function OffDayDrillsPanel() {
         </p>
       </div>
 
-      <div className="grid grid-cols-4 gap-1 rounded-xl border border-hairline bg-surface-2 p-1">
-        {tabBtn("cards", "Flashcards")}
+      <div className="grid grid-cols-5 gap-1 rounded-xl border border-hairline bg-surface-2 p-1">
+        {tabBtn("cards", "Cards")}
         {tabBtn("quiz", "Quiz")}
         {tabBtn("who", "Who's Off")}
         {tabBtn("board", "Board")}
+        {tabBtn("tips", "Tips")}
       </div>
 
       {mode === "cards" && card && (
@@ -436,6 +561,15 @@ export default function OffDayDrillsPanel() {
             </p>
           )}
         </div>
+      )}
+
+      {mode === "tips" && (
+        <TipsSection
+          fingerprintMatches={
+            routeTrucks.map((t) => `${t.truck_number}:${offDays(t).join("")}`).join(",") === TIPS_FINGERPRINT
+          }
+          dayCounts={DAYS.map((_, i) => routeTrucks.filter((t) => offDays(t).includes(i + 1)).length)}
+        />
       )}
 
       {mode === "board" && (
