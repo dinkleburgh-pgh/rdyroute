@@ -24,7 +24,9 @@ const WELL_KNOWN_KEYS = new Set([
   "tracked_items_map",
 ]);
 
-const HIDDEN_KEYS = new Set(["communications_censor_words"]);
+// arrival_code_secret / update_push_secret are server-side key material —
+// the API already refuses to return them; hiding here is defense in depth.
+const HIDDEN_KEYS = new Set(["communications_censor_words", "arrival_code_secret", "update_push_secret"]);
 
 export default function AdvancedPanel({ settings }: { settings: AppSetting[] }) {
   const upsert = useUpsertSetting();

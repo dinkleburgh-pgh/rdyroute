@@ -9,6 +9,9 @@ Three varieties:
   one_off   — shown until expires_on date, then archived.
 """
 
+import hashlib
+import hmac
+import secrets
 import time
 from collections import defaultdict, deque
 from datetime import date, datetime, timezone
@@ -17,6 +20,7 @@ from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from activity_log import append_activity_event
@@ -219,6 +223,7 @@ def driver_truck_info(token: str, db: Session = Depends(get_db)):
         "is_spare": is_spare,
         "coverage": None,
         "claimed_route": None,
+        "arrival_code_required": _arrival_code_required(db),
     }
     if not is_spare:
         return out
@@ -266,6 +271,11 @@ def driver_coverage_notes(token: str, db: Session = Depends(get_db)):
 # Unauthenticated, so it is throttled per token. The stamp is worth very little
 # to an attacker (a timestamp), but it feeds return-time predictions, so a
 # script should not be able to spray it.
+# NOTE: this limiter is in-process memory, and the arrival-code brute-force
+# bound (6 guesses/min against 2 valid codes in 1e6) depends on there being
+# exactly ONE process — the Dockerfile runs uvicorn without --workers. Adding
+# workers or replicas multiplies the guess budget per worker; move the counter
+# to the DB before ever scaling out.
 _ARRIVE_MAX = 6
 _ARRIVE_WINDOW = 60.0
 _arrive_hits: dict[str, deque] = defaultdict(deque)
@@ -284,10 +294,101 @@ def _arrive_rate_limit(token: str) -> None:
     dq.append(now)
 
 
+# ---------------------------------------------------------------------------
+# Rotating arrival code — proof of presence without GPS.
+#
+# A 6-digit TOTP-style code derived from a server secret and the current
+# 60-second window, shown only on the plant screens (the Load Display corner
+# tile and the /arrival-code kiosk page). While arrival_code_required is on,
+# the driver-QR endpoints that stamp arrived_at demand a current code: a
+# driver can only produce one by physically reading the screen, so "I'm
+# back" stops being claimable from the road. Staff-side board stamps are
+# untouched, and the previous window is also accepted — typing routinely
+# spans a rotation boundary.
+# ---------------------------------------------------------------------------
+
+ARRIVAL_CODE_WINDOW_S = 60
+
+
+def _arrival_code_secret(db: Session) -> str:
+    row = db.get(AppSetting, "arrival_code_secret")
+    if row is not None and isinstance(row.value, str) and row.value:
+        return row.value
+    value = secrets.token_hex(32)
+    if row is None:
+        db.add(AppSetting(key="arrival_code_secret", value=value))
+    else:
+        row.value = value
+    try:
+        db.commit()
+    except IntegrityError:
+        # A concurrent request generated it first — use theirs.
+        db.rollback()
+        row = db.get(AppSetting, "arrival_code_secret")
+        if row is not None and isinstance(row.value, str) and row.value:
+            return row.value
+        raise
+    return value
+
+
+def _arrival_code_at(secret: str, window: int) -> str:
+    digest = hmac.new(secret.encode(), str(window).encode(), hashlib.sha256).digest()
+    return f"{int.from_bytes(digest[:4], 'big') % 1_000_000:06d}"
+
+
+def _arrival_code_required(db: Session) -> bool:
+    row = db.get(AppSetting, "arrival_code_required")
+    return row is not None and row.value is True
+
+
+def _check_arrival_code(db: Session, code: str | None) -> None:
+    supplied = (code or "").strip()
+    if not supplied:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Enter the arrival code from the dock screen.",
+        )
+    secret = _arrival_code_secret(db)
+    window = int(time.time() // ARRIVAL_CODE_WINDOW_S)
+    if not any(
+        hmac.compare_digest(supplied, _arrival_code_at(secret, w))
+        for w in (window, window - 1)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="That code isn't current — read the dock screen and try again.",
+        )
+
+
+@router.get("/arrival-code")
+def get_arrival_code(
+    db: Session = Depends(get_db),
+    _user: User = Depends(require_non_guest),
+):
+    """The current dock code, for the plant screens. Non-guest deliberately:
+    anyone who can read it remotely can defeat the presence check, so it stays
+    behind a signed-in session and off the driver token surface."""
+    secret = _arrival_code_secret(db)
+    now = time.time()
+    window = int(now // ARRIVAL_CODE_WINDOW_S)
+    return {
+        "code": _arrival_code_at(secret, window),
+        "seconds_left": int(ARRIVAL_CODE_WINDOW_S - (now % ARRIVAL_CODE_WINDOW_S)),
+        "required": _arrival_code_required(db),
+    }
+
+
+class DriverArrivedIn(BaseModel):
+    """Body for /arrived — the code travels in the body, never the query
+    string, so it stays out of uvicorn/proxy access logs."""
+    code: str | None = None
+
+
 @router.post("/driver/{token}/arrived")
 def driver_mark_arrived(
     token: str,
     background_tasks: BackgroundTasks,
+    payload: DriverArrivedIn | None = None,
     db: Session = Depends(get_db),
 ):
     """Record that this truck is back in the yard. No auth — QR token only.
@@ -310,6 +411,11 @@ def driver_mark_arrived(
             TruckState.run_date == run_date,
         )
     )
+    # Only a FIRST stamp needs proof — re-tapping an already-stamped arrival
+    # changes nothing and just returns the recorded time.
+    if (row is None or row.arrived_at is None) and _arrival_code_required(db):
+        _check_arrival_code(db, payload.code if payload else None)
+
     if row is None:
         # Day-init runs off the authenticated board, so if no staff member has
         # opened the app yet there is nothing to stamp. Create the row rather
@@ -361,6 +467,10 @@ def driver_mark_arrived(
 
 
 class DriverRunReport(BaseModel):
+    # Dock arrival code — required (on the FIRST arrival stamp only, same as
+    # /arrived) while arrival_code_required is on, because every run-report
+    # choice stamps arrived_at.
+    code: str | None = None
     choice: Literal["route", "ran_special", "clean"]
     route_truck: int | None = Field(default=None, ge=1, le=999)
 
@@ -421,6 +531,12 @@ def driver_run_report(
             TruckState.run_date == run_date,
         )
     )
+    # Same first-stamp-only rule as /arrived: a spare whose arrival is already
+    # stamped (by an earlier tap or a lead) can still file its run report
+    # without re-reading the dock screen.
+    if (row is None or row.arrived_at is None) and _arrival_code_required(db):
+        _check_arrival_code(db, payload.code)
+
     if row is None:
         # Same rule as /arrived: create the row rather than drop the report,
         # but NEVER trigger day-init from an anonymous scan. A clean return

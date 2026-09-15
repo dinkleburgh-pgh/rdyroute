@@ -487,6 +487,8 @@ export interface DriverTruckInfo {
   claimed_route: number | null;
   /** Route numbers for the Select Route picker — only when spare + no coverage. */
   route_options?: number[];
+  /** When true, arrival stamps need the rotating dock code. */
+  arrival_code_required?: boolean;
 }
 
 export function useDriverTruckInfo(token: string | undefined) {
@@ -529,7 +531,7 @@ export interface DriverRunReportResult {
 export function useDriverRunReport(token: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (payload: { choice: "route" | "ran_special" | "clean"; route_truck?: number }) =>
+    mutationFn: async (payload: { choice: "route" | "ran_special" | "clean"; route_truck?: number; code?: string }) =>
       (await api.post<DriverRunReportResult>(`/notes/driver/${token}/run-report`, payload)).data,
     // Never queued, never paused — see useDriverNotes.
     networkMode: "always",
@@ -564,9 +566,12 @@ interface DriverNotePayload {
 
 export function useDriverMarkArrived(token: string | undefined) {
   return useMutation({
-    mutationFn: async () =>
+    // The code rides in the BODY, matching run-report — a query string would
+    // put a live (if short-lived) OTP into every access log on the path.
+    mutationFn: async (code?: string) =>
       (await api.post<{ truck_number: number; arrived_at: number | null; already: boolean }>(
         `/notes/driver/${token}/arrived`,
+        code ? { code } : {},
       )).data,
     // Never queued, never paused — a driver must not be told the dock knows
     // when it does not. See useDriverNotes.
@@ -896,3 +901,29 @@ export function useResetDay() {
   });
 }
 
+
+// ---------------------------------------------------------------------------
+// Rotating dock arrival code (proof-of-presence for driver arrival stamps).
+// ---------------------------------------------------------------------------
+
+export interface ArrivalCodeOut {
+  code: string;
+  seconds_left: number;
+  required: boolean;
+}
+
+/** The current dock code — for the plant screens (Load Display, /arrival-code). */
+export function useArrivalCode() {
+  return useQuery({
+    queryKey: ["arrival-code"],
+    queryFn: async () => (await api.get<ArrivalCodeOut>("/notes/arrival-code")).data,
+    // Poll to land just after each rotation (never later than 20s), so the
+    // screen flips to the new code as it becomes valid instead of showing the
+    // old one for up to 20s of a flat interval.
+    refetchInterval: (query) => {
+      const d = query.state.data;
+      return d ? Math.min(20_000, d.seconds_left * 1000 + 300) : 20_000;
+    },
+    staleTime: 0,
+  });
+}

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import clsx from "clsx";
 import { Maximize2, X } from "lucide-react";
 import { formatRunDate } from "../../utils/dates";
-import { useNextUp, useShortages } from "../../api/hooks";
+import { useArrivalCode, useNextUp, useShortages } from "../../api/hooks";
 import { ShortageLogger } from "../../pages/Shorts";
 import { NextUpPanel, StartNextUpBanner } from "../LiveInProgress";
 import CoverageCards from "../CoverageCards";
@@ -143,8 +143,17 @@ export default function LoadDisplay({
     [ready],
   );
 
+  // Rotating dock code — rendered only while Management has the requirement
+  // on, so the always-on station doubles as the driver-facing code screen.
+  const { data: arrivalCode, dataUpdatedAt: arrivalCodeAt, isError: arrivalCodeError } = useArrivalCode();
+  // Hide rather than mislead: a chip older than two rotations shows digits
+  // the server already rejects. The display re-renders at least once a
+  // second (timers), so this check stays current.
+  const arrivalCodeFresh = !arrivalCodeError && Date.now() - arrivalCodeAt < 120_000;
+
   return createPortal(
     <div className="fixed inset-0 z-[85] flex flex-col overflow-hidden bg-app pt-[env(safe-area-inset-top)]">
+
       {/* Bar */}
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-b border-hairline bg-surface/80 px-3 py-2.5 backdrop-blur sm:px-6">
         <div className="min-w-0 flex-1">
@@ -156,6 +165,12 @@ export default function LoadDisplay({
         <span className="shrink-0 font-mono text-sm tabular-nums text-ink-muted">
           {loadedCount} / {loadTotal} loaded
         </span>
+        {arrivalCode?.required && arrivalCodeFresh && (
+          <span className="flex shrink-0 items-baseline gap-2 rounded-lg border border-hairline bg-surface-2 px-3 py-1">
+            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Arrival code</span>
+            <span className="font-mono text-xl font-black tabular-nums text-ink">{arrivalCode.code}</span>
+          </span>
+        )}
         <button
           onClick={onExit}
           title="Exit display (Esc)"

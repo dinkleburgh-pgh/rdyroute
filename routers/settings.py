@@ -144,6 +144,13 @@ _USER_READABLE_KEYS = {
 # Keys any authenticated user may write to (e.g. personal notes)
 _USER_WRITABLE_PREFIX = "personal_note_"
 
+# Rows that are server-side key material, not configuration: no client — admin
+# included — has a reason to read them, and the arrival-code secret in
+# particular turns into "compute valid codes offline forever" if it ever
+# renders in the Advanced table. The exports/backup path reads the table
+# directly and legitimately still carries them.
+SECRET_KEYS = frozenset({"arrival_code_secret", "update_push_secret"})
+
 _OPTIONAL_DEFAULT_PREFIXES: tuple[tuple[str, object], ...] = (
     ("holiday_mode_", False),
     ("holiday_load_", False),
@@ -358,7 +365,10 @@ def list_settings(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    all_settings = db.scalars(select(AppSetting).order_by(AppSetting.key)).all()
+    all_settings = [
+        s for s in db.scalars(select(AppSetting).order_by(AppSetting.key)).all()
+        if s.key not in SECRET_KEYS
+    ]
     if current_user.role in _ADMIN_ROLES:
         return all_settings
     # Non-admins only see the user-readable subset
@@ -375,6 +385,11 @@ def get_setting(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    if key in SECRET_KEYS:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Server-side key material — not readable through the API.",
+        )
     if current_user.role not in _ADMIN_ROLES and not _is_user_readable(key, current_user):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
     setting = db.get(AppSetting, key)

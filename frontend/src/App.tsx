@@ -30,6 +30,7 @@ const TrendDetail = lazy(() => import("./pages/trends/TrendDetail"));
 const Management = lazy(() => import("./pages/Management"));
 const Communications = lazy(() => import("./pages/Communications"));
 const NotesBoard = lazy(() => import("./pages/Notes"));
+const ArrivalCodeScreen = lazy(() => import("./pages/ArrivalCode"));
 const DriverNotes = lazy(() => import("./pages/DriverNotes"));
 const FleetSchedule = lazy(() => import("./pages/FleetSchedule"));
 const VerifyShortSheet = lazy(() => import("./pages/VerifyShortSheet"));
@@ -76,6 +77,7 @@ const router = createBrowserRouter([
       { path: "supervisor", element: <Navigate to="/management" replace /> },
       { path: "settings", element: <Navigate to="/management" replace /> },
       { path: "fleet-schedule", element: lazyRoute(<FleetSchedule />) },
+      { path: "arrival-code", element: lazyRoute(<ArrivalCodeScreen />) },
       { path: "verify-short-sheet", element: lazyRoute(<VerifyShortSheet />) },
       { path: "report", element: lazyRoute(<LiveReport />) },
     ],

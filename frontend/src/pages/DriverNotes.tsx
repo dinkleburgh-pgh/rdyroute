@@ -25,7 +25,7 @@ import type { NoteType, TruckNote } from "../types";
 import { format } from "date-fns";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { useDocumentTitle } from "../hooks/useDocumentTitle";
-import { errorStatus } from "../api/errors";
+import { errorDetail, errorStatus } from "../api/errors";
 import EmptyState from "../components/EmptyState";
 
 // ---------------------------------------------------------------------------
@@ -355,23 +355,65 @@ function NoteCard({ note, token, readOnly = false }: { note: TruckNote; token: s
  * yard, with one hand: making them tap through to read a note that says "use
  * the north gate" is a step that can only cost them.
  */
-function ArrivalBlock({ token }: { token: string }) {
+/**
+ * The rotating dock-code field. Only rendered while the plant has
+ * arrival_code_required on: the 6-digit code lives on the dock screens and
+ * changes every minute, so having a current one IS the proof of presence.
+ */
+function DockCodeField({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <label className="block">
+      <span className="mb-1 block text-center text-xs font-semibold text-slate-400">
+        Arrival code — the 6 digits on the dock screen
+      </span>
+      <input
+        type="text"
+        inputMode="numeric"
+        autoComplete="one-time-code"
+        maxLength={6}
+        placeholder="000000"
+        value={value}
+        onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, "").slice(0, 6))}
+        onFocus={(e) => e.currentTarget.select()}
+        className="input w-full text-center text-3xl font-black tracking-[0.3em]"
+      />
+    </label>
+  );
+}
+
+function driverErrText(e: unknown): string {
+  const s = errorStatus(e);
+  if (s == null) return "Not sent — no signal. Move somewhere with a bar and tap again.";
+  const d = errorDetail(e);
+  // 403 carries the dock-code guidance ("read the screen...") verbatim.
+  if (s === 403 && typeof d === "string") return d;
+  return "Couldn't send that. Try again.";
+}
+
+function ArrivalBlock({ token, codeRequired: codeRequiredProp }: { token: string; codeRequired: boolean }) {
   const arrive = useDriverMarkArrived(token);
   const [done, setDone] = useState<{ at: number | null; already: boolean } | null>(null);
   const [err, setErr] = useState("");
+  const [dockCode, setDockCode] = useState("");
+  // A 403 from the stamp is authoritative — the cached info can lag a toggle
+  // flip, and the field must appear the moment the server demands a code.
+  const [serverWantsCode, setServerWantsCode] = useState(false);
+  const codeRequired = codeRequiredProp || serverWantsCode;
 
   async function markBack() {
     setErr("");
+    // No client pre-gate: the server decides. An already-stamped truck
+    // confirms code-free; a first stamp without a valid code gets the 403
+    // whose detail lands verbatim below.
     try {
-      const r = await arrive.mutateAsync();
+      const r = await arrive.mutateAsync(dockCode.length > 0 ? dockCode : undefined);
       setDone({ at: r.arrived_at, already: r.already });
     } catch (e) {
-      const s = errorStatus(e);
-      setErr(
-        s == null
-          ? "Not sent — no signal. Move somewhere with a bar and tap again."
-          : "Couldn't send that. Try again.",
-      );
+      if (errorStatus(e) === 403) {
+        setServerWantsCode(true);
+        setDockCode("");
+      }
+      setErr(driverErrText(e));
     }
   }
 
@@ -389,14 +431,17 @@ function ArrivalBlock({ token }: { token: string }) {
             <DoneFooter />
           </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => void markBack()}
-            disabled={arrive.isPending}
-            className="w-full rounded-2xl bg-emerald-600 px-6 py-8 text-3xl font-black text-white shadow-lg active:scale-95 disabled:opacity-60"
-          >
-            {arrive.isPending ? "Sending…" : "I'm Back"}
-          </button>
+          <>
+            {codeRequired && <DockCodeField value={dockCode} onChange={setDockCode} />}
+            <button
+              type="button"
+              onClick={() => void markBack()}
+              disabled={arrive.isPending}
+              className="w-full rounded-2xl bg-emerald-600 px-6 py-8 text-3xl font-black text-white shadow-lg active:scale-95 disabled:opacity-60"
+            >
+              {arrive.isPending ? "Sending…" : "I'm Back"}
+            </button>
+          </>
         )}
 
         {err && (
@@ -423,20 +468,28 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
   const [picking, setPicking] = useState(false);
   const [done, setDone] = useState<DriverRunReportResult | null>(null);
   const [err, setErr] = useState("");
+  const [serverWantsCode, setServerWantsCode] = useState(false);
+  const codeRequired = info.arrival_code_required === true || serverWantsCode;
+  const [dockCode, setDockCode] = useState("");
 
   async function send(choice: "route" | "ran_special" | "clean", route_truck?: number) {
     setErr("");
+    // No client pre-gate — the server enforces the code only on the first
+    // arrival stamp, so an already-stamped spare reports code-free.
     try {
-      const r = await report.mutateAsync({ choice, ...(route_truck != null && { route_truck }) });
+      const r = await report.mutateAsync({
+        choice,
+        ...(route_truck != null && { route_truck }),
+        ...(dockCode.length > 0 && { code: dockCode }),
+      });
       setDone(r);
       setPicking(false);
     } catch (e) {
-      const s = errorStatus(e);
-      setErr(
-        s == null
-          ? "Not sent — no signal. Move somewhere with a bar and tap again."
-          : "Couldn't send that. Try again.",
-      );
+      if (errorStatus(e) === 403) {
+        setServerWantsCode(true);
+        setDockCode("");
+      }
+      setErr(driverErrText(e));
     }
   }
 
@@ -488,6 +541,7 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
         <p className="text-center text-sm font-semibold text-slate-300">
           Which route did you run?
         </p>
+        {codeRequired && <DockCodeField value={dockCode} onChange={setDockCode} />}
         <div className="grid max-h-72 grid-cols-4 gap-2 overflow-y-auto">
           {(info.route_options ?? []).map((n) => (
             <button
@@ -518,6 +572,7 @@ function SpareReportBlock({ token, info }: { token: string; info: DriverTruckInf
       <p className="text-center text-sm font-semibold text-slate-400">
         You&apos;re back — how did this truck run today?
       </p>
+      {codeRequired && <DockCodeField value={dockCode} onChange={setDockCode} />}
       <button
         type="button"
         disabled={report.isPending}
@@ -656,7 +711,7 @@ export default function DriverNotes() {
         {truckInfo?.is_spare && coverage == null ? (
           <SpareReportBlock token={token} info={truckInfo} />
         ) : (
-          <ArrivalBlock token={token} />
+          <ArrivalBlock token={token} codeRequired={truckInfo?.arrival_code_required === true} />
         )}
 
         {/* Notes for the route this spare is covering — read-only here; the

@@ -18,6 +18,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       arrived_push_enabled: asBool(map.get("arrived_push_enabled"), false),
+      arrival_code_required: asBool(map.get("arrival_code_required"), false),
       note_cards_enabled: asBool(map.get("note_cards_enabled"), false),
       shift_notes_enabled: asBool(map.get("shift_notes_enabled"), true),
       calculator_fab_enabled: asBool(map.get("calculator_fab_enabled"), false),
@@ -135,6 +136,19 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
             onChange={(e) => setForm({ ...form, arrived_push_enabled: e.target.checked })}
           />
           Push on arrival
+        </label>
+      </FieldRow>
+      <FieldRow
+        label="Require arrival code"
+        hint="Drivers must type the rotating 6-digit code from the plant screens (Load Display top bar, or the /arrival-code kiosk page) before their first arrival stamp counts — 'I'm Back' and spare run reports alike. Proof they're physically at the dock, no GPS; lead stamps on the board are unaffected."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.arrival_code_required}
+            onChange={(e) => setForm({ ...form, arrival_code_required: e.target.checked })}
+          />
+          Require the dock code
         </label>
       </FieldRow>
       <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Notes</p>
