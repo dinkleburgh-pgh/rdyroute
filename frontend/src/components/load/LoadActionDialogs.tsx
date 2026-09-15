@@ -27,8 +27,11 @@ export default function LoadActionDialogs({ actions }: { actions: LoadActions })
 
   return (
     <>
+      {/* layer="dialog" (z-90) is what puts this above the Load Display
+          (z-85) — the Modal default is overlay (z-50), which hid the Start
+          Loading button behind the display exactly when started from it. */}
       {confirmLoadTruck && createPortal(
-        <Modal open onClose={() => setConfirmLoadTruck(null)} size="sm">
+        <Modal open onClose={() => setConfirmLoadTruck(null)} size="sm" layer="dialog">
             <h3 className="mb-1 font-mono text-base font-semibold tabular-nums">
               Start Loading Truck #{confirmLoadTruck.truck_number}?
             </h3>
