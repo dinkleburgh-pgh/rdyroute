@@ -671,6 +671,24 @@ export default function HierarchyPicker({
       {/* Selection trail: chosen buttons in a horizontal row with right-pointing arrows */}
       {trail.length > 0 && (
         <div className="flex flex-wrap items-center gap-1.5 pb-1">
+          {/* Root crumb. Crumb-taps keep the tapped level selected (deliberate —
+              see backToTop), which quietly removed the only route back to the
+              category grid: from inside a category the escape hatch was backing
+              all the way out of the flow. The trail now starts at its root. */}
+          <div className="flex items-center gap-1.5">
+            <button
+              type="button"
+              onClick={reset}
+              title="Back to all categories"
+              className="rounded-xl bg-slate-800 px-4 py-2.5 text-sm font-bold text-slate-300 shadow-md ring-1 ring-white/10 transition hover:bg-slate-700 active:scale-95"
+            >
+              Categories
+            </button>
+            <div className="flex items-center">
+              <div className="h-px w-3 bg-slate-600" />
+              <div className="h-0 w-0 border-b-[5px] border-l-[6px] border-t-[5px] border-b-transparent border-l-slate-500 border-t-transparent" />
+            </div>
+          </div>
           {trail.map((step, i) => (
             <div key={i} className="flex items-center gap-1.5">
               <button
