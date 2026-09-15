@@ -627,13 +627,18 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
         // though the route it helps is running normally (not OOS).
         if (t.route_split_route != null) return true;
         const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
-        if (coveredRoute == null) return false;
-        const coveredStatus = truckStatusByNumber.get(coveredRoute);
-        return coveredStatus === "oos";
+        // A spare with LIVE coverage fields belongs on a lifecycle board in
+        // its own workflow status — regardless of WHY the route needed
+        // covering. Requiring the covered truck to read "oos" hid loaded
+        // coverage of dirty/crossloaded routes entirely: spare 17 covering
+        // dirty 58 was loaded for the night yet appeared on no board while
+        // the progress bar counted it. buildRouteStatusCounts applies the
+        // same rule, keeping the drill and the sidebar in lockstep.
+        return coveredRoute != null;
       }
       return true;
     });
-  }, [data, filter, fleetMode, fleetFilters, runDayNum, runUnloadsDay, holidayLoad, holidayUnload, truckStatusByNumber, takenOverRoutes]);
+  }, [data, filter, fleetMode, fleetFilters, runDayNum, runUnloadsDay, holidayLoad, holidayUnload, truckStatusByNumber, takenOverRoutes, coveringTruckByRoute]);
 
 
 

@@ -527,8 +527,10 @@ export function effectiveWorkflowStatus(
  * Rules:
  * - Route trucks always count in their own effectiveStatus bucket (OOS trucks
  *   always appear in "oos", never promoted to a spare's status).
- * - Spares only appear when covering an OOS route — idle spares are excluded
- *   from load/unload workflow counts entirely.
+ * - Spares appear in lifecycle buckets when actively covering a route today
+ *   (any reason — OOS, crossload, dirty truck) or helping a split; coverage
+ *   known only via the historical fallback still requires the route to be
+ *   OOS. Idle spares are excluded from load/unload workflow counts.
  * - Non-spare trucks on a scheduled-off day (dirty or unloaded) count as
  *   "off" unless holiday mode is active.
  */
@@ -625,10 +627,21 @@ export function buildRouteStatusCounts(
       } else if (rawSpareStatus === "unloaded") {
         out.unloaded += 1;
       } else {
-        const coveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? fallbackRouteByTruck.get(t.truck_number) ?? null;
-        // Covering spares also surface in their live workflow bucket (e.g. unloaded).
+        // LIVE coverage fields (today's assignment/swap) put the spare in its
+        // own workflow bucket whatever the covered truck's status — a spare
+        // loaded to cover a dirty/crossloaded route is tonight's real load
+        // (it counted in the progress bar but showed on no board, and the
+        // Loaded drill's spare rule now matches this one). Coverage known
+        // only from the historical fallback keeps the OOS requirement so
+        // weeks-old echoes don't resurrect counts.
+        const liveCoveredRoute = t.route_swap_route ?? t.state?.oos_spare_route ?? null;
+        const coveredRoute = liveCoveredRoute ?? fallbackRouteByTruck.get(t.truck_number) ?? null;
         // Split helpers likewise — they're carrying a real extra load tonight.
-        if ((coveredRoute != null && oosRouteNumbers.has(coveredRoute)) || t.route_split_route != null) {
+        if (
+          liveCoveredRoute != null ||
+          (coveredRoute != null && oosRouteNumbers.has(coveredRoute)) ||
+          t.route_split_route != null
+        ) {
           out[statusFor(t)] += 1;
         }
       }
