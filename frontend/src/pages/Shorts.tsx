@@ -45,12 +45,15 @@ function TruckPicker({
   loadDay,
   holiday,
   onSelect,
+  recentLog = [],
 }: {
   board: TruckWithState[];
   shortsByTruck: Map<number, Shortage[]>;
   loadDay: number;
   holiday: boolean;
   onSelect: (t: TruckWithState) => void;
+  /** Today's newest entries across every truck, for the Logged-today strip. */
+  recentLog?: Shortage[];
 }) {
   const routeTrucks = board
     .filter((t) => t.truck_type !== "Spare")
@@ -84,6 +87,32 @@ function TruckPicker({
             {runningLogged} / {running.length} routes logged
           </span>
         </div>
+      )}
+
+      {/* Logged today — the newest entries across every truck, so "what just
+          went in" is one glance instead of opening trucks one by one. A chip
+          jumps into its truck (where the row can be edited or removed). */}
+      {recentLog.length > 0 && (
+        <section className="space-y-1.5">
+          <h3 className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Logged today</h3>
+          <div className="flex flex-wrap gap-2">
+            {recentLog.map((sh) => {
+              const t = board.find((b) => b.truck_number === sh.truck_number);
+              const label = sh.item_detail ? `${sh.item_category} ${sh.item_detail}` : sh.item_category;
+              return (
+                <button
+                  key={sh.id}
+                  type="button"
+                  onClick={() => t && onSelect(t)}
+                  className="flex items-center gap-1.5 rounded-full border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft transition hover:bg-track"
+                >
+                  <span className="font-mono font-black tabular-nums text-amber-300">#{sh.truck_number}</span>
+                  {label} ×{sh.quantity}
+                </button>
+              );
+            })}
+          </div>
+        </section>
       )}
 
       {/* Routes without shortages */}
@@ -175,7 +204,7 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
 
   return (
     <section className="space-y-2">
-      <h4 className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Logged this session</h4>
+      <h4 className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">On this truck today</h4>
       <div className="flex flex-wrap gap-2">
         {[...shorts].reverse().map((s) => {
           const label = s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category;
@@ -341,8 +370,11 @@ export function ShortageLogger({
             </div>
           </div>
         )}
-        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} quickSelect={quickSelect} quickKey={quickKey} />
+        {/* What's already on the truck reads FIRST — the question while
+            transcribing is "did I get this one already?", and the list was
+            buried under the whole category grid. */}
         <LoggedList shorts={shorts} items={items} />
+        <HierarchyPicker items={items} onLog={logItem} isPending={create.isPending} quickSelect={quickSelect} quickKey={quickKey} />
       </div>
     );
   }
@@ -372,6 +404,8 @@ export function ShortageLogger({
       </div>
 
       <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
+        {/* What's already on the truck reads FIRST (see inline variant). */}
+        <LoggedList shorts={shorts} items={items} />
         {/* Recently shorted items quick-list */}
         {recentItems && recentItems.length > 0 && (
           <div>
@@ -404,8 +438,6 @@ export function ShortageLogger({
           quickSelect={quickSelect}
           quickKey={quickKey}
         />
-
-        <LoggedList shorts={shorts} items={items} />
       </div>
     </div>
   );
@@ -506,6 +538,15 @@ export function ShortsWorkspace() {
   const truckShorts = selectedTruck
     ? (shortsByTruck.get(selectedTruck.truck_number) ?? [])
     : [];
+
+  // Newest entries across every truck for the picker's Logged-today strip.
+  const recentLog = useMemo(
+    () =>
+      [...shorts]
+        .sort((a, b) => (a.recorded_at < b.recorded_at ? 1 : -1))
+        .slice(0, 12),
+    [shorts],
+  );
 
   return (
     <motion.div
@@ -622,6 +663,7 @@ export function ShortsWorkspace() {
               loadDay={loadDay}
               holiday={holiday}
               onSelect={(t) => setSelected(t)}
+              recentLog={recentLog}
             />
           ) : (
             <ShortageLogger
