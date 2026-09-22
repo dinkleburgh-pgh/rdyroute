@@ -41,10 +41,15 @@ export interface BatchesSectionVM {
 
 export interface CoverageRowVM {
   route_truck: number;
-  load_on_truck: number;
+  /** null = crossload target not yet assigned ("Needs crossload"). */
+  load_on_truck: number | null;
   type: string;
   recurring: boolean;
   returned: boolean;
+  /** Freight moved (or moving) off a same-day truck rather than OOS cover. */
+  crossload?: boolean;
+  /** Crossload flagged but not performed — renders "Not moved yet". */
+  pending?: boolean;
   /** SPLIT load — the route runs on both trucks, so the pair joins with "+"
    *  rather than the coverage arrow. */
   split: boolean;

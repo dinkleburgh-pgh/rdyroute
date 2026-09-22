@@ -130,6 +130,9 @@ export default function RouteSwapModal({ onClose, initialSection = "add" }: Prop
       run_date: runDate,
       spare_truck_number: to,
       covering_route_truck: from,
+      // Durable record that this is a same-day freight move, not OOS
+      // coverage — the report labels the two differently.
+      kind: "crossload",
     });
     await upsertState.mutateAsync({
       truck_number: to,

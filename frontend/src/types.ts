@@ -287,6 +287,8 @@ export interface SpareAssignment {
   run_date: string;
   spare_truck_number: number;
   covering_route_truck: number;
+  /** "oos" (classic cover) or "crossload" (same-day freight move). */
+  kind?: "oos" | "crossload";
   returned: boolean;
   assigned_at: string;
   returned_at: string | null;

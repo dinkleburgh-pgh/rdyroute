@@ -91,6 +91,8 @@ export function useAssignSpare() {
       run_date: string;
       spare_truck_number: number;
       covering_route_truck: number;
+      /** Why the route is covered — "crossload" marks a same-day freight move. */
+      kind?: "oos" | "crossload";
     }) => (await api.post<SpareAssignment>("/spares", payload)).data,
     onSuccess: (_data, vars) => {
       qc.invalidateQueries({ queryKey: ["spares"] });

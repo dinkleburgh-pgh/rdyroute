@@ -355,15 +355,23 @@ def _coverage_html(c: CoverageSectionVM | None) -> str:
         # an arrow would read as a handoff. `type` is checked as a fallback so
         # a client cached before `split` shipped still renders splits correctly.
         joiner = "+" if (r.split or r.type == "Split") else "&#8594;"
+        # A pending crossload may have no target yet — render "?" and say so,
+        # instead of int(None) taking the whole PDF down.
+        target = f"#{int(r.load_on_truck)}" if r.load_on_truck is not None else "?"
+        hint = (
+            '<div class="covstat dim">assign a truck</div>'
+            if r.load_on_truck is None
+            else ""
+        )
         cards.append(
             f'<div class="cov"><div class="covpair">'
             f'<div><div class="covlab">Route</div>'
             f'<div class="covnum mono route">#{int(r.route_truck)}</div></div>'
             f'<div class="covarrow">{joiner}</div>'
             f'<div><div class="covlab">{"Loaded on" if r.loaded else "Loads on"}</div>'
-            f'<div class="covnum mono">#{int(r.load_on_truck)}</div></div></div>'
+            f'<div class="covnum mono">{target}</div></div></div>'
             f'<div class="covchips"><span class="chip">{_e(r.type)}</span>{rec}{ret}</div>'
-            f'<div class="covstat" style="color:{r.status_hex}">{_e(r.status_label)}</div></div>'
+            f'<div class="covstat" style="color:{r.status_hex}">{_e(r.status_label)}</div>{hint}</div>'
         )
     # Rows of three, spacers keeping widths even (same shape as the batch grid).
     rows = []

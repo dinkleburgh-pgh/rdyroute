@@ -636,10 +636,16 @@ class BatchesSectionVM(BaseModel):
 # ---- Routes covered ------------------------------------------------------
 class CoverageRowVM(BaseModel):
     route_truck: int
-    load_on_truck: int
-    type: str = Field(max_length=24)             # "Route swap" / "Spare cover"
+    # None = a crossload whose target is not yet assigned ("Needs crossload").
+    load_on_truck: int | None = None
+    type: str = Field(max_length=24)             # "Route swap" / "Spare cover" / "Crossloaded" / "Needs crossload"
     recurring: bool = False
     returned: bool = False
+    # Freight moved (or moving) off a same-day truck, vs classic OOS cover.
+    crossload: bool = False
+    # Crossload flagged but not yet performed — the target may be None and the
+    # status line reads "Not moved yet".
+    pending: bool = False
     # A SPLIT load: the route runs on BOTH trucks (the carrier takes only the
     # overflow), so the pair joins with "+" instead of the coverage arrow.
     # Carried as its own flag rather than inferred from `type`, which is a
@@ -888,6 +894,7 @@ class SpareAssignCreate(BaseModel):
     run_date: date
     spare_truck_number: int
     covering_route_truck: int
+    kind: Literal["oos", "crossload"] = "oos"
 
 
 class SpareAssignReturn(BaseModel):
@@ -899,6 +906,7 @@ class SpareAssignOut(_OrmBase):
     run_date: date
     spare_truck_number: int
     covering_route_truck: int
+    kind: str = "oos"
     returned: bool
     assigned_at: datetime
     returned_at: datetime | None

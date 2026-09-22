@@ -23,7 +23,7 @@ import { captureNodeToPngBlob } from "../lib/captureImage";
 import { exportFile } from "../lib/exportFile";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { DEFAULT_TRACKED_ITEMS, topCatOf, useCategoryPalette, useItemDisplayName } from "../components/shorts/HierarchyPicker";
+import { DEFAULT_TRACKED_ITEMS, shortageItemLabel, topCatOf, useCategoryPalette, useItemDisplayName } from "../components/shorts/HierarchyPicker";
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
 import { capacityColor, resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
@@ -247,14 +247,31 @@ export default function LiveReport() {
 
   // ---- Coverage ("routes covered") ----
   const coverageRows = useMemo(() => {
-    type Row = { routeTruck: number; loadOnTruck: number; type: string; returned: boolean; split: boolean };
+    type Row = {
+      routeTruck: number;
+      loadOnTruck: number | null;
+      type: string;
+      returned: boolean;
+      split: boolean;
+      crossload?: boolean;
+      pending?: boolean;
+    };
     const rows: Row[] = [];
     const seen = new Set<string>();
-    const add = (routeTruck: number, loadOnTruck: number, type: string, returned = false, split = false) => {
-      const key = `${routeTruck}->${loadOnTruck}`;
+    const seenRoutes = new Set<number>();
+    const add = (
+      routeTruck: number,
+      loadOnTruck: number | null,
+      type: string,
+      returned = false,
+      split = false,
+      extra: { crossload?: boolean; pending?: boolean } = {},
+    ) => {
+      const key = `${routeTruck}->${loadOnTruck ?? "?"}`;
       if (seen.has(key)) return;
       seen.add(key);
-      rows.push({ routeTruck, loadOnTruck, type, returned, split });
+      seenRoutes.add(routeTruck);
+      rows.push({ routeTruck, loadOnTruck, type, returned, split, ...extra });
     };
     // A SPLIT swap means the route ALSO ran (the truck carried only its overflow)
     // — label it "Split", not full "Route swap", so the report doesn't imply the
@@ -266,10 +283,21 @@ export default function LiveReport() {
     // filtering it out would silently drop real coverage from past reports).
     for (const s of spares) {
       if (isToday && s.returned) continue;
-      add(s.covering_route_truck, s.spare_truck_number, "Spare cover", s.returned);
+      // A crossload's assignment row IS the durable "freight moved" record —
+      // label it as such; classic (and pre-migration) rows stay "Spare cover".
+      const isXload = s.kind === "crossload";
+      add(s.covering_route_truck, s.spare_truck_number, isXload ? "Crossloaded" : "Spare cover", s.returned, false, { crossload: isXload });
+    }
+    // Pending crossloads LAST: the flag lingers on the source truck until the
+    // move happens (or is cleared), so any performed coverage for the same
+    // route wins the dedupe. Target may still be unassigned.
+    for (const t of board) {
+      if (!(t.state?.needs_crossload || t.state?.crossload_to_truck != null)) continue;
+      if (seenRoutes.has(t.truck_number)) continue;
+      add(t.truck_number, t.state?.crossload_to_truck ?? null, "Needs crossload", false, false, { crossload: true, pending: true });
     }
     return rows.sort((a, b) => a.routeTruck - b.routeTruck);
-  }, [routeSwaps, spares, isToday]);
+  }, [routeSwaps, spares, isToday, board]);
 
   const isRecurring = (routeTruck: number, loadOnTruck: number) =>
     recurringRules.some((r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay));
@@ -297,7 +325,8 @@ export default function LiveReport() {
     paceAvg == null ? "text-ink" : d <= paceAvg ? "text-emerald-400" : d <= paceAvg * 1.25 ? "text-amber-400" : "text-red-400";
 
   // ---- Shortages ----
-  const shortLabel = (s: Shortage) => (s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category);
+  const itemsForLabels = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
+  const shortLabel = (s: Shortage) => shortageItemLabel(s.item_category, s.item_detail, itemsForLabels);
   const shortsByTruck = useMemo(() => {
     const m = new Map<number, Shortage[]>();
     for (const s of shorts) {
@@ -479,22 +508,26 @@ export default function LiveReport() {
     if (sel.coverage) {
       vm.coverage = {
         rows: coverageRows.map((r) => {
-          const st = boardByNum.get(r.loadOnTruck)?.state;
-          const done = st?.status === "loaded";
-          const status_label = done
-            ? "Loaded" +
-              (st?.load_finish_time ? ` · ${clock(st.load_finish_time)}` : "") +
-              (st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : "")
-            : st?.status === "in_progress"
-              ? "Loading…"
-              : "Not loaded";
+          const st = r.loadOnTruck != null ? boardByNum.get(r.loadOnTruck)?.state : undefined;
+          const done = !r.pending && st?.status === "loaded";
+          const status_label = r.pending
+            ? "Not moved yet"
+            : done
+              ? "Loaded" +
+                (st?.load_finish_time ? ` · ${clock(st.load_finish_time)}` : "") +
+                (st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : "")
+              : st?.status === "in_progress"
+                ? "Loading…"
+                : "Not loaded";
           return {
             route_truck: r.routeTruck,
             load_on_truck: r.loadOnTruck,
             type: r.type,
-            recurring: isRecurring(r.routeTruck, r.loadOnTruck),
+            recurring: r.loadOnTruck != null && isRecurring(r.routeTruck, r.loadOnTruck),
             returned: r.returned,
             split: r.split,
+            crossload: r.crossload === true,
+            pending: r.pending === true,
             loaded: done,
             status_label,
             status_hex: done ? "#3b82f6" : "#7a8698",
@@ -1023,16 +1056,19 @@ export default function LiveReport() {
         <Section eyebrow="Load" title="Routes covered" sectionKey="coverage">
           {coverageRows.length === 0 ? (
             <Empty>No route coverage recorded for this day.</Empty>
-          ) : (
-            /* Full coverage cards — the canonical big ROUTE → TRUCK paired
-               numbers (same read as a fleet coverage card), not a dense list. */
+          ) : (<>
+            <p className="mb-2 text-[11px] text-ink-muted">
+              Spare cover / Crossloaded = freight moved · Needs crossload = still waiting
+            </p>
+            {/* Full coverage cards — the canonical big ROUTE → TRUCK paired
+                numbers (same read as a fleet coverage card), not a dense list. */}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
               {coverageRows.map((r) => {
-                const st = boardByNum.get(r.loadOnTruck)?.state;
-                const done = st?.status === "loaded";
+                const st = r.loadOnTruck != null ? boardByNum.get(r.loadOnTruck)?.state : undefined;
+                const done = !r.pending && st?.status === "loaded";
                 return (
                   <div
-                    key={`${r.routeTruck}-${r.loadOnTruck}`}
+                    key={`${r.routeTruck}-${r.loadOnTruck ?? "unassigned"}`}
                     className="rounded-xl border border-hairline bg-surface p-4"
                   >
                     <div className="flex items-center justify-center gap-4">
@@ -1052,13 +1088,26 @@ export default function LiveReport() {
                           {done ? "Loaded on" : "Loads on"}
                         </p>
                         <p className="font-mono text-3xl font-black leading-none tabular-nums text-ink">
-                          #{r.loadOnTruck}
+                          {r.loadOnTruck != null ? `#${r.loadOnTruck}` : <span className="text-ink-faint">?</span>}
                         </p>
                       </div>
                     </div>
                     <div className="mt-2.5 flex flex-wrap items-center justify-center gap-1.5">
-                      <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted">{r.type}</span>
-                      {isRecurring(r.routeTruck, r.loadOnTruck) && (
+                      <span
+                        className={
+                          r.pending
+                            ? "rounded bg-fuchsia-950/40 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300 ring-1 ring-fuchsia-800/50"
+                            : r.crossload
+                              ? "rounded bg-violet-950/40 px-1.5 py-0.5 text-[10px] font-semibold text-violet-300 ring-1 ring-violet-800/50"
+                              : "rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-muted"
+                        }
+                      >
+                        {r.type}
+                      </span>
+                      {r.pending && r.loadOnTruck == null && (
+                        <span className="rounded bg-fuchsia-950/25 px-1.5 py-0.5 text-[10px] font-semibold text-fuchsia-300/80">assign a truck</span>
+                      )}
+                      {r.loadOnTruck != null && isRecurring(r.routeTruck, r.loadOnTruck) && (
                         <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300">recurring</span>
                       )}
                       {r.returned && (
@@ -1072,6 +1121,8 @@ export default function LiveReport() {
                           {st?.load_finish_time ? ` · ${clock(st.load_finish_time)}` : ""}
                           {st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : ""}
                         </span>
+                      ) : r.pending ? (
+                        <span className="text-fuchsia-300/80">Not moved yet</span>
                       ) : (
                         <span className="text-ink-faint">{st?.status === "in_progress" ? "Loading…" : "Not loaded"}</span>
                       )}
@@ -1080,7 +1131,7 @@ export default function LiveReport() {
                 );
               })}
             </div>
-          )}
+          </>)}
         </Section>
         )}
         {/* ===================== LOAD · SHORTAGES ===================== */}

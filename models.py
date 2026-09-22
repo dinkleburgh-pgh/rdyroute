@@ -578,6 +578,10 @@ class SpareAssignment(Base):
     run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
     spare_truck_number: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
     covering_route_truck: Mapped[int] = mapped_column(Integer, nullable=False)
+    # WHY the route is covered: "oos" (classic spare cover) or "crossload"
+    # (freight physically moved off a same-day truck). The report renders them
+    # differently; everything else treats them identically.
+    kind: Mapped[str] = mapped_column(String(16), nullable=False, default="oos", server_default="oos")
     returned: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     assigned_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
