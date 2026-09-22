@@ -83,6 +83,7 @@ class TruckStateCreate(BaseModel):
     shop_note: str = ""
     oos_spare_route: int | None = None
     has_dust_garment: bool = False
+    has_nogs: bool = False
     priority_hold: bool = False
     needs_checked: bool = False
     needs_crossload: bool = False
@@ -105,6 +106,7 @@ class TruckStateUpdate(BaseModel):
     shop_note: str | None = None
     oos_spare_route: int | None = None
     has_dust_garment: bool | None = None
+    has_nogs: bool | None = None
     priority_hold: bool | None = None
     needs_checked: bool | None = None
     needs_crossload: bool | None = None
@@ -136,6 +138,7 @@ class TruckStateOut(_OrmBase):
     shop_note: str
     oos_spare_route: int | None
     has_dust_garment: bool
+    has_nogs: bool = False
     priority_hold: bool = False
     needs_checked: bool = False
     needs_crossload: bool = False

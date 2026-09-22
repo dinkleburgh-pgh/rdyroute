@@ -96,6 +96,7 @@ export default function StatusTile({
     if (hold) tagParts.push(filter === "dirty" ? "Request" : "Hold");
     if (truck.state?.needs_checked) tagParts.push("Needs check");
     if (hasRanAhead(truck.state?.off_note)) tagParts.push("Ran ahead");
+    if (truck.state?.has_nogs) tagParts.push("NOGs");
     if (!hold && !truck.state?.needs_checked && displayStatus === "unfinished") tagParts.push("Unfinished");
     const tag = tagParts.length > 0 ? tagParts.join(" · ") : null;
     const tagClass = hold

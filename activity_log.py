@@ -21,6 +21,7 @@ _TRUCK_STATE_FIELDS: tuple[str, ...] = (
     "shop_note",
     "oos_spare_route",
     "has_dust_garment",
+    "has_nogs",
     "priority_hold",
     "needs_checked",
     "needs_crossload",

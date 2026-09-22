@@ -162,6 +162,9 @@ class TruckState(Base):
     oos_spare_route: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Dust garment flag
     has_dust_garment: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    # NOGs — Not Our Garments came back on this route today. Any route truck,
+    # not just F.S.; per-day like the garment flag (fresh seeds default False).
+    has_nogs: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     # Priority unload + hold — truck flagged for urgent unload; once unloaded it holds the load workflow
     priority_hold: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     # Follow-up check required even while the truck continues its normal lifecycle

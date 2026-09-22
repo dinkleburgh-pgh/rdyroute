@@ -325,6 +325,23 @@ export default function FleetCard({ truck, index, ...ctx }: { truck: TruckWithSt
                 isOos={displayStatus === "oos"}
                 onNavigate={setDetailNum}
               />
+              {truck.state?.has_nogs && (
+                isAdmin && !isReadOnly ? (
+                  <button
+                    type="button"
+                    title="Clear NOGs flag"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      upsert.mutate({ truck_number: truck.truck_number, run_date: runDate, has_nogs: false, state_source: "workflow" });
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full bg-rose-900/40 px-2 py-0.5 text-[10px] font-semibold text-rose-300 ring-1 ring-rose-700/40 transition-colors hover:bg-red-900/50 hover:text-red-300 hover:ring-red-700/40"
+                  >
+                    NOGs ✕
+                  </button>
+                ) : (
+                  <span className="font-medium text-rose-300">NOGs</span>
+                )
+              )}
               {hasRanAhead(truck.state?.off_note) && (
                 isAdmin && !isReadOnly ? (
                   <button

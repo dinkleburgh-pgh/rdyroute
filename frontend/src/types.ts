@@ -56,6 +56,8 @@ export interface TruckState {
   shop_note: string;
   oos_spare_route: number | null;
   has_dust_garment: boolean;
+  /** NOGs — Not Our Garments came back on this route today. */
+  has_nogs: boolean;
   priority_hold: boolean;
   needs_checked: boolean;
   /** This truck's freight has to move onto another truck — destination not

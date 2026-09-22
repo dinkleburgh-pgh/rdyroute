@@ -176,6 +176,7 @@ export function useUpsertTruckState() {
       shop_note?: string | null;
       oos_spare_route?: number | null;
       has_dust_garment?: boolean | null;
+      has_nogs?: boolean | null;
       priority_hold?: boolean | null;
       needs_checked?: boolean | null;
       needs_crossload?: boolean | null;
@@ -263,6 +264,7 @@ export function useUpsertTruckState() {
               shop_note: "",
               oos_spare_route: null,
               has_dust_garment: false,
+              has_nogs: false,
               priority_hold: false,
               needs_checked: false,
               needs_crossload: false,
@@ -290,6 +292,7 @@ export function useUpsertTruckState() {
                 ...(vars.shop_note          !== undefined && { shop_note: vars.shop_note ?? "" }),
                 ...(vars.oos_spare_route    !== undefined && { oos_spare_route: vars.oos_spare_route }),
                 ...(vars.has_dust_garment   !== undefined && { has_dust_garment: vars.has_dust_garment ?? false }),
+                ...(vars.has_nogs           !== undefined && { has_nogs: vars.has_nogs ?? false }),
                 ...(vars.priority_hold      !== undefined && { priority_hold: vars.priority_hold ?? false }),
                 ...(vars.needs_checked      !== undefined && { needs_checked: vars.needs_checked ?? false }),
                 ...(vars.needs_crossload    !== undefined && { needs_crossload: vars.needs_crossload ?? false }),

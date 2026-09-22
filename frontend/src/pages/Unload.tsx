@@ -36,6 +36,7 @@ import clsx from "clsx";
 import { truckTypeLabel } from "../utils/truckType";
 import Modal from "../components/Modal";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
+import NogsStrip from "../components/NogsStrip";
 
 /**
  * Unload workflow (V1 parity):
@@ -851,6 +852,11 @@ export default function Unload() {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-5 p-3 md:p-6">
 
         <PreBatchBanner />
+
+        {/* NOGs found today — sibling of the Load page's F.S. Garments strip,
+            on the unload side because that's where NOGs turn up. Hidden until
+            a truck is flagged (from its status sheet). */}
+        <NogsStrip trucks={(data ?? []).filter((t) => t.state?.has_nogs === true)} />
 
         <CollapsibleCoverage
           entries={unloadCoverage}
