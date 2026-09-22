@@ -32,9 +32,10 @@ import { workdayNumbers } from "../../components/Clock";
 import { useToast } from "../../contexts/ToastContext";
 import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
-import { effectiveStatus, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
+import { effectiveStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
 import { errorDetail } from "../../api/errors";
 import Modal from "../../components/Modal";
+import { RAN_AHEAD, addNoteToken, hasRanAhead, removeNoteToken } from "../../utils/offNote";
 
 export default function RunDayWizard({
   runDate,
@@ -204,6 +205,33 @@ export default function RunDayWizard({
   const editableDustTrucks = dustTrucks;
   const editableSpecialTrucks = specialTrucks;
   const [absentSelected, setAbsentSelected] = useState<Set<number>>(new Set());
+  // "Ran ahead" — trucks skipping TONIGHT'S load (holiday weeks run trucks on
+  // their off days, so their next load is already done). Seeded from the
+  // sentinel so re-running Setup Day shows what's already flagged.
+  const ranAheadCandidates = useMemo(
+    () =>
+      board
+        .filter(
+          (t) =>
+            t.truck_type !== "Spare" &&
+            t.is_active &&
+            getCoverageRouteNumber(t) == null &&
+            ((holidayLoad || !isScheduledOff(t, loadDay)) &&
+              ["unloaded", "dirty", "unfinished"].includes(t.state?.status ?? "") ||
+              hasRanAhead(t.state?.off_note)),
+        )
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board, holidayLoad, loadDay],
+  );
+  const [ranAheadSelected, setRanAheadSelected] = useState<Set<number> | null>(null);
+  const ranAheadPicked =
+    ranAheadSelected ??
+    new Set(ranAheadCandidates.filter((t) => hasRanAhead(t.state?.off_note)).map((t) => t.truck_number));
+  function toggleRanAhead(num: number) {
+    const next = new Set(ranAheadPicked);
+    if (next.has(num)) next.delete(num); else next.add(num);
+    setRanAheadSelected(next);
+  }
 
   function toggleDust(num: number) {
     setDustSelected((prev) => {
@@ -313,6 +341,25 @@ export default function RunDayWizard({
         status: "unloaded",
         state_source: "wizard",
       }));
+    }
+
+    // Ran-ahead toggles: sentinel only, status echoed — the truck keeps its
+    // morning unload work and just leaves tonight's load roster.
+    if (ranAheadSelected != null) {
+      for (const t of ranAheadCandidates) {
+        const was = hasRanAhead(t.state?.off_note);
+        const now = ranAheadPicked.has(t.truck_number);
+        if (was === now) continue;
+        tasks.push(upsert.mutateAsync({
+          truck_number: t.truck_number,
+          run_date: runDate,
+          off_note: now
+            ? addNoteToken(t.state?.off_note, RAN_AHEAD)
+            : removeNoteToken(t.state?.off_note, RAN_AHEAD),
+          ...(t.state ? { status: t.state.status, wearers: t.state.wearers } : {}),
+          state_source: "wizard",
+        }));
+      }
     }
 
     // allSettled, not all: the server now rejects a wizard write that would undo
@@ -832,6 +879,31 @@ export default function RunDayWizard({
                       #{t.truck_number}
                     </button>
                   ))}
+                </div>
+              )}
+              {ranAheadCandidates.length > 0 && (
+                <div className="space-y-2 border-t border-hairline pt-3">
+                  <p className="text-center text-base font-extrabold text-ink">Ran ahead — skip tonight's load</p>
+                  <p className="text-center text-xs text-ink-muted">
+                    Ran their route early this week (holiday double) — nothing to load tonight.
+                    They still unload as normal.
+                  </p>
+                  <div className="grid grid-cols-3 gap-2">
+                    {ranAheadCandidates.map((t) => (
+                      <button
+                        key={t.truck_number}
+                        className={clsx(
+                          "rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors",
+                          ranAheadPicked.has(t.truck_number)
+                            ? "border-sky-500 bg-sky-900/40 text-sky-200"
+                            : "border-hairline bg-surface-2 text-ink-soft hover:bg-track",
+                        )}
+                        onClick={() => toggleRanAhead(t.truck_number)}
+                      >
+                        #{t.truck_number}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
               <div className="flex gap-2 pt-2">

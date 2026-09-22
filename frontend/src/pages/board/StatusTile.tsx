@@ -9,6 +9,7 @@ import { DustGarmentIcon, STATUS_LABELS } from "./constants";
 import { effectiveWorkflowStatus, garmentHex, getCoverageRouteNumber, isScheduledOff } from "../../utils/truckStatus";
 import type { TruckStatus, TruckWithState } from "../../types";
 import { truckTypeLabel } from "../../utils/truckType";
+import { hasRanAhead } from "../../utils/offNote";
 
 export interface StatusTileProps {
   truck: TruckWithState;
@@ -94,6 +95,7 @@ export default function StatusTile({
     const tagParts: string[] = [];
     if (hold) tagParts.push(filter === "dirty" ? "Request" : "Hold");
     if (truck.state?.needs_checked) tagParts.push("Needs check");
+    if (hasRanAhead(truck.state?.off_note)) tagParts.push("Ran ahead");
     if (!hold && !truck.state?.needs_checked && displayStatus === "unfinished") tagParts.push("Unfinished");
     const tag = tagParts.length > 0 ? tagParts.join(" · ") : null;
     const tagClass = hold

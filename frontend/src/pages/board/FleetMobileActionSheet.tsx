@@ -16,6 +16,7 @@ import CoverageTag from "../../components/CoverageTag";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import { truckTypeLabel } from "../../utils/truckType";
 import { errorDetail } from "../../api/errors";
+import { RAN_AHEAD, addNoteToken, hasRanAhead, removeNoteToken } from "../../utils/offNote";
 
 /** Uppercase micro-label that opens each block of the sheet. */
 function SectionLabel({ children }: { children: React.ReactNode }) {
@@ -426,6 +427,27 @@ export default function FleetMobileActionSheet({
                   });
                 }}
               />
+              {truck.truck_type !== "Spare" && (
+                <FlagRow
+                  label="Ran Ahead"
+                  hint="Already ran this week — skip tonight's load (still unloads)"
+                  on={hasRanAhead(truck.state?.off_note)}
+                  disabled={upsert.isPending}
+                  onToggle={() => {
+                    const on = hasRanAhead(truck.state?.off_note);
+                    upsert.mutate({
+                      truck_number: truck.truck_number,
+                      run_date: runDate,
+                      // Sentinel only — status untouched, so the morning
+                      // unload workflow never loses the truck.
+                      off_note: on
+                        ? removeNoteToken(truck.state?.off_note, RAN_AHEAD)
+                        : addNoteToken(truck.state?.off_note, RAN_AHEAD),
+                      wearers: truck.state?.wearers ?? 0,
+                    });
+                  }}
+                />
+              )}
               {xloadPickerOpen && (
                 <div className="rounded-xl border border-fuchsia-800/50 bg-fuchsia-950/25 p-3">
                   <p className="text-[13px] font-bold text-fuchsia-200">Where is the freight going?</p>

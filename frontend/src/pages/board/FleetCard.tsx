@@ -23,6 +23,7 @@ import {
 } from "../../utils/truckStatus";
 import { truckTypeLabel } from "../../utils/truckType";
 import type { TruckStatus, TruckWithState } from "../../types";
+import { RAN_AHEAD, hasRanAhead, removeNoteToken } from "../../utils/offNote";
 
 function formatArrivedAt(ts: number | null | undefined) {
   if (!ts) return "";
@@ -324,6 +325,24 @@ export default function FleetCard({ truck, index, ...ctx }: { truck: TruckWithSt
                 isOos={displayStatus === "oos"}
                 onNavigate={setDetailNum}
               />
+              {hasRanAhead(truck.state?.off_note) && (
+                isAdmin && !isReadOnly ? (
+                  <button
+                    type="button"
+                    title="Clear Ran Ahead — truck loads tonight again"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      // Surgical: strip only the sentinel, keep any real note.
+                      upsert.mutate({ truck_number: truck.truck_number, run_date: runDate, off_note: removeNoteToken(truck.state?.off_note, RAN_AHEAD), state_source: "workflow" });
+                    }}
+                    className="inline-flex items-center gap-1 rounded-full bg-sky-900/40 px-2 py-0.5 text-[10px] font-semibold text-sky-300 ring-1 ring-sky-700/40 transition-colors hover:bg-red-900/50 hover:text-red-300 hover:ring-red-700/40"
+                  >
+                    Ran Ahead ✕
+                  </button>
+                ) : (
+                  <span className="font-medium text-sky-300">Ran Ahead</span>
+                )
+              )}
               {truck.state?.off_note?.toLowerCase().includes("ran special") && (
                 isAdmin && !isReadOnly ? (
                   <button

@@ -116,6 +116,13 @@ def _ran_special(note: str | None) -> bool:
     return "ran special" in (note or "").lower()
 
 
+def _has_ran_ahead(note: str | None) -> bool:
+    """Exact " | "-segment match for the Ran Ahead sentinel (see
+    frontend utils/offNote.ts) — a truck flagged as already having run this
+    week, which therefore did NOT load that night."""
+    return any(seg.strip().lower() == "ran ahead" for seg in (note or "").split("|"))
+
+
 def _operational_today() -> date:
     """The current OPERATIONAL run date (06:00 rollover + weekend→Friday). The
     canonical implementation now lives in routers.trends_common so every trend
@@ -386,7 +393,7 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                     anchor_sched_off = (
                         prev_load_day_num is not None and prev_load_day_num in off_days
                     )
-                if not anchor_sched_off:
+                if not anchor_sched_off and not (prior is not None and _has_ran_ahead(prior.off_note)):
                     used_yesterday = True
                     status = TruckStatus.dirty
                 elif scheduled_off_today:
@@ -432,7 +439,9 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
                         prev_load_day_num is not None
                         and prev_load_day_num in off_days
                     )
-                if not prev_sched_off:
+                # A "Ran Ahead" sentinel on the prior night means the truck
+                # deliberately skipped that load — treat like scheduled-off.
+                if not prev_sched_off and not _has_ran_ahead(prior.off_note):
                     status = TruckStatus.dirty    # dispatched → came back dirty
                 elif scheduled_off_today:
                     status = TruckStatus.off      # didn't dispatch + not loading tonight

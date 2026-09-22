@@ -61,6 +61,7 @@ import CollapsibleCoverage from "../components/CollapsibleCoverage";
 import Modal from "../components/Modal";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
 import EmptyState from "../components/EmptyState";
+import { hasRanAhead } from "../utils/offNote";
 
 /**
  * Load workflow (V1 parity):
@@ -205,6 +206,15 @@ export default function Load() {
   const loaded = useMemo(
     () => loadDisplayTrucks.filter((t) => effectiveOperationalStatus(t, loadDay, holidayLoad) === "loaded"),
     [loadDisplayTrucks, loadDay, holidayLoad],
+  );
+  // "Ran Ahead" trucks are OUT of the roster (context gate) — surface them so
+  // the shrunken totals are explained rather than mysterious.
+  const ranAhead = useMemo(
+    () =>
+      board
+        .filter((t) => t.truck_type !== "Spare" && hasRanAhead(t.state?.off_note))
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board],
   );
   // Sort variant for the "Loaded today" grid.
   const loadedSorted = useMemo(() => {
@@ -618,10 +628,34 @@ export default function Load() {
           {/* Load / Unload progress */}
           <div className="card flex flex-col justify-center gap-2.5">
             <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
+            {ranAhead.length > 0 && (
+              <p className="text-[11px] font-semibold text-sky-300">
+                {ranAhead.length} ran ahead — not in tonight's load
+              </p>
+            )}
             <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
           </div>
         </div>
       </div>
+
+      {/* ---------------- Ran ahead ---------------- */}
+      {ranAhead.length > 0 && (
+        <div className="rounded-xl border border-sky-800/40 bg-sky-950/20 px-4 py-3">
+          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-sky-300">
+            Ran ahead — no load tonight
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {ranAhead.map((t) => (
+              <span
+                key={t.truck_number}
+                className="rounded-md border border-hairline bg-surface-2 px-2 py-0.5 font-mono text-sm font-bold text-ink-soft"
+              >
+                Truck #{t.truck_number}
+              </span>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ---------------- Loaded today ---------------- */}
       <div>

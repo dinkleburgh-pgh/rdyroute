@@ -5,6 +5,7 @@
  */
 
 import type { TruckStatus, TruckType, TruckWithState } from "../types";
+import { hasRanAhead } from "./offNote";
 
 /** Previous workday in the 1–5 day-number system (Mon→Fri on day 1). */
 // In-file helpers (no longer exported — nothing outside imports them).
@@ -724,6 +725,9 @@ export function loadNeedFor(
     return { needed, reason: `loads Day ${loadDayNum}` };
   }
 
+  if (hasRanAhead(truck.state?.off_note)) {
+    return { needed, reason: "ran ahead — no load tonight" };
+  }
   if (truck.truck_type === "Spare" && cover == null) {
     return { needed, reason: "spare with no route to load" };
   }
@@ -806,6 +810,14 @@ export function buildOperationalDayContext(
 
   const activeTrucks: TruckWithState[] = [];
   for (const truck of trucks) {
+    // "Ran Ahead" (off_note sentinel, set from Setup Day): the truck already
+    // ran its route this week, so it skips TONIGHT'S load entirely — roster,
+    // ready list, denominators. Placed before the split/coverage branches on
+    // purpose: nobody loads this truck's freight tonight, whatever hat it
+    // wears. Load role only (it still unloads in the morning), and
+    // deliberately independent of holidayMode — holiday weeks are exactly
+    // when trucks get ahead.
+    if (dayRole === "load" && hasRanAhead(truck.state?.off_note)) continue;
     // SPLIT helper (LOAD role): the route ALSO runs — the helper carries the
     // overflow as an EXTRA load slot on top of the schedule, regardless of
     // its own schedule/type. Never applies to the unload role: a split marker
