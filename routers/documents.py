@@ -31,11 +31,18 @@ from routers.auth import require_management_access
 from models import Document, DocumentLink, User
 from schemas import DocumentLinkCreate, DocumentLinkOut, DocumentOut, DocumentUpdate
 
+log = logging.getLogger(__name__)
+
 # Let Pillow decode HEIC/HEIF (iPhone photos) so we can render a JPEG preview —
 # browsers can't display HEIC in <img>, so a converted preview is required.
-register_heif_opener()
-
-log = logging.getLogger(__name__)
+# Non-fatal on failure: the native libheif DLL can be missing or blocked by an
+# OS policy (seen 2026-09-22: Windows Application Control blocked it and took
+# the ENTIRE API down at import). Without it, HEIC uploads just keep the
+# existing no-preview caveat — everything else must still run.
+try:
+    register_heif_opener()
+except Exception as exc:  # noqa: BLE001 — any import/DLL failure degrades, never kills
+    log.warning("HEIC support unavailable (register_heif_opener failed): %s", exc)
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 # Files live on the persistent backend data volume (/app/.data) in production,

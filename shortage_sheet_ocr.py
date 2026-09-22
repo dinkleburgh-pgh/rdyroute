@@ -18,7 +18,13 @@ except ImportError:  # pragma: no cover - optional codec dependency
 from shortage_sheet_template import SHORTAGE_V1A_TEMPLATE, ShortageSheetRowDefinition, ShortageSheetTemplate
 
 if register_heif_opener is not None:
-    register_heif_opener()
+    # Non-fatal: the native libheif DLL can be missing or blocked by an OS
+    # policy (pillow_heif defers its ImportError to this call), and HEIC
+    # support degrading must never take the API down at import.
+    try:
+        register_heif_opener()
+    except Exception:  # noqa: BLE001
+        register_heif_opener = None
 
 
 @dataclass(frozen=True)
