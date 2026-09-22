@@ -17,7 +17,6 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode }
 import clsx from "clsx";
 import { useQueryClient } from "@tanstack/react-query";
 import {
-  useShortageByItem,
   useShortageSheetTemplates,
   useTrackedItems,
   useUpsertShortageCells,
@@ -39,7 +38,7 @@ import {
   type PaperRow,
   type SheetRow,
 } from "./shortageMatrix";
-import { findTrackedItem, useCategoryPalette } from "./HierarchyPicker";
+import { findTrackedItem, shortageItemLabel, useCategoryPalette } from "./HierarchyPicker";
 
 type Mode = "grid" | "guided" | "paper" | "review";
 
@@ -121,7 +120,7 @@ export default function ShortSheetEditor({
         group: superGroupOf(meta.category, items),
         category: meta.category,
         detail: meta.detail,
-        label: meta.detail ? `${meta.category} ${meta.detail}` : meta.category,
+        label: shortageItemLabel(meta.category, meta.detail, items),
         unit: null,
         byTruck: new Map(),
         total: 0,

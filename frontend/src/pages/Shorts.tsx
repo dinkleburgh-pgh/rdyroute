@@ -28,7 +28,7 @@ import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 import ItemFirstEntry from "../components/shorts/ItemFirstEntry";
 import ShortSheetEditor from "../components/shorts/ShortSheetEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
-import HierarchyPicker, { DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit, useCategoryPalette } from "../components/shorts/HierarchyPicker";
+import HierarchyPicker, { DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit, shortageItemLabel, useCategoryPalette, useShortageItemLabel } from "../components/shorts/HierarchyPicker";
 import type { TrackedItem } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
@@ -55,6 +55,7 @@ function TruckPicker({
   /** Today's newest entries across every truck, for the Logged-today strip. */
   recentLog?: Shortage[];
 }) {
+  const itemLabelOf = useShortageItemLabel();
   const routeTrucks = board
     .filter((t) => t.truck_type !== "Spare")
     .sort((a, b) => a.truck_number - b.truck_number);
@@ -98,7 +99,7 @@ function TruckPicker({
           <div className="flex flex-wrap gap-2">
             {recentLog.map((sh) => {
               const t = board.find((b) => b.truck_number === sh.truck_number);
-              const label = sh.item_detail ? `${sh.item_category} ${sh.item_detail}` : sh.item_category;
+              const label = itemLabelOf(sh.item_category, sh.item_detail);
               return (
                 <button
                   key={sh.id}
@@ -207,7 +208,7 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
       <h4 className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">On this truck today</h4>
       <div className="flex flex-wrap gap-2">
         {[...shorts].reverse().map((s) => {
-          const label = s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category;
+          const label = shortageItemLabel(s.item_category, s.item_detail, items);
           if (editId === s.id) {
             return (
               <AnimateCard key={s.id} className="flex items-center gap-2 rounded-xl border border-amber-700/60 bg-amber-950/40 px-3 py-2">
@@ -280,7 +281,7 @@ function LoggedList({ shorts, items }: { shorts: Shortage[]; items: TrackedItem[
         title="Delete this shortage?"
         description={
           confirmDel
-            ? `Removes ${qtyWithUnit(items, confirmDel.item_category, confirmDel.item_detail, confirmDel.quantity)} × ${confirmDel.item_detail ? `${confirmDel.item_category} ${confirmDel.item_detail}` : confirmDel.item_category} from truck #${confirmDel.truck_number}.`
+            ? `Removes ${qtyWithUnit(items, confirmDel.item_category, confirmDel.item_detail, confirmDel.quantity)} × ${shortageItemLabel(confirmDel.item_category, confirmDel.item_detail, items)} from truck #${confirmDel.truck_number}.`
             : undefined
         }
         confirmLabel="Delete"
@@ -364,7 +365,7 @@ export function ShortageLogger({
                     palette.chipClass(item.category),
                   )}
                 >
-                  {item.category} {item.detail}
+                  {shortageItemLabel(item.category, item.detail, items)}
                 </button>
               ))}
             </div>
@@ -424,7 +425,7 @@ export function ShortageLogger({
                     palette.chipClass(item.category),
                   )}
                 >
-                  {item.category} {item.detail}
+                  {shortageItemLabel(item.category, item.detail, items)}
                 </button>
               ))}
             </div>

@@ -39,7 +39,7 @@ import ShortageVolumeChart from "../components/trends/ShortageVolumeChart";
 import ShortageKpiSection from "../components/trends/ShortageKpiSection";
 import QualityRateCard from "../components/trends/QualityRateCard";
 import AnomalyPanel from "../components/trends/AnomalyPanel";
-import { useItemDisplayName } from "../components/shorts/HierarchyPicker";
+import { useItemDisplayName, useShortageItemLabel } from "../components/shorts/HierarchyPicker";
 
 function fmtPace(s: number | null): string {
   if (s == null) return "—";
@@ -79,6 +79,7 @@ export default function Trends() {
   const { data: cycleData, isLoading: cycleLoading } = useCycleTimeTrend(days);
   const { data: shortageDaily, isLoading: shortageDailyLoading } = useShortageDailyTrend(days);
   const { data: shortageByItem, isLoading: shortageByItemLoading } = useShortageByItem(days);
+  const itemLabelOf = useShortageItemLabel();
   const { data: shortageByTruck, isLoading: shortageByTruckLoading } = useShortageByTruck(days);
   const { data: shortageSummary, isLoading: shortageSummaryLoading } = useShortageSummary(days, days);
   const { data: qualityRate, isLoading: qualityRateLoading } = useQualityRate(days, days);
@@ -131,10 +132,10 @@ export default function Trends() {
 
   const topShortageItems = useMemo(() => {
     return (shortageByItem ?? [])
-      .map((r) => ({ label: r.label, value: r.total_qty }))
+      .map((r) => ({ label: itemLabelOf(r.category, r.detail), value: r.total_qty }))
       .sort((a, b) => b.value - a.value)
       .slice(0, 10);
-  }, [shortageByItem]);
+  }, [shortageByItem, itemLabelOf]);
 
   const topShortageTrucks = useMemo(() => {
     return (shortageByTruck ?? [])

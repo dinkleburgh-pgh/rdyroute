@@ -18,7 +18,7 @@ import {
 import KpiCard from "../../components/trends/KpiCard";
 import clsx from "clsx";
 import { format, parseISO } from "date-fns";
-import { useItemDisplayName } from "../../components/shorts/HierarchyPicker";
+import { useItemDisplayName, useShortageItemLabel } from "../../components/shorts/HierarchyPicker";
 
 const METRICS: Record<string, { label: string; color: string }> = {
   volume:     { label: "Discrepancy Volume",    color: "text-blue-400" },
@@ -280,8 +280,9 @@ function CycleTable({ data }: { data: { run_date: string; avg_seconds: number; t
   );
 }
 
-function ShortageTable({ data, byItem, summary }: { data: { run_date: string; total_qty: number; entry_count: number }[] | undefined; byItem: { label: string; total_qty: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
+function ShortageTable({ data, byItem, summary }: { data: { run_date: string; total_qty: number; entry_count: number }[] | undefined; byItem: { category: string; detail: string; label: string; total_qty: number }[] | undefined; summary: { total_qty: number; avg_per_day: number; peak_qty: number; entry_count: number; days_with_data: number } | undefined }) {
   const s = summary ?? { total_qty: 0, avg_per_day: 0, peak_qty: 0, entry_count: 0, days_with_data: 0 };
+  const itemLabelOf = useShortageItemLabel();
   return (
     <div className="space-y-4">
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -304,7 +305,7 @@ function ShortageTable({ data, byItem, summary }: { data: { run_date: string; to
           )}
           {(byItem ?? []).map((r, i) => (
             <tr key={i} className="hover:bg-slate-800/40">
-              <Td>{r.label}</Td>
+              <Td>{itemLabelOf(r.category, r.detail)}</Td>
               <Td className="font-semibold">{r.total_qty}</Td>
             </tr>
           ))}

@@ -5,7 +5,7 @@
  */
 import type { Shortage, ShortageSheetTemplate } from "../../types";
 import type { TrackedItem } from "../../api/hooks";
-import { findTrackedItem, MAT_SIZES_S, subCatOf, topCatOf } from "./HierarchyPicker";
+import { findTrackedItem, MAT_SIZES_S, shortageItemLabel, subCatOf, topCatOf } from "./HierarchyPicker";
 
 export interface SheetRow {
   /** Top-level family: Mats / Bulk / Paper / Hygiene … */
@@ -154,7 +154,7 @@ export function buildCatalogRows(items: TrackedItem[], paperRank?: Map<string, n
       group: superGroupOf(category, items),
       category,
       detail,
-      label: detail ? `${category} ${detail}` : category,
+      label: shortageItemLabel(category, detail, items),
       unit: item.unit_label ?? null,
       byTruck: new Map(),
       total: 0,
@@ -200,7 +200,7 @@ export function buildPaperRows(
       group: superGroupOf(category, items),
       category,
       detail,
-      label: detail ? `${category} ${detail}` : category,
+      label: shortageItemLabel(category, detail, items),
       unit: findTrackedItem(items, category, detail)?.unit_label ?? null,
       byTruck: new Map(),
       total: 0,
@@ -233,7 +233,7 @@ export function buildShortageMatrix(
         detail: s.item_detail,
         // Always fully qualified — "Onyx" alone is ambiguous across the
         // three mat sizes, "Black" across mats/aprons/towels.
-        label: s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category,
+        label: shortageItemLabel(s.item_category, s.item_detail, items),
         unit: findTrackedItem(items, s.item_category, s.item_detail)?.unit_label ?? null,
         byTruck: new Map(),
         total: 0,

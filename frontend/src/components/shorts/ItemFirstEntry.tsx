@@ -27,6 +27,7 @@ import { isScheduledOff } from "../../utils/truckStatus";
 import type { Shortage, TruckWithState } from "../../types";
 import AnimateCard from "../AnimateCard";
 import HierarchyPicker, {
+  shortageItemLabel,
   DEFAULT_TRACKED_ITEMS,
   MAT_SIZES_S,
   colorWordClass,
@@ -173,13 +174,7 @@ export default function ItemFirstEntry({
   // same colour-first/item-last mismatch as the audit log. Mats keep size first
   // ("4x6 Black"); anything that isn't a colour word keeps category first.
   const itemLabel = selectedItem
-    ? !selectedItem.detail
-      ? selectedItem.category
-      : MAT_SIZES_S.has(selectedItem.category)
-        ? `${selectedItem.category} ${selectedItem.detail}`
-        : colorWordClass(selectedItem.detail)
-          ? `${selectedItem.detail} ${selectedItem.category}`
-          : `${selectedItem.category} ${selectedItem.detail}`
+    ? shortageItemLabel(selectedItem.category, selectedItem.detail, items)
     : "";
 
   function pickItem(category: string, detail: string) {
@@ -458,7 +453,7 @@ export default function ItemFirstEntry({
                       palette.chipClass(item.category),
                     )}
                   >
-                    {item.category} {item.detail}
+                    {shortageItemLabel(item.category, item.detail, items)}
                   </button>
                 ))}
               </div>

@@ -298,7 +298,7 @@ def shortage_by_item_trend(
         ShortageItemPoint(
             category=r[0],
             detail=r[1] or "",
-            label=f"{r[0]} {r[1]}" if r[1] else r[0],
+            label=f"{r[0]} {r[1]}" if r[1] else r[0],  # raw join — clients compose display labels from category/detail
             total_qty=r[2] or 0,
         )
         for r in rows

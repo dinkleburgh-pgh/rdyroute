@@ -9,7 +9,7 @@ import { motion } from "framer-motion";
 import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import { colorWordClass, itemTileClass, subCatOf, topCatOf, useCategoryPalette, useItemDisplayName, DEFAULT_TRACKED_ITEMS } from "../components/shorts/HierarchyPicker";
+import { colorWordClass, itemTileClass, subCatOf, topCatOf, useCategoryPalette, useItemDisplayName, DEFAULT_TRACKED_ITEMS, stripDupTokens } from "../components/shorts/HierarchyPicker";
 import {
   auditPhotoFileUrl,
   useAuditByRoute,
@@ -275,7 +275,7 @@ function HierarchyPicker({
                 cls,
               )}
             >
-              {suffix && colorWordClass(disp) ? `${disp} ${suffix}` : disp}
+              {(() => { const sfx = suffix ? stripDupTokens(suffix, disp) : ""; return sfx && colorWordClass(disp) ? `${disp} ${sfx}` : disp; })()}
             </button>
           );
         })}

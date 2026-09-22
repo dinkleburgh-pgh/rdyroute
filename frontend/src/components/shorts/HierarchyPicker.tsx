@@ -42,7 +42,29 @@ export const LIGHT_BG_ITEMS = new Set(["White", "White Shop"]);
 // Hierarchy helpers + defaults
 // ---------------------------------------------------------------------------
 
+// Mat SIZES only — this set drives the label-prefix strip ("4x6 Black" under
+// "Mats > 4x6"). Categories whose word appears INSIDE their item labels
+// (Traffics: "3x10 Traffic") are handled by stripDupTokens below, not here.
 export const MAT_SIZES_S = new Set(["3x10", "3x5", "4x6"]);
+
+/** Plural- and case-insensitive token key: "Traffic" and "Traffics" collide. */
+function normToken(w: string): string {
+  const t = w.toLowerCase();
+  return t.length > 3 && t.endsWith("s") ? t.slice(0, -1) : t;
+}
+
+/**
+ * Drop every token of *qualifier* whose normalized form already appears in
+ * *base* — the one rule that stops a category word from being glued onto an
+ * item label that already contains it ("Traffic 10's" + "Traffics" → "").
+ */
+export function stripDupTokens(qualifier: string, base: string): string {
+  const seen = new Set(base.split(/\s+/).filter(Boolean).map(normToken));
+  return qualifier
+    .split(/\s+/)
+    .filter((w) => w && !seen.has(normToken(w)))
+    .join(" ");
+}
 
 // Accepts undefined so callers can pass a catalog lookup straight in — a label
 // with no matching item resolves to "General" rather than forcing a cast.
@@ -80,8 +102,12 @@ export function itemDisplayName(label: string, items: TrackedItem[]): string {
   const it = items.find((i) => i.label === label);
   if (!it) return label;
   const group = subCatOf(it);
-  if (!group || label.toLowerCase().startsWith(group.toLowerCase())) return label;
-  return `${label} ${group}`;
+  if (!group) return label;
+  // Token-level dedupe rather than a prefix check: "3x10 Traffic" under
+  // "Traffics" (and "Traffic 10's" — plural mismatch) both defeated
+  // startsWith and rendered "3x10 Traffic Traffics".
+  const suffix = stripDupTokens(group, label);
+  return suffix ? `${label} ${suffix}` : label;
 }
 
 /**
@@ -95,6 +121,42 @@ export function useItemDisplayName(): (label: string) => string {
   const { data: raw = [] } = useTrackedItems();
   const items = raw.length > 0 ? raw : DEFAULT_TRACKED_ITEMS;
   return useMemo(() => (label: string) => itemDisplayName(label, items), [items]);
+}
+
+/**
+ * The one display label for a stored (item_category, item_detail) pair.
+ *
+ * Twelve surfaces hand-rolled `${category} ${detail}` and doubled any word
+ * the label already contained ("Traffics 3x10 Traffic"); ItemFirstEntry kept
+ * its own copy of the ordering grammar besides. This is now the only rule:
+ *   1. resolve the catalog row (all three historical category shapes);
+ *   2. reduce the category to its bare identity ("Bulk > Towels" → "Towels");
+ *   3. drop category words the detail already carries (plural-insensitive) —
+ *      "Traffics" vs "3x10 Traffic" leaves nothing, so the detail stands alone;
+ *   4. order the survivors the way the floor speaks them: mat sizes first
+ *      ("4x6 Black"), colour-word details first ("Red Shop Towels"),
+ *      category first otherwise ("Paper SIG HW").
+ * Display only — storage/grouping keys stay the raw pair.
+ */
+export function shortageItemLabel(category: string, detail: string, items: TrackedItem[]): string {
+  if (!detail) return category.trim();
+  const it = findTrackedItem(items, category, detail);
+  const rawCat = it ? (subCatOf(it) ?? topCatOf(it)) : catKeyOf(category);
+  const cat = stripDupTokens(rawCat, detail);
+  if (!cat) return detail;
+  if (MAT_SIZES_S.has(rawCat)) return `${cat} ${detail}`;
+  if (colorWordClass(detail)) return `${detail} ${cat}`;
+  return `${cat} ${detail}`;
+}
+
+/** shortageItemLabel bound to the live catalog (DEFAULT_TRACKED_ITEMS fallback). */
+export function useShortageItemLabel(): (category: string, detail: string) => string {
+  const { data: raw = [] } = useTrackedItems();
+  const items = raw.length > 0 ? raw : DEFAULT_TRACKED_ITEMS;
+  return useMemo(
+    () => (category: string, detail: string) => shortageItemLabel(category, detail, items),
+    [items],
+  );
 }
 
 /**
@@ -458,7 +520,7 @@ function ItemGrid({
             whileHover={{ scale: 1.04, transition: { type: "spring", stiffness: 400, damping: 20 } }}
             whileTap={{ scale: 0.94 }}
           >
-            {suffix && colorWordClass(disp) ? `${disp} ${suffix}` : disp}
+            {(() => { const sfx = suffix ? stripDupTokens(suffix, disp) : ""; return sfx && colorWordClass(disp) ? `${disp} ${sfx}` : disp; })()}
           </motion.button>
         );
       })}

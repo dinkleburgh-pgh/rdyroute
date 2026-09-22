@@ -35,7 +35,7 @@ import {
 } from "../api/hooks";
 import type { TrackedItem } from "../api/hooks";
 import { ShortageLogger } from "../pages/Shorts";
-import { DEFAULT_TRACKED_ITEMS, findTrackedItem, topCatOf } from "./shorts/HierarchyPicker";
+import { DEFAULT_TRACKED_ITEMS, findTrackedItem, topCatOf, useShortageItemLabel } from "./shorts/HierarchyPicker";
 import { useAuth } from "../contexts/AuthContext";
 import CoverageTag from "./CoverageTag";
 import LoadNotesPanel from "./load/LoadNotesPanel";
@@ -465,6 +465,7 @@ function ShortageDropdownEntry({
   shorts: import("../types").Shortage[];
   runDate: string;
 }) {
+  const itemLabelOf = useShortageItemLabel();
   const { user } = useAuth();
   const create = useCreateShortage();
   const { data: trackedRaw = [] } = useTrackedItems();
@@ -524,7 +525,7 @@ function ShortageDropdownEntry({
           {[...shorts].reverse().map((s) => (
             <div key={s.id} className="flex items-center gap-2.5 text-xs">
               <span className="font-mono font-semibold text-ink">
-                {s.item_detail ? `${s.item_category} ${s.item_detail}` : s.item_category} ×{s.quantity}
+                {itemLabelOf(s.item_category, s.item_detail)} ×{s.quantity}
               </span>
               <span className="text-ink-faint">
                 logged {new Date(Date.parse(s.recorded_at)).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
