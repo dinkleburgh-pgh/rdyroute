@@ -25,7 +25,7 @@ import CoverageTag from "../components/CoverageTag";
 import OverbatchedChip from "../components/OverbatchedChip";
 import { capacityColor, capacityPct } from "../utils/batchCapacity";
 import LoadWorkflowCard from "../components/WorkflowCard";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { Sep, Stat } from "../components/PageHeader";
 import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/QuietTile";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
@@ -837,7 +837,6 @@ export default function Unload() {
   return (
     <>
       <PageHeader
-        eyebrow="Workflow"
         title="Unload"
         titleBadge={
           <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-dirty/40 bg-st-dirty/10 px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.14em] text-st-dirty">
@@ -845,7 +844,17 @@ export default function Unload() {
             {toGo} to go
           </span>
         }
-        subtitle={`Unload Day ${unloadsDay}${UNLOAD_DAY_NAMES[unloadsDay] ? ` · ${UNLOAD_DAY_NAMES[unloadsDay]}` : ""}`}
+        meta={
+          <>
+            <Stat value={`${unloadDone}/${unloadTotal}`} label="unloaded" tone="unloaded" />
+            {UNLOAD_DAY_NAMES[unloadsDay] && (
+              <>
+                <Sep />
+                <span>{UNLOAD_DAY_NAMES[unloadsDay]}</span>
+              </>
+            )}
+          </>
+        }
         actions={styleToggle}
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="space-y-5 p-3 md:p-6">

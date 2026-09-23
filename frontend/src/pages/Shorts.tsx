@@ -558,79 +558,40 @@ export function ShortsWorkspace() {
     >
       {/* Page header */}
       <PageHeader
-        eyebrow="Workflow"
         title="Short Sheet"
-        subtitle="Log route shortages or review imported sheet data for verification."
         actions={
-          <>
-            <select
-              className="input min-w-[8.5rem] py-1.5 text-sm"
-              value={runDate}
-              onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
-            >
-              <option value={todayIso()}>Today</option>
-              {shortDates.map((d) => (
-                <option key={d} value={d}>{d}</option>
-              ))}
-            </select>
-            {/* One sizing rule for all four, so the selected tab isn't the only
-                one that looks like a button. Equal min-width keeps "Sheet" the
-                same size as "Import sheets". */}
-            <div className="flex gap-1 rounded-lg border border-hairline bg-surface/70 p-1">
-              {VIEW_MODES.map((m) => (
-                <button
-                  key={m.id}
-                  type="button"
-                  onClick={() => setViewMode(m.id)}
-                  className={clsx(
-                    // Fixed width sized to the longest label ("Import sheets"),
-                    // so every tab is the same box. flex-1 doesn't work here:
-                    // the bar is shrink-to-fit, so there's no free space to
-                    // distribute and each button collapses to its own text.
-                    "w-32 shrink-0 whitespace-nowrap rounded-md border px-2 py-1.5 text-center text-sm font-medium transition",
-                    viewMode === m.id
-                      ? "border-blue-500 bg-blue-600 text-white"
-                      : "border-hairline bg-surface-2/60 text-ink-soft hover:border-slate-500 hover:text-ink",
-                  )}
-                >
-                  {m.label}
-                </button>
-              ))}
-            </div>
-          </>
+          <select
+            className="input w-36 py-1 text-xs"
+            value={runDate}
+            onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
+          >
+            <option value={todayIso()}>Today</option>
+            {shortDates.map((d) => (
+              <option key={d} value={d}>{d}</option>
+            ))}
+          </select>
         }
       />
 
-      {/* Mobile: the date + mode toggle above live in PageHeader's actions, which
-          are hidden below md — surface them here so every entry option is reachable. */}
-      <div className="flex flex-col gap-2 border-b border-hairline bg-surface-3/40 p-3 md:hidden">
-        <select
-          className="input w-full py-1.5 text-sm"
-          value={runDate}
-          onChange={(e) => { setRunDate(e.target.value); setSelected(null); }}
-        >
-          <option value={todayIso()}>Today</option>
-          {shortDates.map((d) => (
-            <option key={d} value={d}>{d}</option>
-          ))}
-        </select>
-        <div className="grid grid-cols-2 gap-1 rounded-lg border border-hairline bg-surface/70 p-1">
-          {VIEW_MODES.map((m) => (
-            <button
-              key={m.id}
-              type="button"
-              onClick={() => setViewMode(m.id)}
-              className={clsx(
-                "rounded-md border px-3 py-2 text-center text-sm font-medium transition",
-                viewMode === m.id
-                  ? "border-blue-500 bg-blue-600 text-white"
-                  : "border-hairline bg-surface-2/60 text-ink-soft hover:border-slate-500 hover:text-ink",
-              )}
-            >
-              {m.label}
-            </button>
-          ))}
-        </div>
+      {/* Mode tabs — one full-width strip at every width. flex-1 works here
+          because the bar spans the page (the old header box was shrink-to-fit,
+          which is why it needed the fixed w-32 per tab). */}
+      <div className="flex shrink-0 gap-1 border-b border-hairline bg-surface-3/40 p-2">
+        {VIEW_MODES.map((m) => (
+          <button
+            key={m.id}
+            type="button"
+            onClick={() => setViewMode(m.id)}
+            className={clsx(
+              "flex-1 whitespace-nowrap rounded-md border px-2 py-1.5 text-center text-xs font-medium transition md:text-sm",
+              viewMode === m.id
+                ? "border-blue-500 bg-blue-600 text-white"
+                : "border-hairline bg-surface-2/60 text-ink-soft hover:border-slate-500 hover:text-ink",
+            )}
+          >
+            {m.label}
+          </button>
+        ))}
       </div>
 
       {viewMode === "imports" ? (

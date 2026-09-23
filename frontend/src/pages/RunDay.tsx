@@ -44,6 +44,7 @@ import { formatRunDate } from "../utils/dates";
 import TruckCard from "./runday/TruckCard";
 import { errorDetail } from "../api/errors";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
+import PageHeader, { Sep, Stat } from "../components/PageHeader";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
@@ -387,23 +388,18 @@ export default function RunDay() {
 
   return (
     <>
-      {/* Page header — matches PageHeader component style */}
-      <div className="border-b border-hairline bg-[radial-gradient(circle_at_top_left,rgba(56,189,248,0.10),transparent_36%),linear-gradient(180deg,rgba(2,6,23,0.6),rgba(15,23,42,0.4))] px-3 py-3 md:px-6 md:py-4">
-        <div>
-          <span
-            className="hidden md:inline-flex rounded-pill border px-[10px] py-[3px] text-[9.5px] font-semibold uppercase tracking-[0.18em] text-[#7cc4ff]"
-            style={{ borderColor: "rgba(56,189,248,0.22)", background: "rgba(56,189,248,0.10)" }}
-          >
-            Operations
-          </span>
-          <h2 className="mt-2 text-3xl font-black leading-none tracking-tight text-indigo-400 md:text-[1.75rem]">
-            Day Overview
-          </h2>
-          <p className="mt-1.5 text-[13.5px] text-ink-muted">
-            {formatRunDate(runDate)} · Unload Day {unloadsDay} · Load Day {loadDay}
-          </p>
-        </div>
-      </div>
+      <PageHeader
+        title="Day Overview"
+        meta={
+          <>
+            <span>{formatRunDate(runDate)}</span>
+            <Sep />
+            <Stat value={`${unloadDone}/${unloadTotal}`} label="unloaded" tone="unloaded" />
+            <Sep />
+            <Stat value={`${loadDone}/${loadTotal}`} label="loaded" tone="loaded" />
+          </>
+        }
+      />
       <div className="space-y-6 p-4 md:p-6">
 
       {/* Shift Handoff Notes — toggleable in Operations settings */}

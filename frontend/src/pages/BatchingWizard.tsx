@@ -31,7 +31,7 @@ import { workdayNumbers } from "../components/Clock";
 import { buildOperationalDayContext } from "../utils/truckStatus";
 import { capacityColor, capacityPct, resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
 import { useToast } from "../contexts/ToastContext";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { Stat } from "../components/PageHeader";
 import OverbatchedChip from "../components/OverbatchedChip";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { AlertTriangleIcon, DustGarmentIcon } from "../components/icons";
@@ -307,9 +307,8 @@ export default function BatchingWizard() {
   return (
     <div className="space-y-4 p-3 md:p-6">
       <PageHeader
-        eyebrow="Operations"
         title="Batching Wizard"
-        subtitle={`Work batch by batch for ${runDate}. Target ${noCap ? "∞" : wearerCap.toLocaleString()} wearers per batch — as close as possible, don't go over.`}
+        meta={<Stat value={noCap ? "∞" : wearerCap.toLocaleString()} label="wearers/batch cap" />}
       />
 
       {/* The sheet notes ARE batching constraints ("69 must be in its own

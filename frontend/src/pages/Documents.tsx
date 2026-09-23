@@ -12,7 +12,7 @@ import {
   documentPreviewUrl,
   type DocumentItem,
 } from "../api/hooks";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { Stat } from "../components/PageHeader";
 import ConfirmDialog from "../components/ConfirmDialog";
 import DocumentViewer from "../components/DocumentViewer";
 
@@ -275,7 +275,10 @@ export default function Documents() {
 
   return (
     <div className="space-y-4">
-      <PageHeader eyebrow="Workflow" title="Documents" subtitle="Store and reference files and photos of documents. Leads & admins only." />
+      <PageHeader
+        title="Documents"
+        meta={<Stat value={docs.length === allDocs.length ? allDocs.length : `${docs.length}/${allDocs.length}`} label="files" />}
+      />
 
       <UploadPanel categories={categories} />
 
@@ -299,7 +302,7 @@ export default function Documents() {
         <p className="py-10 text-center text-sm text-slate-500">Loading…</p>
       ) : docs.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-700 py-12 text-center">
-          <p className="text-sm text-slate-500">{allDocs.length === 0 ? "No documents yet — upload one above." : "No documents match your filters."}</p>
+          <p className="text-sm text-slate-500">{allDocs.length === 0 ? "No documents yet — upload one above. Leads & admins only." : "No documents match your filters."}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">

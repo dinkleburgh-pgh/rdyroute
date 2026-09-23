@@ -1503,70 +1503,52 @@ export default function LiveReport() {
         </div>
       )}
       <PageHeader
-        eyebrow="Live Report"
         title="Run Report"
-        subtitle={`${formatRunDate(runDate)} · Load Day ${loadDay} · Unload Day ${unloadsDay}`}
+        titleBadge={isToday ? (
+          <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
+            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
+            Live
+          </span>
+        ) : undefined}
+        meta={<span>{formatRunDate(runDate)}</span>}
         actions={
-          <div className="flex items-center gap-2">
-            {isToday && (
-              <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
-                <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
-                Live
-              </span>
-            )}
-            <input
-              className="input text-xs [color-scheme:dark]"
-              type="date"
-              max={todayIso()}
-              value={runDate}
-              onChange={(e) => setRunDate(e.target.value)}
-            />
+          <>
             {kioskButton}
             {pdfButton}
             {imagesButton}
             {pdfErr && <span className="text-[10px] text-st-dirty">PDF failed</span>}
-          </div>
+          </>
         }
       />
-      {/* Mobile date bar — PageHeader hides its actions under md, so on a
-          phone the report had no way to change the date (and no Live badge
-          or day numbers, which live in the md-only subtitle). */}
-      <div className="flex items-center gap-2 border-b border-hairline bg-surface/60 px-3 py-2 md:hidden">
+      {/* Date scope — one toolbar at every width (the old phone-only bar,
+          promoted; desktop gains the prev/next arrows it never had). Day
+          numbers stay out: the top bar's L/U chips own them. */}
+      <div className="flex items-center gap-2 border-b border-hairline bg-surface/60 px-3 py-2 md:px-6">
         <button
           type="button"
           aria-label="Previous run day"
           onClick={() => setRunDate(previousRunDate(runDate))}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95"
         >
           ‹
         </button>
-        <div className="min-w-0 flex-1">
-          <input
-            className="input w-full text-sm [color-scheme:dark]"
-            type="date"
-            max={todayIso()}
-            value={runDate}
-            onChange={(e) => e.target.value && setRunDate(e.target.value)}
-          />
-          <p className="mt-1 truncate text-center text-[10px] text-ink-muted">
-            Load Day {loadDay} · Unload Day {unloadsDay}
-          </p>
-        </div>
+        <input
+          className="input min-w-0 flex-1 text-sm [color-scheme:dark] md:w-44 md:flex-none"
+          type="date"
+          max={todayIso()}
+          value={runDate}
+          onChange={(e) => e.target.value && setRunDate(e.target.value)}
+        />
         <button
           type="button"
           aria-label="Next run day"
           disabled={isToday}
           onClick={() => setRunDate(nextRunDate(runDate, todayIso()))}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95 disabled:opacity-30"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95 disabled:opacity-30"
         >
           ›
         </button>
-        {isToday ? (
-          <span className="inline-flex shrink-0 items-center gap-1 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-st-inprogress">
-            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
-            Live
-          </span>
-        ) : (
+        {!isToday && (
           <button
             type="button"
             onClick={() => setRunDate(todayIso())}
@@ -1575,9 +1557,6 @@ export default function LiveReport() {
             Today
           </button>
         )}
-        {kioskButton}
-        {pdfButton}
-        {imagesButton}
       </div>
 
       {/* Horizontal padding respects the landscape safe area so the system nav

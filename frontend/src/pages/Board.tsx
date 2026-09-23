@@ -40,7 +40,7 @@ import TruckDetailPanel from "./board/TruckDetailPanel";
 import TruckDetailModal from "./board/TruckDetailModal";
 import FleetMobileActionSheet from "./board/FleetMobileActionSheet";
 import FleetUtilityBar from "./board/FleetUtilityBar";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { Sep, Stat } from "../components/PageHeader";
 import { motion } from "framer-motion";
 import { ArrowLeftRight, CalendarDays } from "lucide-react";
 import { errorDetail } from "../api/errors";
@@ -685,63 +685,46 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className={fleetMode ? "space-y-4 overflow-y-auto p-3 md:p-4" : "space-y-4 p-3 md:p-6"}>
       {/* ── Page header (above the bulk-edit bar) ── */}
       {(() => {
-        type HeaderCfg = { title: string; subtitle: string };
-        const fleet: HeaderCfg = {
-          title: "Fleet",
-          subtitle: `Review ${filtered.length} visible truck${filtered.length === 1 ? "" : "s"} and update current-day fleet state.`,
+        const titles: Record<string, string> = {
+          all: "Truck Board",
+          dirty: "Dirty",
+          shop: "Shop",
+          in_progress: "Loading",
+          unloaded: "Unloaded",
+          loaded: "Loaded",
+          off: "Off",
+          oos: "Requests / OOS",
+          spare: "Spares / Coverages",
         };
-        const headers: Record<string, HeaderCfg> = {
-          all: {
-            title: "Truck Board",
-            subtitle: `View ${filtered.length} truck${filtered.length === 1 ? "" : "s"} across the full board.`,
-          },
-          dirty: {
-            title: "Dirty",
-            subtitle: `Review ${filtered.length} truck${filtered.length === 1 ? "" : "s"} still needing unload attention.`,
-          },
-          shop: {
-            title: "Shop",
-            subtitle: `Track ${filtered.length} truck${filtered.length === 1 ? "" : "s"} currently assigned to shop status.`,
-          },
-          in_progress: {
-            title: "Loading",
-            subtitle: `Monitor ${filtered.length} truck${filtered.length === 1 ? "" : "s"} actively being loaded.`,
-          },
-          unloaded: {
-            title: "Unloaded",
-            subtitle: `Review ${filtered.length} truck${filtered.length === 1 ? "" : "s"} ready for the next loading step.`,
-          },
-          loaded: {
-            title: "Loaded",
-            subtitle: `Confirm ${filtered.length} truck${filtered.length === 1 ? "" : "s"} completed for the day.`,
-          },
-          off: {
-            title: "Off",
-            subtitle: `Check ${filtered.length} truck${filtered.length === 1 ? "" : "s"} scheduled off the route board.`,
-          },
-          oos: {
-            title: "Requests / OOS",
-            subtitle: `Manage holds, requests, and out-of-service trucks from one board view.`,
-          },
-          spare: {
-            title: "Spares / Coverages",
-            subtitle: `Review spare assignments, coverages, and idle backup trucks.`,
-          },
-        };
-        const cfg = fleetMode ? fleet : (headers[filter] ?? headers.all);
+        // The mixed boards (oos/spare) blend statuses, so a raw count would
+        // mislead — they get no meta at all.
+        const showCount = fleetMode || !["oos", "spare"].includes(filter);
         return (
           <PageHeader
-            eyebrow={fleetMode ? "Operations" : "Board"}
-            title={cfg.title}
-            subtitle={cfg.subtitle}
+            title={fleetMode ? "Fleet" : (titles[filter] ?? "Truck Board")}
+            meta={
+              showCount ? (
+                <>
+                  <Stat value={filtered.length} label={filtered.length === 1 ? "truck" : "trucks"} />
+                  {fleetMode && (
+                    <>
+                      <Sep />
+                      <Stat value={counts["dirty"] ?? 0} tone="dirty" />
+                      <Stat value={counts["unloaded"] ?? 0} tone="unloaded" />
+                      <Stat value={counts["loaded"] ?? 0} tone="loaded" />
+                    </>
+                  )}
+                </>
+              ) : undefined
+            }
             actions={
               filter === "off" ? (
                 <button
                   type="button"
                   onClick={() => setOffScheduleDialogOpen(true)}
-                  className="inline-flex items-center justify-center gap-2 rounded-md border border-hairline bg-surface/60 px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-hairline hover:bg-surface-2"
+                  className="inline-flex items-center justify-center gap-1.5 rounded-md border border-hairline bg-surface/60 px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:border-hairline hover:bg-surface-2"
                 >
-                  <CalendarDays className="h-4 w-4 text-ink-muted" />
+                  <CalendarDays className="h-3.5 w-3.5 text-ink-muted" />
                   View Schedule
                 </button>
               ) : undefined

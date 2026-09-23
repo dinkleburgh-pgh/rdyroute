@@ -519,24 +519,22 @@ export default function NotesBoard() {
       className="flex min-h-0 flex-col"
     >
       <PageHeader
-        eyebrow="Workflow"
         title="Notes"
-        subtitle="Standing instructions for the unload and load workflows, plus notes on individual trucks."
         actions={
-          <div className="flex flex-wrap justify-center gap-2 text-xs md:justify-end">
-            <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.constant)}>
+          <>
+            <span className={clsx("rounded-full px-2 py-0.5 text-[10px] font-semibold", NOTE_TYPE_COLOR.constant)}>
               {totalConstant} Always
             </span>
-            <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.workday)}>
+            <span className={clsx("rounded-full px-2 py-0.5 text-[10px] font-semibold", NOTE_TYPE_COLOR.workday)}>
               {totalWorkday} Workday
             </span>
-            <span className={clsx("rounded-full px-2.5 py-0.5 font-semibold", NOTE_TYPE_COLOR.one_off)}>
+            <span className={clsx("rounded-full px-2 py-0.5 text-[10px] font-semibold", NOTE_TYPE_COLOR.one_off)}>
               {totalOneOff} Set Until...
             </span>
-            <span className="rounded-full bg-surface-2 px-2.5 py-0.5 font-semibold text-ink-soft">
+            <span className="rounded-full bg-surface-2 px-2 py-0.5 text-[10px] font-semibold text-ink-soft">
               {totalActive} Active
             </span>
-          </div>
+          </>
         }
       />
 

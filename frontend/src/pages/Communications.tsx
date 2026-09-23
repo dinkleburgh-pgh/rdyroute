@@ -119,12 +119,7 @@ export default function Communications() {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       {/* Header */}
-      <PageHeader
-        eyebrow="Team"
-        title="Communications"
-        subtitle="Share shift updates, keep the team aligned, and track channel conversations."
-        className="shrink-0"
-      />
+      <PageHeader title="Communications" className="shrink-0" />
 
       {/* Channel tabs */}
       <div className="flex shrink-0 gap-1 overflow-x-auto border-b border-hairline bg-[#0b0f17] px-3 py-2">

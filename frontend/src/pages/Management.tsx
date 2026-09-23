@@ -244,11 +244,7 @@ export default function Management() {
         transition={{ duration: 0.35 }}
         className="flex min-h-0 flex-col"
       >
-        <PageHeader
-          eyebrow="Admin Tools"
-          title="Management"
-          subtitle="Settings, reports, imports, and operational controls."
-        />
+        <PageHeader title="Management" />
         <div className="p-6">
           <p className="text-sm text-ink-muted">
             Access is restricted to Fleet / Supervisor / Lead / ATL roles.
@@ -314,11 +310,7 @@ export default function Management() {
       transition={{ duration: 0.35 }}
       className="flex min-h-0 flex-col"
     >
-      <PageHeader
-        eyebrow="Admin Tools"
-        title="Management"
-        subtitle="Settings, user access, reports, and workflow controls in one place."
-      />
+      <PageHeader title="Management" />
       <div className="space-y-4 p-3 md:p-6">
 
       {/* Card group grid */}

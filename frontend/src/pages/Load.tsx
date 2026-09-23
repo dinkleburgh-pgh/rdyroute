@@ -54,7 +54,7 @@ import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import ConfirmDialog from "../components/ConfirmDialog";
 import LoadWorkflowCard from "../components/WorkflowCard";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { Sep, Stat } from "../components/PageHeader";
 import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/QuietTile";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
@@ -364,41 +364,37 @@ export default function Load() {
   return (
     <>
       <PageHeader
-        eyebrow="Workflow"
         title="Load"
-        subtitle="Start loading, finish routes, and track pace for the next run day."
-        actions={
-          <div className="flex items-center gap-2">
-            <PaceBadge avgSeconds={pace?.avg_seconds ?? null} />
-            <button
-              type="button"
-              onClick={openDisplay}
-              title="Open the full-screen load display"
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
-            >
-              <MonitorPlay className="h-4 w-4" />
-              Display
-            </button>
-          </div>
-        }
         titleBadge={anyInProgress ? (
           <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
             <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
             Live
           </span>
         ) : undefined}
+        meta={
+          <>
+            <Stat value={`${loadDone}/${loadTotal}`} label="loaded" tone="loaded" />
+            {pace?.avg_seconds != null && (
+              <>
+                <Sep />
+                <Stat value={formatDuration(pace.avg_seconds)} label="pace" />
+              </>
+            )}
+          </>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={openDisplay}
+            title="Open the full-screen load display"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+          >
+            <MonitorPlay className="h-4 w-4" />
+            Display
+          </button>
+        }
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
-
-      {/* PageHeader hides its actions below md, so the phone gets its own. */}
-      <button
-        type="button"
-        onClick={openDisplay}
-        className="flex w-full items-center justify-center gap-2 rounded-lg border border-hairline bg-surface-2 py-2 text-sm font-semibold text-ink-soft md:hidden"
-      >
-        <MonitorPlay className="h-4 w-4" />
-        Open Load Display
-      </button>
 
       <GarmentsStrip trucks={dustGarmentTrucks} />
       <NogsStrip trucks={nogsTrucks} />
@@ -806,17 +802,6 @@ function ProgressRow({
         {done}/{total} ({pct}%)
       </span>
     </div>
-  );
-}
-
-function PaceBadge({ avgSeconds }: { avgSeconds: number | null }) {
-  if (avgSeconds == null) {
-    return <span className="text-xs text-ink-muted">No pace history</span>;
-  }
-  return (
-    <span className="font-mono tabular-nums text-xs text-ink-muted">
-      30-day avg <span className="font-semibold text-ink">{formatDuration(avgSeconds)}</span>
-    </span>
   );
 }
 

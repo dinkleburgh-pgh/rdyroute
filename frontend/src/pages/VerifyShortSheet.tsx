@@ -5,7 +5,7 @@
 import { useMemo, useState, useEffect, useCallback } from "react";
 import { CheckCircle2, Circle, RotateCcw, ClipboardCheck } from "lucide-react";
 import clsx from "clsx";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { Stat } from "../components/PageHeader";
 import { useFleet, useHolidayLoad } from "../api/hooks";
 import { isScheduledOff } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
@@ -137,15 +137,13 @@ export default function VerifyShortSheet() {
   return (
     <>
       <PageHeader
-        eyebrow="Operations"
         title="Verify Short Sheet"
-        subtitle="Tap each route as you confirm it was written up."
-        centerMobile={false}
+        meta={<Stat value={checked.size} label="confirmed" />}
         actions={
           checked.size > 0 ? (
             <button
               onClick={reset}
-              className="hidden md:flex items-center gap-1.5 rounded-lg border border-hairline bg-surface px-3 py-1.5 text-xs text-ink-soft transition-colors hover:bg-surface-2 hover:text-ink"
+              className="flex items-center gap-1.5 rounded-lg border border-hairline bg-surface px-3 py-1.5 text-xs text-ink-soft transition-colors hover:bg-surface-2 hover:text-ink"
             >
               <RotateCcw className="h-3.5 w-3.5" />
               Reset
@@ -190,15 +188,6 @@ export default function VerifyShortSheet() {
             >
               Holiday{!holidayTouched && detectedHoliday ? " (auto)" : ""}
             </button>
-            {checked.size > 0 && (
-              <button
-                onClick={reset}
-                className="flex md:hidden items-center gap-1 rounded-lg border border-hairline bg-surface px-2.5 py-1.5 text-xs text-ink-muted transition-colors hover:bg-surface-2 hover:text-ink"
-              >
-                <RotateCcw className="h-3 w-3" />
-                Reset
-              </button>
-            )}
           </div>
         </div>
 
@@ -313,6 +302,7 @@ export default function VerifyShortSheet() {
             <h3 className="mb-2.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-ink-muted">
               Not Written Up · {notDone.length}
             </h3>
+            <p className="mb-2 text-xs text-ink-faint">Tap each route as you confirm it was written up.</p>
             <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-5 lg:grid-cols-6">
               {notDone.map((truck) => (
                 <button

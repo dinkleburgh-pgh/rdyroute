@@ -27,7 +27,7 @@ import {
 import { todayIso } from "../api/client";
 import { useAuth } from "../contexts/AuthContext";
 import type { AuditEntry, TruckWithState } from "../types";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { Sep, Stat } from "../components/PageHeader";
 import { truckTypeLabel } from "../utils/truckType";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { errorDetail } from "../api/errors";
@@ -778,9 +778,14 @@ export default function Audit() {
     >
       {/* Page header */}
       <PageHeader
-        eyebrow="Workflow"
         title="Audit"
-        subtitle="Review route item counts, track truck audits, and manage supporting photos."
+        meta={
+          <>
+            <Stat value={entriesByTruck.size} label="trucks" />
+            <Sep />
+            <Stat value={entries.length} label="items" />
+          </>
+        }
       />
 
       <AuditRotationStrip />

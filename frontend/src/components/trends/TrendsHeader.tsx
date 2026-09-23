@@ -4,10 +4,10 @@ import { DownloadIcon } from "../icons";
 import PageHeader from "../PageHeader";
 
 const RANGES = [
-  { label: "7d", mobileLabel: "7 days", value: 7 },
-  { label: "14d", mobileLabel: "14 days", value: 14 },
-  { label: "30d", mobileLabel: "1 month", value: 30 },
-  { label: "90d", mobileLabel: "3 months", value: 90 },
+  { label: "7d", value: 7 },
+  { label: "14d", value: 14 },
+  { label: "30d", value: 30 },
+  { label: "90d", value: 90 },
 ];
 
 interface Props {
@@ -39,27 +39,25 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
   };
 
   return (
-    <>
     <PageHeader
-      eyebrow="Analytics"
       title="Trends"
-      subtitle={`Discrepancy tracking and operational performance over the last ${days} days.`}
+      meta={
+        isLoading ? (
+          <span
+            title="Loading"
+            className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent"
+          />
+        ) : undefined
+      }
       actions={
         <>
-          {isLoading && (
-            <span className="flex items-center justify-center gap-1.5 text-xs text-ink-faint md:justify-end">
-              <span className="inline-block h-2 w-2 animate-pulse rounded-full bg-accent" />
-              Loading...
-            </span>
-          )}
-
-          <div className="flex gap-1 rounded-lg border border-hairline bg-surface-2/60 p-0.5">
+          <div className="flex gap-0.5 rounded-lg border border-hairline bg-surface-2/60 p-0.5">
             {RANGES.map((r) => (
               <button
                 key={r.value}
                 onClick={() => onChangeDays(r.value)}
                 className={
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-all " +
+                  "rounded-md px-2 py-1 text-xs font-medium transition-all " +
                   (days === r.value
                     ? "bg-accent text-white shadow"
                     : "text-ink-muted hover:text-ink")
@@ -81,26 +79,5 @@ export default function TrendsHeader({ days, onChangeDays, summary, isLoading }:
         </>
       }
     />
-
-      {/* Mobile-only range filter — the desktop selector above lives in
-          PageHeader's actions, which are hidden below md. Same four ranges as
-          desktop so switching viewports never strands the selection. */}
-      <div className="flex gap-1 rounded-lg border border-hairline bg-surface-2/60 p-1 md:hidden">
-        {RANGES.map((r) => (
-          <button
-            key={r.value}
-            onClick={() => onChangeDays(r.value)}
-            className={
-              "flex-1 rounded-md px-1 py-2 text-xs font-medium transition-all " +
-              (days === r.value
-                ? "bg-accent text-white shadow"
-                : "text-ink-muted hover:text-ink")
-            }
-          >
-            {r.mobileLabel}
-          </button>
-        ))}
-      </div>
-    </>
   );
 }

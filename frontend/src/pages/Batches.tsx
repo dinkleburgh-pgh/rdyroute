@@ -20,7 +20,7 @@ import type { BatchSummary } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
 import { capacityColor, resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
-import { useDocumentTitle } from "../hooks/useDocumentTitle";
+import PageHeader from "../components/PageHeader";
 
 function BatchCard({
   batch,
@@ -185,7 +185,6 @@ function BatchCard({
 }
 
 export default function Batches() {
-  useDocumentTitle("Batches");
   const [params] = useSearchParams();
   const [runDate, setRunDate] = useState(params.get("run_date") ?? todayIso());
   const { data, isLoading } = useBatchSummary(runDate);
@@ -275,24 +274,22 @@ export default function Batches() {
       animate={{ opacity: 1, y: 0 }}
       transition={{ duration: 0.35 }}
     >
+    <PageHeader
+      title="Batches"
+      actions={
+        <label className="flex items-center gap-2 text-xs text-ink-muted">
+          Run date
+          <input
+            className="input py-1 text-xs"
+            type="date"
+            max={todayIso()}
+            value={runDate}
+            onChange={(e) => setRunDate(e.target.value)}
+          />
+        </label>
+      }
+    />
     <div className="space-y-4 p-3 md:p-6">
-      <div className="flex flex-wrap items-end justify-between gap-3">
-        <h2 className="text-2xl font-semibold">Batches</h2>
-        <div className="flex flex-wrap items-end gap-3">
-
-          <div>
-            <label className="label">Run date</label>
-            <input
-              className="input"
-              type="date"
-              max={todayIso()}
-              value={runDate}
-              onChange={(e) => setRunDate(e.target.value)}
-            />
-          </div>
-        </div>
-      </div>
-
       {/* Truck selector */}
       <div className="card animate-slide-down border border-blue-500/40 bg-slate-900 p-6">
         <div className="flex flex-col items-center gap-2">
