@@ -308,7 +308,7 @@ export default function BatchingWizard() {
     <div className="space-y-4 p-3 md:p-6">
       <PageHeader
         title="Batching Wizard"
-        meta={<Stat value={noCap ? "∞" : wearerCap.toLocaleString()} label="wearers/batch cap" />}
+        meta={<Stat value={noCap ? "∞" : wearerCap.toLocaleString()} label="wearers/batch cap — don't go over" />}
       />
 
       {/* The sheet notes ARE batching constraints ("69 must be in its own

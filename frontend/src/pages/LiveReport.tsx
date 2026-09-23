@@ -1557,6 +1557,11 @@ export default function LiveReport() {
             Today
           </button>
         )}
+        {/* The VIEWED date's day numbers (override-aware) — the top bar's
+            chips only know about today, so a historical report needs its own. */}
+        <span className="ml-auto shrink-0 whitespace-nowrap font-mono text-[10px] tabular-nums text-ink-muted">
+          Load {loadDay} · Unload {unloadsDay}
+        </span>
       </div>
 
       {/* Horizontal padding respects the landscape safe area so the system nav

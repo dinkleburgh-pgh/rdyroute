@@ -49,7 +49,6 @@ import GarmentsStrip from "../components/load/GarmentsStrip";
 import NogsStrip from "../components/load/NogsStrip";
 import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import LoadDisplay from "../components/load/LoadDisplay";
-import { DustGarmentIcon } from "../components/icons";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import ConfirmDialog from "../components/ConfirmDialog";
@@ -377,7 +376,7 @@ export default function Load() {
             {pace?.avg_seconds != null && (
               <>
                 <Sep />
-                <Stat value={formatDuration(pace.avg_seconds)} label="pace" />
+                <Stat value={formatDuration(pace.avg_seconds)} label="30-day pace" />
               </>
             )}
           </>

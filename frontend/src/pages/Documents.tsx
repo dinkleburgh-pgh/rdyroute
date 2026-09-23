@@ -66,7 +66,10 @@ function UploadPanel({ categories }: { categories: string[] }) {
 
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900 p-4 space-y-3">
-      <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Add documents</p>
+      <div className="flex items-baseline gap-2">
+        <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">Add documents</p>
+        <span className="text-[10px] text-slate-500">Leads &amp; admins only</span>
+      </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <div className="sm:col-span-2">
           <label className="label">File(s) — any type, up to 25 MB each</label>
@@ -302,7 +305,7 @@ export default function Documents() {
         <p className="py-10 text-center text-sm text-slate-500">Loading…</p>
       ) : docs.length === 0 ? (
         <div className="rounded-xl border border-dashed border-slate-700 py-12 text-center">
-          <p className="text-sm text-slate-500">{allDocs.length === 0 ? "No documents yet — upload one above. Leads & admins only." : "No documents match your filters."}</p>
+          <p className="text-sm text-slate-500">{allDocs.length === 0 ? "No documents yet — upload one above." : "No documents match your filters."}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
