@@ -1,7 +1,7 @@
 /**
  * Run Day Wizard (5-step Setup Day modal). Extracted from RunDay.tsx.
  *
- * Steps: Run Mode → F.S. Garments → Route Swaps → Trucks Not Here → Daily Notes.
+ * Steps: Run Mode → Garments & NOGs → Route Swaps → Trucks Not Here → Daily Notes.
  */
 import { useState, useMemo } from "react";
 import clsx from "clsx";
@@ -128,6 +128,27 @@ export default function RunDayWizard({
     new Set(board.filter((t) => t.state?.has_dust_garment).map((t) => t.truck_number)),
   );
 
+  // NOGs — trucks sending Not-Our-Garments back out today. Set at the start
+  // of the day like the F.S. garments; the Load page strip then tracks them
+  // out the door. Any active route truck qualifies; a flagged spare (from the
+  // status sheet) stays visible so it can be cleared here too.
+  const nogsCandidates = useMemo(
+    () =>
+      board
+        .filter((t) => t.is_active && (t.truck_type !== "Spare" || t.state?.has_nogs === true))
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board],
+  );
+  const [nogsSelected, setNogsSelected] = useState<Set<number> | null>(null);
+  const nogsPicked =
+    nogsSelected ??
+    new Set(nogsCandidates.filter((t) => t.state?.has_nogs === true).map((t) => t.truck_number));
+  function toggleNogs(num: number) {
+    const next = new Set(nogsPicked);
+    if (next.has(num)) next.delete(num); else next.add(num);
+    setNogsSelected(next);
+  }
+
   const { data: swaps = [] } = useRouteSwaps(runDate);
   const { data: spareAssignments = [] } = useSpareAssignments(runDate);
   const createSwap = useCreateRouteSwap();
@@ -252,16 +273,33 @@ export default function RunDayWizard({
   }
 
   async function saveDustAndAdvance() {
-    await Promise.all(
-      editableDustTrucks.map((t) =>
-        upsert.mutateAsync({
+    const tasks: Promise<unknown>[] = editableDustTrucks.map((t) =>
+      upsert.mutateAsync({
+        truck_number: t.truck_number,
+        run_date: runDate,
+        has_dust_garment: dustSelected.has(t.truck_number),
+        state_source: "wizard",
+      }),
+    );
+    // NOGs: delta-only writes — the grid spans the whole fleet, and stamping
+    // forty untouched rows "wizard" would make every day look human-edited.
+    if (nogsSelected != null) {
+      for (const t of nogsCandidates) {
+        const was = t.state?.has_nogs === true;
+        const now = nogsPicked.has(t.truck_number);
+        if (was === now) continue;
+        tasks.push(upsert.mutateAsync({
           truck_number: t.truck_number,
           run_date: runDate,
-          has_dust_garment: dustSelected.has(t.truck_number),
+          has_nogs: now,
+          // Echo the current status so the create fallback on a row-less truck
+          // can't invent a status change through a flag-only write.
+          ...(t.state ? { status: t.state.status, wearers: t.state.wearers } : {}),
           state_source: "wizard",
-        }),
-      ),
-    );
+        }));
+      }
+    }
+    await Promise.all(tasks);
     setStep(3);
   }
 
@@ -386,7 +424,7 @@ export default function RunDayWizard({
   const STEP_TITLES = [
     "",
     "Step 1 of 5 — Run Mode",
-    "Step 2 of 5 — F.S. Garments",
+    "Step 2 of 5 — Garments & NOGs",
     "Step 3 of 5 — Route Swaps",
     "Step 4 of 5 — Trucks Not Here",
     "Step 5 of 5 — Daily Notes",
@@ -574,7 +612,7 @@ export default function RunDayWizard({
             </div>
           )}
 
-          {/* Step 2: Dust Garments */}
+          {/* Step 2: Garments & NOGs */}
           {step === 2 && (
             <div className="space-y-4">
               <DustGarmentIcon className="mx-auto h-16 w-16 text-amber-300" style={{ color: "#fcd34d" }} />
@@ -599,6 +637,30 @@ export default function RunDayWizard({
                   ))}
                 </div>
               )}
+
+              {/* NOGs — set at the start of the day, exactly like the garments
+                  above; the Load page's strip then tracks them out the door. */}
+              <div className="space-y-2 border-t border-hairline pt-3">
+                <p className="text-center text-sm font-extrabold text-rose-300">NOGs — not our garments</p>
+                <p className="text-center text-xs text-ink-muted">Pick trucks sending NOGs back out today.</p>
+                <div className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto pr-1">
+                  {nogsCandidates.map((t) => (
+                    <button
+                      key={t.truck_number}
+                      className={clsx(
+                        "rounded-lg border px-2 py-2 text-sm font-bold transition-colors",
+                        nogsPicked.has(t.truck_number)
+                          ? "border-rose-500 bg-rose-900/40 text-rose-200"
+                          : "border-hairline bg-surface-2 text-ink-soft hover:bg-track",
+                      )}
+                      onClick={() => toggleNogs(t.truck_number)}
+                    >
+                      #{t.truck_number}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <div className="flex gap-2 pt-2">
                 <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(1)}>Back</button>
                 <button className="flex-1 btn-primary text-sm" disabled={upsert.isPending} onClick={saveDustAndAdvance}>Save & Continue</button>

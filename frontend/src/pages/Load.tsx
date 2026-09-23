@@ -46,6 +46,7 @@ import NowUnloadingStrip from "../components/load/NowUnloadingStrip";
 import LoadActionDialogs from "../components/load/LoadActionDialogs";
 import InProgressHeroPanel from "../components/load/InProgressHeroPanel";
 import GarmentsStrip from "../components/load/GarmentsStrip";
+import NogsStrip from "../components/load/NogsStrip";
 import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import LoadDisplay from "../components/load/LoadDisplay";
 import { DustGarmentIcon } from "../components/icons";
@@ -320,6 +321,12 @@ export default function Load() {
     .filter((t) => t.truck_type === "Dust")
     .sort((a, b) => a.truck_number - b.truck_number);
 
+  // Trucks sending Not-Our-Garments back out today (set at Setup Day, like
+  // the F.S. garments). The strip hides itself when nothing is flagged.
+  const nogsTrucks = board
+    .filter((t) => t.state?.has_nogs === true)
+    .sort((a, b) => a.truck_number - b.truck_number);
+
   if (displayOpen) {
     return (
       <>
@@ -338,6 +345,7 @@ export default function Load() {
           coverage={loadCoverage}
           isRecurringCoverage={isRecurringCoverage}
           garmentTrucks={dustGarmentTrucks}
+          nogsTrucks={nogsTrucks}
           loadedCount={loadDone}
           loadTotal={loadTotal}
           onExit={closeDisplay}
@@ -393,6 +401,7 @@ export default function Load() {
       </button>
 
       <GarmentsStrip trucks={dustGarmentTrucks} />
+      <NogsStrip trucks={nogsTrucks} />
 
       {/* Freight that has to change trucks affects what gets loaded where —
           the load crew sees it here; swap-managing roles can assign from it. */}

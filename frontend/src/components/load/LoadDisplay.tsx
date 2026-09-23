@@ -9,6 +9,7 @@ import { NextUpPanel, StartNextUpBanner } from "../LiveInProgress";
 import CoverageCards from "../CoverageCards";
 import WorkflowCard from "../WorkflowCard";
 import GarmentsStrip from "./GarmentsStrip";
+import NogsStrip from "./NogsStrip";
 import InProgressHeroPanel from "./InProgressHeroPanel";
 import LoadNotesPanel from "./LoadNotesPanel";
 import type { LoadActions } from "../../hooks/useLoadActions";
@@ -51,6 +52,7 @@ export default function LoadDisplay({
   coverage,
   isRecurringCoverage,
   garmentTrucks,
+  nogsTrucks,
   loadedCount,
   loadTotal,
   onExit,
@@ -72,6 +74,8 @@ export default function LoadDisplay({
   coverage: CoverageEntry[];
   isRecurringCoverage: (route: number, cover: number) => boolean;
   garmentTrucks: TruckWithState[];
+  /** Trucks flagged has_nogs today — NOGs going back out with the load. */
+  nogsTrucks: TruckWithState[];
   loadedCount: number;
   loadTotal: number;
   onExit: () => void;
@@ -298,6 +302,7 @@ export default function LoadDisplay({
             {/* RIGHT — reference you glance at, garments first */}
             <div className="flex min-w-0 flex-col gap-4">
               <GarmentsStrip trucks={garmentTrucks} />
+              <NogsStrip trucks={nogsTrucks} />
 
               <LoadNotesPanel
                 truck={inProgress}

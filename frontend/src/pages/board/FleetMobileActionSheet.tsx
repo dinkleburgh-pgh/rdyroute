@@ -569,7 +569,7 @@ export default function FleetMobileActionSheet({
               )}
               <FlagRow
                 label="NOGs"
-                hint="Not our garments came back on this route"
+                hint="Not our garments go back out with this route today"
                 on={truck.state?.has_nogs === true}
                 disabled={upsert.isPending}
                 onToggle={() =>
