@@ -540,25 +540,6 @@ export default function Load() {
           )}
         </div>
 
-        {/* ---------------- Ran ahead ---------------- */}
-        {ranAhead.length > 0 && (
-          <div className="rounded-xl border border-sky-800/40 bg-sky-950/20 px-4 py-3">
-            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-sky-300">
-              Ran ahead — no load tonight
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {ranAhead.map((t) => (
-                <span
-                  key={t.truck_number}
-                  className="rounded-md border border-hairline bg-surface-2 px-2 py-0.5 font-mono text-sm font-bold text-ink-soft"
-                >
-                  Truck #{t.truck_number}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* ---------------- Loaded today ----------------
             Lives IN the work rail: ready shrinks exactly as this grows, so
             the column holds its height all night instead of hollowing out
