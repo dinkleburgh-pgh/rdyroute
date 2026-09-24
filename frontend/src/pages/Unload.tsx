@@ -166,6 +166,11 @@ export default function Unload() {
   }, [data]);
   const UNLOADED_PREVIEW = 8;
   const [showAllUnloaded, setShowAllUnloaded] = useState(false);
+  // The page lives mounted across the 6am rollover — an expansion from
+  // yesterday must not leave today's wall pre-expanded.
+  useEffect(() => {
+    setShowAllUnloaded(false);
+  }, [runDate]);
   const [unloadedSort, setUnloadedSort] = useState<"number" | "order">("number");
   const [statFilter, setStatFilter] = useState<"routes" | "coverage" | "holds" | "total" | null>(null);
   // Per-device layout preference: "cards" (Load-page look, default) | "list".
@@ -410,6 +415,7 @@ export default function Unload() {
     }
     return arr;
   }, [unloaded, unloadedSort]);
+  const hiddenUnloaded = showAllUnloaded ? 0 : Math.max(0, unloadedSorted.length - UNLOADED_PREVIEW);
 
   // ── Stat cards — the unload work still outstanding, bucketed the way THIS
   // page is organised (route / coverage / hold), not by truck type the way the
@@ -926,7 +932,22 @@ export default function Unload() {
                   </div>
                 </SectionHeader>
                 <div className={tileGrid}>
-                  {(showAllUnloaded ? unloadedSorted : unloadedSorted.slice(0, UNLOADED_PREVIEW)).map((t, idx) => {
+                  {/* The full list is 20+ tiles most nights — long enough to
+                      bury the work above it, and nobody scrolls it twice.
+                      Tail slice: the glance is "did the truck I just finished
+                      register", and the freshest finishes sort LAST — so the
+                      expander (first) hides the early tiles instead, and the
+                      order numbers offset past the hidden count. */}
+                  {hiddenUnloaded > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setShowAllUnloaded(true)}
+                      className="rounded-[10px] border border-dashed border-hairline bg-surface/40 px-3.5 py-3 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+                    >
+                      + {hiddenUnloaded} more
+                    </button>
+                  )}
+                  {unloadedSorted.slice(hiddenUnloaded).map((t, idx) => {
                     const time = t.state?.unloaded_at != null ? format(new Date(t.state.unloaded_at * 1000), "h:mm a") : "—";
                     const cd = coverDisplay(t);
                     return (
@@ -941,24 +962,13 @@ export default function Unload() {
                         pair={cd.route != null ? { route: cd.route, split: cd.split } : null}
                         sub={
                           <span className="text-ink-faint">
-                            {unloadedSort === "order" ? `#${idx + 1} · ${time}` : time}
+                            {unloadedSort === "order" ? `#${hiddenUnloaded + idx + 1} · ${time}` : time}
                             {t.state?.batch_id != null ? ` · Batch ${t.state.batch_id}` : ""}
                           </span>
                         }
                       />
                     );
                   })}
-                  {/* The full list is 20+ tiles most nights — long enough to
-                      bury the work above it, and nobody scrolls it twice. */}
-                  {!showAllUnloaded && unloadedSorted.length > UNLOADED_PREVIEW && (
-                    <button
-                      type="button"
-                      onClick={() => setShowAllUnloaded(true)}
-                      className="rounded-[10px] border border-dashed border-hairline bg-surface/40 px-3.5 py-3 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
-                    >
-                      + {unloadedSorted.length - UNLOADED_PREVIEW} more
-                    </button>
-                  )}
                 </div>
               </div>
             )}

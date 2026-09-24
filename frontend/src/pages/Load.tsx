@@ -102,6 +102,11 @@ export default function Load() {
   // (same pattern as Unload's unloaded wall).
   const LOADED_PREVIEW = 10;
   const [showAllLoaded, setShowAllLoaded] = useState(false);
+  // The page lives mounted on a dock tablet across the 6am rollover — an
+  // expansion from last night must not leave tomorrow's wall pre-expanded.
+  useEffect(() => {
+    setShowAllLoaded(false);
+  }, [runDate]);
   // Dust-garment finish confirmation — asks "Did you load garments?" before
   // finishing a truck flagged with dust garments.
 
@@ -240,6 +245,7 @@ export default function Load() {
     }
     return arr;
   }, [loaded, loadedSort]);
+  const hiddenLoaded = showAllLoaded ? 0 : Math.max(0, loadedSorted.length - LOADED_PREVIEW);
 
   const notYetLoadedTrucks = useMemo(
     () =>
@@ -579,11 +585,25 @@ export default function Load() {
             )}
           </SectionHeader>
           <div className={TILE_GRID}>
-            {(showAllLoaded ? loadedSorted : loadedSorted.slice(0, LOADED_PREVIEW)).map((t, idx) => (
+            {/* Tail slice, not head: the glance here is "did the truck I just
+                finished register" — under Load-order sort the freshest finishes
+                are LAST, so the preview keeps them and the expander (rendered
+                first) hides the early-evening tiles instead. Pips stay true by
+                offsetting past the hidden count. */}
+            {hiddenLoaded > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowAllLoaded(true)}
+                className="rounded-[10px] border border-dashed border-hairline bg-surface/40 px-3.5 py-3 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+              >
+                + {hiddenLoaded} more
+              </button>
+            )}
+            {loadedSorted.slice(hiddenLoaded).map((t, idx) => (
               <div key={t.truck_number} className="relative">
                 {loadedSort === "order" && (
                   <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-loaded ring-1 ring-st-loaded/60">
-                    {idx + 1}
+                    {hiddenLoaded + idx + 1}
                   </span>
                 )}
                 <QuietTile
@@ -601,15 +621,6 @@ export default function Load() {
                 />
               </div>
             ))}
-            {!showAllLoaded && loadedSorted.length > LOADED_PREVIEW && (
-              <button
-                type="button"
-                onClick={() => setShowAllLoaded(true)}
-                className="rounded-[10px] border border-dashed border-hairline bg-surface/40 px-3.5 py-3 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
-              >
-                + {loadedSorted.length - LOADED_PREVIEW} more
-              </button>
-            )}
             {loaded.length === 0 && (
               <EmptyState className="col-span-full">Nothing loaded yet.</EmptyState>
             )}
