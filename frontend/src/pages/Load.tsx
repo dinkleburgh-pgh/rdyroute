@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from "react";
-import { createPortal } from "react-dom";
 import { useSearchParams } from "react-router-dom";
 import { MonitorPlay } from "lucide-react";
 import clsx from "clsx";
@@ -35,8 +34,6 @@ import {
   isScheduledOff,
   loadedTruckNumbers,
   unloadedTruckNumbersFromContext,
-  GARMENT_LOADED_HEX,
-  GARMENT_PENDING_HEX,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
 import { NextUpPanel, PaceBar, StartNextUpBanner, formatDuration, useElapsed } from "../components/LiveInProgress";
@@ -50,11 +47,8 @@ import NogsStrip from "../components/load/NogsStrip";
 import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import LoadDisplay from "../components/load/LoadDisplay";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
-import AnimateCard from "../components/AnimateCard";
-import ConfirmDialog from "../components/ConfirmDialog";
-import LoadWorkflowCard from "../components/WorkflowCard";
 import PageHeader, { Sep, Stat } from "../components/PageHeader";
-import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/QuietTile";
+import { QuietTile, SectionHeader, TILE_GRID, TILE_GRID_LG } from "../components/workflow/QuietTile";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
 import CollapsibleCoverage from "../components/CollapsibleCoverage";
@@ -103,6 +97,11 @@ export default function Load() {
   const { busy, cancelLoad, requestStart, requestFinish } = actions;
   const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
   const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
+  // The loaded wall is 30+ tiles by morning — long enough to bury the ready
+  // queue it now shares a rail with. Two rows, then a "+N more" expander
+  // (same pattern as Unload's unloaded wall).
+  const LOADED_PREVIEW = 10;
+  const [showAllLoaded, setShowAllLoaded] = useState(false);
   // Dust-garment finish confirmation — asks "Did you load garments?" before
   // finishing a truck flagged with dust garments.
 
@@ -326,6 +325,11 @@ export default function Load() {
     .filter((t) => t.state?.has_nogs === true)
     .sort((a, b) => a.truck_number - b.truck_number);
 
+  // Focus mode: the ready queue rarely holds more than ~10 trucks and spends
+  // most of the night under 5 — render those few BIG (readable from across
+  // the dock) instead of reserving a wall-sized grid for them.
+  const readyFocus = ready.length > 0 && ready.length <= 5;
+
   if (displayOpen) {
     return (
       <>
@@ -395,8 +399,13 @@ export default function Load() {
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
-      <GarmentsStrip trucks={dustGarmentTrucks} />
-      <NogsStrip trucks={nogsTrucks} />
+      {/* Both garment checklists share a row when NOGs are flagged — two
+          stacked full-width bands for a handful of chips each was the single
+          biggest fixed cost on the page. No NOGs (most days) → full width. */}
+      <div className={clsx("grid gap-4", nogsTrucks.length > 0 && "lg:grid-cols-2")}>
+        <GarmentsStrip trucks={dustGarmentTrucks} />
+        <NogsStrip trucks={nogsTrucks} />
+      </div>
 
       {/* Freight that has to change trucks affects what gets loaded where —
           the load crew sees it here; swap-managing roles can assign from it. */}
@@ -472,7 +481,7 @@ export default function Load() {
                 Finish the in-progress truck before starting another.
               </p>
             )}
-            <div className={TILE_GRID}>
+            <div className={readyFocus ? TILE_GRID_LG : TILE_GRID}>
               {ready.map((t) => {
                 const disabled = anyInProgress || busy === t.truck_number;
                 const cr = getCoverageRouteNumber(t);
@@ -480,6 +489,7 @@ export default function Load() {
                   <QuietTile
                     key={t.truck_number}
                     truck={t}
+                    size={readyFocus ? "lg" : "md"}
                     disabled={disabled}
                     onClick={() => requestStart(t)}
                     title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
@@ -522,6 +532,88 @@ export default function Load() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* ---------------- Ran ahead ---------------- */}
+        {ranAhead.length > 0 && (
+          <div className="rounded-xl border border-sky-800/40 bg-sky-950/20 px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-sky-300">
+              Ran ahead — no load tonight
+            </p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {ranAhead.map((t) => (
+                <span
+                  key={t.truck_number}
+                  className="rounded-md border border-hairline bg-surface-2 px-2 py-0.5 font-mono text-sm font-bold text-ink-soft"
+                >
+                  Truck #{t.truck_number}
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* ---------------- Loaded today ----------------
+            Lives IN the work rail: ready shrinks exactly as this grows, so
+            the column holds its height all night instead of hollowing out
+            beside the reference rail. Two rows, then the expander. */}
+        <div>
+          <SectionHeader label="Loaded today" count={loaded.length}>
+            {loaded.length > 1 && (
+              <div className="inline-flex overflow-hidden rounded-[7px] border border-hairline text-[11px] font-semibold">
+                {([["number", "# Number"], ["order", "Load order"]] as const).map(([key, text], i) => (
+                  <button
+                    key={key}
+                    type="button"
+                    onClick={() => setLoadedSort(key)}
+                    className={clsx(
+                      "px-3 py-1 transition-colors",
+                      i > 0 && "border-l border-hairline",
+                      loadedSort === key ? "bg-track text-ink" : "text-ink-muted hover:text-ink",
+                    )}
+                  >
+                    {text}
+                  </button>
+                ))}
+              </div>
+            )}
+          </SectionHeader>
+          <div className={TILE_GRID}>
+            {(showAllLoaded ? loadedSorted : loadedSorted.slice(0, LOADED_PREVIEW)).map((t, idx) => (
+              <div key={t.truck_number} className="relative">
+                {loadedSort === "order" && (
+                  <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-loaded ring-1 ring-st-loaded/60">
+                    {idx + 1}
+                  </span>
+                )}
+                <QuietTile
+                  truck={t}
+                  numberClass="text-st-loaded"
+                  dotClass="bg-st-loaded"
+                  pair={loadPair(t)}
+                  sub={
+                    <span className="text-ink-faint">
+                      {t.state?.load_finish_time
+                        ? `Done ${format(new Date(t.state.load_finish_time * 1000), "h:mm a")}`
+                        : "Loaded"}
+                    </span>
+                  }
+                />
+              </div>
+            ))}
+            {!showAllLoaded && loadedSorted.length > LOADED_PREVIEW && (
+              <button
+                type="button"
+                onClick={() => setShowAllLoaded(true)}
+                className="rounded-[10px] border border-dashed border-hairline bg-surface/40 px-3.5 py-3 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
+              >
+                + {loadedSorted.length - LOADED_PREVIEW} more
+              </button>
+            )}
+            {loaded.length === 0 && (
+              <EmptyState className="col-span-full">Nothing loaded yet.</EmptyState>
+            )}
+          </div>
         </div>
         </div>
 
@@ -642,75 +734,6 @@ export default function Load() {
         </div>
       </div>
 
-      {/* ---------------- Ran ahead ---------------- */}
-      {ranAhead.length > 0 && (
-        <div className="rounded-xl border border-sky-800/40 bg-sky-950/20 px-4 py-3">
-          <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-sky-300">
-            Ran ahead — no load tonight
-          </p>
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {ranAhead.map((t) => (
-              <span
-                key={t.truck_number}
-                className="rounded-md border border-hairline bg-surface-2 px-2 py-0.5 font-mono text-sm font-bold text-ink-soft"
-              >
-                Truck #{t.truck_number}
-              </span>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* ---------------- Loaded today ---------------- */}
-      <div>
-        <SectionHeader label="Loaded today" count={loaded.length}>
-          {loaded.length > 1 && (
-            <div className="inline-flex overflow-hidden rounded-[7px] border border-hairline text-[11px] font-semibold">
-              {([["number", "# Number"], ["order", "Load order"]] as const).map(([key, text], i) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setLoadedSort(key)}
-                  className={clsx(
-                    "px-3 py-1 transition-colors",
-                    i > 0 && "border-l border-hairline",
-                    loadedSort === key ? "bg-track text-ink" : "text-ink-muted hover:text-ink",
-                  )}
-                >
-                  {text}
-                </button>
-              ))}
-            </div>
-          )}
-        </SectionHeader>
-        <div className={TILE_GRID}>
-          {loadedSorted.map((t, idx) => (
-            <div key={t.truck_number} className="relative">
-              {loadedSort === "order" && (
-                <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-loaded ring-1 ring-st-loaded/60">
-                  {idx + 1}
-                </span>
-              )}
-              <QuietTile
-                truck={t}
-                numberClass="text-st-loaded"
-                dotClass="bg-st-loaded"
-                pair={loadPair(t)}
-                sub={
-                  <span className="text-ink-faint">
-                    {t.state?.load_finish_time
-                      ? `Done ${format(new Date(t.state.load_finish_time * 1000), "h:mm a")}`
-                      : "Loaded"}
-                  </span>
-                }
-              />
-            </div>
-          ))}
-          {loaded.length === 0 && (
-            <p className="col-span-full text-sm text-ink-muted">Nothing loaded yet.</p>
-          )}
-        </div>
-      </div>
             <LoadActionDialogs actions={actions} />
       {/* Next Up picker — same panel the In Progress page uses */}
       {nextUpOpen && (
@@ -746,27 +769,6 @@ export default function Load() {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
-
-function StatCard({ label, value, accent, active, onClick }: { label: string; value: number; accent: string; active?: boolean; onClick?: () => void }) {
-  const isTotal = label === "Total Left";
-  return (
-    <AnimateCard>
-    <button
-      type="button"
-      onClick={onClick}
-      className={clsx(
-        "rounded-xl border px-4 py-3 text-center transition-shadow w-full min-h-[5rem] flex flex-col items-center justify-center shadow-inset-top",
-        isTotal ? "bg-surface border-hairline" : "border-transparent",
-        active && "ring-2 ring-white/30",
-      )}
-      style={!isTotal ? { background: `rgba(${parseInt(accent.slice(1,3),16)},${parseInt(accent.slice(3,5),16)},${parseInt(accent.slice(5,7),16)},0.10)`, borderColor: accent + "40" } : undefined}
-    >
-      <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: accent, opacity: 0.7 }}>{label}</p>
-      <p className="mt-1 font-mono tabular-nums tracking-[-0.02em] text-[32px] font-bold leading-none" style={{ color: isTotal ? "#dbe3ee" : accent }}>{value}</p>
-    </button>
-    </AnimateCard>
-  );
-}
 
 /** "started 7:42 PM · 12:34" — hook-bearing, so its own component. */
 function UnloadingSinceLoad({ startSec }: { startSec: number }) {

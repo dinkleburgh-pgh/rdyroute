@@ -60,6 +60,7 @@ export function QuietTile({
   id,
   highlight = false,
   extra,
+  size = "md",
 }: {
   truck: TruckWithState;
   sub: ReactNode;
@@ -82,7 +83,13 @@ export function QuietTile({
   /** Interactive content under the sub line (pickers, inline actions). Forces
    *  a div root — a <button> cannot legally contain selects and buttons. */
   extra?: ReactNode;
+  /** "lg" = focus-mode tile (few trucks on the board → numbers readable from
+   *  across the dock). Default "md" is byte-identical to the original tile. */
+  size?: "md" | "lg";
 }) {
+  const numCls = size === "lg" ? "text-[34px]" : "text-[22px]";
+  const joinCls = size === "lg" ? "text-[16px]" : "text-[13px]";
+  const subCls = size === "lg" ? "text-[12px]" : "text-[11px]";
   const body = (
     <>
       <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
@@ -95,16 +102,16 @@ export function QuietTile({
                 : `Route ${pair.route}'s load rides on truck ${truck.truck_number}`
             }
           >
-            <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", pair.split ? "text-amber-300" : "text-sky-300")}>
+            <span className={clsx("font-mono font-black leading-none tabular-nums", numCls, pair.split ? "text-amber-300" : "text-sky-300")}>
               {pair.route}
             </span>
-            <span className="font-mono text-[13px] leading-none text-ink-muted">{pair.split ? "+" : "→"}</span>
-            <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", numberClass)}>
+            <span className={clsx("font-mono leading-none text-ink-muted", joinCls)}>{pair.split ? "+" : "→"}</span>
+            <span className={clsx("font-mono font-black leading-none tabular-nums", numCls, numberClass)}>
               {truck.truck_number}
             </span>
           </span>
         ) : (
-          <span className={clsx("font-mono text-[22px] font-black leading-none tabular-nums", numberClass)}>
+          <span className={clsx("font-mono font-black leading-none tabular-nums", numCls, numberClass)}>
             #{truck.truck_number}
           </span>
         )}
@@ -112,7 +119,7 @@ export function QuietTile({
           <span className={clsx("text-[9.5px] font-bold uppercase tracking-[0.08em]", tagClass)}>{tag}</span>
         )}
       </div>
-      <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[11px] text-ink-muted">
+      <div className={clsx("mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-ink-muted", subCls)}>
         <span className={clsx("inline-block h-1.5 w-1.5 shrink-0 rounded-full", dotClass)} />
         {sub}
       </div>
@@ -121,7 +128,8 @@ export function QuietTile({
   const cls = clsx(
     // h-full: grid neighbours stretch to the row, so a tile whose sub wraps
     // (coverage pairs) never leaves the card beside it hanging short.
-    "h-full w-full rounded-[10px] border border-hairline px-3.5 py-3 text-left transition-colors",
+    "h-full w-full rounded-[10px] border border-hairline text-left transition-colors",
+    size === "lg" ? "px-4 py-3.5" : "px-3.5 py-3",
     dim ? "bg-surface-3 opacity-75" : "bg-surface",
     onClick && !disabled && "hover:bg-surface-2 active:scale-[0.99]",
     disabled && "cursor-not-allowed opacity-50",
@@ -150,3 +158,6 @@ export function QuietTile({
 
 /** Shared grid for every truck section on both workflow pages. */
 export const TILE_GRID = "grid gap-2.5 grid-cols-2 sm:grid-cols-3 lg:grid-cols-5";
+
+/** Focus-mode grid: few tiles, rendered big (pairs with QuietTile size="lg"). */
+export const TILE_GRID_LG = "grid gap-2.5 grid-cols-1 sm:grid-cols-2";
