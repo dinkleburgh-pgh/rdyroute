@@ -234,12 +234,16 @@ export default function RunDayWizard({
       board
         .filter(
           (t) =>
-            t.truck_type !== "Spare" &&
-            t.is_active &&
-            getCoverageRouteNumber(t) == null &&
-            ((holidayLoad || !isScheduledOff(t, loadDay)) &&
-              ["unloaded", "dirty", "unfinished"].includes(t.state?.status ?? "") ||
-              hasRanAhead(t.state?.off_note)),
+            // A flagged truck ALWAYS shows, whatever else it is — this grid
+            // must be able to clear a wrong flag. (Truck 75 got flagged while
+            // carrying a route via recurring coverage, and the carrier
+            // exclusion below made the flag uncleatable here.)
+            hasRanAhead(t.state?.off_note) ||
+            (t.truck_type !== "Spare" &&
+              t.is_active &&
+              getCoverageRouteNumber(t) == null &&
+              (holidayLoad || !isScheduledOff(t, loadDay)) &&
+              ["unloaded", "dirty", "unfinished"].includes(t.state?.status ?? "")),
         )
         .sort((a, b) => a.truck_number - b.truck_number),
     [board, holidayLoad, loadDay],

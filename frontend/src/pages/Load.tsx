@@ -174,6 +174,15 @@ export default function Load() {
     () => loadDisplayTrucks.filter((t) => t.state?.status === "unloaded" && t.state?.priority_hold === true),
     [loadDisplayTrucks],
   );
+  // Trucks whose unload was started but not completed — they'll join Ready
+  // once Unload finishes them, and the load crew should see them coming.
+  const unfinished = useMemo(
+    () =>
+      board
+        .filter((t) => t.state?.status === "unfinished")
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board],
+  );
   // Manually-set Next Up (shared with the In Progress page). When set and the
   // truck is still ready it wins; otherwise fall back to the first ready truck.
   const { data: storedNextUp } = useNextUp(runDate);
@@ -533,6 +542,29 @@ export default function Load() {
                     numberClass="text-st-dirty"
                     dotClass="bg-st-dirty"
                     sub={<span className="text-ink-faint">Clear in Fleet</span>}
+                  />
+                ))}
+              </div>
+            </div>
+          )}
+
+          {unfinished.length > 0 && (
+            <div>
+              <SectionHeader
+                label="Unfinished"
+                count={unfinished.length}
+                hint="unload not done — will join Ready when finished"
+              />
+              <div className={TILE_GRID}>
+                {unfinished.map((t) => (
+                  <QuietTile
+                    key={t.truck_number}
+                    truck={t}
+                    dim
+                    numberClass="text-st-unfinished"
+                    dotClass="bg-st-unfinished"
+                    pair={loadPair(t)}
+                    sub={<span className="text-ink-faint">Finish unload first</span>}
                   />
                 ))}
               </div>
