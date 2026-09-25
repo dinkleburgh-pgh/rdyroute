@@ -249,30 +249,44 @@ export const PRESET_HEX: Record<string, string> = {
 };
 
 /**
- * The preset each built-in palette category is really painted with. The
- * hardcoded TOP_PALETTE/SUB_PALETTE/CAT_CHIP_COLORS strings are gradients, so
- * a dot or swatch can't be derived from them — without this table
- * categoryDotClass fell through to the name-hash and a category's dot
- * disagreed with its own chip (3x10 chip sky, dot green).
+ * The family-banded hue map — each super-group owns a band of the color
+ * wheel, so two categories from DIFFERENT groups can never be near-twins
+ * (4x6 emerald vs Dust Mops teal used to be indistinguishable 7px dots):
+ * cool (cyan→violet) = Mats · warm (orange→magenta) = Bulk · neutral =
+ * Paper · green = Hygiene · red = General/MISC. The map has zero value
+ * collisions, so buildCategoryPalette's pass-2 claims are order-independent
+ * and complete. Caveat: PINNING a stranger category to one of these family
+ * hues (Management → Items) evicts the builtin owner to the pass-3 reserve
+ * pool — the pin always wins.
  */
 export const BUILTIN_PRESET: Record<string, string> = {
+  // Mats family — the cool band, cyan→violet:
+  Mats: "cyan",
   "3x10": "sky",
+  "4x6": "blue",
+  Traffics: "indigo",
   "3x5": "violet",
-  "4x6": "emerald",
-  Paper: "orange",
-  Bulk: "rose",
-  Hygiene: "cyan",
+  // Bulk family — the warm band, orange→magenta. Orange stays on the PARENT
+  // only: amber vs orange are 13° apart and untellable at dot size, and the
+  // three subs co-occur inside one truck card on the short sheet.
+  Bulk: "orange",
   Towels: "amber",
-  "Dust Mops": "teal",
-  Aprons: "violet", // collides with 3x5 — resolved by buildCategoryPalette's dedupe
-  General: "stone", // catch-all keeps a stable neutral (was slate in the old TOP_CAT_DOT)
+  Aprons: "pink",
+  "Dust Mops": "fuchsia",
+  // Single-category families:
+  Paper: "stone", // paper is plain — the one neutral
+  Hygiene: "emerald", // "clean green"; NOT cyan (10° twin of 3x10 sky)
+  General: "red", // catch-all/MISC reads as attention
 };
 
-// Assignment order for categories with no built-in/user color. Ordered for
-// visual spread so adjacent categories don't land on neighbouring hues.
+// Assignment order for categories with no built-in/user color: the reserve
+// pool first (hues no family owns — lime is far from every family hue;
+// green/teal neighbour Hygiene's emerald; rose neighbours General's red),
+// then family hues, reachable only when a user pin displaced their owner.
 const PRESET_ORDER = [
-  "sky", "orange", "emerald", "violet", "rose", "cyan", "amber", "teal",
-  "blue", "red", "lime", "fuchsia", "indigo", "green", "pink", "stone",
+  "lime", "green", "teal", "rose",
+  "cyan", "amber", "blue", "fuchsia", "sky", "red", "violet", "orange",
+  "indigo", "pink", "emerald", "stone",
 ];
 
 /**
@@ -310,10 +324,14 @@ export function buildCategoryPalette(
 }
 
 // Categories whose NAME implies a hue — used before the hash fallback.
+// Known names mirror BUILTIN_PRESET's family map; speculative names point
+// ONLY at reserve hues (a family hue here would either be dead — already
+// claimed — or reintroduce a cross-family twin).
 const SEMANTIC_CATEGORY_PRESET: Record<string, string> = {
-  towels: "amber", aprons: "violet", "dust mops": "teal", mops: "teal", rags: "stone",
-  chemicals: "lime", wipes: "cyan", soap: "cyan", soaps: "cyan", linens: "indigo",
-  uniforms: "blue", mats: "emerald", paper: "orange", hygiene: "cyan", gloves: "green",
+  towels: "amber", aprons: "pink", "dust mops": "fuchsia", mops: "fuchsia",
+  mats: "cyan", paper: "stone", hygiene: "emerald",
+  chemicals: "lime", gloves: "green", rags: "green",
+  wipes: "teal", soap: "teal", soaps: "teal", uniforms: "teal", linens: "rose",
 };
 
 const PRESET_POOL = Object.keys(COLOR_PRESETS).filter((k) => k !== "stone");
