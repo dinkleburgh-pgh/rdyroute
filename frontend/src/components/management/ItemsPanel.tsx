@@ -8,7 +8,7 @@ import {
   type CategoryMetaMap,
   type TrackedItem,
 } from "../../api/hooks";
-import { COLOR_PRESETS, useCategoryPalette } from "../shorts/HierarchyPicker";
+import { COLOR_PRESETS, PRODUCT_COLORS, useCategoryPalette } from "../shorts/HierarchyPicker";
 import ConfirmDialog from "../ConfirmDialog";
 import { Plus, Trash2, Save, RotateCcw, Upload, Package, X, AlertTriangle, FolderInput } from "lucide-react";
 import EmptyState from "../EmptyState";
@@ -35,7 +35,7 @@ function subLevelOf(cat: string): string | null {
 }
 
 
-function ColorSwatchPicker({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+function ColorSwatchPicker({ value, onChange, disabled, withProducts }: { value: string; onChange: (v: string) => void; disabled?: boolean; withProducts?: boolean }) {
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <button
@@ -60,8 +60,31 @@ function ColorSwatchPicker({ value, onChange, disabled }: { value: string; onCha
           className={clsx("h-6 w-6 rounded-full transition-transform hover:scale-110", p.swatch, value === key && "ring-2 ring-white")}
         />
       ))}
+      {/* Product colors — item faces only (never category dots), so they are
+          not offered on the CATEGORY picker, whose choice drives report dots. */}
+      {withProducts && (
+        <>
+          <span className="mx-0.5 h-5 w-px bg-hairline" />
+          {Object.entries(PRODUCT_COLORS).map(([name, p]) => (
+            <button
+              key={name}
+              type="button"
+              disabled={disabled}
+              title={name}
+              onClick={() => onChange(`product:${name}`)}
+              className={clsx("h-6 w-6 rounded-full transition-transform hover:scale-110", p.swatch, value === `product:${name}` && "ring-2 ring-white")}
+            />
+          ))}
+        </>
+      )}
     </div>
   );
+}
+
+/** Small swatch class for a stored item color — theme preset or product name. */
+function itemSwatchClass(color: string): string | null {
+  if (color.startsWith("product:")) return PRODUCT_COLORS[color.slice("product:".length)]?.swatch ?? null;
+  return COLOR_PRESETS[color]?.swatch ?? null;
 }
 
 export default function ItemsPanel({ disabled }: { disabled: boolean }) {
@@ -622,9 +645,14 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
                             onKeyDown={(e) => { if (e.key === "Enter") commitEdit(); if (e.key === "Escape") cancelEdit(); }} />
                         </div>
                       )}
-                      <div className="flex w-full items-center gap-2">
-                        <span className="text-xs text-ink-muted">Color</span>
-                        <ColorSwatchPicker value={editForm.color} onChange={(c) => setEditForm({ ...editForm, color: c })} />
+                      <div className="w-full space-y-1">
+                        <div className="flex w-full items-center gap-2">
+                          <span className="text-xs text-ink-muted">Button color</span>
+                          <ColorSwatchPicker withProducts value={editForm.color} onChange={(c) => setEditForm({ ...editForm, color: c })} />
+                        </div>
+                        <p className="text-[10px] text-ink-faint">
+                          Changes only this button's face — report and short-sheet dots keep the category color.
+                        </p>
                       </div>
                       <div className="flex gap-1 pb-0.5">
                         <button className="btn-primary text-xs px-2 py-1" onClick={commitEdit}><Save className="h-3 w-3" /></button>
@@ -636,8 +664,8 @@ export default function ItemsPanel({ disabled }: { disabled: boolean }) {
 
                 return (
                   <div key={it.label} className="group flex items-center gap-1 rounded-full border border-hairline bg-surface-2 pl-3 pr-1 py-1 text-sm text-ink-soft transition-colors hover:border-ink-faint">
-                    {it.color && COLOR_PRESETS[it.color] && (
-                      <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", COLOR_PRESETS[it.color].swatch)} />
+                    {it.color && itemSwatchClass(it.color) && (
+                      <span className={clsx("h-2.5 w-2.5 shrink-0 rounded-full", itemSwatchClass(it.color))} />
                     )}
                     <button className="truncate font-medium leading-none max-w-[8rem]" disabled={disabled} onClick={() => startEdit(it)} title="Edit item">
                       {it.label}

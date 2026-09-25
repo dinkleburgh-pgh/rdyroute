@@ -427,15 +427,58 @@ export function categoryDotClass(catKey: string, meta?: CategoryMetaMap): string
   return COLOR_PRESETS[presetForCategory(catKey, meta)].dot;
 }
 
-/** Item tile: MAT palette → user item color → color word in label → category class. */
+/**
+ * Product-color faces pickable per ITEM in Configure Items — the real-world
+ * color of the product, on the button. FACE ONLY, by design: an item's color
+ * never reaches dots/chips/PDF hexes, which stay category-driven (the family
+ * palette), so recoloring a button can never mix categories up on the
+ * report/short sheet. Stored in TrackedItem.color as "product:<Name>"
+ * (bare names remain theme presets). Class strings mirror
+ * MAT_COLOR_PALETTE/COLOR_WORD_CLASSES so hand-picked faces look identical
+ * to name-derived ones.
+ */
+export const PRODUCT_COLORS: Record<string, { cls: string; lightBg: boolean; swatch: string }> = {
+  Black:    { cls: "bg-neutral-950 ring-1 ring-white/10 hover:bg-neutral-800",     lightBg: false, swatch: "bg-neutral-950 ring-1 ring-white/30" },
+  Onyx:     { cls: "bg-stone-800 ring-1 ring-stone-400/20 hover:bg-stone-700",     lightBg: false, swatch: "bg-stone-800 ring-1 ring-white/20" },
+  Charcoal: { cls: "bg-neutral-700 ring-1 ring-white/10 hover:bg-neutral-600",     lightBg: false, swatch: "bg-neutral-700" },
+  Gray:     { cls: "bg-gray-500 ring-1 ring-gray-300/20 hover:bg-gray-400",        lightBg: false, swatch: "bg-gray-500" },
+  White:    { cls: "bg-white ring-1 ring-slate-300 hover:bg-slate-100",            lightBg: true,  swatch: "bg-white ring-1 ring-slate-400" },
+  Cream:    { cls: "bg-[#f5f0dc] ring-1 ring-slate-300 hover:bg-[#efe8cd]",        lightBg: true,  swatch: "bg-[#f5f0dc] ring-1 ring-slate-400" },
+  Tan:      { cls: "bg-[#c3a06b] ring-1 ring-amber-200/30 hover:bg-[#b7935d]",     lightBg: true,  swatch: "bg-[#c3a06b]" },
+  Copper:   { cls: "bg-[#b87333] ring-1 ring-amber-300/20 hover:bg-[#a06828]",     lightBg: false, swatch: "bg-[#b87333]" },
+  Brown:    { cls: "bg-amber-900 ring-1 ring-amber-400/20 hover:bg-amber-800",     lightBg: false, swatch: "bg-amber-900" },
+  Maroon:   { cls: "bg-red-900 ring-1 ring-red-400/20 hover:bg-red-800",           lightBg: false, swatch: "bg-red-900" },
+  Red:      { cls: "bg-red-700 ring-1 ring-red-400/20 hover:bg-red-600",           lightBg: false, swatch: "bg-red-700" },
+  Green:    { cls: "bg-green-700 ring-1 ring-green-400/20 hover:bg-green-600",     lightBg: false, swatch: "bg-green-700" },
+  Blue:     { cls: "bg-blue-700 ring-1 ring-blue-400/20 hover:bg-blue-600",        lightBg: false, swatch: "bg-blue-700" },
+  Navy:     { cls: "bg-blue-900 ring-1 ring-blue-400/20 hover:bg-blue-800",        lightBg: false, swatch: "bg-blue-900" },
+  Denim:    { cls: "bg-[#1a5fa8] ring-1 ring-blue-400/20 hover:bg-[#1e6dbe]",      lightBg: false, swatch: "bg-[#1a5fa8]" },
+  Yellow:   { cls: "bg-yellow-500 ring-1 ring-yellow-200/40 hover:bg-yellow-400",  lightBg: true,  swatch: "bg-yellow-500" },
+  Purple:   { cls: "bg-purple-700 ring-1 ring-purple-400/20 hover:bg-purple-600",  lightBg: false, swatch: "bg-purple-700" },
+};
+
+/** Resolve a stored TrackedItem.color ("product:<Name>" or a theme preset key) to a face. */
+export function itemFaceOf(color: string | undefined): { cls: string; lightBg: boolean } | null {
+  if (!color) return null;
+  if (color.startsWith("product:")) {
+    const p = PRODUCT_COLORS[color.slice("product:".length)];
+    return p ? { cls: p.cls, lightBg: p.lightBg } : null;
+  }
+  const preset = COLOR_PRESETS[color];
+  return preset ? { cls: preset.tile, lightBg: false } : null;
+}
+
+/** Item tile: user item color → MAT palette → color word in label → category class.
+ *  A hand-picked color WINS over the label maps — otherwise recoloring a mat
+ *  ("3x10 Black") would silently do nothing. */
 export function itemTileClass(
   item: TrackedItem | undefined,
   disp: string,
   fallbackCls: string,
 ): { cls: string; lightBg: boolean } {
+  const chosen = itemFaceOf(item?.color);
+  if (chosen) return chosen;
   if (MAT_COLOR_PALETTE[disp]) return { cls: MAT_COLOR_PALETTE[disp], lightBg: LIGHT_BG_ITEMS.has(disp) };
-  const preset = item?.color ? COLOR_PRESETS[item.color] : undefined;
-  if (preset) return { cls: preset.tile, lightBg: false };
   const word = colorWordClass(disp);
   if (word) return word;
   return { cls: fallbackCls, lightBg: false };
