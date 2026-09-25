@@ -266,27 +266,30 @@ export const BUILTIN_PRESET: Record<string, string> = {
   "4x6": "blue",
   Traffics: "indigo",
   "3x5": "violet",
-  // Bulk family — the warm band, orange→magenta. Orange stays on the PARENT
-  // only: amber vs orange are 13° apart and untellable at dot size, and the
-  // three subs co-occur inside one truck card on the short sheet.
+  // Bulk family — warm, plus one deliberate band-breaker. Orange stays on
+  // the PARENT only: amber vs orange are 13° apart and untellable at dot
+  // size. Dust Mops is GREEN by user request (2026-09-25): pink vs fuchsia
+  // failed the eye on real cards, where Aprons + Dust Mops co-occur under
+  // one BULK eyebrow constantly — max separation beats band purity here.
   Bulk: "orange",
   Towels: "amber",
   Aprons: "pink",
-  "Dust Mops": "fuchsia",
+  "Dust Mops": "green",
   // Single-category families:
   Paper: "stone", // paper is plain — the one neutral
-  Hygiene: "emerald", // "clean green"; NOT cyan (10° twin of 3x10 sky)
+  Hygiene: "teal", // still reads "clean"; NOT emerald/green (Dust Mops' neighbors) and NOT cyan (10° twin of 3x10 sky)
   General: "red", // catch-all/MISC reads as attention
 };
 
 // Assignment order for categories with no built-in/user color: the reserve
-// pool first (hues no family owns — lime is far from every family hue;
-// green/teal neighbour Hygiene's emerald; rose neighbours General's red),
-// then family hues, reachable only when a user pin displaced their owner.
+// pool first (hues no family owns — lime is far from everything; fuchsia
+// neighbours pink; emerald neighbours Dust Mops' green and Hygiene's teal;
+// rose neighbours General's red), then family hues, reachable only when a
+// user pin displaced their owner.
 const PRESET_ORDER = [
-  "lime", "green", "teal", "rose",
-  "cyan", "amber", "blue", "fuchsia", "sky", "red", "violet", "orange",
-  "indigo", "pink", "emerald", "stone",
+  "lime", "fuchsia", "emerald", "rose",
+  "cyan", "amber", "blue", "green", "sky", "red", "violet", "orange",
+  "indigo", "pink", "teal", "stone",
 ];
 
 /**
@@ -328,10 +331,10 @@ export function buildCategoryPalette(
 // ONLY at reserve hues (a family hue here would either be dead — already
 // claimed — or reintroduce a cross-family twin).
 const SEMANTIC_CATEGORY_PRESET: Record<string, string> = {
-  towels: "amber", aprons: "pink", "dust mops": "fuchsia", mops: "fuchsia",
-  mats: "cyan", paper: "stone", hygiene: "emerald",
-  chemicals: "lime", gloves: "green", rags: "green",
-  wipes: "teal", soap: "teal", soaps: "teal", uniforms: "teal", linens: "rose",
+  towels: "amber", aprons: "pink", "dust mops": "green", mops: "green",
+  mats: "cyan", paper: "stone", hygiene: "teal",
+  chemicals: "lime", gloves: "emerald", rags: "emerald",
+  wipes: "emerald", soap: "emerald", soaps: "emerald", uniforms: "lime", linens: "rose",
 };
 
 const PRESET_POOL = Object.keys(COLOR_PRESETS).filter((k) => k !== "stone");
