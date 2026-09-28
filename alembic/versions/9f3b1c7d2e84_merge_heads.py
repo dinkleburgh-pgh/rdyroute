@@ -12,14 +12,14 @@ Prod sat on b8c9d0e1f2a3 with the other branch unapplied.
 
 Merging restores a single head so `upgrade("head")` resolves again.
 
-Revision ID: c1d2e3f4a5b6
+Revision ID: 9f3b1c7d2e84
 Revises: e2a7f8c9b541, b8c9d0e1f2a3
 Create Date: 2026-09-28 00:00:00.000000
 """
 
 from typing import Sequence, Union
 
-revision: str = "c1d2e3f4a5b6"
+revision: str = "9f3b1c7d2e84"
 down_revision: Union[str, Sequence[str], None] = ("e2a7f8c9b541", "b8c9d0e1f2a3")
 branch_labels = None
 depends_on = None

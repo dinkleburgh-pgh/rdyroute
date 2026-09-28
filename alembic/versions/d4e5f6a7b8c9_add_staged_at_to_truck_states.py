@@ -11,7 +11,7 @@ status switch changes. Cleared when the truck reaches `loaded` (the lane is
 empty again), when it leaves the loadable set (off/oos), and at day-init.
 
 Revision ID: d4e5f6a7b8c9
-Revises: c1d2e3f4a5b6
+Revises: 9f3b1c7d2e84
 Create Date: 2026-09-28 00:05:00.000000
 """
 
@@ -19,7 +19,7 @@ from alembic import op
 import sqlalchemy as sa
 
 revision = "d4e5f6a7b8c9"
-down_revision = "c1d2e3f4a5b6"
+down_revision = "9f3b1c7d2e84"
 branch_labels = None
 depends_on = None
 
