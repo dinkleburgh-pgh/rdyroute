@@ -908,3 +908,78 @@ class DocumentLink(Base):
     )
 
     document: Mapped["Document"] = relationship("Document", back_populates="links")
+
+
+# ---------------------------------------------------------------------------
+# Section rotation — who works which section, week by week
+# ---------------------------------------------------------------------------
+
+class RotationSection(Base):
+    """One work section people rotate through: the main four, plus the floater.
+
+    Configurable rather than hardcoded. The names are floor vocabulary, and a
+    fifth main section later must not need a migration. `is_floater` is what
+    makes the skip rule expressible: when there are not enough people to fill
+    everything, the floater is the one that goes unfilled.
+    """
+    __tablename__ = "rotation_sections"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(80), nullable=False, unique=True)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # The section that gets skipped when short-handed. Not a status and not the
+    # last sort_order by convention — being explicit means the rotation code can
+    # never guess wrong about which one is droppable.
+    is_floater: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class RotationPerson(Base):
+    """Someone in the section rotation.
+
+    Deliberately NOT a `User`. The floor includes people with no login, and
+    hanging the rotation off accounts would silently drop exactly those people.
+    `is_active` rather than deletion, so a past week's history keeps naming a
+    real person after they leave the rotation.
+    """
+    __tablename__ = "rotation_people"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+
+
+class RotationAssignment(Base):
+    """Who worked which section in one week. One row per (week_start, section).
+
+    `week_start` is the MONDAY of the week the assignment covers.
+
+    There is no separate history table: the current week is simply the newest
+    rows, and history is the older ones. One table means the live board and the
+    history can never disagree with each other.
+
+    A skipped floater is represented by the ABSENCE of a row for that section
+    that week, not by a NULL person. "Nobody floated that week" and "we have not
+    decided yet" are the same thing on this floor, and inventing a distinction
+    the users do not make would only create rows that mean nothing.
+    """
+    __tablename__ = "rotation_assignments"
+    __table_args__ = (
+        UniqueConstraint("week_start", "section_id", name="uq_rotation_week_section"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    week_start: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    section_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("rotation_sections.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    person_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("rotation_people.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    section: Mapped["RotationSection"] = relationship("RotationSection")
+    person: Mapped["RotationPerson"] = relationship("RotationPerson")

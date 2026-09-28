@@ -28,6 +28,7 @@ const Audit = lazy(() => import("./pages/Audit"));
 const Trends = lazy(() => import("./pages/Trends"));
 const TrendDetail = lazy(() => import("./pages/trends/TrendDetail"));
 const Management = lazy(() => import("./pages/Management"));
+const Rotation = lazy(() => import("./pages/Rotation"));
 const Communications = lazy(() => import("./pages/Communications"));
 const NotesBoard = lazy(() => import("./pages/Notes"));
 const ArrivalCodeScreen = lazy(() => import("./pages/ArrivalCode"));
@@ -73,6 +74,7 @@ const router = createBrowserRouter([
       { path: "management", element: lazyRoute(<Management />) },
       { path: "communications", element: lazyRoute(<Communications />) },
       { path: "notes", element: lazyRoute(<NotesBoard />) },
+      { path: "rotation", element: lazyRoute(<Rotation />) },
       { path: "documents", element: lazyRoute(<Documents />) },
       { path: "supervisor", element: <Navigate to="/management" replace /> },
       { path: "settings", element: <Navigate to="/management" replace /> },

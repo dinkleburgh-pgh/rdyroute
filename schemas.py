@@ -1312,3 +1312,65 @@ class RouteDriverUpsert(BaseModel):
     """
 
     driver_name: str = Field(default="", max_length=120)
+
+
+# ---------------------------------------------------------------------------
+# Section rotation
+# ---------------------------------------------------------------------------
+
+class RotationSectionOut(BaseModel):
+    id: int
+    name: str
+    sort_order: int
+    is_floater: bool
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RotationSectionIn(BaseModel):
+    name: str | None = None
+    sort_order: int | None = None
+    is_floater: bool | None = None
+    is_active: bool | None = None
+
+
+class RotationPersonOut(BaseModel):
+    id: int
+    name: str
+    sort_order: int
+    is_active: bool
+    model_config = ConfigDict(from_attributes=True)
+
+
+class RotationPersonIn(BaseModel):
+    name: str | None = None
+    sort_order: int | None = None
+    is_active: bool | None = None
+
+
+class RotationAssignIn(BaseModel):
+    """Set one section for one week. person_id=None clears the slot.
+
+    Clearing deletes the row rather than storing a NULL person: absence is how
+    an unfilled section (the short-handed floater) is represented everywhere
+    else, and two ways to say the same thing is how they drift apart.
+    """
+    section_id: int
+    person_id: int | None = None
+    # Any date in the target week; the router normalises it to that Monday.
+    week_start: date | None = None
+
+
+class RotationSlotOut(BaseModel):
+    section_id: int
+    section_name: str
+    is_floater: bool
+    # None = unfilled. For the floater that is the ordinary short-handed case,
+    # not an error state.
+    person_id: int | None = None
+    person_name: str | None = None
+
+
+class RotationWeekOut(BaseModel):
+    week_start: date
+    sections: list[RotationSlotOut]

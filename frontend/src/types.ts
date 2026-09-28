@@ -429,3 +429,36 @@ export interface NotificationEvent {
   covering_truck?: number | null;
   run_date?: string | null;
 }
+
+// ---------------------------------------------------------------------------
+// Section rotation
+// ---------------------------------------------------------------------------
+
+export interface RotationSection {
+  id: number;
+  name: string;
+  sort_order: number;
+  is_floater: boolean;
+  is_active: boolean;
+}
+
+export interface RotationPerson {
+  id: number;
+  name: string;
+  sort_order: number;
+  is_active: boolean;
+}
+
+export interface RotationSlot {
+  section_id: number;
+  section_name: string;
+  is_floater: boolean;
+  /** null = unfilled. For the floater that is the ordinary short-handed case. */
+  person_id: number | null;
+  person_name: string | null;
+}
+
+export interface RotationWeek {
+  week_start: string;
+  sections: RotationSlot[];
+}

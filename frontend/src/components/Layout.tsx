@@ -59,6 +59,7 @@ const SIDEBAR_SECONDARY_NAV = [
   { to: "/shorts", label: "Short sheet" },
   { to: "/audit", label: "Audit" },
   { to: "/notes", label: "Notes" },
+  { to: "/rotation", label: "Rotation" },
   { to: "/documents", label: "Documents" },
   { to: "/trends", label: "Trends" },
   { to: "/verify-short-sheet", label: "Verify Shorts" },
@@ -79,6 +80,7 @@ const MOBILE_SECONDARY_NAV = [
   { to: "/fleet", label: "Fleet" },
   { to: "/batching", label: "Batching" },
   { to: "/notes", label: "Notes" },
+  { to: "/rotation", label: "Rotation" },
   { to: "/documents", label: "Documents" },
   { to: "/trends", label: "Trends" },
   { to: "/management", label: "Management" },
@@ -86,11 +88,11 @@ const MOBILE_SECONDARY_NAV = [
 
 // Mirrors V1 ROLE_SCREEN_ACCESS — which nav links each role can see.
 const ROLE_NAV_ACCESS: Record<AuthRole, Set<string>> = {
-  admin: new Set(["/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
-  fleet: new Set(["/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
-  atl: new Set(["/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
-  supervisor: new Set(["/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
-  lead: new Set(["/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  admin: new Set(["/rotation", "/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  fleet: new Set(["/rotation", "/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  atl: new Set(["/rotation", "/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  supervisor: new Set(["/rotation", "/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
+  lead: new Set(["/rotation", "/unload", "/load", "/fleet", "/batching", "/communications", "/shorts", "/notes", "/documents", "/trends", "/audit", "/fleet-schedule", "/verify-short-sheet", "/management", "/report"]),
   loader: new Set(["/load", "/communications", "/audit"]),
   unloader: new Set(["/unload", "/communications"]),
   guest: new Set(["/fleet-schedule", "/report"]),

@@ -956,3 +956,108 @@ export function useArrivalCode() {
     staleTime: 0,
   });
 }
+
+
+// ---------------------------------------------------------------------------
+// Section rotation
+// ---------------------------------------------------------------------------
+
+import type {
+  RotationPerson,
+  RotationSection,
+  RotationWeek,
+} from "../../types";
+
+/** Any date in the week; the server normalises it to that Monday. */
+export function useRotationWeek(week?: string) {
+  return useQuery({
+    queryKey: ["rotation", week ?? "current"],
+    queryFn: async () =>
+      (await api.get<RotationWeek>("/rotation", { params: week ? { week } : {} })).data,
+  });
+}
+
+export function useRotationHistory(weeks = 8) {
+  return useQuery({
+    queryKey: ["rotation-history", weeks],
+    queryFn: async () =>
+      (await api.get<RotationWeek[]>("/rotation/history", { params: { weeks } })).data,
+  });
+}
+
+export function useRotationSections() {
+  return useQuery({
+    queryKey: ["rotation-sections"],
+    queryFn: async () => (await api.get<RotationSection[]>("/rotation/sections")).data,
+  });
+}
+
+export function useRotationPeople(includeInactive = false) {
+  return useQuery({
+    queryKey: ["rotation-people", includeInactive],
+    queryFn: async () =>
+      (
+        await api.get<RotationPerson[]>("/rotation/people", {
+          params: { include_inactive: includeInactive },
+        })
+      ).data,
+  });
+}
+
+function invalidateRotation(qc: ReturnType<typeof useQueryClient>) {
+  qc.invalidateQueries({ queryKey: ["rotation"] });
+  qc.invalidateQueries({ queryKey: ["rotation-history"] });
+  qc.invalidateQueries({ queryKey: ["rotation-people"] });
+}
+
+export function useAddRotationPerson() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (name: string) =>
+      (await api.post<RotationPerson>("/rotation/people", { name })).data,
+    onSuccess: () => invalidateRotation(qc),
+  });
+}
+
+export function useUpdateRotationPerson() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { id: number; name?: string; is_active?: boolean; sort_order?: number }) => {
+      const { id, ...body } = args;
+      return (await api.patch<RotationPerson>(`/rotation/people/${id}`, body)).data;
+    },
+    onSuccess: () => invalidateRotation(qc),
+  });
+}
+
+export function useRenameRotationSection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { id: number; name: string }) =>
+      (await api.patch<RotationSection>(`/rotation/sections/${args.id}`, { name: args.name })).data,
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["rotation-sections"] });
+      invalidateRotation(qc);
+    },
+  });
+}
+
+/** Set or clear one section for one week. person_id null clears it. */
+export function useAssignRotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: { section_id: number; person_id: number | null; week_start?: string }) =>
+      (await api.put<RotationWeek>("/rotation/assign", args)).data,
+    onSuccess: () => invalidateRotation(qc),
+  });
+}
+
+/** Build a week by moving everyone one section along. 409s if it already exists. */
+export function useAdvanceRotation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (week?: string) =>
+      (await api.post<RotationWeek>("/rotation/advance", null, { params: week ? { week } : {} })).data,
+    onSuccess: () => invalidateRotation(qc),
+  });
+}
