@@ -112,6 +112,41 @@ export default function FleetTruckEditor({ truck, runDate }: { truck: TruckWithS
         </label>
       </div>
 
+      {/* Currently unloading — the marker the Load board reads.
+          Only offered on dirty/unfinished because the server rejects anything
+          else with a 409; a control that can only fail is worse than none. It
+          stays visible while ON so it can always be switched back off. */}
+      {(truck.state?.status === "dirty" ||
+        truck.state?.status === "unfinished" ||
+        truck.state?.unloading_started_at != null) && (
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="text-sm font-medium text-slate-200">Currently unloading</p>
+            <p className="text-xs text-slate-500">
+              Shows on the Load board as the truck coming off the dock. One truck at a
+              time — switching it on here clears it from any other truck.
+            </p>
+          </div>
+          <label className="relative inline-flex cursor-pointer items-center">
+            <input
+              type="checkbox"
+              className="peer sr-only"
+              checked={truck.state?.unloading_started_at != null}
+              disabled={upsertState.isPending}
+              onChange={(e) =>
+                upsertState.mutate({
+                  truck_number: truck.truck_number,
+                  run_date: runDate,
+                  unloading_started_at: e.target.checked ? Date.now() / 1000 : null,
+                  wearers: truck.state?.wearers ?? 0,
+                })
+              }
+            />
+            <div className="h-6 w-11 rounded-full bg-slate-700 peer-checked:bg-amber-500 peer-disabled:opacity-50 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
+          </label>
+        </div>
+      )}
+
       {/* Request Hold — only shown when truck is on hold */}
       {truck.state?.priority_hold && (
         <div className="flex items-center justify-between gap-4 rounded-md border border-red-600/40 bg-red-950/20 p-3">
