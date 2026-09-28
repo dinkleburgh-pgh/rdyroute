@@ -66,6 +66,10 @@ _PERSISTENT_STATUSES = {"off", "oos", "shop"}
 # Statuses a truck can actually be unloaded FROM. Shared by the marker rules
 # and the load-request guard, which must agree on what "being unloaded" means.
 _UNLOAD_WORKABLE = (TruckStatus.dirty, TruckStatus.unfinished)
+# Reaching any of these ends a truck's stay in the staging lane. MODULE level:
+# both the state PUT and the stage endpoint read it, and it lived as a local
+# inside the PUT at first, which made every stage attempt a NameError 500.
+_STAGE_CLEARING = (TruckStatus.loaded, TruckStatus.off, TruckStatus.oos, TruckStatus.shop)
 
 
 def _ship_day_number(value: date) -> int:
@@ -1037,8 +1041,6 @@ def update_truck_state(
     # truck was marked OOS after unloading, which both erased its unload dwell
     # and dropped it out of the day's unload progress.
     _UNLOAD_OPEN = (TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished)
-    # Reaching any of these ends a truck's stay in the staging lane.
-    _STAGE_CLEARING = (TruckStatus.loaded, TruckStatus.off, TruckStatus.oos, TruckStatus.shop)
     if row.status == TruckStatus.unloaded and previous_status in _UNLOAD_OPEN:
         row.unloaded_at = time.time()
     elif row.status in _UNLOAD_OPEN and previous_status == TruckStatus.unloaded:
