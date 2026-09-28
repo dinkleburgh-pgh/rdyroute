@@ -202,6 +202,15 @@ class TruckState(Base):
     # it cannot outlive the truck it describes. No counter reads it.
     load_request: Mapped[str | None] = mapped_column(String(16), nullable=True)
     load_request_at: Mapped[float | None] = mapped_column(Float, nullable=True)
+    # STAGED — the load crew has physically pulled this truck up ready to load.
+    # Distinct from the stored runday_next_up_<date> pointer, which names ONE
+    # truck for the whole day: staging is per-truck and several can sit staged
+    # at once, so it belongs here and not in app_settings. Like the other
+    # markers it is a timestamp, not a lifecycle status — the truck keeps its
+    # own unloaded/dirty status while staged and no counter reads it. Cleared
+    # the moment the truck is loaded (the lane is empty again), when it leaves
+    # the loadable set (off/oos), and at day-init.
+    staged_at: Mapped[float | None] = mapped_column(Float, nullable=True)
     # A spare driver's CLAIM, from the QR page, of which route they carried on
     # the run they just finished. Not coverage — a lead confirms it on the Fleet
     # board (writing the real SpareAssignment/RouteSwapLog through the

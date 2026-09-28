@@ -46,6 +46,7 @@ from schemas import (
     DayGapDay,
     DayGapOut,
     LoadRequestIn,
+    StageIn,
     CompletionDailyPoint,
     CycleDailyPoint,
     GarmentDayLogOut,
@@ -1036,6 +1037,8 @@ def update_truck_state(
     # truck was marked OOS after unloading, which both erased its unload dwell
     # and dropped it out of the day's unload progress.
     _UNLOAD_OPEN = (TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished)
+    # Reaching any of these ends a truck's stay in the staging lane.
+    _STAGE_CLEARING = (TruckStatus.loaded, TruckStatus.off, TruckStatus.oos, TruckStatus.shop)
     if row.status == TruckStatus.unloaded and previous_status in _UNLOAD_OPEN:
         row.unloaded_at = time.time()
     elif row.status in _UNLOAD_OPEN and previous_status == TruckStatus.unloaded:
@@ -1095,6 +1098,15 @@ def update_truck_state(
     if row.unloading_started_at is None:
         row.load_request = None
         row.load_request_at = None
+
+    # ---- staged_at: the lane empties itself -------------------------------
+    # Staging describes a truck WAITING to be loaded. The moment it is loaded
+    # the lane is empty again, so the marker clears itself rather than relying
+    # on anyone remembering to tap Unstage. off/oos/shop go the same way: a
+    # truck that is gone cannot be staged. Derived here, next to the other
+    # marker invariants, so no future status path can forget it.
+    if row.status in _STAGE_CLEARING:
+        row.staged_at = None
 
     append_truck_state_activity(
         db,
@@ -1280,6 +1292,103 @@ def set_load_request(
             "truck_number": truck_number,
             "run_date": str(run_date),
             "request": row.load_request,
+            "actor": current_user.username,
+        },
+    )
+    background_tasks.add_task(
+        manager.broadcast,
+        {"type": "truck_state_updated", "run_date": str(run_date), "truck_number": truck_number},
+    )
+    return row
+
+
+@router.post("/{truck_number}/stage", response_model=TruckStateOut)
+def set_staged(
+    truck_number: int,
+    payload: StageIn,
+    background_tasks: BackgroundTasks,
+    run_date: date = Query(...),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_non_guest),
+):
+    """Load crew pulls a truck up ready to load — the staging lane.
+
+    Its own URL rather than the generic state PUT, for the same two reasons as
+    load-request: the offline queue filters by URL, and keeping the field off
+    TruckStateCreate/Update means the no-rules create path can never smuggle a
+    staging stamp onto a truck.
+
+    Unlike unloading_started_at this is NOT one-at-a-time — a lane holds more
+    than one truck, and the whole point is seeing the queue. Ordering is by
+    staged_at, so first staged reads first.
+    """
+    row = db.scalars(
+        select(TruckState).where(
+            TruckState.truck_number == truck_number,
+            TruckState.run_date == run_date,
+        )
+    ).first()
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No state for truck {truck_number} on {run_date}",
+        )
+
+    expected = payload.expected_status
+    if expected is not None and row.status != expected:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Truck {truck_number} is {row.status.value} on {run_date}, not "
+                f"{getattr(expected, 'value', expected)} — your view was out of date. "
+                "Refresh and try again."
+            ),
+        )
+
+    before = row.staged_at
+    # Unstaging is ALWAYS allowed. Undoing a mis-tap must never be blocked by
+    # the truck having moved on — that is exactly when someone is trying to
+    # take it back.
+    if payload.staged:
+        if row.status in _STAGE_CLEARING:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    f"Truck {truck_number} is {row.status.value} — it cannot be staged."
+                ),
+            )
+        # First tap wins: re-staging keeps the original time so the lane order
+        # does not reshuffle on a double-tap or a second device.
+        if row.staged_at is None:
+            row.staged_at = time.time()
+    else:
+        row.staged_at = None
+
+    append_activity_event(
+        db,
+        actor_user=current_user,
+        event_family="state",
+        event_type="staged",
+        run_date=run_date,
+        truck_number=truck_number,
+        summary=(
+            f"Load crew staged truck {truck_number}"
+            if payload.staged
+            else f"Load crew unstaged truck {truck_number}"
+        ),
+        diff_json={"staged_at": {"before": before, "after": row.staged_at}},
+        context_json={"via": "load_board"},
+    )
+    db.commit()
+    db.refresh(row)
+
+    background_tasks.add_task(
+        manager.broadcast,
+        {
+            "type": "staged",
+            "truck_number": truck_number,
+            "run_date": str(run_date),
+            "staged_at": row.staged_at,
             "actor": current_user.username,
         },
     )

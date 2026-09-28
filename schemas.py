@@ -153,9 +153,21 @@ class TruckStateOut(_OrmBase):
     # through the no-rules create path.
     load_request: LoadRequestValue | None = None
     load_request_at: float | None = None
+    # Read-only here for the same reason as load_request: staging is written
+    # ONLY through POST /trucks/{n}/stage, so a generic state write can never
+    # set or smuggle it.
+    staged_at: float | None = None
     driver_claimed_route: int | None = None
     state_source: TruckStateSource
     updated_at: datetime
+
+
+class StageIn(BaseModel):
+    """Load crew stages a truck (pulls it up ready to load). staged=False unstages."""
+    staged: bool = True
+    # Same optimistic-concurrency precondition the state PUT uses: staging a
+    # truck someone marked loaded a second ago is the mistake worth catching.
+    expected_status: TruckStatus | None = None
 
 
 class LoadRequestIn(BaseModel):

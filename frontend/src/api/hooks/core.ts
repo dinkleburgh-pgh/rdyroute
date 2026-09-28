@@ -274,6 +274,7 @@ export function useUpsertTruckState() {
               unloading_started_at: null,
               load_request: null,
               load_request_at: null,
+              staged_at: null,
               driver_claimed_route: null,
               state_source: "workflow" as TruckStateSource,
               updated_at: new Date().toISOString(),

@@ -15,6 +15,7 @@ import {
   useSettings,
   useLoadSequenceSuggestions,
   useNextUp,
+  useSetStaged,
   useClearNextUp,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
@@ -183,6 +184,21 @@ export default function Load() {
         .sort((a, b) => a.truck_number - b.truck_number),
     [board],
   );
+  // THE STAGING LANE. Trucks the load crew has physically pulled up, in the
+  // order they were staged. Deliberately not filtered to `ready`: a truck can
+  // be staged while it is still being unloaded, and hiding it the moment its
+  // status moves would make the lane lie about what is actually parked there.
+  // The server clears staged_at on loaded/off/oos/shop, so anything still
+  // carrying a stamp genuinely belongs in the lane.
+  const staged = useMemo(
+    () =>
+      board
+        .filter((t) => t.state?.staged_at != null)
+        .sort((a, b) => (a.state!.staged_at ?? 0) - (b.state!.staged_at ?? 0)),
+    [board],
+  );
+  const setStaged = useSetStaged(runDate);
+
   // Manually-set Next Up (shared with the In Progress page). When set and the
   // truck is still ready it wins; otherwise fall back to the first ready truck.
   const { data: storedNextUp } = useNextUp(runDate);
@@ -471,6 +487,32 @@ export default function Load() {
             renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
           />
 
+        {/* ---------------- Staged ---------------- */}
+        {staged.length > 0 && (
+          <div className="card">
+            <SectionHeader label="Staged" count={staged.length} />
+            <div className={TILE_GRID}>
+              {staged.map((t) => (
+                <QuietTile
+                  key={t.truck_number}
+                  truck={t}
+                  size="md"
+                  onClick={() =>
+                    setStaged.mutate({ truck_number: t.truck_number, staged: false })
+                  }
+                  title="Tap to unstage"
+                  tag="Staged"
+                  tagClass="text-[#f59e0b]"
+                  numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
+                  dotClass="bg-[#f59e0b]"
+                  pair={loadPair(t)}
+                  sub={<span>Staged · tap to remove</span>}
+                />
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ---------------- Ready to load + On hold ---------------- */}
         <div className="card flex flex-col gap-[18px]">
           <div>
@@ -517,6 +559,26 @@ export default function Load() {
                       <span>
                         {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
                         {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
+                        {t.state?.staged_at == null && (
+                          <>
+                            {" · "}
+                            <button
+                              type="button"
+                              /* the tile's own onClick starts loading — staging must not */
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setStaged.mutate({
+                                  truck_number: t.truck_number,
+                                  staged: true,
+                                  expected_status: t.state?.status ?? null,
+                                });
+                              }}
+                              className="underline decoration-dotted hover:text-ink-soft"
+                            >
+                              Stage
+                            </button>
+                          </>
+                        )}
                       </span>
                     }
                   />

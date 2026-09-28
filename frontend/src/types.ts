@@ -71,6 +71,8 @@ export interface TruckState {
   /** Load crew's advisory answer on the truck being unloaded. Dies with the marker. */
   load_request: "want" | "skip" | null;
   load_request_at: number | null;
+  /** Load crew pulled this truck up ready to load. Cleared when it loads. */
+  staged_at: number | null;
   /** Spare driver's unconfirmed "I covered route N" claim from the QR page. */
   driver_claimed_route: number | null;
   unloaded_at: number | null;

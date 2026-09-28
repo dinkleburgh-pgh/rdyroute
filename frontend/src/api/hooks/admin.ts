@@ -874,6 +874,35 @@ export function useSetLoadRequest(runDate: string) {
   });
 }
 
+/**
+ * Stage a truck (pull it up ready to load) or unstage it.
+ *
+ * Unlike useSetLoadRequest this IS offline-queueable. A load request is an
+ * opinion about the truck the dock is on right now and is worthless minutes
+ * later; "I put this truck in the lane" is durable intent that is still true
+ * on reconnect. If the truck has since been loaded the server 409s on replay,
+ * which is the honest outcome.
+ */
+export function useSetStaged(runDate: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: {
+      truck_number: number;
+      staged: boolean;
+      expected_status?: TruckStatus | null;
+    }) => {
+      const { truck_number, staged, expected_status } = args;
+      const { data } = await api.post(
+        `/trucks/${truck_number}/stage`,
+        { staged, ...(expected_status ? { expected_status } : {}) },
+        { params: { run_date: runDate } },
+      );
+      return data;
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["board", runDate] }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Reset day — rewind a run date to how the day started
 // ---------------------------------------------------------------------------
