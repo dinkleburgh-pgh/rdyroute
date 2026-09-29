@@ -977,6 +977,11 @@ class RotationPerson(Base):
     name: Mapped[str] = mapped_column(String(120), nullable=False)
     sort_order: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    # Monday of the first week they were on the rotation (reset when
+    # reactivated). The planner reads it to know who was on the roster in a
+    # past week: on the roster with no row means they sat that week out.
+    # NULL = no record, treated as on the roster throughout.
+    active_since: Mapped[date | None] = mapped_column(Date, nullable=True)
 
 
 class RotationAssignment(Base):

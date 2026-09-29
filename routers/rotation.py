@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from database import get_db
 from models import RotationAssignment, RotationPerson, RotationSection, User
+from rotation_planner import plan_week
 from routers.auth import require_admin, require_non_guest
 from schemas import (
     RotationAssignIn,
@@ -166,7 +167,7 @@ def add_person(
             select(RotationPerson).order_by(RotationPerson.sort_order.desc())
         ).first()
         order = (last.sort_order + 1) if last else 1
-    person = RotationPerson(name=name, sort_order=order, is_active=True)
+    person = RotationPerson(name=name, sort_order=order, is_active=True, active_since=_week_start())
     db.add(person)
     db.commit()
     db.refresh(person)
@@ -190,6 +191,10 @@ def update_person(
         data["name"] = (data["name"] or "").strip()
         if not data["name"]:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Name cannot be blank")
+    # Coming back onto the rotation starts a new roster run: the weeks they were
+    # away must not read as weeks they sat out.
+    if data.get("is_active") is True and not person.is_active:
+        person.active_since = _week_start()
     for field, value in data.items():
         setattr(person, field, value)
     db.commit()
@@ -272,12 +277,16 @@ def advance(
     db: Session = Depends(get_db),
     _: User = Depends(require_non_guest),
 ):
-    """Build a week's assignment by moving everyone one section along.
+    """Build a week's assignment: the fair rotation (see rotation_planner.py).
 
-    Order is taken from the PREVIOUS week where one exists, so the rotation
-    follows what actually happened rather than a stored counter that drifts the
-    moment anyone is moved by hand. People who joined since are appended, people
-    who left drop out, and then the whole list shifts by one.
+    Everyone works every section once before repeating any, and the week is
+    solved as a whole. It reads the recent weeks as they actually happened
+    (hand edits included) rather than a stored counter, and the week after
+    too when it is already built, so gaps, weeks built ahead, people joining
+    or leaving and staffing changes keep the cycle intact. (The first builder
+    moved last week's order one along; it only looked one week back, so an
+    empty previous week restarted it and whole layouts repeated every other
+    week.)
 
     Refuses to overwrite a week that already has assignments unless `force` —
     rebuilding a week someone has already adjusted by hand is exactly the
@@ -291,12 +300,21 @@ def advance(
             status.HTTP_409_CONFLICT,
             f"Week of {target} already has assignments — rebuild it, or edit individually.",
         )
+    # Anyone already placed in the week stays on its roster (a hand edit, or
+    # someone reactivated since, whose active_since was reset) — read before
+    # the rows go.
+    held_ids = {r.person_id for r in existing}
     for row in existing:
         db.delete(row)
     if existing:
         db.flush()
 
-    people = _people(db)
+    # Only people on the rotation in the target week: rebuilding a past week
+    # must not put someone into a week before they joined.
+    people = [
+        p for p in _people(db)
+        if p.active_since is None or p.active_since <= target or p.id in held_ids
+    ]
     if not people:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "No active people to rotate")
 
@@ -304,25 +322,47 @@ def advance(
     if not sections:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "No active sections")
 
-    prev_rows = _week_rows(db, target - timedelta(weeks=1))
-    if prev_rows:
-        by_section = {r.section_id: r.person_id for r in prev_rows}
-        active_ids = {p.id for p in people}
-        # last week's people, in section order, minus anyone now inactive
-        ordered = [
-            by_section[s.id] for s in sections if s.id in by_section and by_section[s.id] in active_ids
-        ]
-        # anyone who has joined since goes on the end
-        ordered += [p.id for p in people if p.id not in ordered]
-    else:
-        ordered = [p.id for p in people]
+    # The weeks before the target, newest first, one entry per week (an empty
+    # week still counts as a week). Three rotations back: the last one decides
+    # who repeats what, the rest evens out the long-run totals.
+    lookback = min(52, 3 * len(people) + 1)
+    rows = db.scalars(
+        select(RotationAssignment)
+        .where(
+            RotationAssignment.week_start >= target - timedelta(weeks=lookback),
+            RotationAssignment.week_start < target,
+        )
+        .order_by(RotationAssignment.week_start, RotationAssignment.section_id)
+    ).all()
+    by_week: dict[date, dict[int, int]] = {}
+    for r in rows:
+        by_week.setdefault(r.week_start, {})[r.section_id] = r.person_id
+    history = [by_week.get(target - timedelta(weeks=k), {}) for k in range(1, lookback + 1)]
+    # Who was on the rotation each of those weeks (RotationPerson.active_since).
+    rosters = [
+        {p.id for p in people if p.active_since is None or p.active_since <= target - timedelta(weeks=k)}
+        for k in range(1, lookback + 1)
+    ]
+    # The week after, when it is already built (building ahead, or rebuilding
+    # a past week): nobody gets the section they already hold there either.
+    following = {
+        r.section_id: r.person_id
+        for r in sorted(_week_rows(db, target + timedelta(weeks=1)), key=lambda r: r.section_id)
+    }
 
-    # the rotation itself: everyone moves one section along
-    if len(ordered) > 1:
-        ordered = ordered[1:] + ordered[:1]
-
-    # fill main sections first; run out and it is the floater that goes empty
-    for sec, person_id in zip(sections, ordered):
-        db.add(RotationAssignment(week_start=target, section_id=sec.id, person_id=person_id))
+    # `sections` is in fill order (main first, floater last), which is what
+    # makes the floater the one left empty when short-handed.
+    plan = plan_week(
+        [s.id for s in sections],
+        [p.id for p in people],
+        history,
+        rosters,
+        following=following or None,
+        floaters=[s.id for s in sections if s.is_floater],
+    )
+    for sec in sections:
+        person_id = plan.get(sec.id)
+        if person_id is not None:
+            db.add(RotationAssignment(week_start=target, section_id=sec.id, person_id=person_id))
     db.commit()
     return _serialise_week(db, target)

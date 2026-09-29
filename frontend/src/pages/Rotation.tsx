@@ -169,10 +169,10 @@ export default function Rotation() {
   const filled = useMemo(() => slots.filter((s) => s.person_id != null).length, [slots]);
   const isEmptyWeek = filled === 0;
 
-  /** Build (empty week) or REBUILD (force): last week's order moved one along.
-   *  Rebuild is how a hand edit to a previous week flows forward — the server
-   *  reads the previous week as it is now, so fixing last week then rebuilding
-   *  this one puts everyone where the corrected rotation says. */
+  /** Build (empty week) or REBUILD (force) the fair rotation: everyone works
+   *  every section once before repeating one. The server reads the recent
+   *  weeks as they are now, so fixing a past week and rebuilding the next one
+   *  flows the fix forward. */
   function doAdvance(force: boolean) {
     setErr(null);
     setRebuildOpen(false);
@@ -221,7 +221,7 @@ export default function Rotation() {
                 className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-sky-500/40 bg-sky-500/10 px-3 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-500/20 disabled:opacity-50"
               >
                 <RefreshCw className={clsx("h-3.5 w-3.5", advance.isPending && "animate-spin")} aria-hidden />
-                {advance.isPending ? "Building…" : "Build from last week"}
+                {advance.isPending ? "Building…" : "Build week"}
               </button>
             ) : (
               <button
@@ -231,7 +231,7 @@ export default function Rotation() {
                 className="inline-flex min-h-[36px] items-center gap-1.5 rounded-lg border border-amber-500/35 bg-amber-500/10 px-3 text-xs font-semibold text-amber-200 transition-colors hover:bg-amber-500/20 disabled:opacity-50"
               >
                 <RefreshCw className={clsx("h-3.5 w-3.5", advance.isPending && "animate-spin")} aria-hidden />
-                {advance.isPending ? "Rebuilding…" : "Rebuild from last week"}
+                {advance.isPending ? "Rebuilding…" : "Rebuild week"}
               </button>
             )}
           </>
@@ -381,7 +381,7 @@ export default function Rotation() {
             <span className="text-[11px] font-bold uppercase tracking-[0.1em] text-ink">People in the rotation</span>
             <span className="font-mono text-[11px] tabular-nums text-ink-faint">{people.length}</span>
             <span className="hidden h-px flex-1 bg-hairline sm:block" />
-            <span className="text-[11px] text-ink-faint">Order here is the order they rotate through</span>
+            <span className="text-[11px] text-ink-faint">Everyone works each section once before repeating one</span>
           </div>
           <div className="mb-3 flex gap-2">
             <input
@@ -409,7 +409,7 @@ export default function Rotation() {
             </button>
           </div>
           {people.length === 0 ? (
-            <p className="text-[12px] text-ink-faint">Nobody yet — add names above, then use Build from last week.</p>
+            <p className="text-[12px] text-ink-faint">Nobody yet — add names above, then use Build week.</p>
           ) : (
             <ul className="flex flex-wrap gap-2">
               {people.map((p) => (
@@ -483,7 +483,7 @@ export default function Rotation() {
       <ConfirmDialog
         open={rebuildOpen}
         title={`Rebuild the week of ${prettyWeek(week)}?`}
-        description="Every section this week is replaced with last week's order moved one along, exactly as it stands now. Anything set by hand this week is lost — edit last week first if that is what needs fixing."
+        description="Every section this week is re-picked so everyone works each section once before repeating one, going by the recent weeks exactly as they stand now. Anything set by hand this week is lost — edit an earlier week first if that is what needs fixing."
         confirmLabel="Rebuild"
         variant="danger"
         busy={advance.isPending}
