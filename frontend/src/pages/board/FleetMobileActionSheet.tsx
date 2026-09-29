@@ -76,6 +76,7 @@ const TIMER_TONES = {
   emerald: { idle: "border-emerald-700/50 text-emerald-300", on: "border-emerald-500 bg-emerald-950/50 text-emerald-200" },
   sky:     { idle: "border-sky-700/50 text-sky-300",         on: "border-sky-500 bg-sky-950/50 text-sky-200" },
   purple:  { idle: "border-purple-700/50 text-purple-300",   on: "border-purple-500 bg-purple-950/50 text-purple-200" },
+  amber:   { idle: "border-amber-700/50 text-amber-300",     on: "border-amber-500 bg-amber-950/50 text-amber-200" },
 } as const;
 
 /**
@@ -182,6 +183,8 @@ export default function FleetMobileActionSheet({
   const { data: boardData } = useBoard(runDate);
   const [xloadPickerOpen, setXloadPickerOpen] = useState(false);
   const [xloadTo, setXloadTo] = useState("");
+  // "Unloading" on a truck that is not Dirty/Unfinished asks first (see below).
+  const [unloadConfirm, setUnloadConfirm] = useState(false);
   // A spare driver's unconfirmed "I covered route N" from the QR page. Confirm
   // writes the REAL coverage through the same authenticated path a lead uses
   // for any late assignment — dated to the run the driver just finished (the
@@ -224,6 +227,27 @@ export default function FleetMobileActionSheet({
   const arrivedActive = typeof arrivedAt === "number" && Number.isFinite(arrivedAt);
   const canStartOutside = outsideEnabled && !outsideActive && !paperBayActive;
   const canStartPaperBay = paperBayEnabled && !paperBayActive && !outsideActive;
+  // The Load board's "now unloading" marker (one truck at a time, server-
+  // enforced). It only fits a truck with something on it — Dirty/Unfinished —
+  // so on any other live status the stamp ASKS, then sets Dirty and starts the
+  // marker in one write. Off/OOS/shop trucks are not on the dock at all: no
+  // status we would silently move them to, so the stamp is simply disabled.
+  const unloadingActive = truck.state?.unloading_started_at != null;
+  const unloadWorkable = status === "dirty" || status === "unfinished";
+  const unloadBlocked = status === "off" || status === "oos" || status === "shop";
+  const dockButtons =
+    1 + Number(arrivedEnabled) + Number(outsideActive || outsideEnabled) + Number(paperBayActive || paperBayEnabled);
+
+  function writeUnloading(next: "start" | "stop", setDirty = false) {
+    upsert.mutate({
+      truck_number: truck.truck_number,
+      run_date: runDate,
+      ...(setDirty && { status: "dirty" as TruckStatus }),
+      unloading_started_at: next === "start" ? Date.now() / 1000 : null,
+      wearers: truck.state?.wearers ?? 0,
+    });
+    onClose();
+  }
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-end justify-center sm:items-center sm:p-4">
@@ -298,43 +322,6 @@ export default function FleetMobileActionSheet({
                   Dismiss
                 </button>
               </div>
-            </div>
-          )}
-          {/* Currently unloading — the marker the Load board reads to see which
-              truck is coming off the dock. Its own section, not a status tile:
-              the truck stays dirty underneath and no counter reads it. Offered
-              only on dirty/unfinished because the server 409s on anything else;
-              stays visible while ON so it can always be switched back off. */}
-          {(status === "dirty" || status === "unfinished" || truck.state?.unloading_started_at != null) && (
-            <div>
-              <SectionLabel>Unloading</SectionLabel>
-              <button
-                type="button"
-                disabled={upsert.isPending}
-                onClick={() => {
-                  upsert.mutate({
-                    truck_number: truck.truck_number,
-                    run_date: runDate,
-                    unloading_started_at:
-                      truck.state?.unloading_started_at != null ? null : Date.now() / 1000,
-                    wearers: truck.state?.wearers ?? 0,
-                  });
-                  onClose();
-                }}
-                className={clsx(
-                  "flex w-full items-center justify-between rounded-xl border px-3 py-3 text-[13px] font-bold transition-colors",
-                  truck.state?.unloading_started_at != null
-                    ? "border-amber-500/60 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
-                    : "border-hairline bg-surface-2/40 text-ink hover:bg-track/60",
-                )}
-              >
-                <span>
-                  {truck.state?.unloading_started_at != null
-                    ? "Currently unloading — tap to stop"
-                    : "Mark as currently unloading"}
-                </span>
-                <span className="text-[11px] font-normal text-ink-faint">shows on Load</span>
-              </button>
             </div>
           )}
           <div>
@@ -602,66 +589,114 @@ export default function FleetMobileActionSheet({
             </div>
           </div>
 
-          {(arrivedEnabled || outsideEnabled || outsideActive || paperBayEnabled || paperBayActive) && (
-            <div>
-              <SectionLabel>Timers &amp; arrival</SectionLabel>
-              <div className="grid grid-cols-3 gap-2">
-                {arrivedEnabled && (
-                  <TimerButton
-                    tone="emerald"
-                    title={arrivedActive ? "Arrived" : "Arrived"}
-                    hint={
-                      arrivedActive
-                        ? new Date(arrivedAt! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-                        : "Stamp now"
-                    }
-                    active={arrivedActive}
-                    onClick={() => {
-                      if (arrivedActive) onClearArrived();
-                      else onArrived();
-                      onClose();
-                    }}
-                  />
-                )}
-                {(outsideActive || outsideEnabled) && (
-                  <TimerButton
-                    tone="sky"
-                    title="Outside"
-                    hint={
-                      outsideActive && typeof outsideRemainingSeconds === "number"
-                        ? fmtCountdown(outsideRemainingSeconds)
-                        : `${outsideMinutes} min timer`
-                    }
-                    active={outsideActive}
-                    disabled={!outsideActive && !canStartOutside}
-                    onClick={() => {
-                      if (outsideActive) onCancelOutside();
-                      else onOutside();
-                      onClose();
-                    }}
-                  />
-                )}
-                {(paperBayActive || paperBayEnabled) && (
-                  <TimerButton
-                    tone="purple"
-                    title="Paper bay"
-                    hint={
-                      paperBayActive && typeof paperBayRemainingSeconds === "number"
-                        ? fmtCountdown(paperBayRemainingSeconds)
-                        : `${paperBayMinutes} min timer`
-                    }
-                    active={paperBayActive}
-                    disabled={!paperBayActive && !canStartPaperBay}
-                    onClick={() => {
-                      if (paperBayActive) onCancelPaperBay();
-                      else onPaperBay();
-                      onClose();
-                    }}
-                  />
-                )}
-              </div>
+          {/* Always rendered: Unloading is a stamp every truck can take, so the
+              section no longer hinges on the arrival/timer settings. */}
+          <div>
+            <SectionLabel>Dock activity</SectionLabel>
+            <div className={clsx("grid gap-2", dockButtons === 1 ? "grid-cols-1" : dockButtons === 3 ? "grid-cols-3" : "grid-cols-2")}>
+              <TimerButton
+                tone="amber"
+                title="Unloading"
+                hint={
+                  unloadingActive
+                    ? new Date(truck.state!.unloading_started_at! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+                    : unloadWorkable
+                      ? "Crew is on it now"
+                      : unloadBlocked
+                        ? "Not on the dock"
+                        : "Sets Dirty first"
+                }
+                active={unloadingActive}
+                disabled={upsert.isPending || (!unloadingActive && unloadBlocked)}
+                onClick={() => {
+                  if (unloadingActive) writeUnloading("stop");
+                  else if (unloadWorkable) writeUnloading("start");
+                  else setUnloadConfirm(true);
+                }}
+              />
+              {arrivedEnabled && (
+                <TimerButton
+                  tone="emerald"
+                  title={arrivedActive ? "Arrived" : "Arrived"}
+                  hint={
+                    arrivedActive
+                      ? new Date(arrivedAt! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+                      : "Stamp now"
+                  }
+                  active={arrivedActive}
+                  onClick={() => {
+                    if (arrivedActive) onClearArrived();
+                    else onArrived();
+                    onClose();
+                  }}
+                />
+              )}
+              {(outsideActive || outsideEnabled) && (
+                <TimerButton
+                  tone="sky"
+                  title="Outside"
+                  hint={
+                    outsideActive && typeof outsideRemainingSeconds === "number"
+                      ? fmtCountdown(outsideRemainingSeconds)
+                      : `${outsideMinutes} min timer`
+                  }
+                  active={outsideActive}
+                  disabled={!outsideActive && !canStartOutside}
+                  onClick={() => {
+                    if (outsideActive) onCancelOutside();
+                    else onOutside();
+                    onClose();
+                  }}
+                />
+              )}
+              {(paperBayActive || paperBayEnabled) && (
+                <TimerButton
+                  tone="purple"
+                  title="Paper bay"
+                  hint={
+                    paperBayActive && typeof paperBayRemainingSeconds === "number"
+                      ? fmtCountdown(paperBayRemainingSeconds)
+                      : `${paperBayMinutes} min timer`
+                  }
+                  active={paperBayActive}
+                  disabled={!paperBayActive && !canStartPaperBay}
+                  onClick={() => {
+                    if (paperBayActive) onCancelPaperBay();
+                    else onPaperBay();
+                    onClose();
+                  }}
+                />
+              )}
             </div>
-          )}
+            {unloadConfirm && !unloadingActive && !unloadWorkable && !unloadBlocked && (
+              <div className="mt-2 rounded-lg border border-amber-700/50 bg-amber-950/30 p-3">
+                <p className="text-sm font-semibold text-amber-200">
+                  #{truck.truck_number} is {STATUS_LABELS[status]} — set it Dirty and mark it unloading?
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-300/70">
+                  Unloading only fits a Dirty or Unfinished truck. This changes the status and
+                  starts the marker the Load board shows, in one step.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={upsert.isPending}
+                    onClick={() => writeUnloading("start", true)}
+                    className="flex-1 rounded-md bg-amber-600 px-3 py-2 text-xs font-bold text-black transition-colors hover:bg-amber-500 disabled:opacity-50"
+                  >
+                    Set Dirty &amp; unload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUnloadConfirm(false)}
+                    className="rounded-md border border-hairline bg-surface-2/60 px-3 py-2 text-xs font-semibold text-ink-soft transition-colors hover:bg-track"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
 
           <button
             type="button"

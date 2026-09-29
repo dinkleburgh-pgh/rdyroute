@@ -115,7 +115,20 @@ def update_section(
     sec = db.get(RotationSection, section_id)
     if sec is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, f"No section {section_id}")
-    for field, value in payload.model_dump(exclude_unset=True).items():
+    updates = payload.model_dump(exclude_unset=True)
+    if "name" in updates:
+        # The column is unique; say so before the index does (a 500 tells the
+        # page nothing it can show).
+        name = (updates["name"] or "").strip()
+        if not name:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Section name cannot be empty")
+        clash = db.scalar(
+            select(RotationSection).where(RotationSection.name == name, RotationSection.id != section_id)
+        )
+        if clash is not None:
+            raise HTTPException(status.HTTP_409_CONFLICT, f"There is already a section named {name!r}")
+        updates["name"] = name
+    for field, value in updates.items():
         setattr(sec, field, value)
     db.commit()
     db.refresh(sec)

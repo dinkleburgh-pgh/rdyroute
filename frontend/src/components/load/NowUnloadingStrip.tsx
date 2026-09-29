@@ -77,18 +77,38 @@ export default function NowUnloadingStrip({
              work column, and neither is wide enough for the old single line:
              it wrapped the pill and buttons into a crowded right-hung clump
              with mismatched heights. */
-          <div key={t.truck_number} className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-              <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
-                Now unloading
-              </span>
-              <span className="font-mono text-lg font-black tabular-nums text-ink">
-                #{t.truck_number}
-              </span>
-              {!dense && cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
-              {!dense && renderClock?.(t.state!.unloading_started_at!)}
-            </div>
+          <div key={t.truck_number} className={clsx("flex", dense ? "flex-row items-stretch gap-3" : "flex-col gap-2")}>
+            {dense ? (
+              /* The display's square. From across the dock the one thing this
+                 strip has to say is WHICH truck is coming off — so the number
+                 gets a box of its own, fixed in size so it cannot stretch with
+                 the answer column beside it. The start time is static text:
+                 the display has no live clock here on purpose (see renderClock). */
+              <div className="flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-xl border-2 border-amber-500/70 bg-amber-950/40 text-center">
+                <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-amber-300">
+                  Now unloading
+                </span>
+                <span className="font-mono text-4xl font-black leading-none tabular-nums text-ink">
+                  #{t.truck_number}
+                </span>
+                <span className="mt-1 text-[11px] font-semibold text-amber-200/80">
+                  since {new Date(t.state!.unloading_started_at! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                </span>
+              </div>
+            ) : (
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
+                  Now unloading
+                </span>
+                <span className="font-mono text-lg font-black tabular-nums text-ink">
+                  #{t.truck_number}
+                </span>
+                {cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
+                {renderClock?.(t.state!.unloading_started_at!)}
+              </div>
+            )}
 
+            <div className={clsx(dense && "flex min-w-0 flex-1 flex-col justify-center")}>
             {req == null ? (
               <div className="flex flex-wrap items-center gap-2">
                 {/* The schedule's own answer, stated before anyone taps. Load
@@ -171,6 +191,7 @@ export default function NowUnloadingStrip({
                 )}
               </div>
             )}
+            </div>
           </div>
         );
       })}

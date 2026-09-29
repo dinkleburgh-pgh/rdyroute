@@ -1058,7 +1058,11 @@ def update_truck_state(
     #       Arrived / Not arrived with no error.
     #   (d) any status change ends it. Mark Unloaded, Mark Unfinished, undo, OOS —
     #       whatever moves status also clears the marker, so it can never outlive
-    #       the work it describes.
+    #       the work it describes. One exception: a write that sets a status AND
+    #       the marker together keeps the marker. That is the Fleet menu's
+    #       "Unloading" tap on a truck the app still shows Loaded/Unloaded,
+    #       which sets Dirty and starts the marker in one round trip — and (a)
+    #       has already proved the new status is one it can be set on.
     _marker_set = updates.get("unloading_started_at") is not None
     if _marker_set:
         if row.status not in _UNLOAD_WORKABLE:
@@ -1092,7 +1096,7 @@ def update_truck_state(
     ):
         row.needs_crossload = True
 
-    if row.status != previous_status or row.status not in _UNLOAD_WORKABLE:
+    if not _marker_set and (row.status != previous_status or row.status not in _UNLOAD_WORKABLE):
         row.unloading_started_at = None  # (d)
     # (e) the load crew's request hangs off the marker — derived, not duplicated,
     # so rules (c) and (d) can never clear one without the other, and a future

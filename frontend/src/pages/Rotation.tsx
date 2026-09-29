@@ -1,13 +1,15 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   useAddRotationPerson,
   useAdvanceRotation,
   useAssignRotation,
+  useRenameRotationSection,
   useRotationHistory,
   useRotationPeople,
   useRotationWeek,
   useUpdateRotationPerson,
 } from "../api/hooks";
+import { useAuth } from "../contexts/AuthContext";
 
 /** Monday of the week containing d, as YYYY-MM-DD in LOCAL time.
  *  Never use toISOString() here - it shifts to UTC and lands on the wrong
@@ -47,6 +49,37 @@ export default function Rotation() {
   const advance = useAdvanceRotation();
   const addPerson = useAddRotationPerson();
   const updatePerson = useUpdateRotationPerson();
+  const rename = useRenameRotationSection();
+  const { user } = useAuth();
+  // Mirrors the server's require_admin (admin / fleet / supervisor). Section
+  // names are floor vocabulary — the migration seeded "Section 1–4", and the
+  // people who run the floor put the real names on them here.
+  const canRename = user?.role === "admin" || user?.role === "fleet" || user?.role === "supervisor";
+  const [renamingId, setRenamingId] = useState<number | null>(null);
+  const [renameDraft, setRenameDraft] = useState("");
+  // The draft is mirrored into a ref so the blur that commits it can never
+  // read a stale closure — Escape resets the ref THEN blurs, which makes the
+  // commit a no-op instead of a race.
+  const renameDraftRef = useRef("");
+  function setDraft(v: string) {
+    renameDraftRef.current = v;
+    setRenameDraft(v);
+  }
+  function commitRename(id: number, current: string) {
+    const name = renameDraftRef.current.trim();
+    setRenamingId(null);
+    if (!name || name === current) return;
+    setErr(null);
+    rename.mutate(
+      { id, name },
+      {
+        onError: (e: unknown) => {
+          const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+          setErr(detail ?? "Could not rename that section.");
+        },
+      },
+    );
+  }
 
   const [newName, setNewName] = useState("");
   const [err, setErr] = useState<string | null>(null);
@@ -121,11 +154,41 @@ export default function Rotation() {
                     : "border-white/10 bg-white/[0.03]")
                 }
               >
-                <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-bold">{slot.section_name}</span>
-                  {slot.is_floater && (
-                    <span className="text-[10px] text-ink-faint">floater</span>
+                <div className="flex items-center justify-between gap-2">
+                  {renamingId === slot.section_id ? (
+                    <input
+                      autoFocus
+                      maxLength={80}
+                      value={renameDraft}
+                      onChange={(e) => setDraft(e.target.value)}
+                      onBlur={() => commitRename(slot.section_id, slot.section_name)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") e.currentTarget.blur();
+                        if (e.key === "Escape") {
+                          setDraft(slot.section_name);
+                          e.currentTarget.blur();
+                        }
+                      }}
+                      className="min-w-0 flex-1 rounded border border-white/20 bg-transparent px-1.5 py-0.5 text-[12px] font-bold"
+                    />
+                  ) : (
+                    <span className="min-w-0 truncate text-[12px] font-bold">{slot.section_name}</span>
                   )}
+                  <span className="flex shrink-0 items-center gap-2">
+                    {slot.is_floater && <span className="text-[10px] text-ink-faint">floater</span>}
+                    {canRename && renamingId !== slot.section_id && (
+                      <button
+                        type="button"
+                        className="text-[10px] text-ink-faint hover:text-ink"
+                        onClick={() => {
+                          setDraft(slot.section_name);
+                          setRenamingId(slot.section_id);
+                        }}
+                      >
+                        rename
+                      </button>
+                    )}
+                  </span>
                 </div>
                 <select
                   className="mt-2 w-full bg-transparent text-sm"

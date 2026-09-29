@@ -259,6 +259,14 @@ export default function FleetCard({ truck, index, ...ctx }: { truck: TruckWithSt
                   {STATUS_LABELS[status]}
                 </span>
               )}
+              {/* 1b. Now unloading — the dock's one-at-a-time marker, set from
+                  Unload or the Fleet menu; the lead who set it should see it
+                  stick. Status-guarded like every other reader, so a stale
+                  marker never lights a finished truck. */}
+              {truck.state?.unloading_started_at != null &&
+                (truck.state.status === "dirty" || truck.state.status === "unfinished") && (
+                <span className="badge bg-amber-500 font-bold text-black">Unloading</span>
+              )}
               {/* 2. U Off chip — route trucks only; spares are always off unless assigned */}
               {fleetMode && status === "off" && truck.truck_type !== "Spare" && !getCoverageRouteNumber(truck) && !truck.state?.needs_checked && (
                 <span className="badge bg-track text-ink-soft">U Off</span>
