@@ -448,20 +448,18 @@ def _top_items_html(m) -> str:
             key=lambda kv: kv[1],
             reverse=True,
         )
-        # Every truck, in two balanced columns. The rows are two short numbers
-        # in different colours, so they stay legible at half width — and an item
-        # is routinely short on 15-20 trucks, where a "+14 more" tail hid the
-        # detail the page exists to show.
+        # Every truck is listed — an item is routinely short on 15-20 trucks,
+        # where a "+14 more" tail hid the detail the page exists to show.
         rows_html = "".join(
             f'<li><span class="il mono">#{tn}</span>'
             f'<span class="mono" style="color:#fcd34d">{q}</span></li>'
             for tn, q in hits
         )
-        # One truck per line; two columns only for a long list (more than 8),
-        # matching the report page. Two-per-line on short lists read as one
-        # row of four numbers, and a single truck in a two-column list floated
-        # off to the middle of the card.
-        list_cls = "alist cols" if len(hits) > 8 else "alist"
+        # One truck per line. Two columns only when one column would overrun
+        # the printed card (about 16 rows at 9.5px) — the page itself never
+        # splits. Two-per-line read as one row of four numbers, and a single
+        # truck in a two-column list floated off to the middle of the card.
+        list_cls = "alist cols" if len(hits) > 16 else "alist"
         cards.append(
             f'<div class="tcard">'
             f'<div class="ah"><span class="rank">#{i}</span>'
