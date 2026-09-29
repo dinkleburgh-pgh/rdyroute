@@ -1053,11 +1053,17 @@ export function useAssignRotation() {
 }
 
 /** Build a week by moving everyone one section along. 409s if it already exists. */
+/** Build an empty week from the previous one; `force` rebuilds one that
+ *  already has rows (the page confirms first). */
 export function useAdvanceRotation() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (week?: string) =>
-      (await api.post<RotationWeek>("/rotation/advance", null, { params: week ? { week } : {} })).data,
+    mutationFn: async (args: { week?: string; force?: boolean } = {}) =>
+      (
+        await api.post<RotationWeek>("/rotation/advance", null, {
+          params: { ...(args.week ? { week: args.week } : {}), ...(args.force ? { force: true } : {}) },
+        })
+      ).data,
     onSuccess: () => invalidateRotation(qc),
   });
 }

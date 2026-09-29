@@ -268,6 +268,7 @@ def assign(
 @router.post("/advance", response_model=RotationWeekOut)
 def advance(
     week: date | None = Query(None, description="Week to BUILD; defaults to this week"),
+    force: bool = Query(False, description="Rebuild a week that already has assignments"),
     db: Session = Depends(get_db),
     _: User = Depends(require_non_guest),
 ):
@@ -278,15 +279,22 @@ def advance(
     moment anyone is moved by hand. People who joined since are appended, people
     who left drop out, and then the whole list shifts by one.
 
-    Refuses to overwrite a week that already has assignments — rebuilding a week
-    someone has already adjusted by hand is exactly the surprise worth blocking.
+    Refuses to overwrite a week that already has assignments unless `force` —
+    rebuilding a week someone has already adjusted by hand is exactly the
+    surprise worth blocking, so the page asks first. `force` is how a hand
+    edit to a PREVIOUS week flows forward: fix last week, rebuild this one.
     """
     target = _week_start(week)
-    if _week_rows(db, target):
+    existing = _week_rows(db, target)
+    if existing and not force:
         raise HTTPException(
             status.HTTP_409_CONFLICT,
-            f"Week of {target} already has assignments — clear them first or edit individually.",
+            f"Week of {target} already has assignments — rebuild it, or edit individually.",
         )
+    for row in existing:
+        db.delete(row)
+    if existing:
+        db.flush()
 
     people = _people(db)
     if not people:
