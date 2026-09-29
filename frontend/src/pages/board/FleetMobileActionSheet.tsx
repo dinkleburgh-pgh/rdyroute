@@ -117,6 +117,10 @@ function TimerButton({
   );
 }
 
+// Day-to-day statuses only. `oos` and `spare` are deliberately NOT here:
+// they are deeper configuration (the OOS toggle lives in Manage truck; spare is
+// a truck type), not something to flip from the quick menu. Six entries = two
+// even rows of three.
 const STATUS_ACTIONS: TruckStatus[] = [
   "dirty",
   "unfinished",
@@ -124,15 +128,6 @@ const STATUS_ACTIONS: TruckStatus[] = [
   "unloaded",
   "in_progress",
   "loaded",
-  "oos",
-];
-// Spares also get their idle status back — without it, one mis-tap on an
-// idle spare was unrecoverable from this sheet. Slotted before OOS so the
-// grid stays two even rows of four.
-const SPARE_STATUS_ACTIONS: TruckStatus[] = [
-  ...STATUS_ACTIONS.slice(0, -1),
-  "spare",
-  "oos",
 ];
 
 export default function FleetMobileActionSheet({
@@ -305,10 +300,47 @@ export default function FleetMobileActionSheet({
               </div>
             </div>
           )}
+          {/* Currently unloading — the marker the Load board reads to see which
+              truck is coming off the dock. Its own section, not a status tile:
+              the truck stays dirty underneath and no counter reads it. Offered
+              only on dirty/unfinished because the server 409s on anything else;
+              stays visible while ON so it can always be switched back off. */}
+          {(status === "dirty" || status === "unfinished" || truck.state?.unloading_started_at != null) && (
+            <div>
+              <SectionLabel>Unloading</SectionLabel>
+              <button
+                type="button"
+                disabled={upsert.isPending}
+                onClick={() => {
+                  upsert.mutate({
+                    truck_number: truck.truck_number,
+                    run_date: runDate,
+                    unloading_started_at:
+                      truck.state?.unloading_started_at != null ? null : Date.now() / 1000,
+                    wearers: truck.state?.wearers ?? 0,
+                  });
+                  onClose();
+                }}
+                className={clsx(
+                  "flex w-full items-center justify-between rounded-xl border px-3 py-3 text-[13px] font-bold transition-colors",
+                  truck.state?.unloading_started_at != null
+                    ? "border-amber-500/60 bg-amber-500/10 text-amber-300 hover:bg-amber-500/20"
+                    : "border-hairline bg-surface-2/40 text-ink hover:bg-track/60",
+                )}
+              >
+                <span>
+                  {truck.state?.unloading_started_at != null
+                    ? "Currently unloading — tap to stop"
+                    : "Mark as currently unloading"}
+                </span>
+                <span className="text-[11px] font-normal text-ink-faint">shows on Load</span>
+              </button>
+            </div>
+          )}
           <div>
             <SectionLabel>Set status</SectionLabel>
-            <div className="grid grid-cols-4 gap-2">
-              {(truck.truck_type === "Spare" ? SPARE_STATUS_ACTIONS : STATUS_ACTIONS).map((s) => {
+            <div className="grid grid-cols-3 gap-2">
+              {STATUS_ACTIONS.map((s) => {
                 const isCurrent = status === s;
                 return (
                   <button
@@ -316,20 +348,6 @@ export default function FleetMobileActionSheet({
                     type="button"
                     disabled={upsert.isPending || isCurrent}
                     onClick={() => {
-                      if (s === "oos") {
-                        // Mark it OOS right here — both writes the Manage-truck
-                        // editor makes, so the fleet record and today's status
-                        // agree. (This used to bounce to Manage truck.)
-                        setOos.mutate({ truck_number: truck.truck_number, is_oos: true });
-                        upsert.mutate({
-                          truck_number: truck.truck_number,
-                          run_date: runDate,
-                          status: "oos",
-                          wearers: truck.state?.wearers ?? 0,
-                        });
-                        onClose();
-                        return;
-                      }
                       // Leaving OOS must clear the fleet-level flag too, or
                       // effectiveStatus keeps showing OOS and the tap reads as
                       // a no-op — the mirror of the OOS tile setting both.
