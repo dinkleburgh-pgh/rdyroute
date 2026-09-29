@@ -108,9 +108,7 @@ export default function LoadDisplay({
   const shellCols =
     effectiveWidth >= 1000 ? "minmax(0,2.2fr) minmax(0,1fr)" : "minmax(0,1fr)";
 
-  const dialogOpen =
-    actions.confirmLoadTruck !== null || actions.confirmGarmentTruck !== null ||
-    shortSheetOpen || nextUpOpen;
+  const dialogOpen = actions.confirmGarmentTruck !== null || shortSheetOpen || nextUpOpen;
 
   // Esc leaves the display — but never while something is layered on top.
   // ConfirmDialog registers its own Escape listener, so without this guard a

@@ -1,5 +1,5 @@
 import { errorMessage } from "../api/errors";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import {
   useBoard,
   useClearNextUp,
@@ -19,29 +19,29 @@ import { loadingCargo } from "../utils/truckStatus";
  * (it navigates away on finish and skips the garment confirmation). Owning it
  * here means the two surfaces cannot drift.
  *
- * The confirm STATE lives here too, but each surface renders the dialogs
- * itself, so they can sit at whatever layer that surface needs.
+ * The garment confirm STATE lives here too, but each surface renders the
+ * dialog itself, so it can sit at whatever layer that surface needs.
+ *
+ * Starting has no confirmation: the chooser tap is already deliberate, and
+ * Cancel on the loading card undoes a mis-tap.
+ * What the old "Start loading?" dialog used to guard is checked in
+ * requestStart instead, and says why in a toast rather than doing nothing.
  */
 export interface LoadActions {
   busy: number | null;
   inProgress: TruckWithState | undefined;
   anyInProgress: boolean;
-  /** Truck awaiting the "Start loading?" confirmation. */
-  confirmLoadTruck: TruckWithState | null;
-  setConfirmLoadTruck: (t: TruckWithState | null) => void;
   /** Truck awaiting the "Did you load garments?" confirmation. */
   confirmGarmentTruck: TruckWithState | null;
   /** The route whose garments ride on that truck, when it is covering one
    *  (null = the truck's own garments). */
   confirmGarmentSource: number | null;
   setConfirmGarmentTruck: (t: TruckWithState | null) => void;
-  /** The pending truck is a Spare with no route to carry — cannot load. */
-  confirmIsUncoveredSpare: boolean;
-  /** Ask to start a truck (opens the confirmation). */
+  /** Start a truck now — or toast why it can't start. */
   requestStart: (t: TruckWithState) => void;
   /** Finish a truck, routing through the garment prompt when it's flagged. */
   requestFinish: (t: TruckWithState) => void;
-  /** Commit a start — call from the confirmation's confirm button. */
+  /** Commit a start, with no guards — requestStart is the entry point. */
   startLoad: (t: TruckWithState) => Promise<void>;
   /** Commit a finish — call after the garment prompt (or directly). */
   finishLoad: (t: TruckWithState) => Promise<void>;
@@ -66,9 +66,11 @@ export function useLoadActions(
   const toast = useToast();
 
   const [busy, setBusy] = useState<number | null>(null);
-  const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
   const [confirmGarmentTruck, setConfirmGarmentTruck] = useState<TruckWithState | null>(null);
   const [confirmGarmentSource, setConfirmGarmentSource] = useState<number | null>(null);
+  // Set synchronously on the first tap, so a double tap (or two start buttons
+  // in the same frame) can't fire two starts before `busy` re-renders.
+  const startingRef = useRef<number | null>(null);
 
   const inProgress = useMemo(
     () => board.find((t) => t.state?.status === "in_progress"),
@@ -76,19 +78,37 @@ export function useLoadActions(
   );
   const anyInProgress = Boolean(inProgress);
 
-  // A spare can't load until it's covering a route (enforced on the backend
-  // too). A SPLIT assignment counts — the spare is carrying a route's
-  // overflow even though it isn't "covering" it.
-  const confirmIsUncoveredSpare =
-    confirmLoadTruck != null &&
-    confirmLoadTruck.truck_type === "Spare" &&
-    confirmLoadTruck.route_swap_route == null &&
-    confirmLoadTruck.route_split_route == null &&
-    confirmLoadTruck.state?.oos_spare_route == null;
+  function requestStart(t: TruckWithState) {
+    if (startingRef.current != null) return;
+    if (inProgress) {
+      if (inProgress.truck_number !== t.truck_number) {
+        toast.error(`#${inProgress.truck_number} is still loading — finish it first.`);
+      }
+      return;
+    }
+    if (t.state?.priority_hold) {
+      toast.error(`#${t.truck_number} is on hold — release the hold before loading it.`);
+      return;
+    }
+    // A spare can't load until it's covering a route (enforced on the backend
+    // too). A SPLIT assignment counts — the spare is carrying a route's
+    // overflow even though it isn't "covering" it.
+    if (
+      t.truck_type === "Spare" &&
+      t.route_swap_route == null &&
+      t.route_split_route == null &&
+      t.state?.oos_spare_route == null
+    ) {
+      toast.error(`Spare #${t.truck_number} has no route to cover yet — assign one on the board first.`);
+      return;
+    }
+    void startLoad(t);
+  }
 
   async function startLoad(t: TruckWithState) {
     if (anyInProgress) return;
     if (t.state?.priority_hold) return;
+    startingRef.current = t.truck_number;
     setBusy(t.truck_number);
     try {
       const nowSec = Date.now() / 1000;
@@ -113,6 +133,7 @@ export function useLoadActions(
       // feedback at all.
       toast.error(errorMessage(err, `Couldn't start truck #${t.truck_number}.`));
     } finally {
+      startingRef.current = null;
       setBusy(null);
     }
   }
@@ -179,13 +200,10 @@ export function useLoadActions(
     busy,
     inProgress,
     anyInProgress,
-    confirmLoadTruck,
-    setConfirmLoadTruck,
     confirmGarmentTruck,
     confirmGarmentSource,
     setConfirmGarmentTruck,
-    confirmIsUncoveredSpare,
-    requestStart: (t) => setConfirmLoadTruck(t),
+    requestStart,
     // The garment branch lives here, not at the call site, so every surface
     // gets the prompt — InProgressHero's copy of "finish" has never had it.
     requestFinish: (t) => {

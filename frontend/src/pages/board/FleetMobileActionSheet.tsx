@@ -237,7 +237,7 @@ export default function FleetMobileActionSheet({
   const unloadWorkable = status === "dirty" || status === "unfinished";
   const unloadBlocked = status === "off" || status === "oos" || status === "shop";
   const dockButtons =
-    1 + Number(arrivedEnabled) + Number(outsideActive || outsideEnabled) + Number(paperBayActive || paperBayEnabled);
+    Number(arrivedEnabled) + Number(outsideActive || outsideEnabled) + Number(paperBayActive || paperBayEnabled);
 
   function writeUnloading(next: "start" | "stop", setDirty = false) {
     upsert.mutate({
@@ -363,7 +363,65 @@ export default function FleetMobileActionSheet({
                   </button>
                 );
               })}
+              {/* Unloading sits with the statuses, full width under them — but
+                  it is still a STAMP, not a status: it writes
+                  unloading_started_at (one truck at a time, server-enforced)
+                  and the truck keeps its status while it runs. */}
+              <button
+                type="button"
+                disabled={upsert.isPending || (!unloadingActive && unloadBlocked)}
+                onClick={() => {
+                  if (unloadingActive) writeUnloading("stop");
+                  else if (unloadWorkable) writeUnloading("start");
+                  else setUnloadConfirm(true);
+                }}
+                className={clsx(
+                  "col-span-3 flex items-center justify-center gap-2 rounded-xl border px-3 py-3 text-[13px] font-bold transition-colors disabled:opacity-40",
+                  unloadingActive ? TIMER_TONES.amber.on : [TIMER_TONES.amber.idle, "bg-surface-2/40 hover:bg-track/60"],
+                )}
+              >
+                <span className={clsx("h-2.5 w-2.5 rounded-full bg-amber-400", unloadingActive && "animate-pulse")} />
+                <span>Unloading</span>
+                <span className="text-[12px] font-semibold opacity-70">
+                  ·{" "}
+                  {unloadingActive
+                    ? `since ${new Date(truck.state!.unloading_started_at! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })} · tap to stop`
+                    : unloadWorkable
+                      ? "crew is on it now"
+                      : unloadBlocked
+                        ? "not on the dock"
+                        : "sets Dirty first"}
+                </span>
+              </button>
             </div>
+            {unloadConfirm && !unloadingActive && !unloadWorkable && !unloadBlocked && (
+              <div className="mt-2 rounded-lg border border-amber-700/50 bg-amber-950/30 p-3">
+                <p className="text-sm font-semibold text-amber-200">
+                  #{truck.truck_number} is {STATUS_LABELS[status]} — set it Dirty and mark it unloading?
+                </p>
+                <p className="mt-0.5 text-[11px] text-amber-300/70">
+                  Unloading only fits a Dirty or Unfinished truck. This changes the status and
+                  starts the marker the Load board shows, in one step.
+                </p>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    type="button"
+                    disabled={upsert.isPending}
+                    onClick={() => writeUnloading("start", true)}
+                    className="flex-1 rounded-md bg-amber-600 px-3 py-2 text-xs font-bold text-black transition-colors hover:bg-amber-500 disabled:opacity-50"
+                  >
+                    Set Dirty &amp; unload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setUnloadConfirm(false)}
+                    className="rounded-md border border-hairline bg-surface-2/60 px-3 py-2 text-xs font-semibold text-ink-soft transition-colors hover:bg-track"
+                  >
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           <div>
@@ -590,31 +648,12 @@ export default function FleetMobileActionSheet({
             </div>
           </div>
 
-          {/* Always rendered: Unloading is a stamp every truck can take, so the
-              section no longer hinges on the arrival/timer settings. */}
+          {/* Arrival stamp and dock timers — only the ones switched on in
+              settings (Unloading moved up to Set status). */}
+          {dockButtons > 0 && (
           <div>
             <SectionLabel>Dock activity</SectionLabel>
             <div className={clsx("grid gap-2", dockButtons === 1 ? "grid-cols-1" : dockButtons === 3 ? "grid-cols-3" : "grid-cols-2")}>
-              <TimerButton
-                tone="amber"
-                title="Unloading"
-                hint={
-                  unloadingActive
-                    ? new Date(truck.state!.unloading_started_at! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
-                    : unloadWorkable
-                      ? "Crew is on it now"
-                      : unloadBlocked
-                        ? "Not on the dock"
-                        : "Sets Dirty first"
-                }
-                active={unloadingActive}
-                disabled={upsert.isPending || (!unloadingActive && unloadBlocked)}
-                onClick={() => {
-                  if (unloadingActive) writeUnloading("stop");
-                  else if (unloadWorkable) writeUnloading("start");
-                  else setUnloadConfirm(true);
-                }}
-              />
               {arrivedEnabled && (
                 <TimerButton
                   tone="emerald"
@@ -669,35 +708,8 @@ export default function FleetMobileActionSheet({
                 />
               )}
             </div>
-            {unloadConfirm && !unloadingActive && !unloadWorkable && !unloadBlocked && (
-              <div className="mt-2 rounded-lg border border-amber-700/50 bg-amber-950/30 p-3">
-                <p className="text-sm font-semibold text-amber-200">
-                  #{truck.truck_number} is {STATUS_LABELS[status]} — set it Dirty and mark it unloading?
-                </p>
-                <p className="mt-0.5 text-[11px] text-amber-300/70">
-                  Unloading only fits a Dirty or Unfinished truck. This changes the status and
-                  starts the marker the Load board shows, in one step.
-                </p>
-                <div className="mt-2 flex gap-2">
-                  <button
-                    type="button"
-                    disabled={upsert.isPending}
-                    onClick={() => writeUnloading("start", true)}
-                    className="flex-1 rounded-md bg-amber-600 px-3 py-2 text-xs font-bold text-black transition-colors hover:bg-amber-500 disabled:opacity-50"
-                  >
-                    Set Dirty &amp; unload
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setUnloadConfirm(false)}
-                    className="rounded-md border border-hairline bg-surface-2/60 px-3 py-2 text-xs font-semibold text-ink-soft transition-colors hover:bg-track"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
           </div>
+          )}
 
           <button
             type="button"

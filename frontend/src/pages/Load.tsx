@@ -818,9 +818,8 @@ export default function Load() {
       </div>
 
             <LoadActionDialogs actions={actions} />
-      {/* Ready-tile chooser: the three things a ready truck can become. Closes
-          itself before handing off, so the start confirmation it may open
-          never stacks on top of it. */}
+      {/* Ready-tile chooser: the three things a ready truck can become.
+          Start Loading starts straight away — no second confirmation. */}
       {readyChoice && (() => {
         const t = readyChoice;
         const n = t.truck_number;
@@ -839,7 +838,7 @@ export default function Load() {
             <div className="flex flex-col gap-2">
               <ChoiceButton
                 label="Start Loading"
-                hint={cannotStart ? "Finish the in-progress truck first" : "Opens the start confirmation"}
+                hint={cannotStart ? "Finish the in-progress truck first" : "Starts the load now"}
                 tone="blue"
                 disabled={cannotStart}
                 onClick={() => { close(); requestStart(t); }}
