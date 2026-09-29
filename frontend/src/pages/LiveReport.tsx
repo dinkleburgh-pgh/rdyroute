@@ -85,9 +85,9 @@ function clock(epochSec: number | null | undefined): string {
 function Kpi({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: string; tone?: string }) {
   return (
     <div className="rounded-xl border border-hairline bg-surface p-3">
-      <p className="text-[10px] font-semibold uppercase tracking-wide text-ink-faint">{label}</p>
-      <p className={clsx("mt-0.5 text-xl font-bold leading-tight tabular-nums", tone ?? "text-ink")}>{value}</p>
-      {sub ? <p className="mt-0.5 text-[11px] text-ink-muted">{sub}</p> : null}
+      <p className="text-[11px] font-semibold uppercase tracking-wide text-ink-faint">{label}</p>
+      <p className={clsx("mt-0.5 text-2xl font-bold leading-tight tabular-nums", tone ?? "text-ink")}>{value}</p>
+      {sub ? <p className="mt-0.5 text-xs text-ink-muted">{sub}</p> : null}
     </div>
   );
 }
@@ -118,10 +118,10 @@ function Section({
   return (
     <section ref={captureRef} data-report-section={sectionKey} className="space-y-3">
       {!inKioskSlide && (
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</p>
-          <h2 className="text-lg font-bold text-ink">{title}</h2>
-        </div>
+        <h2 className="flex items-baseline gap-2 text-xl font-bold text-ink">
+          <span className="text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">{eyebrow}</span>
+          {title}
+        </h2>
       )}
       {children}
       {downloadName && (
@@ -153,7 +153,7 @@ function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number
           Batch {batch.batch_number}
           <OverbatchedChip show={batch.total_wearers > cap} />
         </span>
-        <span className={clsx("shrink-0 whitespace-nowrap font-mono text-xs font-semibold tabular-nums", text)}>
+        <span className={clsx("shrink-0 whitespace-nowrap font-mono text-sm font-semibold tabular-nums", text)}>
           {batch.total_wearers.toLocaleString()}
           {noCap ? "" : ` / ${cap.toLocaleString()}`}
         </span>
@@ -168,7 +168,7 @@ function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number
           {batch.trucks.map((t) => (
             <span key={t.truck_number} className="inline-flex items-baseline gap-1 rounded-md bg-surface-2 px-2 py-0.5">
               <span className="font-mono text-base font-black tabular-nums text-ink">#{t.truck_number}</span>
-              <span className="text-[11px] text-ink-faint">({t.wearers})</span>
+              <span className="text-xs text-ink-faint">({t.wearers})</span>
             </span>
           ))}
         </div>
@@ -1114,7 +1114,7 @@ export default function LiveReport() {
                         <span className="rounded bg-surface-2 px-1.5 py-0.5 text-[10px] font-semibold text-ink-faint">returned</span>
                       )}
                     </div>
-                    <p className="mt-2.5 border-t border-hairline pt-2 text-center text-xs">
+                    <p className="mt-2.5 border-t border-hairline pt-2 text-center text-sm">
                       {done ? (
                         <span className="text-st-loaded">
                           Loaded
@@ -1156,7 +1156,7 @@ export default function LiveReport() {
           </div>
           {topTrucks.length > 0 && (
             <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
                 Top shorted trucks
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
@@ -1164,20 +1164,18 @@ export default function LiveReport() {
                   <div key={t.truck} className="rounded-xl border border-hairline bg-surface p-3">
                     {/* Place + qty flank the truck number so the number itself
                         stays centred as the card's focal point. */}
-                    <div className="border-b border-hairline pb-1.5">
-                      <div className="flex items-baseline justify-between gap-2">
-                        <span className="text-xs font-bold text-ink-faint">#{i + 1}</span>
-                        <span className="font-mono text-sm font-bold tabular-nums text-amber-300">
-                          {t.total.toLocaleString()} <span className="text-[10px] font-normal text-ink-faint">qty</span>
-                        </span>
-                      </div>
-                      <p className="text-center font-mono text-2xl font-black leading-tight tabular-nums text-ink">
-                        #{t.truck}
-                      </p>
+                    {/* One line: place · truck · qty. The number stays the focal
+                        point by weight, not by owning a row of its own. */}
+                    <div className="flex items-baseline gap-2.5 border-b border-hairline pb-1.5">
+                      <span className="text-xs font-bold text-ink-faint">#{i + 1}</span>
+                      <span className="flex-1 font-mono text-2xl font-black leading-tight tabular-nums text-ink">#{t.truck}</span>
+                      <span className="font-mono text-base font-bold tabular-nums text-amber-300">
+                        {t.total.toLocaleString()} <span className="text-[11px] font-normal text-ink-faint">qty</span>
+                      </span>
                     </div>
                     <ul className="mt-1.5 space-y-0.5">
                       {t.items.map((it) => (
-                        <li key={it.label} className="flex items-baseline justify-between gap-2 text-xs">
+                        <li key={it.label} className="flex items-baseline justify-between gap-2 text-sm">
                           <span className="min-w-0 truncate text-ink-soft">{it.label}</span>
                           <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">
                             {it.qty.toLocaleString()}
@@ -1192,22 +1190,23 @@ export default function LiveReport() {
           )}
           {topItems.length > 0 && (
             <div>
-              <p className="mb-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
+              <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-ink-faint">
                 Top shorted items
               </p>
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-5">
                 {topItems.map((it, i) => (
                   <div key={it.label} className="rounded-xl border border-hairline bg-surface p-3">
-                    <div className="flex items-baseline justify-between gap-2">
-                      <span className="text-xs font-bold text-ink-faint">#{i + 1}</span>
-                      <span className="font-mono text-sm font-bold tabular-nums text-amber-300">
-                        {it.qty.toLocaleString()} <span className="text-[10px] font-normal text-ink-faint">qty</span>
+                    {/* One line: place · item · qty. */}
+                    <div className="flex items-center gap-2 border-b border-hairline pb-1.5">
+                      <span className="shrink-0 text-xs font-bold text-ink-faint">#{i + 1}</span>
+                      <span className={clsx("h-2 w-2 shrink-0 rounded-full", palette.dotClass(it.category))} />
+                      <span className="min-w-0 flex-1 truncate text-base font-bold leading-tight text-ink" title={it.label}>
+                        {it.label}
+                      </span>
+                      <span className="shrink-0 font-mono text-base font-bold tabular-nums text-amber-300">
+                        {it.qty.toLocaleString()} <span className="text-[11px] font-normal text-ink-faint">qty</span>
                       </span>
                     </div>
-                    <p className="mt-1 flex items-center justify-center gap-1.5 border-t border-hairline pt-1.5 text-center text-sm font-bold leading-tight text-ink">
-                      <span className={clsx("h-2 w-2 shrink-0 rounded-full", palette.dotClass(it.category))} />
-                      {it.label}
-                    </p>
                     {/* Which trucks this item was short on — the mirror of the
                         per-truck cards above, which list items. */}
                     {/* Two balanced columns instead of a truncated single one.
@@ -1216,11 +1215,11 @@ export default function LiveReport() {
                         half width, and the whole list fits: an item can be
                         short on 20+ trucks, where "+14 more" hid exactly the
                         detail someone opened the report for. */}
-                    <ul className="mt-1.5 columns-2 gap-x-3 border-t border-hairline pt-1.5">
+                    <ul className="mt-1.5 columns-2 gap-x-3">
                       {it.trucks.map((t) => (
                         <li
                           key={t.truck}
-                          className="flex items-baseline justify-between gap-2 break-inside-avoid text-xs leading-relaxed"
+                          className="flex items-baseline justify-between gap-2 break-inside-avoid text-sm leading-relaxed"
                         >
                           <span className="font-mono font-semibold tabular-nums text-ink-soft">#{t.truck}</span>
                           <span className="shrink-0 font-mono font-semibold tabular-nums text-amber-300">
@@ -1282,7 +1281,7 @@ export default function LiveReport() {
                     className="flex items-center justify-center gap-3 rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-sm"
                   >
                     <span className="w-12 text-right font-mono font-bold tabular-nums text-ink">#{t.truck_number}</span>
-                    <span className="w-16 text-center text-xs text-ink-muted">{clock(t.state?.load_finish_time)}</span>
+                    <span className="w-16 text-center text-sm text-ink-muted">{clock(t.state?.load_finish_time)}</span>
                     <span className={clsx("w-16 font-mono font-semibold tabular-nums", durTone(d))}>{formatDuration(d)}</span>
                   </div>
                 );
@@ -1303,7 +1302,7 @@ export default function LiveReport() {
           {catRollup.length > 0 && (
             <div className="flex flex-wrap gap-1.5">
               {catRollup.map(([cat, qty]) => (
-                <span key={cat} className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-surface px-2.5 py-1 text-xs">
+                <span key={cat} className="inline-flex items-center gap-1.5 rounded-pill border border-hairline bg-surface px-2.5 py-1 text-sm">
                   <span className={clsx("h-2 w-2 rounded-full", palette.dotClass(cat))} />
                   <span className="text-ink-soft">{cat}</span>
                   <span className="font-mono font-semibold tabular-nums text-ink">{qty}</span>
@@ -1323,16 +1322,16 @@ export default function LiveReport() {
                       <span className="font-mono font-bold tabular-nums text-ink">
                         #{truck}
                         {routeOverride != null && routeOverride !== truck && (
-                          <span className="ml-1 text-[11px] font-normal text-ink-faint">(route {routeOverride})</span>
+                          <span className="ml-1 text-xs font-normal text-ink-faint">(route {routeOverride})</span>
                         )}
                       </span>
-                      <span className="text-[11px] text-ink-muted">
+                      <span className="text-xs text-ink-muted">
                         {entries.length} item{entries.length === 1 ? "" : "s"}
                       </span>
                     </div>
                     <ul className="space-y-0.5">
                       {entries.map((e) => (
-                        <li key={e.id} className="flex items-center justify-between gap-2 text-xs">
+                        <li key={e.id} className="flex items-center justify-between gap-2 text-sm">
                           <span className="flex min-w-0 items-center gap-1.5">
                             <span className="truncate text-ink-soft">{itemDisplayName(e.item_label)}</span>
                             {e.warn_on_next_load && (
