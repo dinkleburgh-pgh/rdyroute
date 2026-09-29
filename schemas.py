@@ -967,6 +967,27 @@ class GarmentDayLogOut(_OrmBase):
     created_at: datetime
 
 
+class NogsDayLogOut(_OrmBase):
+    id: int
+    run_date: date
+    truck_number: int
+    has_nogs: bool
+    source: str
+    actor_username: str | None
+    created_at: datetime
+
+
+class NogsUsualOut(BaseModel):
+    """How often one route carried NOGs on one weekday — the auto-guess read."""
+    truck_number: int
+    # Python weekday: 0 = Monday … 6 = Sunday.
+    weekday: int
+    flagged_days: int
+    operating_days: int
+    share: float
+    last_flagged: date
+
+
 # ---------------------------------------------------------------------------
 # Notices
 # ---------------------------------------------------------------------------

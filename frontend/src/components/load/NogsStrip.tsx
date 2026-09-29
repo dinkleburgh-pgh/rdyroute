@@ -1,4 +1,6 @@
 import clsx from "clsx";
+import { Undo2 } from "lucide-react";
+import { CHECKLIST_CHIP } from "./GarmentsStrip";
 import type { TruckWithState } from "../../types";
 
 /**
@@ -6,9 +8,10 @@ import type { TruckWithState } from "../../types";
  *
  * Sibling of the F.S. Garments strip on the LOAD side: the flag is set at the
  * start of the day (Setup Day wizard, or a truck's status sheet) and the load
- * crew makes sure the NOGs leave with the truck. Chips mirror the garments
- * strip — sky once the truck is loaded (NOGs out the door), rose while the
- * load is still pending. When nothing is flagged the strip stays off the page
+ * crew makes sure the NOGs leave with the truck. Same one-row shape and the
+ * same chip as the garments strip — sky once the truck is loaded (NOGs out
+ * the door), rose while the load is still pending — so the two sit together
+ * as one family. When nothing is flagged the strip stays off the page
  * entirely; most days there are none.
  */
 export default function NogsStrip({
@@ -23,36 +26,36 @@ export default function NogsStrip({
   const out = trucks.filter((t) => t.state?.status === "loaded").length;
   return (
     <div
-      className={clsx("rounded-xl border", className)}
+      className={clsx("flex flex-wrap items-center gap-x-3 gap-y-2 rounded-xl border px-3 py-2", className)}
       style={{ borderColor: "rgba(244,63,94,0.30)", background: "rgba(244,63,94,0.06)" }}
     >
-      <div className="flex w-full items-center gap-2 px-3 py-2.5">
+      <span className="inline-flex shrink-0 items-center gap-2">
+        <Undo2 className="h-3.5 w-3.5 shrink-0 text-rose-400" aria-hidden />
         <span className="text-xs font-semibold uppercase tracking-wide text-rose-400">NOGs — not our garments</span>
-        <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
-          {out} of {trucks.length} out
-        </span>
+      </span>
+      <div className="flex flex-wrap gap-1.5">
+        {trucks.map((t) => {
+          const done = t.state?.status === "loaded";
+          return (
+            <span
+              key={t.truck_number}
+              title={done ? "Loaded — NOGs out the door" : "NOGs to send back out"}
+              className={clsx(
+                CHECKLIST_CHIP,
+                done
+                  ? "border-sky-500/60 bg-sky-950/50 text-sky-200"
+                  : "border-rose-800/50 bg-rose-950/30 text-rose-200",
+              )}
+            >
+              #{t.truck_number}
+              <Undo2 className="h-5 w-5" aria-hidden />
+            </span>
+          );
+        })}
       </div>
-      <div className="border-t px-3 pb-3 pt-2" style={{ borderColor: "rgba(244,63,94,0.20)" }}>
-        <div className="flex flex-wrap gap-1.5">
-          {trucks.map((t) => {
-            const done = t.state?.status === "loaded";
-            return (
-              <span
-                key={t.truck_number}
-                title={done ? "Loaded — NOGs out the door" : "NOGs to send back out"}
-                className={clsx(
-                  "rounded-md border px-2 py-0.5 font-mono text-sm font-bold",
-                  done
-                    ? "border-sky-500/60 bg-sky-950/50 text-sky-200"
-                    : "border-rose-800/50 bg-rose-950/30 text-rose-200",
-                )}
-              >
-                #{t.truck_number}
-              </span>
-            );
-          })}
-        </div>
-      </div>
+      <span className="ml-auto font-mono text-xs tabular-nums text-ink-muted">
+        {out} of {trucks.length} out
+      </span>
     </div>
   );
 }

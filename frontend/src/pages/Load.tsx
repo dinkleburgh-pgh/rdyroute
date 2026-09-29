@@ -437,10 +437,9 @@ export default function Load() {
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
 
-      {/* Both garment checklists share a row when NOGs are flagged — two
-          stacked full-width bands for a handful of chips each was the single
-          biggest fixed cost on the page. No NOGs (most days) → full width. */}
-      <div className={clsx("grid gap-4", nogsTrucks.length > 0 && "lg:grid-cols-2")}>
+      {/* Both checklists hug their chips and share one wrapping row — neither
+          ever shows more than ~8, so two half-width cards were mostly empty. */}
+      <div className="flex flex-wrap items-start gap-3">
         <GarmentsStrip trucks={dustGarmentTrucks} />
         <NogsStrip trucks={nogsTrucks} />
       </div>

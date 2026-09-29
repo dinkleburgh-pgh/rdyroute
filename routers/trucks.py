@@ -27,7 +27,7 @@ from sqlalchemy.orm import Session
 
 from activity_log import add_related_truck_context, append_activity_event, append_truck_state_activity
 from database import get_db, settings as app_settings
-from models import AppSetting, GarmentDayLog, RouteSwap, RouteSwapLog, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
+from models import AppSetting, GarmentDayLog, NogsDayLog, RouteSwap, RouteSwapLog, SpareAssignment, Truck, TruckState, TruckStateSource, TruckStatus, TruckType, User
 from notification_service import dispatch_notification, send_web_push, truck_arrived_notification, truck_hold_notification, truck_oos_notification
 from routers.trends_common import days_back_query
 from routers.auth import get_current_user, require_admin, require_non_guest
@@ -50,6 +50,8 @@ from schemas import (
     CompletionDailyPoint,
     CycleDailyPoint,
     GarmentDayLogOut,
+    NogsDayLogOut,
+    NogsUsualOut,
     TruckStateCreate,
     TruckStateOut,
     TruckStateUpdate,
@@ -728,6 +730,64 @@ def get_garment_log(
     return rows
 
 
+@router.get("/nogs-log", response_model=list[NogsDayLogOut])
+def get_nogs_log(
+    days: int = Query(default=56, ge=1, le=365),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """Durable, append-only history of NOGs flags over the past N days — each
+    row a change to a truck's has_nogs (the latest row per (run_date,
+    truck_number) is that day's final state). The twin of /garment-log."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).date()
+    return db.scalars(
+        select(NogsDayLog)
+        .where(NogsDayLog.run_date >= cutoff)
+        .order_by(NogsDayLog.run_date.desc(), NogsDayLog.created_at.desc())
+    ).all()
+
+
+@router.get("/nogs-usual", response_model=list[NogsUsualOut])
+def get_nogs_usual(
+    weeks: int = Query(default=8, ge=1, le=52),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """How often each route carried NOGs on each weekday over the last N weeks
+    — the read a future auto-guess makes ("#84 had NOGs on 6 of the last 7
+    Tuesdays"). Final state per day only (the newest log row wins), measured
+    against the days the plant actually ran (distinct truck_states run_dates),
+    so a closed Monday never counts against a route that always has NOGs on
+    Mondays. Nothing here guesses yet; it only reports."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(weeks=weeks)).date()
+    ran = set(db.scalars(select(TruckState.run_date).where(TruckState.run_date >= cutoff).distinct()).all())
+    rows = db.scalars(
+        select(NogsDayLog).where(NogsDayLog.run_date >= cutoff).order_by(NogsDayLog.created_at.asc())
+    ).all()
+    final: dict[tuple[date, int], bool] = {}
+    for r in rows:  # ascending created_at, so the last write for a day wins
+        final[(r.run_date, r.truck_number)] = r.has_nogs
+    operating_by_weekday: dict[int, int] = {}
+    for d in ran:
+        operating_by_weekday[d.weekday()] = operating_by_weekday.get(d.weekday(), 0) + 1
+    flagged: dict[tuple[int, int], list[date]] = {}
+    for (d, n), v in final.items():
+        if v and d in ran:
+            flagged.setdefault((n, d.weekday()), []).append(d)
+    out: list[NogsUsualOut] = []
+    for (n, wd), dates in sorted(flagged.items()):
+        total = operating_by_weekday.get(wd, 0)
+        out.append(NogsUsualOut(
+            truck_number=n,
+            weekday=wd,
+            flagged_days=len(dates),
+            operating_days=total,
+            share=(len(dates) / total) if total else 0.0,
+            last_flagged=max(dates),
+        ))
+    return out
+
+
 @router.get("/board", response_model=list[TruckWithState])
 def get_board(
     run_date: date = Query(..., description="Operational run-date (YYYY-MM-DD)"),
@@ -836,6 +896,29 @@ def _log_garment_change(
     ))
 
 
+def _log_nogs_change(
+    db: Session,
+    *,
+    before: TruckState | None,
+    after: TruckState,
+    actor_user: User | None,
+) -> None:
+    """Append a NogsDayLog row when a truck's has_nogs flag changes — the NOGs
+    twin of _log_garment_change with the same create/update rules, so the two
+    histories can never drift in what they record."""
+    before_val = bool(before.has_nogs) if before is not None else False
+    after_val = bool(after.has_nogs)
+    if before_val == after_val:
+        return
+    db.add(NogsDayLog(
+        run_date=after.run_date,
+        truck_number=after.truck_number,
+        has_nogs=after_val,
+        source=after.state_source or TruckStateSource.workflow.value,
+        actor_username=actor_user.username if actor_user is not None else None,
+    ))
+
+
 @router.post("/{truck_number}/state", response_model=TruckStateOut, status_code=status.HTTP_201_CREATED)
 def create_truck_state(
     truck_number: int,
@@ -897,6 +980,7 @@ def create_truck_state(
         context_json={"source": "direct_write"},
     )
     _log_garment_change(db, before=None, after=row, actor_user=_user)
+    _log_nogs_change(db, before=None, after=row, actor_user=_user)
     db.commit()
     db.refresh(row)
     if row.priority_hold:
@@ -1126,6 +1210,7 @@ def update_truck_state(
         context_json={"source": "direct_write"},
     )
     _log_garment_change(db, before=before_state, after=row, actor_user=_user)
+    _log_nogs_change(db, before=before_state, after=row, actor_user=_user)
     db.commit()
     db.refresh(row)
     if not previous_hold and row.priority_hold:

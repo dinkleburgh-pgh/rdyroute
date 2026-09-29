@@ -689,6 +689,34 @@ class GarmentDayLog(Base):
     )
 
 
+class NogsDayLog(Base):
+    """
+    Append-only log of every change to a route truck's NOGs flag
+    (TruckState.has_nogs) for a run-date — "Not Our Garments going back OUT
+    with this route today".
+
+    Same shape and reason as GarmentDayLog: the per-day flag is mutable state
+    that day-init resets, so it cannot serve as history. NOGs are usually the
+    same routes week to week, which is exactly what a future auto-guess needs
+    to read: the latest row per (run_date, truck_number) is that day's final
+    answer, and the weekday of run_date is the pattern key.
+    """
+    __tablename__ = "nogs_day_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False, index=True)
+    truck_number: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    # The flag's NEW value at this change (True = flagged, False = cleared).
+    has_nogs: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    # TruckState.state_source at the change (wizard / workflow / auto), or
+    # "backfill" for rows seeded from truck_states by the migration.
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="workflow")
+    actor_username: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+
 class RouteDriver(Base):
     """
     Reference mapping of a route (= truck number) to its assigned SSR driver,
