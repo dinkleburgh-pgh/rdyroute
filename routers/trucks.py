@@ -304,10 +304,27 @@ def _ensure_day_initialized(run_date: date, db: Session) -> None:
     # the previous day's board reflects a clean end-of-day state.
     _OPEN_STATUSES = {TruckStatus.dirty, TruckStatus.in_progress, TruckStatus.unfinished}
     if force_unloaded and prev_run_date is not None:
+        # Only a day someone actually worked becomes 'workflow' on close-out.
+        # Stamping an untouched seed (a holiday a kiosk polled, a weekend
+        # opened from a date picker) would make it look worked to the report
+        # archive (report_archive.worked_run_dates), which would then save it
+        # as a run day. Same test as apply_day_gap's "touched", computed
+        # before mutating: the close-out clears driver_claimed_route.
+        from models import Batch  # local import avoids circular (matches reset_day)
+        prev_worked = any(
+            r.state_source != TruckStateSource.auto.value
+            or r.arrived_at is not None
+            or r.driver_claimed_route is not None
+            or r.needs_checked
+            for r in prev_states_by_num.values()
+        ) or db.scalar(
+            select(Batch.id).where(Batch.run_date == prev_run_date).limit(1)
+        ) is not None
         for prev_state in prev_states_by_num.values():
             if prev_state.status in _OPEN_STATUSES:
                 prev_state.status = TruckStatus.unloaded
-                prev_state.state_source = TruckStateSource.workflow.value
+                if prev_worked:
+                    prev_state.state_source = TruckStateSource.workflow.value
                 _end_unloading(prev_state)
                 prev_state.driver_claimed_route = None
 
@@ -806,6 +823,17 @@ def get_board(
 ):
     """Return all active fleet trucks joined with their explicit state for *run_date*."""
     _ensure_day_initialized(run_date, db)
+    return build_board(run_date, db)
+
+
+def build_board(run_date: date, db: Session) -> list[TruckWithState]:
+    """The board payload for *run_date*, read-only.
+
+    Split out of get_board so the end-of-shift report archive can read a day
+    exactly as the board serves it WITHOUT going through day-init, which
+    seeds, closes out the previous day and commits. A snapshot must never be
+    the thing that rolls the day over.
+    """
     trucks = db.scalars(
         select(Truck).where(Truck.is_active == True).order_by(Truck.truck_number)
     ).all()

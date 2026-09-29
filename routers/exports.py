@@ -47,6 +47,7 @@ from models import (
     TruckState,
     User,
 )
+from report_archive import ARCHIVE_SINCE_KEY
 from routers.auth import require_admin, require_management_access
 
 router = APIRouter(prefix="/exports", tags=["exports"])
@@ -432,6 +433,12 @@ def _import_backup_package(content: bytes, db: Session, *, replace_existing: boo
         for item in rows_data:
             key = str(item.get("key") or "").strip()
             if not key:
+                continue
+            # When THIS database's report archive began, not part of the
+            # data: restoring another database's value would have the archive
+            # "catch up" days this one never captured (report_snapshots isn't
+            # in the backup). Left out, the loop re-records it on its next check.
+            if key == ARCHIVE_SINCE_KEY:
                 continue
             # The exporter writes updated_at, but restoring only key+value meant
             # every backup import re-stamped every setting in the app to the

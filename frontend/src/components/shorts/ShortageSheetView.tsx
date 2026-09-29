@@ -5,28 +5,47 @@
  *          cells. Dense by design so a full day fits on one screen.
  *   Sheet · reads like the paper short sheet: one block per truck listing
  *          only the items that truck was actually short.
+ *
+ * The default export reads the live catalog + palette. ShortageSheetContent
+ * takes both as props — the Run Report renders it so an archived day draws
+ * from the catalog it saved, not today's.
  */
 import { Fragment, useMemo, useState } from "react";
 import clsx from "clsx";
 import type { Shortage, TruckWithState } from "../../types";
-import { useTrackedItems } from "../../api/hooks";
-import { DEFAULT_TRACKED_ITEMS, useCategoryPalette } from "./HierarchyPicker";
+import { useTrackedItems, type TrackedItem } from "../../api/hooks";
+import { catalogOrDefault, useCategoryPalette, type CategoryPalette } from "./HierarchyPicker";
 import { buildShortageMatrix } from "./shortageMatrix";
 
-export default function ShortageSheetView({
-  shorts,
-  board,
-  layout: layoutProp,
-  onLayoutChange,
-}: {
+type SheetViewProps = {
   shorts: Shortage[];
   board: TruckWithState[];
   /** Controlled layout. Omit to let the view own its own Grid/Sheet toggle. */
   layout?: "grid" | "paper";
   onLayoutChange?: (l: "grid" | "paper") => void;
+};
+
+export default function ShortageSheetView(props: SheetViewProps) {
+  const { data: trackedRaw } = useTrackedItems();
+  // One canonical colour per category — the shared palette (seeded from the
+  // whole catalog) so a category's dot/chip matches the PDF, audit, Configure
+  // Items, and the entry pickers everywhere.
+  const palette = useCategoryPalette();
+  return <ShortageSheetContent {...props} items={catalogOrDefault(trackedRaw)} palette={palette} />;
+}
+
+export function ShortageSheetContent({
+  shorts,
+  board,
+  layout: layoutProp,
+  onLayoutChange,
+  items,
+  palette,
+}: SheetViewProps & {
+  /** The catalog rows resolve against (already defaulted — never empty). */
+  items: TrackedItem[];
+  palette: CategoryPalette;
 }) {
-  const { data: trackedRaw = [] } = useTrackedItems();
-  const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
   const [ownLayout, setOwnLayout] = useState<"grid" | "paper">("grid");
   const layout = layoutProp ?? ownLayout;
   const setLayout = (l: "grid" | "paper") => {
@@ -47,10 +66,6 @@ export default function ShortageSheetView({
     [board],
   );
 
-  // One canonical colour per category — the shared palette (seeded from the
-  // whole catalog) so a category's dot/chip matches the PDF, audit, Configure
-  // Items, and the entry pickers everywhere.
-  const palette = useCategoryPalette();
   const dotOf = palette.dotClass;
   const chipOf = palette.chipClass;
 

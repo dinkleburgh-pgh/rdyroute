@@ -499,6 +499,14 @@ export function useSetHolidayMode() {
 // Holiday Load / Unload flags (per run-date)
 // ---------------------------------------------------------------------------
 
+/** The app_settings key behind useHolidayLoad / useHolidayUnload for a day. */
+export const holidayOpKey = (op: "load" | "unload", runDate: string) => `holiday_${op}_${runDate}`;
+
+/** A stored holiday flag's value → on/off. Only a literal true counts. */
+export function parseHolidayFlag(value: unknown): boolean {
+  return value === true;
+}
+
 function makeHolidayOpHooks(op: "load" | "unload") {
   const key = `holiday_${op}` as const;
   function useFlag(runDate: string) {
@@ -506,8 +514,8 @@ function makeHolidayOpHooks(op: "load" | "unload") {
       queryKey: [key, runDate],
       queryFn: async () => {
         try {
-          const { data } = await api.get<AppSetting>(`/settings/${key}_${runDate}`);
-          return data.value === true;
+          const { data } = await api.get<AppSetting>(`/settings/${holidayOpKey(op, runDate)}`);
+          return parseHolidayFlag(data.value);
         } catch (err: unknown) {
           const e = err as { response?: { status?: number } };
           if (e?.response?.status === 404) return false;
@@ -522,7 +530,7 @@ function makeHolidayOpHooks(op: "load" | "unload") {
     const qc = useQueryClient();
     return useMutation({
       mutationFn: async ({ runDate, value }: { runDate: string; value: boolean }) =>
-        (await api.put<AppSetting>(`/settings/${key}_${runDate}`, { value })).data,
+        (await api.put<AppSetting>(`/settings/${holidayOpKey(op, runDate)}`, { value })).data,
       onSuccess: (_data, vars) => {
         qc.invalidateQueries({ queryKey: [key, vars.runDate] });
       },
@@ -543,6 +551,16 @@ export const useSetHolidayUnload = _holidayUnloadHooks.useSet;
 // Day-number overrides (holiday run correction)
 // ---------------------------------------------------------------------------
 
+/** The app_settings key behind useLoadDayOverride / useUnloadsDayOverride for a day. */
+export const dayOverrideKey = (op: "load_day" | "unloads_day", runDate: string) => `${op}_override_${runDate}`;
+
+/** A stored day-number override's value → a workday 1-5, or null (unset or
+ *  out of range, so the computed day stands). */
+export function parseDayOverride(value: unknown): number | null {
+  const v = Number(value);
+  return v >= 1 && v <= 5 ? v : null;
+}
+
 function makeDayOverrideHooks(op: "load_day" | "unloads_day") {
   const settingKey = `${op}_override`;
   function useOverride(runDate: string) {
@@ -550,9 +568,8 @@ function makeDayOverrideHooks(op: "load_day" | "unloads_day") {
       queryKey: [settingKey, runDate],
       queryFn: async (): Promise<number | null> => {
         try {
-          const { data } = await api.get<AppSetting>(`/settings/${settingKey}_${runDate}`);
-          const v = Number(data.value);
-          return v >= 1 && v <= 5 ? v : null;
+          const { data } = await api.get<AppSetting>(`/settings/${dayOverrideKey(op, runDate)}`);
+          return parseDayOverride(data.value);
         } catch (err: unknown) {
           const e = err as { response?: { status?: number } };
           if (e?.response?.status === 404) return null;
@@ -568,10 +585,10 @@ function makeDayOverrideHooks(op: "load_day" | "unloads_day") {
     return useMutation({
       mutationFn: async ({ runDate, value }: { runDate: string; value: number | null }) => {
         if (value === null) {
-          try { await api.delete(`/settings/${settingKey}_${runDate}`); } catch { /* already absent */ }
+          try { await api.delete(`/settings/${dayOverrideKey(op, runDate)}`); } catch { /* already absent */ }
           return null;
         }
-        return (await api.put<AppSetting>(`/settings/${settingKey}_${runDate}`, { value })).data;
+        return (await api.put<AppSetting>(`/settings/${dayOverrideKey(op, runDate)}`, { value })).data;
       },
       onSuccess: (_data, vars) => {
         qc.invalidateQueries({ queryKey: [settingKey, vars.runDate] });

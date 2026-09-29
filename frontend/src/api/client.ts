@@ -149,8 +149,12 @@ api.interceptors.response.use(
     // it would show a fake success on a dead tablet and then replay a stale
     // opinion on reconnect — better to fail honestly and let the page say so.
     const isLoadRequest = url.includes("/load-request");
+    // Saving a day into the report archive captures what the server holds AT
+    // THAT MOMENT. A replay on reconnect would archive a different moment than
+    // the one the admin asked for, behind a fake "Saved" — fail honestly.
+    const isReportArchive = url.includes("/reports/archive");
     const queueable =
-      isMutation && !isAuthEndpoint && !isDriverSurface && !isLoadRequest
+      isMutation && !isAuthEndpoint && !isDriverSurface && !isLoadRequest && !isReportArchive
       && !url.includes("/auth/") && !url.includes("/updates/") && !url.includes("/exports/");
     if (cfg && queueable && offlineQueue.isNetworkError(error)) {
       let endpoint = url;

@@ -32,9 +32,10 @@ from database import Base, SessionLocal, engine, settings
 os.environ["TZ"] = settings.timezone
 if hasattr(time, "tzset"):
     time.tzset()
-from routers import activity, audit, auth, batches, communications, debug, documents, exports, fleet, load_durations, notes as notes_router, notices, notifications, reports, rotation, route_drivers, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, ws as ws_router
+from routers import activity, audit, auth, batches, communications, debug, documents, exports, fleet, load_durations, notes as notes_router, notices, notifications, report_archive as report_archive_router, reports, rotation, route_drivers, route_swaps, settings as settings_router, short_imports, shorts, spares, trucks, ws as ws_router
 from seed import run_startup_seed
 from backups import backup_loop
+from report_archive import report_archive_loop
 
 log = logging.getLogger("readyroutev2.startup")
 _http_log = logging.getLogger("uvicorn.error")
@@ -156,15 +157,17 @@ async def lifespan(app: FastAPI):
                 _db.close()
 
     backup_task  = asyncio.create_task(backup_loop())
+    archive_task = asyncio.create_task(report_archive_loop())
     health_task  = asyncio.create_task(_confirm_healthy())
     cleanup_task = asyncio.create_task(_cleanup_expired_sessions())
     try:
         yield
     finally:
         backup_task.cancel()
+        archive_task.cancel()
         health_task.cancel()
         cleanup_task.cancel()
-        for _t in (backup_task, health_task, cleanup_task):
+        for _t in (backup_task, archive_task, health_task, cleanup_task):
             try:
                 await _t
             except (asyncio.CancelledError, Exception):
@@ -334,6 +337,7 @@ app.include_router(notifications.router)
 app.include_router(ws_router.router)
 app.include_router(exports.router)
 app.include_router(reports.router)
+app.include_router(report_archive_router.router)
 app.include_router(route_drivers.router)
 app.include_router(debug.router)
 
@@ -470,6 +474,7 @@ def health_detail(_admin=Depends(auth.require_admin)):
     # Include last backup status so the UI can surface it
     from backups import get_last_backup_status
     last_backup = get_last_backup_status()
+    from report_archive import get_archive_status
 
     return {
         "status": "ok" if overall_ok else "degraded",
@@ -480,6 +485,7 @@ def health_detail(_admin=Depends(auth.require_admin)):
         "db_fallback": fallback_reason,
         "extra_dbs": extras,
         "last_backup": last_backup if last_backup else None,
+        "report_archive": get_archive_status(),
     }
 
 

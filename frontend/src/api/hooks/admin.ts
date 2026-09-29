@@ -720,6 +720,32 @@ const DEFAULT_TRACKED_ITEMS: TrackedItem[] = [
   { label: "White Aprons",  qty_default: 1, category: "Aprons", unit_label: "Bag",    pack_size: 10 },
 ];
 
+/**
+ * The stored `tracked_items_map` value → the catalog list. Unset or unreadable
+ * → the defaults. Pure so a saved report parses its archived copy of the
+ * setting exactly the way this hook parses the live one.
+ */
+export function parseTrackedItems(raw: unknown): TrackedItem[] {
+  if (raw && typeof raw === "object" && !Array.isArray(raw)) {
+    const items: TrackedItem[] = [];
+    for (const [label, meta] of Object.entries(raw as Record<string, unknown>)) {
+      const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
+      items.push({
+        label,
+        qty_default: Number(m.qty_default) || 1,
+        category: typeof m.category === "string" ? m.category : undefined,
+        unit_label: typeof m.unit_label === "string" ? m.unit_label : undefined,
+        pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
+        color: typeof m.color === "string" ? m.color : undefined,
+      });
+    }
+    // Defaults are a FIRST-RUN seed only. Back-filling per missing
+    // label made deleted/renamed defaults resurrect on every read.
+    return items.length > 0 ? items : DEFAULT_TRACKED_ITEMS;
+  }
+  return DEFAULT_TRACKED_ITEMS;
+}
+
 export function useTrackedItems() {
   return useQuery({
     queryKey: ["tracked-items"],
@@ -727,25 +753,7 @@ export function useTrackedItems() {
     queryFn: async (): Promise<TrackedItem[]> => {
       try {
         const { data } = await api.get<AppSetting>("/settings/tracked_items_map");
-        const raw = data?.value;
-        if (raw && typeof raw === "object" && !Array.isArray(raw)) {
-          const items: TrackedItem[] = [];
-          for (const [label, meta] of Object.entries(raw as Record<string, unknown>)) {
-            const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
-            items.push({
-              label,
-              qty_default: Number(m.qty_default) || 1,
-              category: typeof m.category === "string" ? m.category : undefined,
-              unit_label: typeof m.unit_label === "string" ? m.unit_label : undefined,
-              pack_size: typeof m.pack_size === "number" ? m.pack_size : undefined,
-              color: typeof m.color === "string" ? m.color : undefined,
-            });
-          }
-          // Defaults are a FIRST-RUN seed only. Back-filling per missing
-          // label made deleted/renamed defaults resurrect on every read.
-          return items.length > 0 ? items : DEFAULT_TRACKED_ITEMS;
-        }
-        return DEFAULT_TRACKED_ITEMS;
+        return parseTrackedItems(data?.value);
       } catch (err: unknown) {
         const e = err as { response?: { status?: number } };
         if (e?.response?.status === 404) return DEFAULT_TRACKED_ITEMS;
@@ -793,6 +801,27 @@ export interface CategoryMeta {
 }
 export type CategoryMetaMap = Record<string, CategoryMeta>;
 
+/** The stored `tracked_item_categories` value → the category meta map (pure;
+ *  see parseTrackedItems). */
+export function parseTrackedItemCategories(raw: unknown): CategoryMetaMap {
+  // Legacy tolerance: a bare string[] becomes { name: {} }.
+  if (Array.isArray(raw)) {
+    const out: CategoryMetaMap = {};
+    for (const c of raw) if (typeof c === "string" && c.trim()) out[c.trim()] = {};
+    return out;
+  }
+  if (raw && typeof raw === "object") {
+    const out: CategoryMetaMap = {};
+    for (const [name, meta] of Object.entries(raw as Record<string, unknown>)) {
+      if (!name.trim()) continue;
+      const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
+      out[name] = { ...(typeof m.color === "string" && m.color ? { color: m.color } : {}) };
+    }
+    return out;
+  }
+  return {};
+}
+
 export function useTrackedItemCategories() {
   return useQuery({
     queryKey: ["tracked-item-categories"],
@@ -800,23 +829,7 @@ export function useTrackedItemCategories() {
     queryFn: async (): Promise<CategoryMetaMap> => {
       try {
         const { data } = await api.get<AppSetting>("/settings/tracked_item_categories");
-        const raw = data?.value;
-        // Legacy tolerance: a bare string[] becomes { name: {} }.
-        if (Array.isArray(raw)) {
-          const out: CategoryMetaMap = {};
-          for (const c of raw) if (typeof c === "string" && c.trim()) out[c.trim()] = {};
-          return out;
-        }
-        if (raw && typeof raw === "object") {
-          const out: CategoryMetaMap = {};
-          for (const [name, meta] of Object.entries(raw as Record<string, unknown>)) {
-            if (!name.trim()) continue;
-            const m = (meta && typeof meta === "object") ? (meta as Record<string, unknown>) : {};
-            out[name] = { ...(typeof m.color === "string" && m.color ? { color: m.color } : {}) };
-          }
-          return out;
-        }
-        return {};
+        return parseTrackedItemCategories(data?.value);
       } catch (err: unknown) {
         const e = err as { response?: { status?: number } };
         if (e?.response?.status === 404) return {};

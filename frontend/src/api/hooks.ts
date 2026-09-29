@@ -9,3 +9,4 @@ export * from "./hooks/shorts";
 export * from "./hooks/ops";
 export * from "./hooks/trends";
 export * from "./hooks/admin";
+export * from "./hooks/reports";

@@ -38,6 +38,7 @@ from sqlalchemy import (
     func,
     text,
 )
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database import Base
@@ -1011,3 +1012,45 @@ class RotationAssignment(Base):
 
     section: Mapped["RotationSection"] = relationship("RotationSection")
     person: Mapped["RotationPerson"] = relationship("RotationPerson")
+
+
+# ---------------------------------------------------------------------------
+# Report archive — the run report's inputs, frozen at the end of 3rd shift
+# ---------------------------------------------------------------------------
+
+# JSONB on Postgres (compact, indexable); plain JSON keeps SQLite dev working.
+_JsonDocument = JSON().with_variant(JSONB(), "postgresql")
+
+
+class ReportSnapshot(Base):
+    """One run day's report, archived as the INPUTS the report page reads.
+
+    The live report recomputes any date from whatever the DB holds now, and
+    that drifts: the next morning's day-init closes the day out, trucks leave
+    the fleet, settings change. So at the end of 3rd shift report_archive.py
+    stores the exact API payloads the page fetched for that day (board,
+    batches, shorts, audit, coverage, the settings it reads) and the page
+    renders a saved day through the same code as a live one. Storing inputs
+    rather than rendered output is what keeps the two from drifting apart.
+
+    `summary` is a handful of headline counts derived from `inputs` at capture
+    time, so the archive list never has to load the full documents.
+    """
+    __tablename__ = "report_snapshots"
+    __table_args__ = (
+        UniqueConstraint("run_date", name="uq_report_snapshots_run_date"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    run_date: Mapped[date] = mapped_column(Date, nullable=False)
+    captured_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # 'auto' (on time), 'catch-up' (late — the backend was down at end of
+    # shift) or 'manual' (an admin re-captured it).
+    source: Mapped[str] = mapped_column(String(16), nullable=False)
+    # APP_VERSION of the build that captured it, so a snapshot can be read
+    # against the code that shaped it.
+    app_version: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    inputs: Mapped[dict] = mapped_column(_JsonDocument, nullable=False)
+    summary: Mapped[dict] = mapped_column(_JsonDocument, nullable=False)

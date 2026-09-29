@@ -23,7 +23,8 @@ export type PermissionAction =
   | "delete:messages"
   | "edit:wearer-defaults"
   | "manage:qr"
-  | "edit:fleet-schedule";
+  | "edit:fleet-schedule"
+  | "archive:reports";
 
 /** Roles that are considered elevated "manager-level" operators. */
 const MANAGER_ROLES: AuthRole[] = ["admin", "fleet", "atl", "supervisor", "lead"];
@@ -52,6 +53,10 @@ const ACTION_ROLES: Record<PermissionAction, AuthRole[]> = {
   // PUT /route-drivers/{n} for the SSR — are require_admin. Arming edit mode
   // for anyone else just produces a 403 per tap.
   "edit:fleet-schedule": ["admin"],
+  // Saving (or re-saving) a day's report into the archive: POST
+  // /reports/archive/{date} is require_admin. Reading the archive is open to
+  // every role, guests included, like the live report.
+  "archive:reports": ["admin", "fleet", "supervisor"],
 };
 
 /** Returns true if `role` is permitted to perform `action`. */

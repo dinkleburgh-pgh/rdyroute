@@ -10,6 +10,15 @@
  * workflow pages use, so it stays live off the existing websocket + polling
  * (board 5s, batches 10s, spares/route-swaps 10s, shortages via WS). The audit
  * query has no live channel of its own, so we poke it on an interval here.
+ *
+ * SAVED days. At the end of 3rd shift the server archives the day's report
+ * INPUTS — the exact API data this page reads (routers/report_archive.py). A
+ * past day that has a snapshot opens from it by default, so the report reads
+ * as it stood then rather than as today's database recomputes it. Both
+ * readings render through ONE body (ReportBody) from ONE inputs object
+ * (ReportInputs): LiveReportData fills it from the hooks, SavedReportData from
+ * the snapshot via the same pure parsers those hooks use. So the two can't
+ * drift, and Kiosk / Images / PDF work the same on a saved day.
  */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -19,16 +28,26 @@ import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
 import PageHeader from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
+import ConfirmDialog from "../components/ConfirmDialog";
 import { captureNodeToPngBlob } from "../lib/captureImage";
 import { exportFile } from "../lib/exportFile";
 import AnimateCard from "../components/AnimateCard";
 import OverbatchedChip from "../components/OverbatchedChip";
-import { DEFAULT_TRACKED_ITEMS, shortageItemLabel, topCatOf, useCategoryPalette, useItemDisplayName } from "../components/shorts/HierarchyPicker";
+import {
+  catalogOrDefault,
+  itemDisplayNameFor,
+  paletteForCatalog,
+  shortageItemLabel,
+  topCatOf,
+  useCategoryPalette,
+  useItemDisplayName,
+  type CategoryPalette,
+} from "../components/shorts/HierarchyPicker";
 import { buildShortageMatrix } from "../components/shorts/shortageMatrix";
 import { downloadReportPdf, type ReportViewModel } from "../lib/reportPdf";
 import { capacityColor, resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
-import { ChevronLeft, ChevronRight, FileDown, Image as ImageIcon, Maximize2, Pause, Play, X } from "lucide-react";
-import ShortageSheetView from "../components/shorts/ShortageSheetView";
+import { Archive, ChevronLeft, ChevronRight, FileDown, Image as ImageIcon, Maximize2, Pause, Play, X } from "lucide-react";
+import { ShortageSheetContent } from "../components/shorts/ShortageSheetView";
 import { formatDuration } from "../components/LiveInProgress";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
@@ -48,13 +67,27 @@ import {
   useHolidayUnload,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
+  useReportSnapshot,
+  useCaptureReport,
+  dayOverrideKey,
+  holidayOpKey,
+  parseDayOverride,
+  parseHolidayFlag,
+  parseTrackedItemCategories,
+  parseTrackedItems,
+  prevDayCarriersFrom,
+  prevDaySplitHelpersFrom,
+  type ReportSnapshot,
   type TrackedItem,
 } from "../api/hooks";
 import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
-import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
+import type { AuditEntry, BatchSummary, RecurringRouteSwap, RouteSwap, Shortage, SpareAssignment, TruckWithState } from "../types";
 import Modal from "../components/Modal";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
 import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
+import { useAuth } from "../contexts/AuthContext";
+import { can } from "../utils/permissions";
+import { ArchiveModal, ArchiveStrip, SavedPill, savedAtLabel } from "./report/ReportArchive";
 
 // Tailwind class → hex, so the PDF view-model can ship concrete colours that
 // match what capacityColor / durTone / the KPI tones paint on screen.
@@ -178,30 +211,282 @@ function BatchMiniCard({ batch, cap, noCap }: { batch: BatchSummary; cap: number
   );
 }
 
-export default function LiveReport() {
-  const [params] = useSearchParams();
-  const [runDate, setRunDate] = useState(params.get("run_date") ?? todayIso());
-  const isToday = runDate === todayIso();
+/**
+ * Everything the report derives and renders, in one object. LiveReportData
+ * fills it from the per-run-date hooks; SavedReportData from an archived
+ * snapshot. The body reads nothing else about the day.
+ */
+interface ReportInputs {
+  runDate: string;
+  /** Today's live view — coverage then hides returned spares. Never true for a saved day. */
+  isToday: boolean;
+  board: TruckWithState[];
+  batches: BatchSummary[];
+  shorts: Shortage[];
+  auditEntries: AuditEntry[];
+  spares: SpareAssignment[];
+  routeSwaps: RouteSwap[];
+  /** The app settings the report reads (wearer_cap, batch_no_cap, batching_disabled, recurring_route_swaps). */
+  settings: { key: string; value: unknown }[];
+  /** The catalog as the hook returns it — [] until loaded; the body falls back to the defaults. */
+  trackedItems: TrackedItem[];
+  palette: CategoryPalette;
+  itemDisplayName: (label: string) => string;
+  /** 30-day load pace average, seconds. */
+  paceAvg: number | null;
+  loadDayOverride: number | null;
+  unloadsDayOverride: number | null;
+  holidayUnload: boolean;
+  prevSplitHelpers: Set<number>;
+  prevDayCarriers: Map<number, TruckWithState>;
+}
 
-  // Day numbers for the header, with the same per-run-date overrides Load/Unload use.
-  const dayDate = useMemo(() => new Date(runDate + "T12:00:00"), [runDate]);
-  const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers(dayDate);
+/** What the page wraps around the body: header pill, date bar, PDF handoff. */
+interface ReportChrome {
+  /** Beside the title and in the kiosk bar — LIVE, or "Saved 5:58 AM". */
+  badge?: ReactNode;
+  /** The date bar under the header. Handed the VIEWED day's numbers, which are
+   *  override-aware and so come from the report's own inputs. */
+  dateBar: (days: { loadDay: number; unloadsDay: number }) => ReactNode;
+  /** `?pdf=1` is pending. The page owns the one-shot flag so a body that
+   *  remounts (Saved ⇄ Live) can't fire the download twice. */
+  autoPdf: boolean;
+  onAutoPdfFired: () => void;
+  /** Extra PDF header line — a saved day says when it was saved. */
+  pdfNote: string | null;
+  /** Keep the date bar (and its Saved/Live toggle) above a loading/unreachable gate. */
+  keepDateBarOnGate: boolean;
+}
+
+function LivePill() {
+  return (
+    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
+      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-st-inprogress" />
+      Live
+    </span>
+  );
+}
+
+/**
+ * The Report page: which day, and which reading of it. Today is always live. A
+ * past day opens from its end-of-shift snapshot when it has one (with a
+ * Saved/Live toggle), else live with a note that it isn't archived.
+ */
+export default function LiveReport() {
+  const [params, setParams] = useSearchParams();
+  const { user } = useAuth();
+  const canArchive = can(user?.role, "archive:reports");
+  const [runDate, setRunDate] = useState(params.get("run_date") ?? todayIso());
+  // The shell polls nothing (LiveReportData does), so nothing else re-renders
+  // it at the 6 AM rollover. Keep "today" fresh on a clock — an unchanged
+  // string bails out, so this re-renders only when the run day actually flips.
+  const [today, setToday] = useState(todayIso);
+  useEffect(() => {
+    const id = window.setInterval(() => setToday(todayIso()), 5000);
+    return () => window.clearInterval(id);
+  }, []);
+  const isToday = runDate === today;
+  // Which reading of the day is on screen. null = the day's default: its
+  // snapshot when it has one, else live. A day opened as TODAY is pinned live,
+  // so a wall kiosk left running across the 6 AM rollover keeps rotating the
+  // live day instead of dropping into the archive mid-slide.
+  const [view, setView] = useState<"saved" | "live" | null>(() => (isToday ? "live" : null));
+  const [autoPdf, setAutoPdf] = useState(() => params.get("pdf") === "1");
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [confirmResave, setConfirmResave] = useState(false);
+
+  // Today is never looked up — it hasn't been archived, and it's always live.
+  const snapshotQuery = useReportSnapshot(isToday ? null : runDate);
+  const snapshot = snapshotQuery.data ?? null;
+  // null is the archive ANSWERING "not archived"; undefined is no answer yet
+  // (loading, paused offline, or the lookup failed) — unknown, not absent.
+  const archiveAnswered = snapshotQuery.data !== undefined;
+  // ...and null only counts as "not archived" while it is the CURRENT answer.
+  // v5 keeps the last data when a refetch fails, and a persisted or stale null
+  // is being refetched; either way the state is unknown again.
+  const answeredNotArchived =
+    snapshotQuery.data === null && snapshotQuery.isSuccess && snapshotQuery.fetchStatus === "idle";
+  const savedSnapshot = !isToday && view !== "live" ? snapshot : null;
+  const capture = useCaptureReport();
+
+  /** Move to another run day. A past day goes in the URL (replace — stepping
+   *  days shouldn't pile up Back entries) so it can be shared; today keeps the
+   *  URL bare, so a reload after the rollover opens the new today, not
+   *  yesterday's saved report. The PDF handoff belonged to the day it arrived
+   *  with, so it's dropped. */
+  function goTo(date: string) {
+    const now = todayIso();
+    setRunDate(date);
+    setView(date === now ? "live" : null);
+    setAutoPdf(false);
+    const next = new URLSearchParams(params);
+    if (date === now) next.delete("run_date");
+    else next.set("run_date", date);
+    next.delete("pdf");
+    setParams(next, { replace: true });
+  }
+
+  // Re-saving replaces the day's snapshot — normally the end-of-shift record —
+  // so it asks first. Only a day the archive has just answered "not archived"
+  // for saves straight away: unknown must never skip the question.
+  function handleCapture(archivedElsewhere = false) {
+    if (answeredNotArchived && !archivedElsewhere) capture.mutate(runDate);
+    else setConfirmResave(true);
+  }
+
+  // A past day opens saved when it has a snapshot, so hold the body until the
+  // archive answers rather than flash the live recompute first. (An explicit
+  // view choice doesn't wait on it.) The live body stays mounted meanwhile —
+  // its section picks survive and its queries start alongside the lookup.
+  // (data === undefined && isFetching, not v5's isLoading: that is false while
+  // a lookup that failed before is retried, which would flash the live day.)
+  const holdForLookup =
+    !isToday && view === null && snapshotQuery.data === undefined && snapshotQuery.isFetching;
+
+  const chrome: ReportChrome = {
+    badge: isToday ? <LivePill /> : savedSnapshot ? <SavedPill item={savedSnapshot} /> : undefined,
+    // Hold the ?pdf=1 handoff until the archive lookup (or a stale snapshot's
+    // background refetch) has settled, so it prints the reading the page will
+    // actually show: the saved snapshot when there is one, otherwise live.
+    autoPdf: autoPdf && !holdForLookup && !snapshotQuery.isFetching,
+    onAutoPdfFired: () => setAutoPdf(false),
+    pdfNote: savedSnapshot ? `Saved ${savedAtLabel(savedSnapshot, true)}` : null,
+    // An archived day keeps its Saved/Live toggle through a live-mode outage —
+    // the saved reading needs no network.
+    keepDateBarOnGate: !isToday && snapshot != null,
+    dateBar: ({ loadDay, unloadsDay }) => (
+      <>
+        {/* Date scope — one toolbar at every width (the old phone-only bar,
+            promoted; desktop gains the prev/next arrows it never had). Day
+            numbers stay out: the top bar's L/U chips own them. */}
+        <div className="flex items-center gap-2 border-b border-hairline bg-surface/60 px-3 py-2 md:px-6">
+          <button
+            type="button"
+            aria-label="Previous run day"
+            onClick={() => goTo(previousRunDate(runDate))}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95"
+          >
+            ‹
+          </button>
+          <input
+            className="input min-w-0 flex-1 text-sm [color-scheme:dark] md:w-44 md:flex-none"
+            type="date"
+            max={today}
+            value={runDate}
+            onChange={(e) => e.target.value && goTo(e.target.value)}
+          />
+          <button
+            type="button"
+            aria-label="Next run day"
+            disabled={isToday}
+            onClick={() => goTo(nextRunDate(runDate, today))}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95 disabled:opacity-30"
+          >
+            ›
+          </button>
+          {!isToday && (
+            <button
+              type="button"
+              onClick={() => goTo(today)}
+              className="shrink-0 rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+            >
+              Today
+            </button>
+          )}
+          <button
+            type="button"
+            onClick={() => setArchiveOpen(true)}
+            aria-label="Archived reports"
+            title="Archived reports"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+          >
+            <Archive className="h-4 w-4" />
+            <span className="hidden sm:inline">Archive</span>
+          </button>
+          {/* The VIEWED date's day numbers (override-aware) — the top bar's
+              chips only know about today, so a historical report needs its own.
+              Short form on phones, where the Archive button took the room. */}
+          <span className="ml-auto shrink-0 whitespace-nowrap font-mono text-[10px] tabular-nums text-ink-muted">
+            <span className="sm:hidden">L{loadDay} · U{unloadsDay}</span>
+            <span className="hidden sm:inline">Load {loadDay} · Unload {unloadsDay}</span>
+          </span>
+        </div>
+        {!isToday && (
+          <ArchiveStrip
+            snapshot={snapshot}
+            lookupFailed={snapshotQuery.isError}
+            lookupPending={!snapshotQuery.isError && !answeredNotArchived}
+            saved={savedSnapshot != null}
+            onViewChange={setView}
+            // No Save button until the archive has answered — "Save this day
+            // now" on a day whose state is unknown could replace its snapshot.
+            canArchive={canArchive && archiveAnswered}
+            capturing={capture.isPending}
+            onCapture={() => handleCapture()}
+          />
+        )}
+      </>
+    ),
+  };
+
+  return (
+    <>
+      {archiveOpen && (
+        <ArchiveModal
+          onClose={() => setArchiveOpen(false)}
+          selectedDate={runDate}
+          selectedIsToday={isToday}
+          selectedArchived={snapshot != null}
+          selectedUnknown={snapshot == null && !answeredNotArchived}
+          onOpenDay={(date) => {
+            goTo(date);
+            setArchiveOpen(false);
+          }}
+          canArchive={canArchive}
+          capturing={capture.isPending}
+          onCapture={handleCapture}
+        />
+      )}
+      <ConfirmDialog
+        open={confirmResave}
+        title={`Re-save ${formatRunDate(runDate)}?`}
+        description={
+          snapshot
+            ? `This replaces the snapshot saved ${savedAtLabel(snapshot, true)} with the day as the server has it now. The replaced snapshot can't be brought back.`
+            : `${formatRunDate(runDate)} may already be saved. If it is, this replaces that snapshot with the day as the server has it now, and it can't be brought back.`
+        }
+        confirmLabel="Re-save"
+        variant="danger"
+        busy={capture.isPending}
+        onConfirm={() => capture.mutate(runDate, { onSettled: () => setConfirmResave(false) })}
+        onCancel={() => setConfirmResave(false)}
+      />
+      {savedSnapshot ? (
+        <SavedReportData snapshot={savedSnapshot} chrome={chrome} />
+      ) : (
+        <LiveReportData runDate={runDate} isToday={isToday} hold={holdForLookup} chrome={chrome} />
+      )}
+    </>
+  );
+}
+
+/** Live mode: the report inputs straight from the per-run-date hooks. */
+function LiveReportData({
+  runDate,
+  isToday,
+  hold,
+  chrome,
+}: {
+  runDate: string;
+  /** The shell's — so the body's coverage rule and the chrome's LIVE pill flip together. */
+  isToday: boolean;
+  /** The archive lookup is still out: show "loading" instead of the live recompute. */
+  hold: boolean;
+  chrome: ReportChrome;
+}) {
   const { data: loadDayOverride } = useLoadDayOverride(runDate);
   const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
-  const loadDay = loadDayOverride ?? computedLoadDay;
-  const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
-
-  // Settings-derived caps/flags.
   const { data: settings = [] } = useSettings();
-  const noCap = resolveNoCap(settings);
-  const batchingDisabled = settings.some((s) => s.key === "batching_disabled" && s.value === true);
-  const cap = useMemo(() => resolveWearerCap(settings), [settings]);
-  const recurringRules = useMemo(() => {
-    // Guard against a non-array value (the setting is admin-editable) so
-    // isRecurring's `.some(...)` can't throw and crash the coverage section.
-    const row = settings.find((s) => s.key === "recurring_route_swaps");
-    return Array.isArray(row?.value) ? (row!.value as RecurringRouteSwap[]) : [];
-  }, [settings]);
 
   // Per-run-date data (all keyed by runDate; poll/WS keep them live).
   const boardQuery = useBoard(runDate);
@@ -215,6 +500,9 @@ export default function LiveReport() {
   const { data: spares = [] } = useSpareAssignments(runDate);
   const { data: routeSwaps = [] } = useRouteSwaps(runDate);
   const { data: pace } = usePaceAverage(30);
+  const { data: holidayUnload = false } = useHolidayUnload(runDate);
+  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
+  const prevDayCarriers = usePrevDayCarriers(runDate, board);
 
   // The audit query has no websocket/poll of its own — refresh it on an interval
   // so this "live" report doesn't show a stale audit section.
@@ -226,6 +514,124 @@ export default function LiveReport() {
     return () => window.clearInterval(id);
   }, [qc, runDate]);
 
+  const inputs: ReportInputs = {
+    runDate,
+    isToday,
+    board,
+    batches,
+    shorts,
+    auditEntries,
+    spares,
+    routeSwaps,
+    settings,
+    trackedItems,
+    palette,
+    itemDisplayName,
+    paceAvg: pace?.avg_seconds ?? null,
+    loadDayOverride: loadDayOverride ?? null,
+    unloadsDayOverride: unloadsDayOverride ?? null,
+    holidayUnload,
+    prevSplitHelpers,
+    prevDayCarriers,
+  };
+  // Loading / dead-connection gate — never render the fake empty day.
+  const gate = hold ? ({ kind: "loading" } as const) : pageStatusFor(boardQuery);
+  return <ReportBody inputs={inputs} gate={gate} chrome={chrome} />;
+}
+
+/**
+ * A saved day's snapshot → the same ReportInputs the live hooks produce,
+ * through the same pure parsers they use (catalog, category palette, display
+ * names, day overrides, holiday flag, previous-day coverage). Nothing here
+ * derives a rule of its own — if it did, the saved and live readings could
+ * drift. Every list defaults to empty so a thin snapshot degrades to empty
+ * sections rather than a crash.
+ */
+function inputsFromSnapshot(snapshot: ReportSnapshot): ReportInputs {
+  const runDate = snapshot.run_date;
+  const s = snapshot.inputs;
+  const stored = s.settings ?? {};
+  const board = s.board ?? [];
+  const swapLog = s.route_swap_log ?? [];
+  const prevOp = s.prev_operating_day ?? null;
+  const trackedItems = parseTrackedItems(stored.tracked_items_map);
+  return {
+    runDate,
+    // A saved day is over, so coverage keeps the spares returned since.
+    isToday: false,
+    board,
+    batches: s.batches ?? [],
+    shorts: s.shortages ?? [],
+    auditEntries: s.audit_entries ?? [],
+    spares: s.spares ?? [],
+    routeSwaps: s.route_swaps ?? [],
+    settings: Object.entries(stored).map(([key, value]) => ({ key, value })),
+    trackedItems,
+    palette: paletteForCatalog(trackedItems, parseTrackedItemCategories(stored.tracked_item_categories)),
+    itemDisplayName: itemDisplayNameFor(trackedItems),
+    paceAvg: s.pace_avg_seconds ?? null,
+    loadDayOverride: parseDayOverride(stored[dayOverrideKey("load_day", runDate)]),
+    unloadsDayOverride: parseDayOverride(stored[dayOverrideKey("unloads_day", runDate)]),
+    holidayUnload: parseHolidayFlag(stored[holidayOpKey("unload", runDate)]),
+    prevSplitHelpers: prevDaySplitHelpersFrom(swapLog, runDate, prevOp),
+    prevDayCarriers: prevDayCarriersFrom(swapLog, runDate, prevOp, board),
+  };
+}
+
+/** Saved mode: the report inputs from the archived snapshot. Fetches nothing. */
+function SavedReportData({ snapshot, chrome }: { snapshot: ReportSnapshot; chrome: ReportChrome }) {
+  const inputs = useMemo(() => inputsFromSnapshot(snapshot), [snapshot]);
+  return <ReportBody inputs={inputs} gate={null} chrome={chrome} />;
+}
+
+/** The report itself — sections, KPIs, kiosk, Images, PDF — for one day's inputs. */
+function ReportBody({
+  inputs,
+  gate,
+  chrome,
+}: {
+  inputs: ReportInputs;
+  gate: ReturnType<typeof pageStatusFor>;
+  chrome: ReportChrome;
+}) {
+  const {
+    runDate,
+    isToday,
+    board,
+    batches,
+    shorts,
+    auditEntries,
+    spares,
+    routeSwaps,
+    settings,
+    trackedItems,
+    palette,
+    itemDisplayName,
+    paceAvg,
+    loadDayOverride,
+    unloadsDayOverride,
+    holidayUnload,
+    prevSplitHelpers,
+    prevDayCarriers,
+  } = inputs;
+
+  // Day numbers for the header, with the same per-run-date overrides Load/Unload use.
+  const dayDate = useMemo(() => new Date(runDate + "T12:00:00"), [runDate]);
+  const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers(dayDate);
+  const loadDay = loadDayOverride ?? computedLoadDay;
+  const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
+
+  // Settings-derived caps/flags.
+  const noCap = resolveNoCap(settings);
+  const batchingDisabled = settings.some((s) => s.key === "batching_disabled" && s.value === true);
+  const cap = useMemo(() => resolveWearerCap(settings), [settings]);
+  const recurringRules = useMemo(() => {
+    // Guard against a non-array value (the setting is admin-editable) so
+    // isRecurring's `.some(...)` can't throw and crash the coverage section.
+    const row = settings.find((s) => s.key === "recurring_route_swaps");
+    return Array.isArray(row?.value) ? (row!.value as RecurringRouteSwap[]) : [];
+  }, [settings]);
+
   const boardByNum = useMemo(() => new Map(board.map((t) => [t.truck_number, t])), [board]);
 
   // ---- Unload / batches ----
@@ -236,13 +642,10 @@ export default function LiveReport() {
   // seeds pending (not done), "loaded" still counts as unloaded-then-moved-on.
   // The old whole-fleet raw-status filter started the day at the seed count
   // and climbed past the roster size as trucks loaded overnight.
-  const { data: holidayUnload = false } = useHolidayUnload(runDate);
-  const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const unloadCtx = useMemo(
     () => buildOperationalDayContext(board, unloadsDay, holidayUnload, false, "unload", prevSplitHelpers),
     [board, unloadsDay, holidayUnload, prevSplitHelpers],
   );
-  const prevDayCarriers = usePrevDayCarriers(runDate, board);
   const unloadedCount = countUnloadedFromContext(unloadCtx, prevDayCarriers);
   const unloadRosterSize = unloadCtx.activeTrucks.length;
 
@@ -321,12 +724,11 @@ export default function LiveReport() {
     () => (finished.length ? finished.reduce((m, t) => (t.state!.load_duration_seconds! > m.state!.load_duration_seconds! ? t : m)) : null),
     [finished],
   );
-  const paceAvg = pace?.avg_seconds ?? null;
   const durTone = (d: number) =>
     paceAvg == null ? "text-ink" : d <= paceAvg ? "text-emerald-400" : d <= paceAvg * 1.25 ? "text-amber-400" : "text-red-400";
 
   // ---- Shortages ----
-  const itemsForLabels = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
+  const itemsForLabels = catalogOrDefault(trackedItems);
   const shortLabel = (s: Shortage) => shortageItemLabel(s.item_category, s.item_detail, itemsForLabels);
   const shortsByTruck = useMemo(() => {
     const m = new Map<number, Shortage[]>();
@@ -472,6 +874,7 @@ export default function LiveReport() {
       generated_at: new Date().toISOString(),
       load_day: loadDay,
       unload_day: unloadsDay,
+      shift_label: chrome.pdfNote,
       title: "Run Report",
     };
 
@@ -563,7 +966,7 @@ export default function LiveReport() {
     }
 
     if (sel.shortages || sel.shortSheet) {
-      const items = trackedItems.length > 0 ? trackedItems : DEFAULT_TRACKED_ITEMS;
+      const items = itemsForLabels;
       // Printed-sheet order, so the PDF's short sheet reads in the same
       // sequence as the paper and as the on-screen editor.
       const m = buildShortageMatrix(shorts, items);
@@ -658,16 +1061,18 @@ export default function LiveReport() {
   // download drives this page rather than re-deriving any of it.
   //
   // Waits on `board`: the memos feed off it, and firing on the first render
-  // would post a view-model full of empty sections.
-  const autoPdf = params.get("pdf") === "1";
-  const autoPdfFired = useRef(false);
+  // would post a view-model full of empty sections. On a past day with a
+  // snapshot this is the saved report, like everything else on the page.
+  // Never while gated — a held or loading body isn't the reading on screen.
+  const { autoPdf, onAutoPdfFired } = chrome;
+  const gated = gate != null;
   useEffect(() => {
-    if (!autoPdf || autoPdfFired.current) return;
+    if (!autoPdf || gated) return;
     if (board.length === 0) return;
-    autoPdfFired.current = true;
+    onAutoPdfFired();
     void handleDownloadPdf(selected);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [autoPdf, board.length]);
+  }, [autoPdf, board.length, gated]);
 
   // Which sections have content today (drives the picker's muted hints).
   // `phase` mirrors each Section's eyebrow so kiosk mode can show it in the
@@ -1254,7 +1659,14 @@ export default function LiveReport() {
             /* Same Grid / Sheet views as the Short Sheet page, so the report
                shows the crew's actual sheet. */
             <div className="overflow-hidden rounded-xl border border-hairline bg-surface">
-              <ShortageSheetView shorts={shorts} board={board} layout={sheetLayout} onLayoutChange={setSheetLayout} />
+              <ShortageSheetContent
+                shorts={shorts}
+                board={board}
+                items={itemsForLabels}
+                palette={palette}
+                layout={sheetLayout}
+                onLayoutChange={setSheetLayout}
+              />
             </div>
           )}
         </Section>
@@ -1402,12 +1814,7 @@ export default function LiveReport() {
           {kioskDef?.label ?? ""}
         </h2>
       </div>
-      {isToday && (
-        <span className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
-          <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-st-inprogress" />
-          Live
-        </span>
-      )}
+      {chrome.badge}
       {/* Exit stays on the title row so a narrow screen can never push it off */}
       <button
         onClick={() => { setKiosk(false); if (document.fullscreenElement) void document.exitFullscreen(); }}
@@ -1473,9 +1880,18 @@ export default function LiveReport() {
     </div>
   );
 
-  // Loading / dead-connection gate — never render the fake empty day.
-  const pageGate = pageStatusFor(boardQuery);
-  if (pageGate) return <PageStatus {...pageGate} />;
+  // Loading / dead-connection gate (live mode's board) — never render the fake
+  // empty day. Checked here, after every hook, so a dropped connection doesn't
+  // unmount the body and throw a wall display out of kiosk mode.
+  if (gate)
+    return chrome.keepDateBarOnGate ? (
+      <>
+        {chrome.dateBar({ loadDay, unloadsDay })}
+        <PageStatus {...gate} />
+      </>
+    ) : (
+      <PageStatus {...gate} />
+    );
 
   return (
     <>
@@ -1517,12 +1933,7 @@ export default function LiveReport() {
       )}
       <PageHeader
         title="Run Report"
-        titleBadge={isToday ? (
-          <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
-            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
-            Live
-          </span>
-        ) : undefined}
+        titleBadge={chrome.badge}
         meta={<span>{formatRunDate(runDate)}</span>}
         actions={
           <>
@@ -1533,49 +1944,7 @@ export default function LiveReport() {
           </>
         }
       />
-      {/* Date scope — one toolbar at every width (the old phone-only bar,
-          promoted; desktop gains the prev/next arrows it never had). Day
-          numbers stay out: the top bar's L/U chips own them. */}
-      <div className="flex items-center gap-2 border-b border-hairline bg-surface/60 px-3 py-2 md:px-6">
-        <button
-          type="button"
-          aria-label="Previous run day"
-          onClick={() => setRunDate(previousRunDate(runDate))}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95"
-        >
-          ‹
-        </button>
-        <input
-          className="input min-w-0 flex-1 text-sm [color-scheme:dark] md:w-44 md:flex-none"
-          type="date"
-          max={todayIso()}
-          value={runDate}
-          onChange={(e) => e.target.value && setRunDate(e.target.value)}
-        />
-        <button
-          type="button"
-          aria-label="Next run day"
-          disabled={isToday}
-          onClick={() => setRunDate(nextRunDate(runDate, todayIso()))}
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg border border-hairline bg-surface-2 text-lg leading-none text-ink-soft active:scale-95 disabled:opacity-30"
-        >
-          ›
-        </button>
-        {!isToday && (
-          <button
-            type="button"
-            onClick={() => setRunDate(todayIso())}
-            className="shrink-0 rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
-          >
-            Today
-          </button>
-        )}
-        {/* The VIEWED date's day numbers (override-aware) — the top bar's
-            chips only know about today, so a historical report needs its own. */}
-        <span className="ml-auto shrink-0 whitespace-nowrap font-mono text-[10px] tabular-nums text-ink-muted">
-          Load {loadDay} · Unload {unloadsDay}
-        </span>
-      </div>
+      {chrome.dateBar({ loadDay, unloadsDay })}
 
       {/* Horizontal padding respects the landscape safe area so the system nav
           bar (right side in landscape) doesn't cover the grid's last columns. */}

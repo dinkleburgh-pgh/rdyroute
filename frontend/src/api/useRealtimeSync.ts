@@ -91,6 +91,11 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
           // other for something, and the dock works heads-down.
           if (event.run_date) qc.invalidateQueries({ queryKey: ["board", event.run_date] });
           window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
+        } else if (event.type === "report_archived") {
+          // A day was archived (end of shift, catch-up, or an admin's
+          // re-save): open Report pages pick up the new snapshot.
+          qc.invalidateQueries({ queryKey: ["report-archive"] });
+          if (event.run_date) qc.invalidateQueries({ queryKey: ["report-snapshot", event.run_date] });
         } else if (event.type === "driver_note_created") {
           // A driver just added a note from the QR page — refresh the notes
           // board live and let the app surface a clickable toast.

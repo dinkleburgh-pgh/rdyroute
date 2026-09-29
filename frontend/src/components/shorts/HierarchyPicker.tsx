@@ -110,6 +110,19 @@ export function itemDisplayName(label: string, items: TrackedItem[]): string {
   return suffix ? `${label} ${suffix}` : label;
 }
 
+/** The catalog to resolve labels against: the given one, or the built-in
+ *  defaults while it is empty (still loading). */
+export function catalogOrDefault(raw: TrackedItem[] | undefined): TrackedItem[] {
+  return raw && raw.length > 0 ? raw : DEFAULT_TRACKED_ITEMS;
+}
+
+/** itemDisplayName bound to a catalog — what useItemDisplayName returns, for a
+ *  caller holding the catalog itself (a saved report's archived copy). */
+export function itemDisplayNameFor(raw: TrackedItem[] | undefined): (label: string) => string {
+  const items = catalogOrDefault(raw);
+  return (label: string) => itemDisplayName(label, items);
+}
+
 /**
  * itemDisplayName bound to the live catalog. Use this at every surface that
  * renders a stored item label — the previous version of this logic lived
@@ -118,9 +131,8 @@ export function itemDisplayName(label: string, items: TrackedItem[]): string {
  * showed the bare colour.
  */
 export function useItemDisplayName(): (label: string) => string {
-  const { data: raw = [] } = useTrackedItems();
-  const items = raw.length > 0 ? raw : DEFAULT_TRACKED_ITEMS;
-  return useMemo(() => (label: string) => itemDisplayName(label, items), [items]);
+  const { data: raw } = useTrackedItems();
+  return useMemo(() => itemDisplayNameFor(raw), [raw]);
 }
 
 /**
@@ -508,31 +520,38 @@ export interface CategoryPalette {
 export function useCategoryPalette(): CategoryPalette {
   const { data: trackedRaw } = useTrackedItems();
   const { data: catMeta } = useTrackedItemCategories();
-  return useMemo(() => {
-    const items = trackedRaw && trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
-    const seed = new Set<string>(["General"]);
-    for (const i of items) {
-      seed.add(topCatOf(i));
-      const sub = subCatOf(i);
-      if (sub) seed.add(sub);
-    }
-    const meta: CategoryMetaMap = {};
-    for (const [k, v] of Object.entries(catMeta ?? {})) {
-      const key = catKeyOf(k);
-      seed.add(key);
-      if (v?.color && !meta[key]?.color) meta[key] = v;
-    }
-    const map = buildCategoryPalette([...seed], meta);
-    const presetOf = (cat: string) => map.get(catKeyOf(cat)) ?? guessPresetKey(catKeyOf(cat));
-    const preset = (cat: string) => COLOR_PRESETS[presetOf(cat)] ?? COLOR_PRESETS.stone;
-    return {
-      presetOf,
-      dotClass: (c) => preset(c).dot,
-      chipClass: (c) => preset(c).chip,
-      tileClass: (c) => preset(c).tile,
-      hexOf: (c) => PRESET_HEX[presetOf(c)] ?? PRESET_HEX.stone,
-    };
-  }, [trackedRaw, catMeta]);
+  return useMemo(() => paletteForCatalog(trackedRaw, catMeta), [trackedRaw, catMeta]);
+}
+
+/** useCategoryPalette's builder, pure — for a caller holding the catalog and
+ *  category meta itself (a saved report reads both from its snapshot). */
+export function paletteForCatalog(
+  trackedRaw: TrackedItem[] | undefined,
+  catMeta: CategoryMetaMap | undefined,
+): CategoryPalette {
+  const items = catalogOrDefault(trackedRaw);
+  const seed = new Set<string>(["General"]);
+  for (const i of items) {
+    seed.add(topCatOf(i));
+    const sub = subCatOf(i);
+    if (sub) seed.add(sub);
+  }
+  const meta: CategoryMetaMap = {};
+  for (const [k, v] of Object.entries(catMeta ?? {})) {
+    const key = catKeyOf(k);
+    seed.add(key);
+    if (v?.color && !meta[key]?.color) meta[key] = v;
+  }
+  const map = buildCategoryPalette([...seed], meta);
+  const presetOf = (cat: string) => map.get(catKeyOf(cat)) ?? guessPresetKey(catKeyOf(cat));
+  const preset = (cat: string) => COLOR_PRESETS[presetOf(cat)] ?? COLOR_PRESETS.stone;
+  return {
+    presetOf,
+    dotClass: (c) => preset(c).dot,
+    chipClass: (c) => preset(c).chip,
+    tileClass: (c) => preset(c).tile,
+    hexOf: (c) => PRESET_HEX[presetOf(c)] ?? PRESET_HEX.stone,
+  };
 }
 
 // ---------------------------------------------------------------------------

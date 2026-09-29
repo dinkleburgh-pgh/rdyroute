@@ -778,6 +778,37 @@ class ReportViewModel(BaseModel):
     audit: AuditSectionVM | None = None
 
 
+# ---- Report archive ------------------------------------------------------
+# A run day's report inputs, captured at the end of 3rd shift (see
+# report_archive.py). `inputs` is deliberately untyped here: every list in it
+# was serialised through its own endpoint's response model at capture time, so
+# the frontend's existing types already describe it.
+ReportSnapshotSource = Literal["auto", "catch-up", "manual"]
+
+
+class ReportSnapshotSummary(BaseModel):
+    """Headline counts for the archive list, derived from the inputs."""
+    qty_short: int
+    trucks_shorted: int
+    trucks_loaded: int
+    trucks_timed: int
+    routes_covered: int
+    audit_items: int
+    batches_used: int
+
+
+class ReportSnapshotMetaOut(_OrmBase):
+    run_date: date
+    captured_at: datetime
+    source: ReportSnapshotSource
+    app_version: str | None
+    summary: ReportSnapshotSummary
+
+
+class ReportSnapshotOut(ReportSnapshotMetaOut):
+    inputs: dict[str, Any]
+
+
 class BatchHistoryCreate(BaseModel):
     run_date: date
     truck_number: int

@@ -69,7 +69,18 @@ def pace_average(
     operational days, excluding records outside the shared valid band (so it
     agrees with the pace-daily and cycle-time trends).
     """
-    start, end = window_bounds(lookback_days)
+    _, end = window_bounds(lookback_days)
+    return {
+        "avg_seconds": pace_average_as_of(db, end, lookback_days),
+        "lookback_days": lookback_days,
+    }
+
+
+def pace_average_as_of(db: Session, end: date, lookback_days: int) -> int | None:
+    """Average valid load duration (seconds) over the *lookback_days* run dates
+    ending on *end*, inclusive — pace_average's window anchored on any day, so
+    the report archive can store the pace a past day was shown against."""
+    start = end - timedelta(days=lookback_days - 1)
     result = db.execute(
         select(func.avg(LoadDuration.duration_seconds).label("avg_seconds"))
         .where(
@@ -79,11 +90,7 @@ def pace_average(
             LoadDuration.duration_seconds <= _MAX_VALID_SECONDS,
         )
     ).scalar_one_or_none()
-
-    return {
-        "avg_seconds": round(result) if result is not None else None,
-        "lookback_days": lookback_days,
-    }
+    return round(result) if result is not None else None
 
 
 @router.delete("/purge-abnormal", status_code=status.HTTP_200_OK)

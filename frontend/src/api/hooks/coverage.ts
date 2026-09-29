@@ -194,6 +194,43 @@ export function useRouteSwapLog(days = 30) {
 
 
 /**
+ * usePrevDayCarriers' derivation, pure — for a caller that already holds the
+ * swap log and previous operating day (a saved report reads both from its
+ * snapshot). `prevOp` null/undefined falls back to the weekday step.
+ */
+export function prevDayCarriersFrom(
+  swapLog: RouteSwapLog[],
+  runDate: string,
+  prevOp: string | null | undefined,
+  board: TruckWithState[],
+): Map<number, TruckWithState> {
+  const prev = buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp));
+  const byNum = new Map(board.map((t) => [t.truck_number, t]));
+  const m = new Map<number, TruckWithState>();
+  for (const c of prev.items) {
+    // Split entries are NOT coverage: the route ran itself, so the helper's
+    // unload never substitutes for the route's own.
+    if (c.isSplit) continue;
+    // Two-way swap: both trucks physically ran, so neither carries the other —
+    // each unloads itself. Without this, unloading one credited both.
+    if (prev.twoWayRoutes.has(c.route)) continue;
+    const carrier = byNum.get(c.loadOn);
+    if (carrier) m.set(c.route, carrier);
+  }
+  return m;
+}
+
+/** usePrevDaySplitHelpers' derivation, pure (see prevDayCarriersFrom). */
+export function prevDaySplitHelpersFrom(
+  swapLog: RouteSwapLog[],
+  runDate: string,
+  prevOp: string | null | undefined,
+): Set<number> {
+  const prev = buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp));
+  return new Set(prev.splitHelpers.keys());
+}
+
+/**
  * route → the truck that carried that route's freight on the PREVIOUS load
  * day (from the route-swap log). Feed to countUnloadedFromContext so a
  * covered route counts as unloaded once its carrier is — the covered truck
@@ -202,22 +239,10 @@ export function useRouteSwapLog(days = 30) {
 export function usePrevDayCarriers(runDate: string, board: TruckWithState[]): Map<number, TruckWithState> {
   const { data: swapLog = [] } = useRouteSwapLog(14);
   const { data: prevOp } = usePrevOperatingDay(runDate);
-  return useMemo(() => {
-    const prev = buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp));
-    const byNum = new Map(board.map((t) => [t.truck_number, t]));
-    const m = new Map<number, TruckWithState>();
-    for (const c of prev.items) {
-      // Split entries are NOT coverage: the route ran itself, so the helper's
-      // unload never substitutes for the route's own.
-      if (c.isSplit) continue;
-      // Two-way swap: both trucks physically ran, so neither carries the other —
-      // each unloads itself. Without this, unloading one credited both.
-      if (prev.twoWayRoutes.has(c.route)) continue;
-      const carrier = byNum.get(c.loadOn);
-      if (carrier) m.set(c.route, carrier);
-    }
-    return m;
-  }, [swapLog, runDate, board, prevOp]);
+  return useMemo(
+    () => prevDayCarriersFrom(swapLog, runDate, prevOp, board),
+    [swapLog, runDate, board, prevOp],
+  );
 }
 
 /**
@@ -229,10 +254,10 @@ export function usePrevDayCarriers(runDate: string, board: TruckWithState[]): Ma
 export function usePrevDaySplitHelpers(runDate: string): Set<number> {
   const { data: swapLog = [] } = useRouteSwapLog(14);
   const { data: prevOp } = usePrevOperatingDay(runDate);
-  return useMemo(() => {
-    const prev = buildPrevDayCoverage(swapLog, resolvePrevRunDate(runDate, prevOp));
-    return new Set(prev.splitHelpers.keys());
-  }, [swapLog, runDate, prevOp]);
+  return useMemo(
+    () => prevDaySplitHelpersFrom(swapLog, runDate, prevOp),
+    [swapLog, runDate, prevOp],
+  );
 }
 
 /**
