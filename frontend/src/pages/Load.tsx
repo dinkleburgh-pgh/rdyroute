@@ -188,8 +188,9 @@ export default function Load() {
   // order they were staged. Deliberately not filtered to `ready`: a truck can
   // be staged while it is still being unloaded, and hiding it the moment its
   // status moves would make the lane lie about what is actually parked there.
-  // The server clears staged_at on loaded/off/oos/shop, so anything still
-  // carrying a stamp genuinely belongs in the lane.
+  // The server clears staged_at the moment a truck starts loading (and on
+  // loaded/off/oos/shop), so anything still carrying a stamp genuinely
+  // belongs in the lane.
   const staged = useMemo(
     () =>
       board
@@ -716,7 +717,7 @@ export default function Load() {
             storageKey="rr-load-coverage-open"
             tone="sky"
             isRecurring={isRecurringCoverage}
-            statusOf={(n) => board.find((t) => t.truck_number === n)?.state?.status ?? null}
+            truckOf={(n) => board.find((t) => t.truck_number === n)}
             cardsClassName="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"
           />
 

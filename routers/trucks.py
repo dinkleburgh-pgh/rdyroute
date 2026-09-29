@@ -66,10 +66,14 @@ _PERSISTENT_STATUSES = {"off", "oos", "shop"}
 # Statuses a truck can actually be unloaded FROM. Shared by the marker rules
 # and the load-request guard, which must agree on what "being unloaded" means.
 _UNLOAD_WORKABLE = (TruckStatus.dirty, TruckStatus.unfinished)
-# Reaching any of these ends a truck's stay in the staging lane. MODULE level:
-# both the state PUT and the stage endpoint read it, and it lived as a local
-# inside the PUT at first, which made every stage attempt a NameError 500.
-_STAGE_CLEARING = (TruckStatus.loaded, TruckStatus.off, TruckStatus.oos, TruckStatus.shop)
+# Reaching any of these ends a truck's stay in the staging lane. The lane holds
+# trucks WAITING to load, so starting to load (in_progress) ends the stay just
+# as surely as being loaded. MODULE level: both the state PUT and the stage
+# endpoint read it, and it lived as a local inside the PUT at first, which made
+# every stage attempt a NameError 500.
+_STAGE_CLEARING = (
+    TruckStatus.in_progress, TruckStatus.loaded, TruckStatus.off, TruckStatus.oos, TruckStatus.shop,
+)
 
 
 def _ship_day_number(value: date) -> int:
@@ -1106,9 +1110,9 @@ def update_truck_state(
         row.load_request_at = None
 
     # ---- staged_at: the lane empties itself -------------------------------
-    # Staging describes a truck WAITING to be loaded. The moment it is loaded
-    # the lane is empty again, so the marker clears itself rather than relying
-    # on anyone remembering to tap Unstage. off/oos/shop go the same way: a
+    # Staging describes a truck WAITING to be loaded. The moment it starts
+    # loading the lane is empty again, so the marker clears itself rather than
+    # relying on anyone remembering to tap Unstage. off/oos/shop go the same way: a
     # truck that is gone cannot be staged. Derived here, next to the other
     # marker invariants, so no future status path can forget it.
     if row.status in _STAGE_CLEARING:

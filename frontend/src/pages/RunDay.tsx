@@ -57,25 +57,15 @@ import {
   resolvePrevRunDate,
   takenOverRouteNumber,
 } from "../utils/truckStatus";
-import { STATUS_LABELS } from "../constants/truckStatus";
 import { resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
 import { truckTypeLabel } from "../utils/truckType";
 import { formatRunDate } from "../utils/dates";
 import { errorDetail } from "../api/errors";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
 import PageHeader from "../components/PageHeader";
-import CoverageTag from "../components/CoverageTag";
+import CoverageCards from "../components/CoverageCards";
 import { DoneChip, OffChip, ReadyCard, WorkingCard, type CardBadge } from "./runday/cards";
-import {
-  BatchTile,
-  CoverageMini,
-  GroupHeader,
-  LaneHeader,
-  Meter,
-  MobileLaneSwitch,
-  PulseCard,
-  type CoverageKindLabel,
-} from "./runday/parts";
+import { BatchTile, GroupHeader, LaneHeader, Meter, MobileLaneSwitch, PulseCard } from "./runday/parts";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
@@ -101,10 +91,6 @@ type LaneCard = {
   /** Off-group chips: U OFF / L OFF / OOS. */
   chipTag?: string;
 };
-
-function fmtClock(sec: number): string {
-  return new Date(sec * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
-}
 
 function weekdayShort(iso: string | null): string {
   if (!iso) return "prev day";
@@ -421,31 +407,6 @@ export default function RunDay() {
   );
   const loadSpareCount = loadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
 
-  // Today's live coverages (shown with the Load lane): each route being
-  // covered, the truck covering it, whether that's a spare or a route swap.
-  const coverages = useMemo(() => {
-    const byNum = new Map(board.map((t) => [t.truck_number, t]));
-    const covers = [...liveCoveringTruckMap.entries()]
-      .map(([routeNum, cover]) => ({
-        routeNum,
-        routeTruck: byNum.get(routeNum),
-        cover,
-        kind: (cover.truck_type === "Spare" ? "spare" : "swap") as CoverageKindLabel,
-        coverStatus: effectiveStatus(cover, loadDay, holidayLoad),
-      }));
-    // SPLIT helpers: the route also runs; the helper carries its overflow.
-    const splits = board
-      .filter((t) => t.route_split_route != null)
-      .map((t) => ({
-        routeNum: t.route_split_route as number,
-        routeTruck: byNum.get(t.route_split_route as number),
-        cover: t,
-        kind: "split" as const,
-        coverStatus: effectiveStatus(t, loadDay, holidayLoad),
-      }));
-    return [...covers, ...splits].sort((a, b) => a.routeNum - b.routeNum);
-  }, [board, liveCoveringTruckMap, loadDay, holidayLoad]);
-
   // The previous OPERATING run date — from the server (max run_date < today) so
   // a mid-week plant closure doesn't blank out coverage; falls back to the
   // weekday step. Monday's unload is Friday's load.
@@ -461,6 +422,12 @@ export default function RunDay() {
   const prevEntries = useMemo(
     () => buildCoverageList({ role: "unload", board: [], prevCoverage }),
     [prevCoverage],
+  );
+  // Today's live coverages (shown with the Load lane) — the same normalised
+  // list every other surface renders, so the cards read identically.
+  const todayEntries = useMemo(
+    () => buildCoverageList({ role: "load", board, prevCoverage }),
+    [board, prevCoverage],
   );
 
   // Lookups so the Unload lane can show each route's covering truck from the
@@ -671,27 +638,7 @@ export default function RunDay() {
     window.setTimeout(() => document.getElementById("assign")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
   }
 
-  // Coverage card state lines.
-  function prevCoverState(cover?: TruckWithState): { text: string; className: string } {
-    const s = cover?.state;
-    if (!s) return { text: "No state yet", className: "text-ink-faint" };
-    if (isBeingUnloaded(cover!)) return { text: "Unloading…", className: "text-amber-300" };
-    if (s.status === "unloaded" || s.status === "loaded" || s.status === "in_progress") {
-      return { text: s.unloaded_at ? `Unloaded · ${fmtClock(s.unloaded_at)}` : "Unloaded", className: "text-green-400" };
-    }
-    if (s.status === "unfinished") return { text: "Unfinished", className: "text-fuchsia-300" };
-    return { text: STATUS_LABELS[s.status] === "Dirty" ? "Not unloaded" : STATUS_LABELS[s.status], className: "text-ink-muted" };
-  }
-  function todayCoverState(status: TruckStatus, cover: TruckWithState): { text: string; className: string } {
-    const s = cover.state;
-    if (status === "loaded") {
-      const mins = s?.load_duration_seconds ? ` · ${Math.round(s.load_duration_seconds / 60)}m` : "";
-      return { text: s?.load_finish_time ? `Loaded · ${fmtClock(s.load_finish_time)}${mins}` : "Loaded", className: "text-blue-300" };
-    }
-    if (status === "in_progress") return { text: "Loading…", className: "text-amber-300" };
-    if (status === "unloaded") return { text: "Ready", className: "text-green-400" };
-    return { text: "Not loaded", className: "text-ink-muted" };
-  }
+  const truckOf = (n: number) => boardByNum.get(n);
 
   // Loading / dead-connection gate — never render the fake empty day.
   const pageGate = pageStatusFor(boardQuery);
@@ -904,29 +851,7 @@ export default function RunDay() {
                 {prevEntries.length > 0 && (
                   <div className="flex flex-col gap-2">
                     <GroupHeader label={`Covered ${weekdayShort(prevCoverage.date)}`} count={prevEntries.length} />
-                    <div className="flex flex-wrap gap-1.5 sm:hidden">
-                      {prevEntries.map((e) => (
-                        <CoverageTag key={`${e.route}-${e.cover}`} route={e.route} truck={e.cover} prev split={e.kind === "split"} />
-                      ))}
-                    </div>
-                    <div className="hidden grid-cols-2 gap-2 sm:grid xl:grid-cols-3">
-                      {prevEntries.map((e) => {
-                        const cover = boardByNum.get(e.cover);
-                        const st = prevCoverState(cover);
-                        return (
-                          <CoverageMini
-                            key={`${e.route}-${e.cover}`}
-                            route={e.route}
-                            cover={e.cover}
-                            kind={e.kind === "split" ? "split" : cover?.truck_type === "Spare" ? "spare" : "swap"}
-                            verb="Loaded on"
-                            state={st.text}
-                            stateClassName={st.className}
-                            prev
-                          />
-                        );
-                      })}
-                    </div>
+                    <CoverageCards entries={prevEntries} size="sm" truckOf={truckOf} showPrevBadge={false} />
                   </div>
                 )}
 
@@ -1076,30 +1001,10 @@ export default function RunDay() {
                 )}
 
                 {/* Today's live coverages — who is covering which route on this load day. */}
-                {coverages.length > 0 && (
+                {todayEntries.length > 0 && (
                   <div className="flex flex-col gap-2">
-                    <GroupHeader label="Routes covered" count={coverages.length} />
-                    <div className="flex flex-wrap gap-1.5 sm:hidden">
-                      {coverages.map((c) => (
-                        <CoverageTag key={`${c.routeNum}-${c.cover.truck_number}`} route={c.routeNum} truck={c.cover.truck_number} split={c.kind === "split"} />
-                      ))}
-                    </div>
-                    <div className="hidden grid-cols-2 gap-2 sm:grid xl:grid-cols-3">
-                      {coverages.map((c) => {
-                        const st = todayCoverState(c.coverStatus, c.cover);
-                        return (
-                          <CoverageMini
-                            key={`${c.routeNum}-${c.cover.truck_number}`}
-                            route={c.routeNum}
-                            cover={c.cover.truck_number}
-                            kind={c.kind}
-                            verb={c.coverStatus === "loaded" ? "Loaded on" : "Loads on"}
-                            state={st.text}
-                            stateClassName={st.className}
-                          />
-                        );
-                      })}
-                    </div>
+                    <GroupHeader label="Routes covered" count={todayEntries.length} />
+                    <CoverageCards entries={todayEntries} size="sm" truckOf={truckOf} />
                   </div>
                 )}
 

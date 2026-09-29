@@ -99,67 +99,6 @@ export function PulseCard({ amber, className, children }: { amber?: boolean; cla
   );
 }
 
-export type CoverageKindLabel = "spare" | "swap" | "split";
-const KIND_CHIP: Record<CoverageKindLabel, { text: string; className: string }> = {
-  spare: { text: "Spare cover", className: "bg-track text-ink-muted" },
-  swap: { text: "Route swap", className: "bg-sky-500/15 text-sky-300" },
-  split: { text: "Split", className: "bg-amber-500/20 text-amber-200" },
-};
-
-/**
- * The Report's ROUTE → LOADS ON read, compact enough for a lane. Route on the
- * left, the truck its load rides on to the right; the verb says whether that
- * already happened ("Loaded on") or is still ahead ("Loads on").
- */
-export function CoverageMini({
-  route,
-  cover,
-  kind,
-  verb,
-  state,
-  stateClassName,
-  prev,
-}: {
-  route: number;
-  cover: number;
-  kind: CoverageKindLabel;
-  verb: string;
-  state: string;
-  stateClassName: string;
-  /** Previous-day pairing: the route number wears amber instead of sky. */
-  prev?: boolean;
-}) {
-  const chip = KIND_CHIP[kind];
-  return (
-    <div
-      className={clsx(
-        "flex flex-col items-center gap-1.5 rounded-[10px] border bg-surface px-2.5 py-2",
-        prev ? "border-amber-500/25" : "border-hairline",
-      )}
-    >
-      <div className="flex items-center justify-center gap-3">
-        <div className="text-center">
-          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-muted">Route</p>
-          <p className={clsx("font-mono text-[22px] font-semibold leading-none tabular-nums", prev ? "text-amber-300" : "text-sky-300")}>
-            #{route}
-          </p>
-        </div>
-        <span className="text-lg font-extrabold leading-none text-ink-faint" aria-hidden>
-          {kind === "split" ? "+" : "→"}
-        </span>
-        <div className="text-center">
-          <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-ink-muted">{verb}</p>
-          <p className="font-mono text-[22px] font-semibold leading-none tabular-nums text-ink">#{cover}</p>
-        </div>
-      </div>
-      <div className="flex items-center gap-1.5">
-        <span className={clsx("rounded px-1.5 py-px text-[10px] font-semibold", chip.className)}>{chip.text}</span>
-        <span className={clsx("text-[11px]", stateClassName)}>{state}</span>
-      </div>
-    </div>
-  );
-}
-
 /** One batch, the Report's BatchMiniCard read at lane density. */
 export function BatchTile({ batch, cap, noCap }: { batch: BatchSummary; cap: number; noCap: boolean }) {
   const { bar, text } = capacityColor(batch.total_wearers, noCap, cap);

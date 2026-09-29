@@ -10,10 +10,10 @@
 import { useState, type ReactNode } from "react";
 import clsx from "clsx";
 import { ChevronDown } from "lucide-react";
-import CoverageCards from "./CoverageCards";
+import CoverageCards, { type CoverageCardSize } from "./CoverageCards";
 import CoverageList from "./CoverageList";
 import type { CoverageEntry } from "../utils/truckStatus";
-import type { TruckStatus } from "../types";
+import type { TruckWithState } from "../types";
 
 const TONES = {
   sky: {
@@ -37,7 +37,8 @@ export default function CollapsibleCoverage({
   tone,
   headerExtra,
   isRecurring,
-  statusOf,
+  truckOf,
+  size = "md",
   showPrevBadge = true,
   cardsClassName,
 }: {
@@ -49,7 +50,10 @@ export default function CollapsibleCoverage({
   /** Extra header content after the title (an icon, a date). */
   headerExtra?: ReactNode;
   isRecurring?: (route: number, cover: number) => boolean;
-  statusOf?: (truckNumber: number) => TruckStatus | null;
+  /** The covering truck's live row — feeds the card's state line. */
+  truckOf?: (truckNumber: number) => TruckWithState | null | undefined;
+  /** Card size for the expanded view; the banners are md by default. */
+  size?: CoverageCardSize;
   showPrevBadge?: boolean;
   cardsClassName?: string;
 }) {
@@ -82,8 +86,9 @@ export default function CollapsibleCoverage({
         <div className="border-t px-3.5 pb-3.5 pt-3.5" style={t.divider}>
           <CoverageCards
             entries={entries}
+            size={size}
             isRecurring={isRecurring}
-            statusOf={statusOf}
+            truckOf={truckOf}
             showPrevBadge={showPrevBadge}
             className={cardsClassName}
           />

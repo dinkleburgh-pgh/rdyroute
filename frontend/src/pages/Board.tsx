@@ -766,7 +766,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           title="Coverage today"
           storageKey="rr-fleet-coverage-open"
           tone="sky"
-          statusOf={(n) => data?.find((t) => t.truck_number === n)?.state?.status ?? null}
+          truckOf={(n) => data?.find((t) => t.truck_number === n)}
         />
       )}
       {fleetMode && (
@@ -775,6 +775,7 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           title="Previous day coverage"
           storageKey="rr-fleet-prev-coverage-open"
           tone="amber"
+          truckOf={(n) => data?.find((t) => t.truck_number === n)}
           showPrevBadge={false}
         />
       )}

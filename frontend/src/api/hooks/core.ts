@@ -158,6 +158,11 @@ export function useBoard(runDate: string = todayIso()) {
   });
 }
 
+// Statuses that end a truck's stay in the staging lane — mirrors the server's
+// _STAGE_CLEARING so the optimistic cache drops the Staged card the instant
+// "Start" is tapped instead of on the next refetch.
+const STAGE_CLEARING = new Set<string>(["in_progress", "loaded", "off", "oos", "shop"]);
+
 export function useUpsertTruckState() {
   const qc = useQueryClient();
   return useMutation({
@@ -300,6 +305,7 @@ export function useUpsertTruckState() {
                 ...(vars.crossload_to_truck !== undefined && { crossload_to_truck: vars.crossload_to_truck }),
                 ...(vars.arrived_at         !== undefined && { arrived_at: vars.arrived_at }),
                 ...(vars.unloading_started_at !== undefined && { unloading_started_at: vars.unloading_started_at }),
+                ...(vars.status !== undefined && STAGE_CLEARING.has(vars.status) && { staged_at: null }),
                 ...(vars.driver_claimed_route !== undefined && { driver_claimed_route: vars.driver_claimed_route }),
                 ...(vars.state_source       !== undefined && vars.state_source !== null && { state_source: vars.state_source }),
               },

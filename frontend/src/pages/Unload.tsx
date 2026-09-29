@@ -872,6 +872,7 @@ export default function Unload() {
           title="Previous load-day coverage"
           storageKey="rr-unload-coverage-open"
           tone="amber"
+          truckOf={(n) => (data ?? []).find((t) => t.truck_number === n)}
           showPrevBadge={false}
           headerExtra={
             prevCoverage.date ? (
