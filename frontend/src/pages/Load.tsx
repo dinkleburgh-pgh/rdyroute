@@ -15,6 +15,7 @@ import {
   useSettings,
   useLoadSequenceSuggestions,
   useNextUp,
+  useSetNextUp,
   useSetStaged,
   useClearNextUp,
   usePrevDayCarriers,
@@ -207,6 +208,11 @@ export default function Load() {
   // One hook call feeds both surfaces: LoadDisplay is rendered by this page.
   const loadRequest = useLoadRequest(runDate);
   const [nextUpOpen, setNextUpOpen] = useState(false);
+  const setNextUp = useSetNextUp(runDate);
+  // A ready tile no longer starts the load on tap — it opens a chooser: Start
+  // Loading, Stage, or Set Next Up. Starting is the one that moves status, and
+  // it was too easy to hit when the crew meant to stage or queue the truck.
+  const [readyChoice, setReadyChoice] = useState<TruckWithState | null>(null);
   // The inline logger is revealed by the card's Log Shortage button rather
   // than sitting open under every load — it's a long panel and most loads
   // don't need it.
@@ -541,15 +547,14 @@ export default function Load() {
             )}
             <div className={readyFocus ? TILE_GRID_LG : TILE_GRID}>
               {ready.map((t) => {
-                const disabled = anyInProgress || busy === t.truck_number;
                 const cr = getCoverageRouteNumber(t);
                 return (
                   <QuietTile
                     key={t.truck_number}
                     truck={t}
                     size={readyFocus ? "lg" : "md"}
-                    disabled={disabled}
-                    onClick={() => requestStart(t)}
+                    disabled={busy === t.truck_number}
+                    onClick={() => setReadyChoice(t)}
                     title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
                     tag={t.truck_number === storedNextUp ? "Next" : undefined}
                     tagClass="text-[#3b82f6]"
@@ -560,26 +565,7 @@ export default function Load() {
                       <span>
                         {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
                         {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
-                        {t.state?.staged_at == null && (
-                          <>
-                            {" · "}
-                            <button
-                              type="button"
-                              /* the tile's own onClick starts loading — staging must not */
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setStaged.mutate({
-                                  truck_number: t.truck_number,
-                                  staged: true,
-                                  expected_status: t.state?.status ?? null,
-                                });
-                              }}
-                              className="underline decoration-dotted hover:text-ink-soft"
-                            >
-                              Stage
-                            </button>
-                          </>
-                        )}
+                        {t.state?.staged_at != null ? " · staged" : ""}
                       </span>
                     }
                   />
@@ -822,6 +808,61 @@ export default function Load() {
       </div>
 
             <LoadActionDialogs actions={actions} />
+      {/* Ready-tile chooser: the three things a ready truck can become. Closes
+          itself before handing off, so the start confirmation it may open
+          never stacks on top of it. */}
+      {readyChoice && (() => {
+        const t = readyChoice;
+        const n = t.truck_number;
+        const isStaged = t.state?.staged_at != null;
+        const isNext = storedNextUp === n;
+        const cannotStart = anyInProgress || busy === n;
+        const close = () => setReadyChoice(null);
+        return (
+          <Modal
+            open
+            onClose={close}
+            size="sm"
+            sheet
+            title={<span>Truck <span className="font-mono">#{n}</span></span>}
+          >
+            <div className="flex flex-col gap-2">
+              <ChoiceButton
+                label="Start Loading"
+                hint={cannotStart ? "Finish the in-progress truck first" : "Opens the start confirmation"}
+                tone="blue"
+                disabled={cannotStart}
+                onClick={() => { close(); requestStart(t); }}
+              />
+              <ChoiceButton
+                label={isStaged ? "Unstage" : "Stage"}
+                hint={isStaged ? "Take it back out of the lane" : "Pulled up to the lane, ready to go"}
+                tone="amber"
+                disabled={setStaged.isPending}
+                onClick={() => {
+                  setStaged.mutate({ truck_number: n, staged: !isStaged, expected_status: t.state?.status ?? null });
+                  close();
+                }}
+              />
+              <ChoiceButton
+                label={isNext ? "Clear Next Up" : "Set Next Up"}
+                hint={
+                  isNext ? "It is queued next right now"
+                  : storedNextUp != null ? `Replaces #${storedNextUp} as next`
+                  : "Queue it as the next load"
+                }
+                tone="sky"
+                disabled={setNextUp.isPending || clearNextUp.isPending}
+                onClick={() => {
+                  if (isNext) clearNextUp.mutate();
+                  else setNextUp.mutate(n);
+                  close();
+                }}
+              />
+            </div>
+          </Modal>
+        );
+      })()}
       {/* Next Up picker — same panel the In Progress page uses */}
       {nextUpOpen && (
         <Modal open onClose={() => setNextUpOpen(false)} size="lg" panelClassName="border-hairline bg-surface" bodyClassName="flex max-h-[85svh] flex-col">
@@ -856,6 +897,42 @@ export default function Load() {
 // ---------------------------------------------------------------------------
 // Sub-components
 // ---------------------------------------------------------------------------
+
+const CHOICE_TONES = {
+  blue: "border-blue-500/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20",
+  amber: "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20",
+  sky: "border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20",
+} as const;
+
+/** One row of the ready-tile chooser: a verb and one line on what it does. */
+function ChoiceButton({
+  label,
+  hint,
+  tone,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  hint: string;
+  tone: keyof typeof CHOICE_TONES;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      className={clsx(
+        "flex min-h-[56px] w-full flex-col items-start justify-center rounded-xl border px-4 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        CHOICE_TONES[tone],
+      )}
+    >
+      <span className="text-[15px] font-bold">{label}</span>
+      <span className="text-[12px] font-normal opacity-70">{hint}</span>
+    </button>
+  );
+}
 
 /** "started 7:42 PM · 12:34" — hook-bearing, so its own component. */
 function UnloadingSinceLoad({ startSec }: { startSec: number }) {
