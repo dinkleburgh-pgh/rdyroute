@@ -1,14 +1,31 @@
+/**
+ * Day Overview — the whole shift on one screen.
+ *
+ * Layout (from the 2026-09-29 redesign):
+ *   pulse row   two STACKED meters (unload / load), a Needs-attention box and
+ *               the shift notes (amber only when there is text);
+ *   two lanes   Unload and Load side by side from lg up — Load used to sit
+ *               below the fold on a 30-truck fleet. One lane at a time on a
+ *               phone, behind a tab switch.
+ * Inside a lane trucks are grouped by what they need: Working cards stay big,
+ * Ready cards are shorter, Done and Off collapse to chips. Visual mass tracks
+ * the work left. The old amber/sky callout boxes are group headers now.
+ *
+ * Every derivation below (coverage maps, substitution of a covering spare for
+ * its OOS route, the context-based counters, prev-day carriers…) is the same
+ * one the sidebar, Board and Unload pages use — only the rendering changed.
+ */
 import { useMemo, useState } from "react";
 import clsx from "clsx";
-import { Clock, Calendar, Check, ArrowLeftRight, AlertTriangle } from "lucide-react";
+import { AlertTriangle, Clock } from "lucide-react";
 import {
   useAssignSpare,
+  useBatchSummary,
   useBoard,
   useDailyNotes,
   useHolidayLoad,
   useHolidayUnload,
   useSetDailyNotes,
-  useUpsertTruckState,
   useLoadDayOverride,
   useUnloadsDayOverride,
   useTruckNotes,
@@ -20,7 +37,6 @@ import {
   useSettings,
 } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
-import CoverageList from "../components/CoverageList";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckNote, TruckStatus, TruckWithState } from "../types";
@@ -31,20 +47,35 @@ import {
   buildPrevDayCoverage,
   countLoaded,
   countUnloadedFromContext,
-  effectiveOperationalStatus,
   effectiveStatus,
+  garmentIsLoaded,
   getCoverageRouteNumber,
+  getSwapHistory,
   isScheduledOff,
   previousWorkday,
+  recordSwapHistory,
   resolvePrevRunDate,
   takenOverRouteNumber,
 } from "../utils/truckStatus";
-import { STATUS_BG, STATUS_TEXT, STATUS_LABELS, DustGarmentIcon } from "./runday/constants";
+import { STATUS_LABELS } from "../constants/truckStatus";
+import { resolveNoCap, resolveWearerCap } from "../utils/batchCapacity";
+import { truckTypeLabel } from "../utils/truckType";
 import { formatRunDate } from "../utils/dates";
-import TruckCard from "./runday/TruckCard";
 import { errorDetail } from "../api/errors";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
-import PageHeader, { Sep, Stat } from "../components/PageHeader";
+import PageHeader from "../components/PageHeader";
+import CoverageTag from "../components/CoverageTag";
+import { DoneChip, OffChip, ReadyCard, WorkingCard, type CardBadge } from "./runday/cards";
+import {
+  BatchTile,
+  CoverageMini,
+  GroupHeader,
+  LaneHeader,
+  Meter,
+  MobileLaneSwitch,
+  PulseCard,
+  type CoverageKindLabel,
+} from "./runday/parts";
 
 const UNLOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, shop: 2, in_progress: 3, unloaded: 4, loaded: 5, oos: 6, off: 7,
@@ -53,12 +84,49 @@ const LOAD_SORT: Partial<Record<TruckStatus, number>> = {
   dirty: 0, unfinished: 1, unloaded: 2, shop: 3, in_progress: 4, loaded: 5, oos: 6, off: 7,
 };
 
-function isUnloadDone(s: TruckStatus) {
-  return s === "unloaded" || s === "loaded";
+/** One truck's slot in a lane, already resolved to what the card shows. */
+type LaneCard = {
+  key: number;
+  number: number;
+  /** Stripe + number colour. */
+  status: TruckStatus;
+  /** Overrides the status word — "Unloading" on a dirty truck the dock is on. */
+  label?: string;
+  sub: string;
+  group: "working" | "ready" | "done" | "off";
+  badge?: CardBadge;
+  notes?: TruckNote[];
+  sinceSec?: number | null;
+  emphasis?: boolean;
+  /** Off-group chips: U OFF / L OFF / OOS. */
+  chipTag?: string;
+};
+
+function fmtClock(sec: number): string {
+  return new Date(sec * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
 }
-function isLoadDone(s: TruckStatus) {
-  return s === "loaded";
+
+function weekdayShort(iso: string | null): string {
+  if (!iso) return "prev day";
+  return new Date(iso + "T12:00:00").toLocaleDateString(undefined, { weekday: "short" });
 }
+
+function readFlag(key: string): boolean {
+  try {
+    return localStorage.getItem(key) === "1";
+  } catch {
+    return false;
+  }
+}
+function writeFlag(key: string, on: boolean) {
+  try {
+    localStorage.setItem(key, on ? "1" : "0");
+  } catch {
+    /* private mode — the toggle still works for this visit */
+  }
+}
+
+const BTN = "min-h-[36px] rounded-lg border px-3 text-xs font-semibold transition-colors";
 
 export default function RunDay() {
   const runDate = todayIso();
@@ -79,19 +147,35 @@ export default function RunDay() {
     }
     return map;
   }, [allNotes, today]);
+  // Notes that apply to a truck on a given workday: always-on, one-offs, and
+  // the ones pinned to that day number.
+  const notesFor = (truckNumber: number, dayNum: number): TruckNote[] | undefined => {
+    const list = (notesByTruck.get(truckNumber) ?? []).filter(
+      (n) => n.note_type === "constant" || n.note_type === "one_off" || n.workday_num === dayNum,
+    );
+    return list.length > 0 ? list : undefined;
+  };
   const { loadDay: computedLoadDay, unloadsDay: computedUnloadsDay } = workdayNumbers();
   const { data: loadDayOverride }    = useLoadDayOverride(runDate);
   const { data: unloadsDayOverride } = useUnloadsDayOverride(runDate);
   const loadDay    = loadDayOverride    ?? computedLoadDay;
   const unloadsDay = unloadsDayOverride ?? computedUnloadsDay;
 
-  const [unloadCollapsed, setUnloadCollapsed] = useState(
-    () => localStorage.getItem("runday:unloadCollapsed") === "1",
+  const [unloadCollapsed, setUnloadCollapsed] = useState(() => readFlag("runday:unloadCollapsed"));
+  const [loadCollapsed, setLoadCollapsed] = useState(() => readFlag("runday:loadCollapsed"));
+  // "Collapse done" hides the Done and Off chip rows in both lanes; the group
+  // headers stay so the counts do.
+  const [collapseDone, setCollapseDone] = useState(() => readFlag("runday:collapseDone"));
+  // Phone: one lane at a time.
+  const [mobileLane, setMobileLane] = useState<"unload" | "load">(() =>
+    readFlag("runday:mobileLoad") ? "load" : "unload",
   );
-  const [loadCollapsed, setLoadCollapsed] = useState(
-    () => localStorage.getItem("runday:loadCollapsed") === "1",
-  );
-  // Shift notes — visible inline on the main page, editable by supervisors+
+  function pickMobileLane(lane: "unload" | "load") {
+    setMobileLane(lane);
+    writeFlag("runday:mobileLoad", lane === "load");
+  }
+
+  // Shift notes — inline on the page, editable by supervisors+
   const { user } = useAuth();
   const canEditNotes = ["admin", "fleet", "supervisor", "lead", "atl"].includes(user?.role ?? "");
   const { data: dailyNotes = "" } = useDailyNotes(runDate);
@@ -101,6 +185,15 @@ export default function RunDay() {
   // Shift Notes can be toggled off in Operations settings (default on).
   const { data: settings = [] } = useSettings();
   const shiftNotesEnabled = settings.find((s) => s.key === "shift_notes_enabled")?.value !== false;
+  const showNotesCard = shiftNotesEnabled && (Boolean(dailyNotes) || canEditNotes);
+
+  // Batches (unload lane) — the Report's read, one tile per batch.
+  const batchingDisabled = settings.some((s) => s.key === "batching_disabled" && s.value === true);
+  const { data: batches = [] } = useBatchSummary(runDate);
+  const cap = useMemo(() => resolveWearerCap(settings), [settings]);
+  const noCap = resolveNoCap(settings);
+  const batchWearers = batches.reduce((s, b) => s + b.total_wearers, 0);
+  const batchesUsed = batches.filter((b) => b.trucks.length > 0).length;
 
   const { data: swapLog = [] } = useRouteSwapLog(60);
   const { data: openSpareAssignments = [] } = useOpenSpareAssignments();
@@ -164,7 +257,7 @@ export default function RunDay() {
     [board, liveCoveringTruckMap, holidayLoad, loadDay],
   );
 
-  // Inline assignment for the Needs-assignment strip (mirrors the Route Swaps
+  // Inline assignment for the Needs-assignment rows (mirrors the Route Swaps
   // modal: a spare covering an OOS route is a SpareAssignment).
   const assignSpare = useAssignSpare();
   const [assignFor, setAssignFor] = useState<Record<number, string>>({});
@@ -205,6 +298,7 @@ export default function RunDay() {
         spare_truck_number: coveringTruck,
         covering_route_truck: routeTruck,
       });
+      recordSwapHistory(routeTruck, coveringTruck);
       setAssignFor((p) => { const n = { ...p }; delete n[routeTruck]; return n; });
     } catch (err: unknown) {
       const detail = errorDetail(err);
@@ -313,6 +407,8 @@ export default function RunDay() {
   // (matches the sidebar/board "Day N + N+1" load label).
   const unloadsDay2 = previousWorkday(unloadsDay);
   const loadNextDay = loadDay === 5 ? 1 : loadDay + 1;
+  const unloadDayLabel = holidayUnload ? `Day ${unloadsDay2} + ${unloadsDay}` : `Day ${unloadsDay}`;
+  const loadDayLabel = holidayLoad ? `Day ${loadDay} + ${loadNextDay}` : `Day ${loadDay}`;
 
   const loadContext = useMemo(
     () => buildOperationalDayContext(board, loadDay, holidayLoad, false),
@@ -325,7 +421,7 @@ export default function RunDay() {
   );
   const loadSpareCount = loadContext.activeTrucks.filter((t) => t.truck_type === "Spare").length;
 
-  // Today's live coverages (shown with the Load section): each route being
+  // Today's live coverages (shown with the Load lane): each route being
   // covered, the truck covering it, whether that's a spare or a route swap.
   const coverages = useMemo(() => {
     const byNum = new Map(board.map((t) => [t.truck_number, t]));
@@ -334,7 +430,7 @@ export default function RunDay() {
         routeNum,
         routeTruck: byNum.get(routeNum),
         cover,
-        kind: (cover.truck_type === "Spare" ? "spare" : "swap") as "spare" | "swap" | "split",
+        kind: (cover.truck_type === "Spare" ? "spare" : "swap") as CoverageKindLabel,
         coverStatus: effectiveStatus(cover, loadDay, holidayLoad),
       }));
     // SPLIT helpers: the route also runs; the helper carries its overflow.
@@ -356,14 +452,18 @@ export default function RunDay() {
   const { data: prevOp } = usePrevOperatingDay(runDate);
   const prevRunDate = useMemo(() => resolvePrevRunDate(runDate, prevOp), [runDate, prevOp]);
 
-  // Previous load-day coverage (shown with the Unload section as a reminder):
+  // Previous load-day coverage (shown with the Unload lane as a reminder):
   // the trucks being unloaded today were loaded on the prior run day, so surface
   // who covered which route then. Uses the shared buildPrevDayCoverage (same as
   // the Unload page and Note Cards) — coverage from the ACTUAL previous run day
   // only, so a swap from last week can't stick around on days with no coverage.
   const prevCoverage = useMemo(() => buildPrevDayCoverage(swapLog, prevRunDate), [swapLog, prevRunDate]);
+  const prevEntries = useMemo(
+    () => buildCoverageList({ role: "unload", board: [], prevCoverage }),
+    [prevCoverage],
+  );
 
-  // Lookups so the Unload grid can show each route's covering truck from the
+  // Lookups so the Unload lane can show each route's covering truck from the
   // PREVIOUS load day (what's being unloaded today was covered then).
   const boardByNum = useMemo(() => new Map(board.map((t) => [t.truck_number, t])), [board]);
   // Split entries excluded: the route ran itself, so nothing substitutes.
@@ -382,391 +482,676 @@ export default function RunDay() {
     return s;
   }, [prevCoverage, boardByNum]);
 
+  // ---- lane cards --------------------------------------------------------
+  // Resolve every truck to what its card shows, then group. The substitution
+  // rules are unchanged from the tile grid this replaced; what is new is the
+  // grouping, the sub-line, and the dock's "unloading now" marker surfacing as
+  // an amber Working card with elapsed minutes.
+  const isBeingUnloaded = (t: TruckWithState) =>
+    t.state?.unloading_started_at != null && (t.state.status === "dirty" || t.state.status === "unfinished");
+
+  const unloadCards = useMemo<LaneCard[]>(
+    () =>
+      unloadTrucks
+        // UNLOAD side: a takeover describes where the NEXT load rides —
+        // it doesn't change who ran today. Route-truck carriers therefore
+        // render AS THEMSELVES here (their own route ran), and only true
+        // Spares (no route of their own) render in place of the route
+        // they cover.
+        .filter((t) =>
+          !(t.truck_type === "Spare" && getCoverageRouteNumber(t) != null) &&
+          !prevSpareCoverNums.has(t.truck_number),
+        )
+        .map((t) => {
+          // Unload reflects the PREVIOUS load day: prefer who covered this
+          // route then (if known), falling back to today's coverage.
+          const prevCoverNum = prevCoverByRoute.get(t.truck_number);
+          const prevCover = prevCoverNum != null ? boardByNum.get(prevCoverNum) : undefined;
+          const todayCover = coveringTruckMap.get(t.truck_number);
+          const coveringTruck = prevCover ?? todayCover;
+          // Only a SPARE cover substitutes on the unload side — a
+          // route-truck carrier ran its own route today and renders its
+          // own card, so the covered route's truck keeps its slot too.
+          const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
+          const displayTruck = spareCover ?? t;
+          const ownRaw = effectiveStatus(displayTruck, unloadsDay, holidayUnload);
+          // A non-spare cover's status substitutes ONLY when it covered the
+          // PREVIOUS load day (the covered truck genuinely didn't run and
+          // its cover's unload progress is its progress). A cover entered
+          // TODAY describes tomorrow's load — the covered truck ran today
+          // and must show its own pending state.
+          const raw = !spareCover && prevCover
+            ? effectiveStatus(prevCover, unloadsDay, holidayUnload)
+            : ownRaw;
+          // The unload lifecycle ends at "Unloaded": anything downstream
+          // (loaded, loading) is done from this lane's point of view.
+          const status: TruckStatus = raw === "loaded" || raw === "in_progress" ? "unloaded" : raw;
+          const truckUnloadDay = holidayUnload
+            ? isScheduledOff(t, unloadsDay) ? unloadsDay2 : unloadsDay
+            : unloadsDay;
+          const isExtraDay = truckUnloadDay === unloadsDay2;
+          const underlying = displayTruck.state?.status;
+          const shown: TruckStatus =
+            status === "off" && (underlying === "dirty" || underlying === "unloaded") ? underlying : status;
+          const unloading = status !== "unloaded" && isBeingUnloaded(displayTruck);
+          const group: LaneCard["group"] =
+            shown === "unloaded" ? "done" : shown === "off" || shown === "oos" ? "off" : "working";
+          const sub = [truckTypeLabel(displayTruck.truck_type)];
+          if (spareCover) sub.push(`covers #${t.truck_number}`);
+          else if (coveringTruck) sub.push(`covered by #${coveringTruck.truck_number}`);
+          else if (displayTruck.route_split_route != null) sub.push(`split with #${displayTruck.route_split_route}`);
+          else if (displayTruck.route_swap_route != null && displayTruck.truck_type !== "Spare") sub.push(`covers #${displayTruck.route_swap_route}`);
+          if (status === "off" && shown !== "off" && displayTruck.truck_type !== "Spare") sub.push("U Off");
+          const st = displayTruck.state;
+          const badge: CardBadge | undefined = st?.needs_checked
+            ? { label: "Check", tone: "amber" }
+            : isExtraDay
+              ? { label: `Day ${truckUnloadDay}`, tone: "amber" }
+              : displayTruck.truck_type === "Dust" && st?.has_dust_garment
+                ? { label: "Garments", tone: garmentIsLoaded(displayTruck) ? "sky" : "amber" }
+                : undefined;
+          return {
+            key: displayTruck.truck_number,
+            number: displayTruck.truck_number,
+            status: unloading ? "in_progress" : shown,
+            label: unloading ? "Unloading" : undefined,
+            sub: sub.join(" · "),
+            group,
+            badge,
+            notes: group === "working" ? notesFor(displayTruck.truck_number, truckUnloadDay) : undefined,
+            sinceSec: unloading ? st!.unloading_started_at : null,
+            emphasis: unloading,
+            chipTag: shown === "oos" ? "OOS" : shown === "off" ? "U OFF" : undefined,
+          };
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [unloadTrucks, prevSpareCoverNums, prevCoverByRoute, boardByNum, coveringTruckMap, unloadsDay, unloadsDay2, holidayUnload, notesByTruck],
+  );
+
+  const loadCards = useMemo<LaneCard[]>(
+    () =>
+      loadTrucks
+        // Covering trucks (ANY type carrying a takeover) are rendered in
+        // place of the route they cover — drop the standalone card.
+        .filter((t) => takenOverRouteNumber(t) == null)
+        .map((t) => {
+          // TODAY's coverage only — an unassigned OOS route keeps its own
+          // card (and shows up under Needs assignment) instead of wearing a
+          // stale pairing.
+          const coveringTruck = liveCoveringTruckMap.get(t.truck_number);
+          // Once a truck takes over an OOS route (any type), show the
+          // cover's card instead of the empty OOS truck.
+          const spareCover =
+            coveringTruck && takenOverRouteNumber(coveringTruck) === t.truck_number
+              ? coveringTruck
+              : coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
+          const displayTruck = spareCover ?? t;
+          const status = !spareCover && coveringTruck
+            ? effectiveStatus(coveringTruck, loadDay, holidayLoad)
+            : effectiveStatus(displayTruck, loadDay, holidayLoad);
+          const truckLoadDay = holidayLoad
+            ? isScheduledOff(t, loadDay) ? loadNextDay : loadDay
+            : loadDay;
+          const isExtraDay = truckLoadDay === loadNextDay;
+          const underlying = displayTruck.state?.status;
+          const shown: TruckStatus =
+            status === "off" && (underlying === "dirty" || underlying === "unloaded") ? underlying : status;
+          const group: LaneCard["group"] =
+            shown === "loaded" ? "done" : shown === "unloaded" ? "ready" : shown === "off" || shown === "oos" ? "off" : "working";
+          const unloading = group === "working" && isBeingUnloaded(displayTruck);
+          const loading = shown === "in_progress";
+          const sub = [truckTypeLabel(displayTruck.truck_type)];
+          if (spareCover) sub.push(`covers #${t.truck_number}`);
+          else if (coveringTruck) sub.push(`covered by #${coveringTruck.truck_number}`);
+          else if (displayTruck.route_split_route != null) sub.push(`split with #${displayTruck.route_split_route}`);
+          else if (displayTruck.route_swap_route != null && displayTruck.truck_type !== "Spare") sub.push(`covers #${displayTruck.route_swap_route}`);
+          if (status === "off" && shown !== "off" && displayTruck.truck_type !== "Spare") sub.push("L Off");
+          const st = displayTruck.state;
+          const badge: CardBadge | undefined = st?.needs_checked
+            ? { label: "Check", tone: "amber" }
+            : st?.priority_hold
+              ? { label: "Hold", tone: "amber" }
+              : isExtraDay
+                ? { label: `Day ${truckLoadDay}`, tone: "amber" }
+                : group === "ready" && st?.staged_at != null
+                  ? { label: "Staged", tone: "amber" }
+                  : displayTruck.truck_type === "Dust" && st?.has_dust_garment
+                    ? { label: "Garments", tone: garmentIsLoaded(displayTruck) ? "sky" : "amber" }
+                    : undefined;
+          return {
+            key: displayTruck.truck_number,
+            number: displayTruck.truck_number,
+            status: unloading ? "in_progress" : shown,
+            label: unloading ? "Unloading" : undefined,
+            sub: sub.join(" · "),
+            group,
+            badge,
+            notes: group === "working" || group === "ready" ? notesFor(displayTruck.truck_number, truckLoadDay) : undefined,
+            sinceSec: unloading ? st!.unloading_started_at : loading ? st?.load_start_time ?? null : null,
+            emphasis: unloading || loading,
+            chipTag: shown === "oos" ? "OOS" : shown === "off" ? "L OFF" : undefined,
+          };
+        }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [loadTrucks, liveCoveringTruckMap, loadDay, loadNextDay, holidayLoad, notesByTruck],
+  );
+
+  const unloadWorking = unloadCards.filter((c) => c.group === "working");
+  const unloadDoneCards = unloadCards.filter((c) => c.group === "done");
+  const unloadOff = unloadCards.filter((c) => c.group === "off");
+  const loadWorking = loadCards.filter((c) => c.group === "working");
+  const loadReady = loadCards.filter((c) => c.group === "ready");
+  const loadDoneCards = loadCards.filter((c) => c.group === "done");
+  const loadOff = loadCards.filter((c) => c.group === "off");
+
+  // Meter segments. Totals come from the shared context counters (what the
+  // sidebar shows); the in-between slices come from the cards; the remainder
+  // absorbs any difference so the bar never overflows.
+  const unloadingNow = unloadWorking.filter((c) => c.label === "Unloading").length;
+  const unloadToGo = Math.max(0, unloadTotal - unloadDone - unloadingNow);
+  const unloadLeft = Math.max(0, unloadTotal - unloadDone);
+  const loadLoading = loadWorking.filter((c) => c.status === "in_progress" && c.label !== "Unloading").length;
+  const loadReadyCount = loadReady.length;
+  const loadNotReady = Math.max(0, loadTotal - loadDone - loadLoading - loadReadyCount);
+  const loadLeft = Math.max(0, loadTotal - loadDone);
+
+  // Needs attention — counted over the trucks that actually appear in a lane.
+  const laneNums = useMemo(
+    () => new Set([...unloadCards, ...loadCards].map((c) => c.number)),
+    [unloadCards, loadCards],
+  );
+  const needsCheckedCount = board.filter((t) => t.state?.needs_checked && laneNums.has(t.truck_number)).length;
+  const unfinishedCount = board.filter((t) => t.state?.status === "unfinished" && laneNums.has(t.truck_number)).length;
+  const notedCount = [...notesByTruck.keys()].filter((n) => laneNums.has(n)).length;
+  const attentionTotal = needsAssignment.length + needsCheckedCount + unfinishedCount;
+
+  function jumpToAssign() {
+    pickMobileLane("load");
+    // The lane may be hidden on a phone until the state above lands.
+    window.setTimeout(() => document.getElementById("assign")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
+  }
+
+  // Coverage card state lines.
+  function prevCoverState(cover?: TruckWithState): { text: string; className: string } {
+    const s = cover?.state;
+    if (!s) return { text: "No state yet", className: "text-ink-faint" };
+    if (isBeingUnloaded(cover!)) return { text: "Unloading…", className: "text-amber-300" };
+    if (s.status === "unloaded" || s.status === "loaded" || s.status === "in_progress") {
+      return { text: s.unloaded_at ? `Unloaded · ${fmtClock(s.unloaded_at)}` : "Unloaded", className: "text-green-400" };
+    }
+    if (s.status === "unfinished") return { text: "Unfinished", className: "text-fuchsia-300" };
+    return { text: STATUS_LABELS[s.status] === "Dirty" ? "Not unloaded" : STATUS_LABELS[s.status], className: "text-ink-muted" };
+  }
+  function todayCoverState(status: TruckStatus, cover: TruckWithState): { text: string; className: string } {
+    const s = cover.state;
+    if (status === "loaded") {
+      const mins = s?.load_duration_seconds ? ` · ${Math.round(s.load_duration_seconds / 60)}m` : "";
+      return { text: s?.load_finish_time ? `Loaded · ${fmtClock(s.load_finish_time)}${mins}` : "Loaded", className: "text-blue-300" };
+    }
+    if (status === "in_progress") return { text: "Loading…", className: "text-amber-300" };
+    if (status === "unloaded") return { text: "Ready", className: "text-green-400" };
+    return { text: "Not loaded", className: "text-ink-muted" };
+  }
+
   // Loading / dead-connection gate — never render the fake empty day.
   const pageGate = pageStatusFor(boardQuery);
   if (pageGate) return <PageStatus {...pageGate} />;
+
+  const notesCard = showNotesCard && (
+    <PulseCard amber={Boolean(dailyNotes) || notesEditing} className="col-span-2 lg:col-span-1">
+      <div className="flex items-center gap-2">
+        <Clock className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
+        <span className={clsx("text-[11px] font-bold uppercase tracking-[0.08em]", dailyNotes ? "text-amber-400" : "text-ink-muted")}>
+          Shift notes
+        </span>
+        {canEditNotes && !notesEditing && (
+          <button
+            type="button"
+            onClick={() => { setNotesDraft(dailyNotes); setNotesEditing(true); }}
+            className="ml-auto rounded px-1.5 py-0.5 text-[11px] text-ink-muted transition-colors hover:bg-track hover:text-ink-soft lg:hidden"
+          >
+            Edit
+          </button>
+        )}
+      </div>
+      {notesEditing ? (
+        <div className="space-y-2">
+          <textarea
+            className="w-full rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-sm text-ink placeholder-ink-muted focus:border-amber-500 focus:outline-none"
+            rows={3}
+            placeholder="Add shift handoff notes for the next team…"
+            value={notesDraft}
+            onChange={(e) => setNotesDraft(e.target.value)}
+            autoFocus
+          />
+          <div className="flex gap-2">
+            <button
+              type="button"
+              disabled={setDailyNotesMutation.isPending}
+              onClick={async () => {
+                await setDailyNotesMutation.mutateAsync({ runDate, notes: notesDraft });
+                setNotesEditing(false);
+              }}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition-colors hover:bg-amber-500 disabled:opacity-50"
+            >
+              Save
+            </button>
+            <button
+              type="button"
+              onClick={() => setNotesEditing(false)}
+              className="rounded-lg bg-track px-3 py-1.5 text-xs font-semibold text-ink-soft transition-colors hover:bg-surface-2"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      ) : dailyNotes ? (
+        <p className="line-clamp-2 whitespace-pre-wrap text-[13px] leading-snug text-amber-100/90 lg:line-clamp-3" title={dailyNotes}>
+          {dailyNotes}
+        </p>
+      ) : (
+        <p className="text-xs italic text-ink-muted">No shift notes for today.</p>
+      )}
+    </PulseCard>
+  );
 
   return (
     <>
       <PageHeader
         title="Day Overview"
-        meta={
-          <>
-            <span>{formatRunDate(runDate)}</span>
-            <Sep />
-            <Stat value={`${unloadDone}/${unloadTotal}`} label="unloaded" tone="unloaded" />
-            <Sep />
-            <Stat value={`${loadDone}/${loadTotal}`} label="loaded" tone="loaded" />
-          </>
+        titleBadge={
+          <span className="inline-flex items-center gap-1.5 rounded-pill bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-300">
+            <span className={clsx("h-1.5 w-1.5 rounded-full bg-emerald-500", boardQuery.isFetching && "animate-pulse")} aria-hidden />
+            Live · 5s
+          </span>
         }
-      />
-      <div className="space-y-6 p-4 md:p-6">
-
-      {/* Shift Handoff Notes — toggleable in Operations settings */}
-      {shiftNotesEnabled && (dailyNotes || canEditNotes) && (
-        <div className={clsx(
-          "rounded-xl border px-4 py-3",
-          dailyNotes
-            ? "border-amber-700/40 bg-amber-950/20"
-            : "border-hairline bg-surface-2/20",
-        )}>
-          <div className="mb-1.5 flex items-center gap-2">
-            <Clock className="h-4 w-4 shrink-0 text-amber-400" />
-            <span className="text-xs font-semibold uppercase tracking-wide text-amber-400">Shift Notes</span>
-            {canEditNotes && !notesEditing && (
+        meta={<span>{formatRunDate(runDate)}</span>}
+        actions={
+          <>
+            <button
+              type="button"
+              aria-pressed={collapseDone}
+              onClick={() => setCollapseDone((c) => { writeFlag("runday:collapseDone", !c); return !c; })}
+              className={clsx(BTN, "border-hairline bg-surface text-ink-soft hover:bg-surface-2")}
+            >
+              {collapseDone ? "Show done" : "Collapse done"}
+            </button>
+            {shiftNotesEnabled && canEditNotes && (
               <button
                 type="button"
                 onClick={() => { setNotesDraft(dailyNotes); setNotesEditing(true); }}
-                className="ml-auto rounded px-2 py-0.5 text-xs text-ink-muted hover:bg-track hover:text-ink-soft transition-colors"
+                className={clsx(BTN, "hidden border-amber-500/35 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20 lg:inline-flex lg:items-center")}
               >
-                Edit
+                Edit shift notes
               </button>
             )}
-          </div>
-          {notesEditing ? (
-            <div className="space-y-2">
-              <textarea
-                className="w-full rounded-lg border border-hairline bg-surface-2 px-3 py-2 text-sm text-ink placeholder-ink-muted focus:border-amber-500 focus:outline-none"
-                rows={3}
-                placeholder="Add shift handoff notes for the next team…"
-                value={notesDraft}
-                onChange={(e) => setNotesDraft(e.target.value)}
-                autoFocus
-              />
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  disabled={setDailyNotesMutation.isPending}
-                  onClick={async () => {
-                    await setDailyNotesMutation.mutateAsync({ runDate, notes: notesDraft });
-                    setNotesEditing(false);
-                  }}
-                  className="rounded-lg bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white hover:bg-amber-500 disabled:opacity-50 transition-colors"
-                >
-                  Save
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setNotesEditing(false)}
-                  className="rounded-lg bg-track px-3 py-1.5 text-xs font-semibold text-ink-soft hover:bg-track transition-colors"
-                >
-                  Cancel
-                </button>
+          </>
+        }
+      />
+      <div className="space-y-3 p-3 sm:p-4 lg:space-y-4 lg:p-6">
+
+        {/* ---------------- pulse row ---------------- */}
+        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
+          <Meter
+            label="Unload"
+            day={unloadDayLabel}
+            done={unloadDone}
+            total={unloadTotal}
+            segments={[
+              { value: unloadDone, className: "bg-st-unloaded" },
+              { value: unloadingNow, className: "bg-st-inprogress" },
+              { value: unloadToGo, className: "bg-st-dirty" },
+            ]}
+            legend={[
+              { value: unloadDone, label: "unloaded", className: "text-green-400" },
+              { value: unloadingNow, label: "unloading", className: "text-amber-400" },
+              { value: unloadToGo, label: "to go", className: "text-red-400" },
+            ]}
+            trailing={unloadSpareCount > 0 ? `${unloadSpareCount} spare${unloadSpareCount === 1 ? "" : "s"}` : undefined}
+          />
+          <Meter
+            label="Load"
+            day={loadDayLabel}
+            done={loadDone}
+            total={loadTotal}
+            segments={[
+              { value: loadDone, className: "bg-st-loaded" },
+              { value: loadReadyCount, className: "bg-st-unloaded" },
+              { value: loadLoading, className: "bg-st-inprogress" },
+              { value: loadNotReady, className: "bg-st-dirty" },
+            ]}
+            legend={[
+              { value: loadDone, label: "loaded", className: "text-blue-300" },
+              { value: loadReadyCount, label: "ready", className: "text-green-400" },
+              { value: loadLoading, label: "loading", className: "text-amber-400" },
+              { value: loadNotReady, label: "not ready", className: "text-red-400" },
+            ]}
+            trailing={loadSpareCount > 0 ? `${loadSpareCount} spare${loadSpareCount === 1 ? "" : "s"}` : undefined}
+          />
+
+          {/* Needs attention: the four counts from lg up; one tappable line on a phone. */}
+          <PulseCard amber={attentionTotal > 0} className={clsx("col-span-2", showNotesCard ? "lg:col-span-1" : "lg:col-span-2")}>
+            <div className="hidden items-center gap-2 lg:flex">
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
+              <span className={clsx("text-[11px] font-bold uppercase tracking-[0.08em]", attentionTotal > 0 ? "text-amber-400" : "text-ink-muted")}>
+                Needs attention
+              </span>
+            </div>
+            <div className="hidden grid-cols-2 gap-x-3 gap-y-1 text-xs text-ink-soft lg:grid">
+              <button
+                type="button"
+                onClick={jumpToAssign}
+                disabled={needsAssignment.length === 0}
+                className={clsx("flex justify-between gap-2 text-left", needsAssignment.length > 0 ? "font-semibold text-amber-200 hover:underline" : "text-ink-soft")}
+              >
+                <span>Unassigned OOS</span>
+                <span className="font-mono">{needsAssignment.length}</span>
+              </button>
+              <span className="flex justify-between gap-2"><span>Needs checked</span><span className="font-mono">{needsCheckedCount}</span></span>
+              <span className="flex justify-between gap-2"><span>Unfinished</span><span className="font-mono">{unfinishedCount}</span></span>
+              <span className="flex justify-between gap-2"><span>Trucks with notes</span><span className="font-mono">{notedCount}</span></span>
+            </div>
+            <button
+              type="button"
+              onClick={jumpToAssign}
+              disabled={needsAssignment.length === 0}
+              className="flex min-h-[28px] items-center gap-2 text-left text-xs font-semibold text-amber-200 disabled:text-ink-soft lg:hidden"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
+              <span>
+                {needsAssignment.length > 0
+                  ? `${needsAssignment.length} route${needsAssignment.length === 1 ? "" : "s"} need${needsAssignment.length === 1 ? "s" : ""} a truck`
+                  : "Nothing needs assigning"}
+              </span>
+              <span className="ml-auto font-normal text-ink-muted">
+                {unfinishedCount} unfinished · {needsCheckedCount} check
+              </span>
+            </button>
+          </PulseCard>
+
+          {notesCard}
+        </div>
+
+        <MobileLaneSwitch lane={mobileLane} onChange={pickMobileLane} unloadLeft={unloadLeft} loadLeft={loadLeft} />
+
+        {/* ---------------- lanes ---------------- */}
+        <div className="grid items-start gap-3 lg:grid-cols-2 lg:gap-4">
+
+          {/* UNLOAD */}
+          <section
+            aria-label="Unload lane"
+            className={clsx(
+              "flex-col gap-3 rounded-xl border border-hairline bg-surface-3 px-3 pb-4 pt-3 sm:px-4",
+              mobileLane === "unload" ? "flex" : "hidden lg:flex",
+            )}
+          >
+            <LaneHeader
+              title="Unload"
+              day={unloadDayLabel}
+              summary={
+                <>
+                  <b className="font-mono text-ink">{unloadDone}/{unloadTotal}</b> done · {unloadLeft} left
+                  {unloadSpareCount > 0 && ` · ${unloadSpareCount} spare${unloadSpareCount === 1 ? "" : "s"}`}
+                </>
+              }
+              collapsed={unloadCollapsed}
+              onToggle={() => setUnloadCollapsed((c) => { writeFlag("runday:unloadCollapsed", !c); return !c; })}
+            />
+            <div style={{ display: "grid", gridTemplateRows: unloadCollapsed ? "0fr" : "1fr", transition: "grid-template-rows 220ms ease" }}>
+              <div className="flex flex-col gap-3 overflow-hidden">
+
+                {/* Previous load-day coverage: what is being unloaded today was covered then. */}
+                {prevEntries.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <GroupHeader label={`Covered ${weekdayShort(prevCoverage.date)}`} count={prevEntries.length} />
+                    <div className="flex flex-wrap gap-1.5 sm:hidden">
+                      {prevEntries.map((e) => (
+                        <CoverageTag key={`${e.route}-${e.cover}`} route={e.route} truck={e.cover} prev split={e.kind === "split"} />
+                      ))}
+                    </div>
+                    <div className="hidden grid-cols-2 gap-2 sm:grid xl:grid-cols-3">
+                      {prevEntries.map((e) => {
+                        const cover = boardByNum.get(e.cover);
+                        const st = prevCoverState(cover);
+                        return (
+                          <CoverageMini
+                            key={`${e.route}-${e.cover}`}
+                            route={e.route}
+                            cover={e.cover}
+                            kind={e.kind === "split" ? "split" : cover?.truck_type === "Spare" ? "spare" : "swap"}
+                            verb="Loaded on"
+                            state={st.text}
+                            stateClassName={st.className}
+                            prev
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <GroupHeader label="Working" count={unloadWorking.length} />
+                  {unloadWorking.length === 0 ? (
+                    <p className="py-2 text-center text-sm text-ink-faint">Nothing left to unload.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      {unloadWorking.map((c) => (
+                        <WorkingCard key={c.key} number={c.number} status={c.status} label={c.label} sub={c.sub} badge={c.badge} notes={c.notes} sinceSec={c.sinceSec} emphasis={c.emphasis} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                {!batchingDisabled && batches.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <GroupHeader
+                      label="Batches"
+                      count={`${batchesUsed}/${batches.length}`}
+                      extra={`· ${batchWearers.toLocaleString()} wearers`}
+                    />
+                    <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                      {batches.map((b) => (
+                        <BatchTile key={b.batch_number} batch={b} cap={cap} noCap={noCap} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <GroupHeader label="Unloaded" count={unloadDoneCards.length} extra={collapseDone && unloadDoneCards.length > 0 ? "· hidden" : undefined} />
+                  {!collapseDone && unloadDoneCards.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {unloadDoneCards.map((c) => <DoneChip key={c.key} number={c.number} tone="unloaded" />)}
+                    </div>
+                  )}
+                </div>
+
+                {unloadOff.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <GroupHeader label="Off · OOS" count={unloadOff.length} extra={collapseDone ? "· hidden" : undefined} />
+                    {!collapseDone && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {unloadOff.map((c) => <OffChip key={c.key} number={c.number} tag={c.chipTag ?? "OFF"} />)}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-          ) : dailyNotes ? (
-            <p className="whitespace-pre-wrap text-sm text-amber-100/90">{dailyNotes}</p>
-          ) : (
-            <p className="text-xs text-ink-muted italic">No shift notes for today. Click Edit to add.</p>
-          )}
-        </div>
-      )}
+          </section>
 
-      <section>
-        <button
-          type="button"
-          onClick={() => setUnloadCollapsed((c) => { const next = !c; localStorage.setItem("runday:unloadCollapsed", next ? "1" : "0"); return next; })}
-          className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
-        >
-          <Calendar
-            className={clsx("h-4 w-4 shrink-0 text-ink-muted transition-transform", unloadCollapsed && "-rotate-90")}
-          />
-          <h2 className="w-44 shrink-0 text-lg font-semibold text-ink-soft">
-            Unload &mdash; Day {holidayUnload ? `${unloadsDay2} + ` : ""}{unloadsDay}
-          </h2>
-          <span className="w-24 shrink-0 text-sm text-ink-muted">
-            {unloadDone} / {unloadTotal} done
-            {unloadSpareCount > 0 && (
-              <span className="ml-1 text-ink-muted">· {unloadSpareCount} spare{unloadSpareCount === 1 ? "" : "s"}</span>
+          {/* LOAD */}
+          <section
+            id="assign"
+            aria-label="Load lane"
+            className={clsx(
+              "scroll-mt-16 flex-col gap-3 rounded-xl border border-hairline bg-surface-3 px-3 pb-4 pt-3 sm:px-4",
+              mobileLane === "load" ? "flex" : "hidden lg:flex",
             )}
-          </span>
-          {unloadTotal > 0 && (
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-              <div
-                className="h-full rounded-full bg-emerald-500 transition-all"
-                style={{ width: `${Math.round((unloadDone / unloadTotal) * 100)}%` }}
-              />
-            </div>
-          )}
-        </button>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateRows: unloadCollapsed ? "0fr" : "1fr",
-            transition: "grid-template-rows 220ms ease",
-          }}
-        >
-        <div style={{ overflow: "hidden" }}>
-        {/* Reminder: coverage that was in place on the previous load day — the
-            loads now being unloaded today were covered by these trucks. */}
-        {prevCoverage.items.length > 0 && (
-          <div className="mb-3 rounded-lg border border-amber-700/40 bg-amber-950/20 px-3 py-2.5">
-            <div className="mb-1.5 flex items-center gap-2">
-              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-400">
-                Previous load-day coverage
-              </span>
-              <span className="text-[10px] text-amber-500/70">({formatRunDate(prevCoverage.date)})</span>
-            </div>
-            <CoverageList entries={buildCoverageList({ role: "unload", board: [], prevCoverage })} />
-          </div>
-        )}
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
-          {unloadTrucks
-            // UNLOAD side: a takeover describes where the NEXT load rides —
-            // it doesn't change who ran today. Route-truck carriers therefore
-            // render AS THEMSELVES here (their own route ran), and only true
-            // Spares (no route of their own) render in place of the route
-            // they cover. Dropping any takeover carrier hid #87 entirely and
-            // collapsed #4/#62 into their carriers' cards (25 cards vs the
-            // 28/28 header, 2026-07-19).
-            .filter((t) =>
-              !(t.truck_type === "Spare" && getCoverageRouteNumber(t) != null) &&
-              !prevSpareCoverNums.has(t.truck_number),
-            )
-            .map((t) => {
-              // Unload reflects the PREVIOUS load day: prefer who covered this
-              // route then (if known), falling back to today's coverage.
-              const prevCoverNum = prevCoverByRoute.get(t.truck_number);
-              const prevCover = prevCoverNum != null ? boardByNum.get(prevCoverNum) : undefined;
-              // A truck can be OOS via the is_oos flag while its status reads
-              // dirty/unloaded, so substitute whenever coverage exists for the
-              // route rather than gating on status === "oos".
-              const todayCover = coveringTruckMap.get(t.truck_number);
-              const coveringTruck = prevCover ?? todayCover;
-              // Only a SPARE cover substitutes on the unload side — a
-              // route-truck carrier ran its own route today and renders its
-              // own card, so the covered route's truck keeps its slot too.
-              const spareCover = coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
-              const displayTruck = spareCover ?? t;
-              const ownRaw = effectiveStatus(displayTruck, unloadsDay, holidayUnload);
-              // A non-spare cover's status substitutes ONLY when it covered the
-              // PREVIOUS load day (the covered truck genuinely didn't run and
-              // its cover's unload progress is its progress). A cover entered
-              // TODAY describes tomorrow's load — the covered truck ran today
-              // and must show its own pending state (32 cards read done while
-              // the bar said 29/32, 2026-07-22).
-              const raw = !spareCover && prevCover
-                ? effectiveStatus(prevCover, unloadsDay, holidayUnload)
-                : ownRaw;
-              // The unload lifecycle ends at "Unloaded". Once a truck moves on
-              // to "Loaded" (start of the load lifecycle), keep displaying it
-              // as Unloaded here so the unload board doesn't flip its badge.
-              const status: TruckStatus = raw === "loaded" ? "unloaded" : raw;
-              const truckUnloadDay = holidayUnload
-                ? isScheduledOff(t, unloadsDay) ? unloadsDay2 : unloadsDay
-                : unloadsDay;
-              return (
-                <TruckCard
-                  key={displayTruck.truck_number}
-                  t={displayTruck}
-                  status={status}
-                  done={isUnloadDone(raw)}
-                  coveringSpare={spareCover ? undefined : coveringTruck}
-                  coversRoute={spareCover ? t.truck_number : undefined}
-                  dayNum={truckUnloadDay}
-                  isExtraDay={truckUnloadDay === unloadsDay2}
-                  notes={notesByTruck.get(displayTruck.truck_number)}
-                  context="unload"
-                />
-              );
-            })}
-        </div>
-        </div>
-        </div>
-      </section>
+          >
+            <LaneHeader
+              title="Load"
+              day={loadDayLabel}
+              summary={
+                <>
+                  <b className="font-mono text-ink">{loadDone}/{loadTotal}</b> done · {loadLeft} left
+                  {loadSpareCount > 0 && ` · ${loadSpareCount} spare${loadSpareCount === 1 ? "" : "s"}`}
+                </>
+              }
+              collapsed={loadCollapsed}
+              onToggle={() => setLoadCollapsed((c) => { writeFlag("runday:loadCollapsed", !c); return !c; })}
+            />
+            <div style={{ display: "grid", gridTemplateRows: loadCollapsed ? "0fr" : "1fr", transition: "grid-template-rows 220ms ease" }}>
+              <div className="flex flex-col gap-3 overflow-hidden">
 
-      <section>
-        <button
-          type="button"
-          onClick={() => setLoadCollapsed((c) => { const next = !c; localStorage.setItem("runday:loadCollapsed", next ? "1" : "0"); return next; })}
-          className="mb-3 flex min-h-[44px] w-full items-center gap-3 text-left"
-        >
-          <Check
-            className={clsx("h-4 w-4 shrink-0 text-ink-muted transition-transform", loadCollapsed && "-rotate-90")}
-          />
-          <h2 className="w-44 shrink-0 text-lg font-semibold text-ink-soft">
-            Load &mdash; Day {loadDay}{holidayLoad ? ` + ${loadNextDay}` : ""}
-          </h2>
-          <span className="w-24 shrink-0 text-sm text-ink-muted">
-            {loadDone} / {loadTotal} done
-            {loadSpareCount > 0 && (
-              <span className="ml-1 text-ink-muted">&middot; {loadSpareCount} spare{loadSpareCount === 1 ? "" : "s"}</span>
-            )}
-          </span>
-          {loadTotal > 0 && (
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-surface-2">
-              <div
-                className="h-full rounded-full bg-blue-500 transition-all"
-                style={{ width: `${Math.round((loadDone / loadTotal) * 100)}%` }}
-              />
-            </div>
-          )}
-        </button>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateRows: loadCollapsed ? "0fr" : "1fr",
-            transition: "grid-template-rows 220ms ease",
-          }}
-        >
-        <div style={{ overflow: "hidden" }}>
-        {/* OOS routes with nobody covering them yet — the Day Overview's
-            equivalent of Fleet's "Needs Assignment", shown until coverage is
-            actually recorded for TODAY. */}
-        {needsAssignment.length > 0 && (
-          <div className="mb-3 rounded-lg border border-amber-700/50 bg-amber-950/20 px-3 py-2.5">
-            <div className="mb-1.5 flex items-center gap-2">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-amber-300">Needs assignment</span>
-              <span className="rounded-full bg-amber-700/50 px-2 py-0.5 text-[10px] font-bold text-amber-200">{needsAssignment.length}</span>
-              <span className="hidden text-[10px] text-amber-500/80 sm:inline">
-                out of service with no truck covering the route today
-              </span>
-            </div>
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-              {needsAssignment.map((t) => (
-                <div
-                  key={t.truck_number}
-                  className="flex items-center gap-2 rounded-md border border-amber-700/40 bg-surface/60 px-2.5 py-1.5"
-                >
-                  <span className="text-sm font-black text-amber-300">#{t.truck_number}</span>
-                  <span className="text-[9px] font-semibold uppercase tracking-wide text-amber-500">OOS</span>
-                  <span className="text-ink-faint">→</span>
-                  <select
-                    className="input min-w-0 flex-1 py-1 text-xs"
-                    value={assignFor[t.truck_number] ?? ""}
-                    disabled={assignSpare.isPending}
-                    onChange={(e) => {
-                      const val = e.target.value;
-                      setAssignFor((p) => ({ ...p, [t.truck_number]: val }));
-                      if (val) assignCoverage(t.truck_number, parseInt(val, 10));
-                    }}
-                  >
-                    <option value="">— Assign truck —</option>
-                    {assignOptions.spares.length > 0 && (
-                      <optgroup label="Spare trucks">
-                        {assignOptions.spares.map((x) => (
-                          <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {assignOptions.offToday.length > 0 && (
-                      <optgroup label={`Off — Day ${loadDay}`}>
-                        {assignOptions.offToday.map((x) => (
-                          <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
-                        ))}
-                      </optgroup>
-                    )}
-                    {assignOptions.routes.filter((x) => x.truck_number !== t.truck_number).length > 0 && (
-                      <optgroup label="Route trucks">
-                        {assignOptions.routes
-                          .filter((x) => x.truck_number !== t.truck_number)
-                          .map((x) => (
-                            <option key={x.truck_number} value={x.truck_number}>#{x.truck_number}</option>
-                          ))}
-                      </optgroup>
-                    )}
-                  </select>
-                </div>
-              ))}
-            </div>
-            {assignError && (
-              <p className="mt-1.5 text-[11px] text-red-300">{assignError}</p>
-            )}
-          </div>
-        )}
-
-        {/* Today's live coverages — who is covering which route on this load day. */}
-        {coverages.length > 0 && (
-          <div className="mb-3 rounded-lg border border-sky-800/40 bg-sky-950/15 px-3 py-2.5">
-            <div className="mb-1.5 flex items-center gap-2">
-              <ArrowLeftRight className="h-3.5 w-3.5 shrink-0 text-sky-400" />
-              <span className="text-[11px] font-semibold uppercase tracking-wide text-sky-300">Coverages</span>
-              <span className="rounded-full bg-sky-800/50 px-2 py-0.5 text-[10px] font-bold text-sky-200">{coverages.length}</span>
-            </div>
-            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-              {coverages.map((c) => {
-                const routeOos = c.routeTruck?.state?.status === "oos" || c.routeTruck?.is_oos;
-                return (
-                  <div
-                    key={c.routeNum}
-                    className="flex items-center gap-2 rounded-md border border-sky-800/30 bg-surface/50 px-2.5 py-1.5"
-                  >
-                    <span className="text-sm font-black text-red-400">#{c.routeNum}</span>
-                    <span className="text-[9px] font-semibold uppercase tracking-wide text-red-400/70">
-                      {routeOos ? "OOS" : "swap"}
-                    </span>
-                    {c.kind === "split"
-                      ? <span className="shrink-0 text-sm font-bold text-amber-500">+</span>
-                      : <ArrowLeftRight className="h-3 w-3 shrink-0 text-ink-faint" />}
-                    <span className={clsx("text-sm font-black", c.kind === "split" ? "text-amber-200" : "text-sky-300")}>#{c.cover.truck_number}</span>
-                    <span className={clsx(
-                      "rounded-full px-1.5 py-0.5 text-[9px] font-semibold ring-1",
-                      c.kind === "split"
-                        ? "bg-amber-900/50 text-amber-300 ring-amber-700/40"
-                        : "bg-sky-900/50 text-sky-300 ring-sky-700/40",
-                    )}>
-                      {c.kind === "spare" ? "Spare" : c.kind === "split" ? "Split" : "Route"}
-                    </span>
-                    <span
-                      className={clsx(
-                        "ml-auto rounded-full px-2 py-0.5 text-[9px] font-semibold text-white",
-                        STATUS_BG[c.coverStatus],
-                      )}
-                    >
-                      {STATUS_LABELS[c.coverStatus]}
-                    </span>
+                {/* OOS routes with nobody covering them yet — shown until coverage
+                    is actually recorded for TODAY. Action rows, not a callout. */}
+                {needsAssignment.length > 0 && (
+                  <div className="flex flex-col gap-1.5 rounded-lg border border-amber-500/35 bg-amber-500/[0.06] px-2.5 py-2">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.08em] text-amber-400">Needs assignment</span>
+                      <span className="rounded-pill bg-amber-500/25 px-1.5 text-[10px] font-bold text-amber-200">{needsAssignment.length}</span>
+                      <span className="text-[10px] text-ink-muted">OOS with nobody covering the route tonight</span>
+                    </div>
+                    <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+                      {needsAssignment.map((t) => {
+                        const notSelf = (x: TruckWithState) => x.truck_number !== t.truck_number;
+                        const pool = new Map<number, string>();
+                        for (const x of assignOptions.spares) pool.set(x.truck_number, `#${x.truck_number} — Spare`);
+                        for (const x of assignOptions.offToday) pool.set(x.truck_number, `#${x.truck_number} — Off`);
+                        for (const x of assignOptions.routes.filter(notSelf)) pool.set(x.truck_number, `#${x.truck_number}`);
+                        const recent = getSwapHistory(t.truck_number).filter((n) => pool.has(n));
+                        const selectId = `assign-${t.truck_number}`;
+                        return (
+                          <div key={t.truck_number} className="flex min-h-[44px] items-center gap-2 rounded-lg border border-amber-500/30 bg-surface px-2.5">
+                            <span className="font-mono text-[15px] font-semibold text-amber-300">#{t.truck_number}</span>
+                            <span className="text-[9px] font-bold text-amber-400">OOS</span>
+                            <label htmlFor={selectId} className="sr-only">Assign a truck to route {t.truck_number}</label>
+                            <select
+                              id={selectId}
+                              className="input min-w-0 flex-1 py-1 text-xs"
+                              value={assignFor[t.truck_number] ?? ""}
+                              disabled={assignSpare.isPending}
+                              onChange={(e) => {
+                                const val = e.target.value;
+                                setAssignFor((p) => ({ ...p, [t.truck_number]: val }));
+                                if (val) assignCoverage(t.truck_number, parseInt(val, 10));
+                              }}
+                            >
+                              <option value="">— Assign truck —</option>
+                              {recent.length > 0 && (
+                                <optgroup label="★ Recently used">
+                                  {recent.map((n) => <option key={n} value={n}>{pool.get(n)}</option>)}
+                                </optgroup>
+                              )}
+                              {assignOptions.spares.length > 0 && (
+                                <optgroup label="Spare trucks">
+                                  {assignOptions.spares.map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Spare</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {assignOptions.offToday.length > 0 && (
+                                <optgroup label={`Off — Day ${loadDay}`}>
+                                  {assignOptions.offToday.map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number} — Off</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                              {assignOptions.routes.filter(notSelf).length > 0 && (
+                                <optgroup label="Route trucks">
+                                  {assignOptions.routes.filter(notSelf).map((x) => (
+                                    <option key={x.truck_number} value={x.truck_number}>#{x.truck_number}</option>
+                                  ))}
+                                </optgroup>
+                              )}
+                            </select>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    {assignError && <p className="text-[11px] text-red-300">{assignError}</p>}
                   </div>
-                );
-              })}
+                )}
+
+                {/* Today's live coverages — who is covering which route on this load day. */}
+                {coverages.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <GroupHeader label="Routes covered" count={coverages.length} />
+                    <div className="flex flex-wrap gap-1.5 sm:hidden">
+                      {coverages.map((c) => (
+                        <CoverageTag key={`${c.routeNum}-${c.cover.truck_number}`} route={c.routeNum} truck={c.cover.truck_number} split={c.kind === "split"} />
+                      ))}
+                    </div>
+                    <div className="hidden grid-cols-2 gap-2 sm:grid xl:grid-cols-3">
+                      {coverages.map((c) => {
+                        const st = todayCoverState(c.coverStatus, c.cover);
+                        return (
+                          <CoverageMini
+                            key={`${c.routeNum}-${c.cover.truck_number}`}
+                            route={c.routeNum}
+                            cover={c.cover.truck_number}
+                            kind={c.kind}
+                            verb={c.coverStatus === "loaded" ? "Loaded on" : "Loads on"}
+                            state={st.text}
+                            stateClassName={st.className}
+                          />
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2">
+                  <GroupHeader label="Ready to load" count={loadReady.length} />
+                  {loadReady.length === 0 ? (
+                    <p className="py-2 text-center text-sm text-ink-faint">Nothing ready.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      {loadReady.map((c) => (
+                        <ReadyCard key={c.key} number={c.number} sub={c.sub} badge={c.badge} notes={c.notes} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <GroupHeader label="Not ready" count={loadWorking.length} />
+                  {loadWorking.length === 0 ? (
+                    <p className="py-2 text-center text-sm text-ink-faint">Everything is unloaded.</p>
+                  ) : (
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      {loadWorking.map((c) => (
+                        <WorkingCard key={c.key} number={c.number} status={c.status} label={c.label} sub={c.sub} badge={c.badge} notes={c.notes} sinceSec={c.sinceSec} emphasis={c.emphasis} />
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <GroupHeader label="Loaded" count={loadDoneCards.length} extra={collapseDone && loadDoneCards.length > 0 ? "· hidden" : undefined} />
+                  {!collapseDone && loadDoneCards.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {loadDoneCards.map((c) => <DoneChip key={c.key} number={c.number} tone="loaded" />)}
+                    </div>
+                  )}
+                </div>
+
+                {loadOff.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <GroupHeader label="Off · OOS" count={loadOff.length} extra={collapseDone ? "· hidden" : undefined} />
+                    {!collapseDone && (
+                      <div className="flex flex-wrap gap-1.5">
+                        {loadOff.map((c) => <OffChip key={c.key} number={c.number} tag={c.chipTag ?? "OFF"} />)}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
-        )}
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:grid-cols-6 lg:grid-cols-8 xl:grid-cols-10">
-          {loadTrucks
-            // Covering trucks (ANY type carrying a takeover) are rendered in
-            // place of the route they cover (below) — drop the standalone card.
-            .filter((t) => takenOverRouteNumber(t) == null)
-            .map((t) => {
-              // A truck can be OOS via the is_oos flag while its status reads
-              // dirty/unloaded, so substitute whenever coverage exists for the
-              // route rather than gating on status === "oos". TODAY's coverage
-              // only — an unassigned OOS route keeps its own card (and shows up
-              // under Needs assignment) instead of wearing a stale pairing.
-              const coveringTruck = liveCoveringTruckMap.get(t.truck_number);
-              // Once a truck takes over an OOS route (any type), show the
-              // cover's card instead of the empty OOS truck.
-              const spareCover =
-                coveringTruck && takenOverRouteNumber(coveringTruck) === t.truck_number
-                  ? coveringTruck
-                  : coveringTruck?.truck_type === "Spare" ? coveringTruck : undefined;
-              const displayTruck = spareCover ?? t;
-              const status = !spareCover && coveringTruck
-                ? effectiveStatus(coveringTruck, loadDay, holidayLoad)
-                : effectiveStatus(displayTruck, loadDay, holidayLoad);
-              const truckLoadDay = holidayLoad
-                ? isScheduledOff(t, loadDay) ? loadNextDay : loadDay
-                : loadDay;
-              return (
-                <TruckCard
-                  key={displayTruck.truck_number}
-                  t={displayTruck}
-                  status={status}
-                  done={isLoadDone(status)}
-                  coveringSpare={spareCover ? undefined : coveringTruck}
-                  coversRoute={spareCover ? t.truck_number : undefined}
-                  dayNum={truckLoadDay}
-                  isExtraDay={truckLoadDay === loadNextDay}
-                  notes={notesByTruck.get(displayTruck.truck_number)}
-                  context="load"
-                />
-              );
-            })}
+          </section>
         </div>
-        </div>
-        </div>
-      </section>
       </div>
     </>
   );
