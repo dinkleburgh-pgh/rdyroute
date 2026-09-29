@@ -760,10 +760,20 @@ def get_nogs_usual(
     so a closed Monday never counts against a route that always has NOGs on
     Mondays. Nothing here guesses yet; it only reports."""
     cutoff = (datetime.now(timezone.utc) - timedelta(weeks=weeks)).date()
-    ran = set(db.scalars(select(TruckState.run_date).where(TruckState.run_date >= cutoff).distinct()).all())
     rows = db.scalars(
         select(NogsDayLog).where(NogsDayLog.run_date >= cutoff).order_by(NogsDayLog.created_at.asc())
     ).all()
+    if not rows:
+        return []
+    # Operating days count only from the first day the log covers: before that
+    # a route without NOGs was not being recorded at all, and counting those
+    # days made every share read low until the window had filled with data.
+    first_logged = min(r.run_date for r in rows)
+    ran = set(
+        db.scalars(
+            select(TruckState.run_date).where(TruckState.run_date >= max(cutoff, first_logged)).distinct()
+        ).all()
+    )
     final: dict[tuple[date, int], bool] = {}
     for r in rows:  # ascending created_at, so the last write for a day wins
         final[(r.run_date, r.truck_number)] = r.has_nogs
