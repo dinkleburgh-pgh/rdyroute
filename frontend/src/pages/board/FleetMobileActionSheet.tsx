@@ -46,25 +46,26 @@ function FlagRow({
       aria-checked={on}
       disabled={disabled}
       onClick={onToggle}
-      className="flex w-full items-center gap-3 rounded-xl border border-hairline bg-surface-2/40 px-4 py-3 text-left transition-colors hover:bg-surface-2 disabled:opacity-50"
+      className="flex min-h-[40px] w-full items-center gap-2.5 rounded-lg border border-hairline bg-surface-2/40 px-3 py-1.5 text-left transition-colors hover:bg-surface-2 disabled:opacity-50"
     >
-      {/* Label over hint, and the hint WRAPS. On one line the hint truncated
-          mid-word on every phone ("Keep on dock after u…"), which read as a
-          rendering bug rather than a description. */}
-      <span className="min-w-0 flex-1">
-        <span className="block text-[15px] font-bold leading-tight text-ink">{label}</span>
-        <span className="mt-0.5 block text-[12px] leading-snug text-ink-muted">{hint}</span>
+      {/* Label and hint share one line and the hint WRAPS onto the next when
+          it must — never truncates (a mid-word "Keep on dock after u…" read as
+          a rendering bug). Five of these at label-over-hint height used to own
+          the whole sheet. */}
+      <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2 gap-y-0">
+        <span className="text-[13px] font-bold leading-tight text-ink">{label}</span>
+        <span className="text-[11px] leading-snug text-ink-muted">{hint}</span>
       </span>
       <span
         className={clsx(
-          "ml-auto flex h-6 w-11 shrink-0 items-center rounded-full p-0.5 transition-colors",
+          "ml-auto flex h-5 w-9 shrink-0 items-center rounded-full p-0.5 transition-colors",
           on ? "bg-emerald-600" : "bg-track",
         )}
       >
         <span
           className={clsx(
-            "h-5 w-5 rounded-full bg-white transition-transform",
-            on && "translate-x-5",
+            "h-4 w-4 rounded-full bg-white transition-transform",
+            on && "translate-x-4",
           )}
         />
       </span>
@@ -367,7 +368,7 @@ export default function FleetMobileActionSheet({
 
           <div>
             <SectionLabel>Flags</SectionLabel>
-            <div className="flex flex-col gap-2">
+            <div className="flex flex-col gap-1.5">
               {/* Flags are switches now, and flipping one keeps the sheet open:
                   they're settings on the truck, not decisions that end the
                   visit, and a lead usually sets two at once. */}
