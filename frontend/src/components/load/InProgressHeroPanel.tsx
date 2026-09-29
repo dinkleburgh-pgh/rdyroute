@@ -5,6 +5,7 @@ import { DustGarmentIcon } from "../icons";
 import { PaceBar, formatDuration, useElapsed } from "../LiveInProgress";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import { useLoadTimerVisible } from "../../hooks/useLoadTimerVisible";
+import { CARGO_FLASH, GARMENT_FLASH_TONE, NOGS_FLASH_TONE } from "./cargoFlash";
 import type { TruckWithState } from "../../types";
 
 const LOAD_DAY_NAMES: Record<number, string> = {
@@ -15,10 +16,12 @@ const LOAD_DAY_NAMES: Record<number, string> = {
   5: "Friday",
 };
 
-/** The icon on a cargo reminder flashes for as long as this truck is loading —
- *  that is exactly the window in which the garments / NOGs have to go on.
- *  (index.css: a calmer pulse under "reduce motion", never a static icon.) */
-const FLASH = "animate-cargo-flash";
+/** Cargo reminders are pills that flash whole for as long as this truck is
+ *  loading — exactly the window in which the garments / NOGs have to go on.
+ *  (index.css: a calmer fade under "reduce motion", never a static pill.) */
+const CARGO_PILL = clsx("inline-flex items-center gap-1.5 rounded-lg border font-bold", CARGO_FLASH);
+const GARMENT_PILL = "border-amber-600/60 bg-amber-950/50 text-amber-300";
+const NOGS_PILL = "border-rose-800/50 bg-rose-950/30 text-rose-200";
 
 /**
  * The truck currently being loaded — big number, live timer, pace bar, and the
@@ -123,14 +126,14 @@ export default function InProgressHeroPanel({
                 {truck.state?.wearers ? <span>· {truck.state.wearers} wearers</span> : null}
                 {coverRoute != null && <CoverageTag route={coverRoute} truck={truck.truck_number} />}
                 {hasGarment && (
-                  <span className="inline-flex items-center gap-1 font-semibold text-st-inprogress">
-                    <DustGarmentIcon className={clsx("h-4 w-4", FLASH)} />
+                  <span className={clsx(CARGO_PILL, GARMENT_PILL, "px-2 py-0.5 text-xs")} style={GARMENT_FLASH_TONE}>
+                    <DustGarmentIcon className="h-4 w-4" />
                     garment
                   </span>
                 )}
                 {hasNogs && (
-                  <span className="inline-flex items-center gap-1 font-semibold text-rose-300">
-                    <Undo2 className={clsx("h-4 w-4", FLASH)} aria-hidden />
+                  <span className={clsx(CARGO_PILL, NOGS_PILL, "px-2 py-0.5 text-xs")} style={NOGS_FLASH_TONE}>
+                    <Undo2 className="h-4 w-4" aria-hidden />
                     NOGs
                   </span>
                 )}
@@ -231,14 +234,14 @@ export default function InProgressHeroPanel({
             {(hasGarment || hasNogs) && (
               <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
                 {hasGarment && (
-                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-st-inprogress">
-                    <DustGarmentIcon className={clsx("h-6 w-6", FLASH)} />
+                  <span className={clsx(CARGO_PILL, GARMENT_PILL, "px-3 py-1 text-sm")} style={GARMENT_FLASH_TONE}>
+                    <DustGarmentIcon className="h-6 w-6" />
                     F.S. garment
                   </span>
                 )}
                 {hasNogs && (
-                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-rose-300">
-                    <Undo2 className={clsx("h-6 w-6", FLASH)} aria-hidden />
+                  <span className={clsx(CARGO_PILL, NOGS_PILL, "px-3 py-1 text-sm")} style={NOGS_FLASH_TONE}>
+                    <Undo2 className="h-6 w-6" aria-hidden />
                     NOGs
                   </span>
                 )}

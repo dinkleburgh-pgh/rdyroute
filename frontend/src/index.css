@@ -26,12 +26,15 @@
     animation: pickMe 1.6s ease-in-out infinite;
     will-change: transform, box-shadow;
   }
-  /* The garments / NOGs icon on the truck being loaded. A hard blink rather
-     than a fade: it has to catch the eye of someone in the middle of a load,
-     and it only runs for the few minutes that load takes. 1 Hz is well under
-     the three-flashes-a-second seizure threshold. */
-  .animate-cargo-flash {
-    animation: cargoFlash 1s linear infinite;
+  /* The garments / NOGs chip of the truck being loaded. The WHOLE chip
+     flashes — it snaps to a solid fill with a glowing outline and back, once a
+     second — because a blinking icon alone was easy to read past mid-load.
+     The number stays readable in both phases (dark ink on the fill). Colours
+     come from --cargo-fill / --cargo-ink / --cargo-glow set on the element
+     (components/load/cargoFlash.ts). 1 Hz is well under the
+     three-flashes-a-second seizure threshold. */
+  .animate-cargo-chip {
+    animation: cargoChip 1s linear infinite;
   }
 
   /* Safe area inset utilities (iPhone notch / Android gesture bar) */
@@ -91,16 +94,27 @@
   }
 }
 
-@keyframes cargoFlash {
-  0%, 49%   { opacity: 1; }
-  50%, 100% { opacity: 0.2; }
+/* 0-49%: lit. 50-100% lists nothing, so the chip shows its own colours — a
+   hard switch, not a fade. Animation values beat the chip's inline colour. */
+@keyframes cargoChip {
+  0%, 49% {
+    background-color: var(--cargo-fill);
+    border-color: var(--cargo-fill);
+    color: var(--cargo-ink);
+    box-shadow: 0 0 0 3px var(--cargo-glow), 0 0 18px var(--cargo-glow);
+  }
 }
 
-/* Reduced-motion twin: the same cue as a smooth breathe instead of a hard
-   blink — a static icon would be too easy to miss (see pickMeCalm). */
-@keyframes cargoFlashCalm {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.45; }
+/* Reduced-motion twin: the same fill, reached by a slow fade instead of a
+   snap — no movement either way, and never a static chip (see pickMeCalm). */
+@keyframes cargoChipCalm {
+  0%, 100% {}
+  50% {
+    background-color: var(--cargo-fill);
+    border-color: var(--cargo-fill);
+    color: var(--cargo-ink);
+    box-shadow: 0 0 0 3px var(--cargo-glow), 0 0 18px var(--cargo-glow);
+  }
 }
 
 /* Rotating rail sections fade in as each takes its turn, so a swap reads as a
@@ -118,8 +132,8 @@
   .animate-pick-me {
     animation: pickMeCalm 1.8s ease-in-out infinite;
   }
-  .animate-cargo-flash {
-    animation: cargoFlashCalm 1.6s ease-in-out infinite;
+  .animate-cargo-chip {
+    animation: cargoChipCalm 1.6s ease-in-out infinite;
   }
   /* The rotation itself still happens — it has to, or sections stay hidden —
      but drop the movement and just cut between them. */

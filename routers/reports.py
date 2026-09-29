@@ -457,11 +457,11 @@ def _top_items_html(m) -> str:
             f'<span class="mono" style="color:#fcd34d">{q}</span></li>'
             for tn, q in hits
         )
-        # Two columns only once there is something to balance. A single truck in
-        # a two-column list gets laid out against the column box rather than the
-        # card, so the one line of info floated off to the middle instead of
-        # sitting flush left like every other row.
-        list_cls = "alist cols" if len(hits) > 2 else "alist"
+        # One truck per line; two columns only for a long list (more than 8),
+        # matching the report page. Two-per-line on short lists read as one
+        # row of four numbers, and a single truck in a two-column list floated
+        # off to the middle of the card.
+        list_cls = "alist cols" if len(hits) > 8 else "alist"
         cards.append(
             f'<div class="tcard">'
             f'<div class="ah"><span class="rank">#{i}</span>'

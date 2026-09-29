@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import { Undo2 } from "lucide-react";
 import { CHECKLIST_CHIP } from "./GarmentsStrip";
+import { CARGO_FLASH, NOGS_FLASH_TONE } from "./cargoFlash";
 import type { TruckWithState } from "../../types";
 
 /**
@@ -59,11 +60,12 @@ export default function NogsStrip({
                 done
                   ? "border-sky-500/60 bg-sky-950/50 text-sky-200"
                   : "border-rose-800/50 bg-rose-950/30 text-rose-200",
-                loading && "ring-2 ring-rose-400/80",
+                loading && clsx("ring-2 ring-rose-400/80", CARGO_FLASH),
               )}
+              style={loading ? NOGS_FLASH_TONE : undefined}
             >
               #{t.truck_number}
-              <Undo2 className={clsx("h-5 w-5", loading && "animate-cargo-flash")} aria-hidden />
+              <Undo2 className="h-5 w-5" aria-hidden />
             </span>
           );
         })}

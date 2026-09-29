@@ -1217,13 +1217,12 @@ export default function LiveReport() {
                     </div>
                     {/* Which trucks this item was short on — the mirror of the
                         per-truck cards above, which list items. */}
-                    {/* Two balanced columns instead of a truncated single one.
-                        These rows are two short numbers in different colours —
-                        truck in grey, qty in amber — so they stay readable at
-                        half width, and the whole list fits: an item can be
-                        short on 20+ trucks, where "+14 more" hid exactly the
-                        detail someone opened the report for. */}
-                    <ul className="mt-1.5 columns-2 gap-x-3">
+                    {/* One truck per line — two per line read as one row of
+                        four numbers. Only a long list (more than 8 trucks, and
+                        an item can be short on 20+) splits into two balanced
+                        columns so the card stays a sensible height; nothing is
+                        ever cut to a "+14 more". Same rule in the PDF. */}
+                    <ul className={clsx("mt-1.5", it.trucks.length > 8 && "columns-2 gap-x-3")}>
                       {it.trucks.map((t) => (
                         <li
                           key={t.truck}

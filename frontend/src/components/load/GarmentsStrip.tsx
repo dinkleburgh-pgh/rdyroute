@@ -2,6 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { DustGarmentIcon } from "../icons";
 import { GARMENT_LOADED_HEX, GARMENT_PENDING_HEX } from "../../utils/truckStatus";
+import { CARGO_FLASH, GARMENT_FLASH_TONE } from "./cargoFlash";
 import type { TruckWithState } from "../../types";
 
 /**
@@ -86,12 +87,14 @@ export default function GarmentsStrip({
                     : garment
                       ? "border-amber-600/60 bg-amber-950/50"
                       : "border-hairline bg-surface-3",
-                  loading && "ring-2 ring-amber-400/80",
+                  loading && clsx("ring-2 ring-amber-400/80", CARGO_FLASH),
                 )}
-                style={{ color }}
+                style={loading ? { color, ...GARMENT_FLASH_TONE } : { color }}
               >
                 #{t.truck_number}
-                {garment && <DustGarmentIcon className={clsx("h-5 w-5", loading && "animate-cargo-flash")} style={{ color }} />}
+                {/* While flashing the icon inherits the chip's colour, so it
+                    flips to dark ink on the lit fill instead of vanishing. */}
+                {garment && <DustGarmentIcon className="h-5 w-5" style={loading ? undefined : { color }} />}
               </span>
             );
           })}
