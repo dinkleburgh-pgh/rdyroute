@@ -75,7 +75,9 @@ else
   STANDBY_LOG="/tmp/rdyroute-standby-update.log"
   echo "[local-deploy] chaining standby update in the background (${STANDBY_HOST})…"
   nohup env SK="$STANDBY_KEY" SH="$STANDBY_HOST" AV="$APP_VERSION" bash -c '
-    if timeout 600 ssh -i "$SK" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$SH" true; then
+    # 30 min: the standby builds on a 1 GB box, where the frontend alone now
+    # takes ~9.5 min — at 600 s the ssh was cut before the image was saved.
+    if timeout 1800 ssh -i "$SK" -o StrictHostKeyChecking=accept-new -o ConnectTimeout=15 "$SH" true; then
       echo "$(date -u +%FT%TZ) [standby] OK → in sync with $AV"
     else
       echo "$(date -u +%FT%TZ) [standby] FAILED (prod is fine); retry: ssh -i $SK $SH true"
