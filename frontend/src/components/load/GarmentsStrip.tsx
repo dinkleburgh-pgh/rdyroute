@@ -28,10 +28,18 @@ export const CHECKLIST_CHIP =
 
 export default function GarmentsStrip({
   trucks,
+  loadingNow,
+  carriers,
   className,
 }: {
   /** Every F.S. truck, regardless of schedule or status. */
   trucks: TruckWithState[];
+  /** Chips whose garments are on the truck being loaded right now
+   *  (loadingCargo().numbers) — their icon flashes. */
+  loadingNow?: ReadonlySet<number>;
+  /** Covered route -> the truck carrying its freight (loadingCargo().carriers).
+   *  A chip is "out the door" when its CARRIER is loaded, not its own truck. */
+  carriers?: ReadonlyMap<number, TruckWithState>;
   className?: string;
 }) {
   const [showAll, setShowAll] = useState(false);
@@ -58,12 +66,19 @@ export default function GarmentsStrip({
             const garment = t.state?.has_dust_garment === true;
             // Garments already out the door read blue/cyan (done); still
             // pending ones stay amber (needs action); no garment is muted.
-            const done = garment && t.state?.status === "loaded";
+            // Being loaded right now: the icon flashes until the load is
+            // finished — the moment the garments have to go on. It wins over
+            // "done": in a two-way swap the chip's own truck may already be
+            // loaded (with its partner's freight) while ITS garments are on
+            // this load.
+            const loading = garment && loadingNow?.has(t.truck_number) === true;
+            const carrier = carriers?.get(t.truck_number) ?? t;
+            const done = garment && !loading && carrier.state?.status === "loaded";
             const color = done ? GARMENT_LOADED_HEX : garment ? GARMENT_PENDING_HEX : "#6f7c8e";
             return (
               <span
                 key={t.truck_number}
-                title={done ? "Loaded with garments" : garment ? "Garments to load" : "No garments"}
+                title={done ? "Loaded with garments" : loading ? "Loading now — garments go on this load" : garment ? "Garments to load" : "No garments"}
                 className={clsx(
                   CHECKLIST_CHIP,
                   done
@@ -71,11 +86,12 @@ export default function GarmentsStrip({
                     : garment
                       ? "border-amber-600/60 bg-amber-950/50"
                       : "border-hairline bg-surface-3",
+                  loading && "ring-2 ring-amber-400/80",
                 )}
                 style={{ color }}
               >
                 #{t.truck_number}
-                {garment && <DustGarmentIcon className="h-5 w-5" style={{ color }} />}
+                {garment && <DustGarmentIcon className={clsx("h-5 w-5", loading && "animate-cargo-flash")} style={{ color }} />}
               </span>
             );
           })}

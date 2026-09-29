@@ -37,6 +37,7 @@ import {
   useSettings,
 } from "../api/hooks";
 import { useAuth } from "../contexts/AuthContext";
+import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 import { todayIso } from "../api/client";
 import { workdayNumbers } from "../components/Clock";
 import type { TruckNote, TruckStatus, TruckWithState } from "../types";
@@ -163,6 +164,9 @@ export default function RunDay() {
 
   // Shift notes — inline on the page, editable by supervisors+
   const { user } = useAuth();
+  // A loading card's "· N min" is the load timer by another name, so it
+  // follows the Operations switch. Unloading minutes are not the load timer.
+  const showLoadTimer = useLoadTimerVisible();
   const canEditNotes = ["admin", "fleet", "supervisor", "lead", "atl"].includes(user?.role ?? "");
   const { data: dailyNotes = "" } = useDailyNotes(runDate);
   const setDailyNotesMutation = useSetDailyNotes();
@@ -594,13 +598,13 @@ export default function RunDay() {
             group,
             badge,
             notes: group === "working" || group === "ready" ? notesFor(displayTruck.truck_number, truckLoadDay) : undefined,
-            sinceSec: unloading ? st!.unloading_started_at : loading ? st?.load_start_time ?? null : null,
+            sinceSec: unloading ? st!.unloading_started_at : loading && showLoadTimer ? st?.load_start_time ?? null : null,
             emphasis: unloading || loading,
             chipTag: shown === "oos" ? "OOS" : shown === "off" ? "L OFF" : undefined,
           };
         }),
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [loadTrucks, liveCoveringTruckMap, loadDay, loadNextDay, holidayLoad, notesByTruck],
+    [loadTrucks, liveCoveringTruckMap, loadDay, loadNextDay, holidayLoad, notesByTruck, showLoadTimer],
   );
 
   const unloadWorking = unloadCards.filter((c) => c.group === "working");

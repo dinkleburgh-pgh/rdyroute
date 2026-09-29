@@ -43,6 +43,7 @@ import { workdayNumbers } from "./Clock";
 import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import { truckTypeLabel } from "../utils/truckType";
+import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 import Modal from "./Modal";
 
 export function LiveInProgress({ runDate }: { runDate: string }) {
@@ -236,6 +237,9 @@ function InProgressView({
   const dayLabel = dayNum != null && dayNum >= 1 && dayNum <= 7 ? `Load Day ${dayNum} — ${DAY_NAMES[dayNum]}` : null;
 
   const elapsed = useElapsed(truck.state?.load_start_time ?? null);
+  // Operations "Load timer" switch — hidden, the clock, pace bar, averages and
+  // pace stats go; finishLoading below still records the duration.
+  const showTimer = useLoadTimerVisible();
   const pct = paceAvgSeconds && paceAvgSeconds > 0 ? elapsed / paceAvgSeconds : null;
   const onPace = pct == null ? null : pct < 1;
   const timerColor =
@@ -313,16 +317,22 @@ function InProgressView({
               </span>
             </div>
           </div>
-          <div className="hidden w-px self-stretch bg-hairline lg:block" />
-          <div className="flex-1">
-            <div className="mb-2 flex items-baseline justify-between">
-              <span className={clsx("font-mono text-[44px] font-black tabular-nums leading-none tracking-[-0.02em]", timerColor)}>
-                {formatDuration(elapsed)}
-              </span>
-              {paceLabel && <span className={clsx("text-xs font-medium", paceLabelColor)}>{paceLabel}</span>}
-            </div>
-            <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={6} />
-          </div>
+          {showTimer ? (
+            <>
+              <div className="hidden w-px self-stretch bg-hairline lg:block" />
+              <div className="flex-1">
+                <div className="mb-2 flex items-baseline justify-between">
+                  <span className={clsx("font-mono text-[44px] font-black tabular-nums leading-none tracking-[-0.02em]", timerColor)}>
+                    {formatDuration(elapsed)}
+                  </span>
+                  {paceLabel && <span className={clsx("text-xs font-medium", paceLabelColor)}>{paceLabel}</span>}
+                </div>
+                <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={6} />
+              </div>
+            </>
+          ) : (
+            <div className="hidden flex-1 lg:block" />
+          )}
           <div className="hidden w-px self-stretch bg-hairline lg:block" />
           {/* The number gets its own line so it can sit at the same weight as
               the two numerals to its left; the average reads underneath it
@@ -332,7 +342,7 @@ function InProgressView({
             <div className="font-mono text-[38px] font-black tabular-nums leading-none tracking-[-0.02em] text-ink-soft">
               {nextUp != null ? `#${nextUp}` : "—"}
             </div>
-            {nextUp != null && paceAvgSeconds != null && (
+            {showTimer && nextUp != null && paceAvgSeconds != null && (
               <div className="mt-1.5 text-[11px] text-ink-faint">avg {formatDuration(paceAvgSeconds)}</div>
             )}
             <button type="button" onClick={() => setPickerOpen(true)} className="btn-ghost mt-2.5 px-3 py-1 text-[11px]">
@@ -364,12 +374,12 @@ function InProgressView({
             {/* Session stats — monochrome strip, hairline-divided */}
             <div className="card flex px-0 py-4">
               {[
-                { value: <>{loadedCount}<span className="text-[13px] text-ink-faint">/{scheduledTotal}</span></>, label: "Loaded today" },
-                { value: paceAvgSeconds ? formatDuration(paceAvgSeconds) : "—", label: "Avg pace · 30d" },
-                { value: remaining, label: "Remaining" },
-                { value: onPacePct != null ? `${onPacePct}%` : "—", label: "On pace today" },
-              ].map((s, i) => (
-                <div key={s.label} className={clsx("flex-1 text-center", i < 3 && "border-r border-hairline")}>
+                { value: <>{loadedCount}<span className="text-[13px] text-ink-faint">/{scheduledTotal}</span></>, label: "Loaded today", pace: false },
+                { value: paceAvgSeconds ? formatDuration(paceAvgSeconds) : "—", label: "Avg pace · 30d", pace: true },
+                { value: remaining, label: "Remaining", pace: false },
+                { value: onPacePct != null ? `${onPacePct}%` : "—", label: "On pace today", pace: true },
+              ].filter((s) => showTimer || !s.pace).map((s, i, shown) => (
+                <div key={s.label} className={clsx("flex-1 text-center", i < shown.length - 1 && "border-r border-hairline")}>
                   <div className="font-mono text-2xl font-black tabular-nums text-ink">{s.value}</div>
                   <div className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">{s.label}</div>
                 </div>
@@ -545,6 +555,9 @@ function ShortageDropdownEntry({
 // ---------------------------------------------------------------------------
 
 function RecentFinishes({ loadedToday }: { loadedToday: TruckWithState[] }) {
+  // Finish times stay (when a truck left is not a measure of anyone); the
+  // per-truck durations follow the Load timer switch.
+  const showTimer = useLoadTimerVisible();
   const finishes = useMemo(
     () =>
       [...loadedToday]
@@ -574,7 +587,7 @@ function RecentFinishes({ loadedToday }: { loadedToday: TruckWithState[] }) {
                     {new Date(finish * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                   </span>
                 )}
-                {duration != null && (
+                {showTimer && duration != null && (
                   <span className={clsx("ml-auto font-mono font-medium tabular-nums", isSlow ? "text-st-dirty" : "text-st-unloaded")}>
                     {formatDuration(duration)}
                   </span>
@@ -607,6 +620,7 @@ export function StartNextUpBanner({
   blockedReason?: string | null;
 }) {
   const coverageRoute = getCoverageRouteNumber(truck);
+  const showTimer = useLoadTimerVisible();
   return (
     <section
       className="overflow-hidden rounded-xl border-2"
@@ -623,7 +637,7 @@ export function StartNextUpBanner({
             <span className="text-sm text-ink-muted">
               {truckTypeLabel(truck.truck_type)}
               {truck.state?.wearers ? ` · ${truck.state.wearers} wearers` : ""}
-              {paceAvgSeconds != null ? ` · avg ${formatDuration(paceAvgSeconds)}` : ""}
+              {showTimer && paceAvgSeconds != null ? ` · avg ${formatDuration(paceAvgSeconds)}` : ""}
             </span>
           </div>
           {coverageRoute != null && <CoverageTag route={coverageRoute} truck={truck.truck_number} className="mt-1.5" />}

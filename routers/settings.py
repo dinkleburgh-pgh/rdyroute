@@ -60,6 +60,7 @@ KNOWN_KEYS = {
     # set to, and timer countdowns that disagreed with a supervisor's.
     "wearer_cap",
     "shift_notes_enabled",
+    "load_timer_visible",
     "outside_timer_minutes",
     "paper_bay_timer_minutes",
     "recurring_route_swaps",
@@ -128,6 +129,10 @@ _USER_READABLE_KEYS = {
     # actually working the floor have to receive them.
     "wearer_cap",
     "shift_notes_enabled",
+    # Whether the Load page / Load Display / In Progress show load timing.
+    # The crew's own screens read it; without it here a loader's session never
+    # sees the switch and keeps showing the timer.
+    "load_timer_visible",
     "outside_timer_minutes",
     "paper_bay_timer_minutes",
     "recurring_route_swaps",

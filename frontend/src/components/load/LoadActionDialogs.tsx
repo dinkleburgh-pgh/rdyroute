@@ -19,6 +19,7 @@ export default function LoadActionDialogs({ actions }: { actions: LoadActions })
     confirmLoadTruck,
     setConfirmLoadTruck,
     confirmGarmentTruck,
+    confirmGarmentSource,
     setConfirmGarmentTruck,
     confirmIsUncoveredSpare,
     startLoad,
@@ -64,7 +65,11 @@ export default function LoadActionDialogs({ actions }: { actions: LoadActions })
       <ConfirmDialog
         open={confirmGarmentTruck !== null}
         title="Did you load garments?"
-        description={`Truck #${confirmGarmentTruck?.truck_number ?? ""} is flagged with F.S. garments — confirm the garments were loaded before finishing.`}
+        description={
+          confirmGarmentSource != null
+            ? `Truck #${confirmGarmentTruck?.truck_number ?? ""} is carrying route #${confirmGarmentSource}'s F.S. garments — confirm they were loaded before finishing.`
+            : `Truck #${confirmGarmentTruck?.truck_number ?? ""} is flagged with F.S. garments — confirm the garments were loaded before finishing.`
+        }
         confirmLabel="Yes, finish loading"
         cancelLabel="Not yet"
         onConfirm={() => {

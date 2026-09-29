@@ -115,7 +115,9 @@ const STATUS_CLASS_MAP: Record<string, string> = {
 
 function StatusColorApplier() {
   const { user, loading } = useAuth();
-  const { data: settings } = useSettings(!loading && !!user);
+  // The app's one settings poller (see useSettings): open screens pick up a
+  // changed Operations switch within a minute, without a reload.
+  const { data: settings } = useSettings(!loading && !!user, 60_000);
   useEffect(() => {
     const raw = settings?.find((s) => s.key === "status_badge_colors")?.value;
     if (!raw || typeof raw !== "object") return;

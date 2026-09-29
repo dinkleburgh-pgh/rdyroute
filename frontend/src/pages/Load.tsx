@@ -36,10 +36,12 @@ import {
   isScheduledOff,
   loadedTruckNumbers,
   unloadedTruckNumbersFromContext,
+  loadingCargo,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
 import { NextUpPanel, PaceBar, StartNextUpBanner, formatDuration, useElapsed } from "../components/LiveInProgress";
 import { useLoadActions } from "../hooks/useLoadActions";
+import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 import { useLoadRequest } from "../hooks/useLoadRequest";
 import NowUnloadingStrip from "../components/load/NowUnloadingStrip";
 import LoadActionDialogs from "../components/load/LoadActionDialogs";
@@ -72,6 +74,9 @@ export default function Load() {
   const boardQuery = useBoard(runDate);
   const { data } = boardQuery;
   const { data: pace } = usePaceAverage(30);
+  // Operations "Load timer" switch: the header's 30-day pace follows it (the
+  // hero panel and banners read it themselves).
+  const showLoadTimer = useLoadTimerVisible();
   // The URL is the source of truth for the display, so /load?display=1 is
   // bookmarkable and the device comes back up straight into it.
   const [params, setParams] = useSearchParams();
@@ -363,6 +368,10 @@ export default function Load() {
     .filter((t) => t.state?.has_nogs === true)
     .sort((a, b) => a.truck_number - b.truck_number);
 
+  // Whose garments / NOGs ride on the truck being loaded (coverage-aware):
+  // their strip icons flash, and the hero shows + flashes them.
+  const cargo = loadingCargo(inProgress, board);
+
   // Focus mode: the ready queue rarely holds more than ~10 trucks and spends
   // most of the night under 5 — render those few BIG (readable from across
   // the dock) instead of reserving a wall-sized grid for them.
@@ -415,7 +424,7 @@ export default function Load() {
         meta={
           <>
             <Stat value={`${loadDone}/${loadTotal}`} label="loaded" tone="loaded" />
-            {pace?.avg_seconds != null && (
+            {showLoadTimer && pace?.avg_seconds != null && (
               <>
                 <Sep />
                 <Stat value={formatDuration(pace.avg_seconds)} label="30-day pace" />
@@ -440,8 +449,8 @@ export default function Load() {
       {/* Both checklists hug their chips and share one wrapping row — neither
           ever shows more than ~8, so two half-width cards were mostly empty. */}
       <div className="flex flex-wrap items-start gap-3">
-        <GarmentsStrip trucks={dustGarmentTrucks} />
-        <NogsStrip trucks={nogsTrucks} />
+        <GarmentsStrip trucks={dustGarmentTrucks} loadingNow={cargo.numbers} carriers={cargo.carriers} />
+        <NogsStrip trucks={nogsTrucks} loadingNow={cargo.numbers} carriers={cargo.carriers} />
       </div>
 
       {/* Freight that has to change trucks affects what gets loaded where —
@@ -464,6 +473,8 @@ export default function Load() {
                 busy={busy === inProgress.truck_number}
                 loadDay={loadDay}
                 nextUp={nextUpTruck}
+                garment={cargo.garment}
+                nogs={cargo.nogs}
                 onFinish={() => requestFinish(inProgress)}
                 onCancel={() => cancelLoad(inProgress)}
                 onChangeNextUp={() => setNextUpOpen(true)}

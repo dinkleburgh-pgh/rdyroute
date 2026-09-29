@@ -1,8 +1,10 @@
 import clsx from "clsx";
+import { Undo2 } from "lucide-react";
 import CoverageTag from "../CoverageTag";
 import { DustGarmentIcon } from "../icons";
 import { PaceBar, formatDuration, useElapsed } from "../LiveInProgress";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
+import { useLoadTimerVisible } from "../../hooks/useLoadTimerVisible";
 import type { TruckWithState } from "../../types";
 
 const LOAD_DAY_NAMES: Record<number, string> = {
@@ -12,6 +14,11 @@ const LOAD_DAY_NAMES: Record<number, string> = {
   4: "Thursday",
   5: "Friday",
 };
+
+/** The icon on a cargo reminder flashes for as long as this truck is loading —
+ *  that is exactly the window in which the garments / NOGs have to go on.
+ *  (index.css: a calmer pulse under "reduce motion", never a static icon.) */
+const FLASH = "animate-cargo-flash";
 
 /**
  * The truck currently being loaded — big number, live timer, pace bar, and the
@@ -23,6 +30,11 @@ const LOAD_DAY_NAMES: Record<number, string> = {
  * hooks/useLoadActions), which is what keeps the page and the display honest.
  *
  * `variant="display"` scales the type up for reading across a dock.
+ *
+ * The clock, pace bar, over-pace line and averages all obey the Operations
+ * "Load timer" switch (useLoadTimerVisible). Hidden, the load is still timed —
+ * only the display goes. The 15-second Cancel lock still reads `elapsed`; it is
+ * a mis-tap guard, not a timer anyone is measured against.
  */
 export default function InProgressHeroPanel({
   truck,
@@ -30,6 +42,8 @@ export default function InProgressHeroPanel({
   busy,
   loadDay,
   nextUp,
+  garment,
+  nogs,
   onFinish,
   onCancel,
   onShortSheet,
@@ -42,6 +56,12 @@ export default function InProgressHeroPanel({
   busy: boolean;
   loadDay: number;
   nextUp?: TruckWithState;
+  /** Garments ride on this load. The caller resolves coverage (a spare covering
+   *  an F.S. route carries that route's garments); defaults to the truck's own
+   *  flag. */
+  garment?: boolean;
+  /** NOGs go back out on this load — resolved like `garment`. */
+  nogs?: boolean;
   onFinish: () => void;
   onCancel: () => void;
   /** Display only — opens the short-sheet drawer for this truck. */
@@ -54,8 +74,11 @@ export default function InProgressHeroPanel({
   variant?: "page" | "display";
 }) {
   const big = variant === "display";
+  const showTimer = useLoadTimerVisible();
   const startSec = truck.state?.load_start_time ?? null;
   const elapsed = useElapsed(startSec);
+  const hasGarment = garment ?? truck.state?.has_dust_garment === true;
+  const hasNogs = nogs ?? truck.state?.has_nogs === true;
 
   const pct = paceAvgSeconds && paceAvgSeconds > 0 ? elapsed / paceAvgSeconds : null;
   const onPace = pct == null ? null : pct < 1;
@@ -99,24 +122,34 @@ export default function InProgressHeroPanel({
                 </span>
                 {truck.state?.wearers ? <span>· {truck.state.wearers} wearers</span> : null}
                 {coverRoute != null && <CoverageTag route={coverRoute} truck={truck.truck_number} />}
-                {truck.state?.has_dust_garment && (
-                  <span className="inline-flex items-center gap-1 text-st-inprogress">
-                    <DustGarmentIcon className="h-4 w-4" />
+                {hasGarment && (
+                  <span className="inline-flex items-center gap-1 font-semibold text-st-inprogress">
+                    <DustGarmentIcon className={clsx("h-4 w-4", FLASH)} />
                     garment
+                  </span>
+                )}
+                {hasNogs && (
+                  <span className="inline-flex items-center gap-1 font-semibold text-rose-300">
+                    <Undo2 className={clsx("h-4 w-4", FLASH)} aria-hidden />
+                    NOGs
                   </span>
                 )}
               </div>
             </div>
-            <div className="hidden w-px self-stretch bg-hairline sm:block" />
-            <div className="flex-1">
-              <div className="mb-2 flex items-baseline justify-between gap-3">
-                <span className={clsx("font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums", timerColor)}>
-                  {formatDuration(elapsed)}
-                </span>
-                {paceLabel && <span className={clsx("text-xs", paceLabelColor)}>{paceLabel}</span>}
-              </div>
-              <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={6} />
-            </div>
+            {showTimer && (
+              <>
+                <div className="hidden w-px self-stretch bg-hairline sm:block" />
+                <div className="flex-1">
+                  <div className="mb-2 flex items-baseline justify-between gap-3">
+                    <span className={clsx("font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums", timerColor)}>
+                      {formatDuration(elapsed)}
+                    </span>
+                    {paceLabel && <span className={clsx("text-xs", paceLabelColor)}>{paceLabel}</span>}
+                  </div>
+                  <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={6} />
+                </div>
+              </>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-3 rounded-lg border border-hairline bg-surface-3 px-3.5 py-2.5">
@@ -124,7 +157,7 @@ export default function InProgressHeroPanel({
             <span className="font-mono text-xl font-black tabular-nums text-ink-soft">
               {nextUp ? `#${nextUp.truck_number}` : "—"}
             </span>
-            {nextUp && paceAvgSeconds != null && (
+            {showTimer && nextUp && paceAvgSeconds != null && (
               <span className="text-[11px] text-ink-faint">avg {formatDuration(paceAvgSeconds)}</span>
             )}
             {nextUp && getCoverageRouteNumber(nextUp) != null && (
@@ -195,10 +228,20 @@ export default function InProgressHeroPanel({
               <span className="h-1.5 w-1.5 rounded-full bg-st-unloaded" />
               Load Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` · ${LOAD_DAY_NAMES[loadDay]}` : ""}
             </div>
-            {truck.state?.has_dust_garment && (
-              <div className="mt-1.5 inline-flex items-center gap-1 text-xs text-st-inprogress">
-                <DustGarmentIcon className="h-5 w-5" />
-                F.S. garment
+            {(hasGarment || hasNogs) && (
+              <div className="mt-1.5 flex flex-wrap items-center justify-center gap-x-3 gap-y-1">
+                {hasGarment && (
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-st-inprogress">
+                    <DustGarmentIcon className={clsx("h-6 w-6", FLASH)} />
+                    F.S. garment
+                  </span>
+                )}
+                {hasNogs && (
+                  <span className="inline-flex items-center gap-1 text-sm font-semibold text-rose-300">
+                    <Undo2 className={clsx("h-6 w-6", FLASH)} aria-hidden />
+                    NOGs
+                  </span>
+                )}
               </div>
             )}
             {truck.state?.wearers ? (
@@ -222,7 +265,7 @@ export default function InProgressHeroPanel({
                         <CoverageTag route={cr} truck={nextUp.truck_number} className="mt-1" />
                       ) : null;
                     })()}
-                    {paceAvgSeconds != null && (
+                    {showTimer && paceAvgSeconds != null && (
                       <div className="mt-1.5 text-xs text-ink-muted">
                         avg <span className="text-ink">{formatDuration(paceAvgSeconds)}</span>
                       </div>
@@ -243,21 +286,25 @@ export default function InProgressHeroPanel({
           </div>
         </div>
 
-        {/* Timer — centered */}
-        <div className="flex flex-col items-center gap-2 py-1">
-          <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none", timerColor)}
-            style={{ fontSize: big ? "5.5rem" : "3.5rem" }}>
-            {formatDuration(elapsed)}
-          </span>
-          {paceLabel && (
-            <span className={clsx("text-sm font-medium", paceLabelColor)}>
-              {paceLabel}
-            </span>
-          )}
-        </div>
+        {showTimer && (
+          <>
+            {/* Timer — centered */}
+            <div className="flex flex-col items-center gap-2 py-1">
+              <span className={clsx("font-mono font-black tabular-nums tracking-[-0.02em] leading-none", timerColor)}
+                style={{ fontSize: big ? "5.5rem" : "3.5rem" }}>
+                {formatDuration(elapsed)}
+              </span>
+              {paceLabel && (
+                <span className={clsx("text-sm font-medium", paceLabelColor)}>
+                  {paceLabel}
+                </span>
+              )}
+            </div>
 
-        {/* Full-width pace bar */}
-        <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
+            {/* Full-width pace bar */}
+            <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={14} />
+          </>
+        )}
 
         {/* Finish Loading — immediately below bar */}
         <button

@@ -15,7 +15,7 @@ import LoadNotesPanel from "./LoadNotesPanel";
 import type { LoadActions } from "../../hooks/useLoadActions";
 import type { LoadRequestActions } from "../../hooks/useLoadRequest";
 import NowUnloadingStrip from "./NowUnloadingStrip";
-import type { CoverageEntry } from "../../utils/truckStatus";
+import { loadingCargo, type CoverageEntry } from "../../utils/truckStatus";
 import type { TruckWithState } from "../../types";
 
 const ZOOM_KEY = "load:displayZoom";
@@ -81,6 +81,8 @@ export default function LoadDisplay({
   onExit: () => void;
 }) {
   const { inProgress, busy, requestStart, requestFinish, cancelLoad } = actions;
+  // Same coverage-aware cargo read as the Load page: strips flash, hero shows.
+  const cargo = loadingCargo(inProgress, board);
   const [zoom, setZoom] = useState<number>(() => {
     const raw = Number(localStorage.getItem(ZOOM_KEY));
     return ZOOM_STEPS.includes(raw) ? raw : 1.5;
@@ -219,6 +221,8 @@ export default function LoadDisplay({
                   busy={busy === inProgress.truck_number}
                   loadDay={loadDay}
                   nextUp={nextUpTruck}
+                  garment={cargo.garment}
+                  nogs={cargo.nogs}
                   onFinish={() => requestFinish(inProgress)}
                   onCancel={() => void cancelLoad(inProgress)}
                   onShortSheet={() => setShortSheetOpen(true)}
@@ -301,8 +305,8 @@ export default function LoadDisplay({
 
             {/* RIGHT — reference you glance at, garments first */}
             <div className="flex min-w-0 flex-col gap-4">
-              <GarmentsStrip trucks={garmentTrucks} />
-              <NogsStrip trucks={nogsTrucks} />
+              <GarmentsStrip trucks={garmentTrucks} loadingNow={cargo.numbers} carriers={cargo.carriers} />
+              <NogsStrip trucks={nogsTrucks} loadingNow={cargo.numbers} carriers={cargo.carriers} />
 
               <LoadNotesPanel
                 truck={inProgress}

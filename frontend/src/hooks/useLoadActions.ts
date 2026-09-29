@@ -9,6 +9,7 @@ import {
 } from "../api/hooks";
 import { useToast } from "../contexts/ToastContext";
 import type { TruckWithState } from "../types";
+import { loadingCargo } from "../utils/truckStatus";
 
 /**
  * The load workflow — start / finish / cancel — in one place.
@@ -30,6 +31,9 @@ export interface LoadActions {
   setConfirmLoadTruck: (t: TruckWithState | null) => void;
   /** Truck awaiting the "Did you load garments?" confirmation. */
   confirmGarmentTruck: TruckWithState | null;
+  /** The route whose garments ride on that truck, when it is covering one
+   *  (null = the truck's own garments). */
+  confirmGarmentSource: number | null;
   setConfirmGarmentTruck: (t: TruckWithState | null) => void;
   /** The pending truck is a Spare with no route to carry — cannot load. */
   confirmIsUncoveredSpare: boolean;
@@ -64,6 +68,7 @@ export function useLoadActions(
   const [busy, setBusy] = useState<number | null>(null);
   const [confirmLoadTruck, setConfirmLoadTruck] = useState<TruckWithState | null>(null);
   const [confirmGarmentTruck, setConfirmGarmentTruck] = useState<TruckWithState | null>(null);
+  const [confirmGarmentSource, setConfirmGarmentSource] = useState<number | null>(null);
 
   const inProgress = useMemo(
     () => board.find((t) => t.state?.status === "in_progress"),
@@ -177,14 +182,21 @@ export function useLoadActions(
     confirmLoadTruck,
     setConfirmLoadTruck,
     confirmGarmentTruck,
+    confirmGarmentSource,
     setConfirmGarmentTruck,
     confirmIsUncoveredSpare,
     requestStart: (t) => setConfirmLoadTruck(t),
     // The garment branch lives here, not at the call site, so every surface
     // gets the prompt — InProgressHero's copy of "finish" has never had it.
     requestFinish: (t) => {
-      if (t.state?.has_dust_garment) setConfirmGarmentTruck(t);
-      else void finishLoad(t);
+      // Same coverage-aware rule as the flashing garment badge: a spare
+      // covering an F.S. route carries THAT route's garments, a two-way swap
+      // its partner's — so the badge and this prompt can never disagree.
+      const cargo = loadingCargo(t, board);
+      if (cargo.garment) {
+        setConfirmGarmentSource([...cargo.numbers].find((n) => n !== t.truck_number) ?? null);
+        setConfirmGarmentTruck(t);
+      } else void finishLoad(t);
     },
     startLoad,
     finishLoad,

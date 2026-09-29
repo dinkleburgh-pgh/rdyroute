@@ -2,6 +2,7 @@ import clsx from "clsx";
 import type { CoverageEntry } from "../utils/truckStatus";
 import type { TruckWithState } from "../types";
 import { formatDuration } from "./LiveInProgress";
+import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 
 /**
  * The canonical coverage card — the Report's "Routes covered" read, now the
@@ -44,12 +45,13 @@ function fmtClock(sec: number): string {
 
 type StateLine = { text: string; className: string };
 
-/** Tonight's load on the cover — the Report's wording, verbatim. */
-function loadState(cover: TruckWithState | null | undefined): StateLine {
+/** Tonight's load on the cover — the Report's wording, verbatim. The duration
+ *  follows the Operations "Load timer" switch; the finish time always shows. */
+function loadState(cover: TruckWithState | null | undefined, showDuration: boolean): StateLine {
   const s = cover?.state;
   if (s?.status === "loaded") {
     const when = s.load_finish_time ? ` · ${fmtClock(s.load_finish_time)}` : "";
-    const took = s.load_duration_seconds != null ? ` · ${formatDuration(s.load_duration_seconds)}` : "";
+    const took = showDuration && s.load_duration_seconds != null ? ` · ${formatDuration(s.load_duration_seconds)}` : "";
     return { text: `Loaded${when}${took}`, className: "text-st-loaded" };
   }
   if (s?.status === "in_progress") return { text: "Loading…", className: "text-st-inprogress" };
@@ -91,13 +93,14 @@ export default function CoverageCards({
   showPrevBadge?: boolean;
   className?: string;
 }) {
+  const showDuration = useLoadTimerVisible();
   if (entries.length === 0) return null;
   const s = SIZE[size];
   return (
     <div className={className ?? DEFAULT_GRID[size]}>
       {entries.map((e) => {
         const cover = truckOf?.(e.cover) ?? null;
-        const state = truckOf ? (e.prev ? unloadState(cover) : loadState(cover)) : null;
+        const state = truckOf ? (e.prev ? unloadState(cover) : loadState(cover, showDuration)) : null;
         const done = !e.prev && cover?.state?.status === "loaded";
         const kind =
           e.kind === "split" ? "Split"

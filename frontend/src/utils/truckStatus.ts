@@ -950,3 +950,54 @@ export function garmentHex(t: TruckWithState): string {
 export function garmentIsLoaded(t: TruckWithState): boolean {
   return t.state?.status === "loaded";
 }
+
+/**
+ * What rides on the truck being loaded right now.
+ *
+ * Garments and NOGs are flagged on the ROUTE truck, and nothing copies the flag
+ * to whoever covers the route. So the cargo on a loading truck is its covered
+ * route's (getCoverageRouteNumber — spare cover, one-way and two-way swap
+ * alike; a split helper carries overflow only, so it is excluded by that
+ * helper) or, carrying nothing, its own. In a two-way swap A⇄B, A loads B's
+ * freight: A's chip must NOT light while A loads, B's must.
+ *
+ * A spare has no route of its own, so a flag set directly on a spare can only
+ * describe the load it is carrying — it counts too.
+ *
+ * `numbers` = the checklist chips to light (the route truck, plus the spare
+ * itself when one is loading). `garment` / `nogs` = what the hero should show.
+ */
+export function loadingCargo(
+  inProgress: TruckWithState | null | undefined,
+  board: TruckWithState[],
+): { numbers: ReadonlySet<number>; garment: boolean; nogs: boolean; carriers: ReadonlyMap<number, TruckWithState> } {
+  const carriers = cargoCarriers(board);
+  if (!inProgress) return { numbers: new Set(), garment: false, nogs: false, carriers };
+  const route = getCoverageRouteNumber(inProgress);
+  const source = (route != null ? board.find((t) => t.truck_number === route) : undefined) ?? inProgress;
+  const spare = inProgress.truck_type === "Spare";
+  const numbers = new Set<number>([source.truck_number]);
+  if (spare) numbers.add(inProgress.truck_number);
+  return {
+    numbers,
+    garment: source.state?.has_dust_garment === true || (spare && inProgress.state?.has_dust_garment === true),
+    nogs: source.state?.has_nogs === true || (spare && inProgress.state?.has_nogs === true),
+    carriers,
+  };
+}
+
+/**
+ * Covered route -> the truck its freight (and so its garments / NOGs) rides on
+ * tonight: spare cover, one-way and two-way swaps. A split helper carries only
+ * overflow, so the route still carries its own (getCoverageRouteNumber leaves
+ * splits out). A route missing here carries its own. The checklist strips use
+ * it so a chip reads "out the door" when its CARRIER is loaded.
+ */
+export function cargoCarriers(board: TruckWithState[]): ReadonlyMap<number, TruckWithState> {
+  const out = new Map<number, TruckWithState>();
+  for (const c of board) {
+    const route = getCoverageRouteNumber(c);
+    if (route != null && route !== c.truck_number && !out.has(route)) out.set(route, c);
+  }
+  return out;
+}

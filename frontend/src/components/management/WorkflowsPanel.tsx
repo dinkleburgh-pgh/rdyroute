@@ -16,6 +16,7 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
       outside_timer_minutes: Number(map.get("outside_timer_minutes") ?? 20),
       paper_bay_enabled: asBool(map.get("paper_bay_enabled"), false),
       paper_bay_timer_minutes: Number(map.get("paper_bay_timer_minutes") ?? 25),
+      load_timer_visible: asBool(map.get("load_timer_visible"), true),
       arrived_tracking_enabled: asBool(map.get("arrived_tracking_enabled"), false),
       arrived_push_enabled: asBool(map.get("arrived_push_enabled"), false),
       arrival_code_required: asBool(map.get("arrival_code_required"), false),
@@ -67,6 +68,19 @@ export default function WorkflowsPanel({ map }: { map: Map<string, unknown> }) {
         </div>
       </FieldRow>
       <p className="mt-4 border-t border-hairline pt-3 text-[11px] font-bold uppercase tracking-widest text-ink-muted first:mt-0 first:border-0 first:pt-0">Timers</p>
+      <FieldRow
+        label="Load timer"
+        hint="Show load timing to the crew: the running load clock, pace bar, over-pace warnings, averages and per-truck load times on the Load page, Load Display, In Progress page, Day Overview (loading minutes), the route-coverage cards (Fleet, Load, Unload, Day Overview) and the Report's kiosk slideshow, which skips its Load times slide. Turning it off only hides them — every load is still timed and recorded, and the Report page, truck details and Trends keep every number. Unloading timers are not affected. Open screens follow a change within a minute."
+      >
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={form.load_timer_visible}
+            onChange={(e) => setForm({ ...form, load_timer_visible: e.target.checked })}
+          />
+          Show the load timer on the floor
+        </label>
+      </FieldRow>
       <FieldRow
         label="Outside timer"
         hint="Lets fleet mark a truck as 'Outside' — a countdown that auto-transitions to Unloaded."

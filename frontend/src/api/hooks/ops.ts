@@ -163,12 +163,18 @@ export function useDeleteMessage() {
 // Settings
 // ---------------------------------------------------------------------------
 
-export function useSettings(enabled = true) {
+/** `refetchInterval` is for the ONE always-mounted observer in App.tsx: this
+ *  query has no focus refetch and no realtime push, so without it a screen
+ *  left open all shift (the wall Load Display, the Report kiosk) never saw a
+ *  switch flipped in Operations. One poller refreshes the shared cache for
+ *  every other reader — don't add intervals at call sites. */
+export function useSettings(enabled = true, refetchInterval?: number) {
   return useQuery({
     queryKey: ["settings"],
     enabled,
     queryFn: async () => (await api.get<AppSetting[]>("/settings")).data,
     staleTime: 60_000,
+    refetchInterval,
   });
 }
 

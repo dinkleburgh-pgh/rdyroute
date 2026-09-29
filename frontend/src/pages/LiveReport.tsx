@@ -54,6 +54,7 @@ import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, prev
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, Shortage } from "../types";
 import Modal from "../components/Modal";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
+import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 
 // Tailwind class → hex, so the PDF view-model can ship concrete colours that
 // match what capacityColor / durTone / the KPI tones paint on screen.
@@ -698,6 +699,10 @@ export default function LiveReport() {
   // than transform:scale because it reflows — the grid keeps its own
   // horizontal scroll instead of being squashed.
   const [kioskZoom, setKioskZoom] = useState(1.3);
+  // The kiosk is a wall screen the crew sees, so it follows the Operations
+  // "Load timer" switch: off, the Load times slide and the coverage cards'
+  // durations stay off the wall. The report itself keeps every number.
+  const showLoadTimer = useLoadTimerVisible();
   const [kioskTick, setKioskTick] = useState(0); // drives the progress bar
 
   // Only rotate through sections the user picked that actually have something
@@ -711,12 +716,15 @@ export default function LiveReport() {
       loadTimes: finished.length > 0,
       audit: auditEntries.length > 0,
     };
-    const live = sectionDefs.filter((d) => selected[d.key] && has[d.key]);
+    const allowed = (d: (typeof sectionDefs)[number]) => selected[d.key] && (showLoadTimer || d.key !== "loadTimes");
+    const live = sectionDefs.filter((d) => allowed(d) && has[d.key]);
     // Fall back to whatever is selected so kiosk mode is never empty.
-    return (live.length > 0 ? live : sectionDefs.filter((d) => selected[d.key])).map((d) => d.key);
-  }, [selected, shorts.length, batches, coverageRows.length, finished.length, auditEntries.length, sectionDefs]);
+    return (live.length > 0 ? live : sectionDefs.filter(allowed)).map((d) => d.key);
+  }, [selected, shorts.length, batches, coverageRows.length, finished.length, auditEntries.length, sectionDefs, showLoadTimer]);
 
-  const kioskKey = kioskSlides[Math.min(kioskIdx, Math.max(0, kioskSlides.length - 1))] ?? "shortages";
+  // null = nothing left to rotate: only Load times was picked and the Load
+  // timer switch hides it. Show that plainly rather than an unpicked section.
+  const kioskKey: SectionKey | null = kioskSlides[Math.min(kioskIdx, Math.max(0, kioskSlides.length - 1))] ?? null;
   const kioskNext = useCallback(() => setKioskIdx((i) => (kioskSlides.length ? (i + 1) % kioskSlides.length : 0)), [kioskSlides.length]);
   const kioskPrev = useCallback(
     () => setKioskIdx((i) => (kioskSlides.length ? (i - 1 + kioskSlides.length) % kioskSlides.length : 0)),
@@ -1119,7 +1127,7 @@ export default function LiveReport() {
                         <span className="text-st-loaded">
                           Loaded
                           {st?.load_finish_time ? ` · ${clock(st.load_finish_time)}` : ""}
-                          {st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : ""}
+                          {(!kiosk || showLoadTimer) && st?.load_duration_seconds != null ? ` · ${formatDuration(st.load_duration_seconds)}` : ""}
                         </span>
                       ) : r.pending ? (
                         <span className="text-fuchsia-300/80">Not moved yet</span>
@@ -1487,7 +1495,7 @@ export default function LiveReport() {
           <div ref={kioskScrollRef} className="min-h-0 flex-1 overflow-auto">
             <AnimatePresence mode="wait">
               <motion.div
-                key={kioskKey}
+                key={kioskKey ?? "none"}
                 initial={{ opacity: 0, y: 24, scale: 0.99 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
                 exit={{ opacity: 0, y: -24, scale: 0.99 }}
@@ -1495,7 +1503,14 @@ export default function LiveReport() {
                 className="px-6 py-5"
                 style={{ zoom: kioskZoom }}
               >
-                <KioskSlideContext.Provider value>{reportBody}</KioskSlideContext.Provider>
+                {kioskKey ? (
+                  <KioskSlideContext.Provider value>{reportBody}</KioskSlideContext.Provider>
+                ) : (
+                  <p className="py-24 text-center text-lg text-ink-muted">
+                    Load times are hidden on the floor (Operations → Workflows → Load timer).
+                    Pick another section to show here.
+                  </p>
+                )}
               </motion.div>
             </AnimatePresence>
           </div>
