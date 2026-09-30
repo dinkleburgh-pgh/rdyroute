@@ -41,7 +41,7 @@ log = logging.getLogger("readyroutev2.startup")
 _http_log = logging.getLogger("uvicorn.error")
 
 # ---------------------------------------------------------------------------
-# Error rate-limiter — suppress repeated identical 500s to one log per minute
+# Error rate-limiter — suppress repeated identical 5xx/4xx lines to one per minute
 # ---------------------------------------------------------------------------
 
 _err_last_seen: dict[str, float] = defaultdict(float)
@@ -278,6 +278,11 @@ async def _strip_api_prefix(request: Request, call_next) -> Response:
 
 _req_log = logging.getLogger("uvicorn.error")
 
+# Refusals that are normal traffic, logged at DEBUG with the 2xx lines: 401 is
+# every poll from a tab whose session expired, 404 a lookup with no answer
+# (GET /reports/archive/{date} for any day that wasn't archived).
+_QUIET_4XX = frozenset({401, 404})
+
 @app.middleware("http")
 async def _log_requests(request: Request, call_next) -> Response:
     t0 = time.monotonic()
@@ -295,8 +300,13 @@ async def _log_requests(request: Request, call_next) -> Response:
         key = f"{request.method}:{path}:{status}"
         if _should_log_error(key):
             _req_log.error("%s %s → %d  (%.0f ms)", request.method, path, status, ms)
-    elif status >= 400:
-        _req_log.warning("%s %s → %d  (%.0f ms)", request.method, path, status, ms)
+    elif status >= 400 and status not in _QUIET_4XX:
+        # Rate-limited like the 5xx lines so a client retrying on a poll can't
+        # flood the log, but keyed by route template rather than the concrete
+        # path: junk URLs must not grow the limiter's table without bound.
+        route = getattr(request.scope.get("route"), "path", "-")
+        if _should_log_error(f"{request.method}:{route}:{status}"):
+            _req_log.warning("%s %s → %d  (%.0f ms)", request.method, path, status, ms)
     else:
         _req_log.debug("%s %s → %d  (%.0f ms)", request.method, path, status, ms)
 
