@@ -1,8 +1,21 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
-import { X } from "lucide-react";
+import { ChevronRight, X } from "lucide-react";
+import CoverageTag from "../CoverageTag";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
 import type { TruckWithState } from "../../types";
+
+export type LoadPair = { route: number; split?: boolean } | null;
+
+/** The tile-face coverage pair: tonight's covered route, or the route whose
+ *  SPLIT overflow this truck carries (amber; the route also runs). One rule
+ *  for every tile on the Load page and the display. */
+export function loadPairOf(t: TruckWithState): LoadPair {
+  const cr = getCoverageRouteNumber(t);
+  if (cr != null) return { route: cr };
+  if (t.route_split_route != null) return { route: t.route_split_route, split: true };
+  return null;
+}
 
 /**
  * What the crew is actually loading. A spare (or swap truck) covering a route
@@ -184,5 +197,164 @@ export function SheetNote({ tone = "info", children }: { tone?: "info" | "warn";
     >
       {children}
     </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// The line — pieces shared by the yard (page + display) and the dock card
+// ---------------------------------------------------------------------------
+
+/** A truck's place in the line: ① is the queued truck, ②… the lane. */
+export function PositionBadge({ n, tone = "line" }: { n: number; tone?: "line" | "next" }) {
+  return (
+    <span
+      className={clsx(
+        "flex h-6 w-6 shrink-0 items-center justify-center rounded-full font-mono text-[11px] font-bold tabular-nums",
+        tone === "next" ? "bg-sky-400/20 text-sky-200" : "bg-track text-ink-soft",
+      )}
+    >
+      {n}
+    </span>
+  );
+}
+
+/** What a staged truck is waiting on. The lane can hold a truck that is
+ *  still being unloaded, and the slot has to say so rather than look ready. */
+export function stagedStatus(t: TruckWithState): { label: string; dot: string } {
+  const st = t.state?.status;
+  const since =
+    t.state?.staged_at != null
+      ? new Date(t.state.staged_at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : null;
+  const what =
+    t.state?.priority_hold ? "On hold"
+    : st === "unloaded" ? "Ready"
+    : st === "unfinished" ? "Unload unfinished"
+    : st === "dirty" ? "Not unloaded"
+    : "Staged";
+  const dot =
+    t.state?.priority_hold ? "bg-st-dirty"
+    : st === "unloaded" ? (t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded")
+    : st === "unfinished" ? "bg-st-unfinished"
+    : "bg-st-dirty";
+  return { label: since ? `Staged ${since} · ${what}` : what, dot };
+}
+
+/** One-tap "queue this one up next" chip for the empty ① slot. */
+export function SuggestChip({ n, note, onPick }: { n: number; note: string; onPick: (n: number) => void }) {
+  return (
+    <button
+      type="button"
+      onClick={() => onPick(n)}
+      title={`Queue #${n} up next`}
+      className="inline-flex items-baseline gap-1.5 rounded-md border border-sky-600/40 bg-sky-950/40 px-2 py-1 transition-colors hover:bg-sky-900/50"
+    >
+      <span className="font-mono text-[13px] font-bold tabular-nums text-sky-200">#{n}</span>
+      <span className="text-[10px] text-sky-300/70">{note}</span>
+    </button>
+  );
+}
+
+/**
+ * One truck in the line. The body is a real button (tap = the chooser, or
+ * Start on the display); `action` sits beside it outside the button, so a
+ * Start button on the ① row is never a button inside a button.
+ */
+export function LineSlot({
+  truck,
+  zone,
+  position,
+  pair,
+  sub,
+  dotClass,
+  onClick,
+  action,
+  disabled = false,
+  size = "md",
+}: {
+  truck: TruckWithState;
+  zone: "next" | "staged";
+  /** Place in the line; omitted in the classic dock card's Up-next zone. */
+  position?: number;
+  pair: LoadPair;
+  sub: ReactNode;
+  dotClass: string;
+  onClick: () => void;
+  action?: ReactNode;
+  disabled?: boolean;
+  /** "lg" = the Floor view, one size up across the dock. */
+  size?: "md" | "lg";
+}) {
+  const lg = size === "lg";
+  const faceSize = zone === "next" ? (lg ? "lg" : "md") : lg ? "md" : "sm";
+  return (
+    <div
+      className={clsx(
+        "flex items-center gap-3 rounded-[10px] border pl-3.5 pr-3 transition-colors",
+        lg ? "min-h-[88px]" : "min-h-[72px]",
+        zone === "next"
+          ? "border-sky-500/30 bg-sky-500/[0.07] hover:bg-sky-500/[0.11]"
+          : "border-hairline bg-surface hover:bg-surface-2",
+      )}
+    >
+      {position != null && <PositionBadge n={position} tone={zone === "next" ? "next" : "line"} />}
+      <button
+        type="button"
+        disabled={disabled}
+        onClick={onClick}
+        className={clsx(
+          "group flex min-w-0 flex-1 items-center gap-3 py-2.5 text-left disabled:cursor-not-allowed disabled:opacity-50",
+          lg ? "min-h-[88px]" : "min-h-[72px]",
+        )}
+      >
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <LoadFace truck={truck} size={faceSize} numberClass={zone === "next" ? ZONE.next.number : ZONE.staged.number} />
+            {pair?.split && <CoverageTag route={pair.route} truck={truck.truck_number} split />}
+          </span>
+          <span className="mt-1.5 flex items-baseline gap-1.5 text-[11.5px] leading-snug text-ink-muted">
+            <span className={clsx("h-1.5 w-1.5 shrink-0 -translate-y-px rounded-full", dotClass)} />
+            <span className="min-w-0">{sub}</span>
+          </span>
+        </span>
+        {!action && <ChevronRight className="h-4 w-4 shrink-0 text-ink-faint transition-colors group-hover:text-ink-muted" aria-hidden />}
+      </button>
+      {action}
+    </div>
+  );
+}
+
+/** One held / unfinished truck: number in its status colour, then why. */
+export function NotReadyChip({
+  truck,
+  pair,
+  tone,
+  dot,
+  label,
+}: {
+  truck: TruckWithState;
+  pair: LoadPair;
+  tone: string;
+  dot: string;
+  label: string;
+}) {
+  return (
+    <div className="inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-3 px-3 py-2">
+      <span className={clsx("font-mono text-[17px] font-black leading-none tabular-nums", tone)}>
+        {pair != null ? (
+          <>
+            <span className={pair.split ? "text-amber-300" : "text-sky-300"}>{pair.route}</span>
+            <span className="px-0.5 text-[13px] text-ink-faint">{pair.split ? "+" : "→"}</span>
+            {truck.truck_number}
+          </>
+        ) : (
+          <>#{truck.truck_number}</>
+        )}
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
+        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
+        {label}
+      </span>
+    </div>
   );
 }

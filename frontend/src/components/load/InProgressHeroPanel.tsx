@@ -54,6 +54,7 @@ export default function InProgressHeroPanel({
   onLogShortage,
   shortagesOpen = false,
   variant = "page",
+  size = "md",
 }: {
   truck: TruckWithState;
   paceAvgSeconds: number | null;
@@ -79,8 +80,11 @@ export default function InProgressHeroPanel({
   /** Page variant only — the logger is open, so the button reads "Hide". */
   shortagesOpen?: boolean;
   variant?: "page" | "display";
+  /** Page variant only — "xl" is the Floor view: one size up across the dock. */
+  size?: "md" | "xl";
 }) {
   const big = variant === "display";
+  const xl = size === "xl";
   const showTimer = useLoadTimerVisible();
   const startSec = truck.state?.load_start_time ?? null;
   const elapsed = useElapsed(startSec);
@@ -120,8 +124,8 @@ export default function InProgressHeroPanel({
         <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-6">
           <div className="min-w-0 sm:min-w-[210px]">
             <ZoneLabel zone="loading" pulse>{face.onTruck != null ? "Loading route" : "Loading now"}</ZoneLabel>
-            <LoadFace truck={truck} size="lg" numberClass={ZONE.loading.number} className="mt-2" />
-            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-ink-muted">
+            <LoadFace truck={truck} size={xl ? "xl" : "lg"} numberClass={ZONE.loading.number} className="mt-2" />
+            <div className={clsx("mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-ink-muted", xl ? "text-[14px]" : "text-[12px]")}>
               <span>{truckTypeLabel(truck.truck_type)}</span>
               <span className="text-ink-faint">·</span>
               <span>
@@ -156,12 +160,12 @@ export default function InProgressHeroPanel({
               <div className="hidden w-px self-stretch bg-hairline sm:block" />
               <div className="flex flex-1 flex-col justify-end">
                 <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-                  <span className={clsx("font-mono text-[52px] font-black leading-none tracking-[-0.02em] tabular-nums", timerColor)}>
+                  <span className={clsx("font-mono font-black leading-none tracking-[-0.02em] tabular-nums", xl ? "text-[76px]" : "text-[52px]", timerColor)}>
                     {formatDuration(elapsed)}
                   </span>
-                  {paceLabel && <span className={clsx("text-xs", paceLabelColor)}>{paceLabel}</span>}
+                  {paceLabel && <span className={clsx(xl ? "text-sm" : "text-xs", paceLabelColor)}>{paceLabel}</span>}
                 </div>
-                <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={8} />
+                <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={xl ? 10 : 8} />
               </div>
             </>
           )}
@@ -173,7 +177,7 @@ export default function InProgressHeroPanel({
             type="button"
             disabled={busy}
             onClick={onFinish}
-            className={clsx(BTN_GO, "col-span-2 min-h-[52px] text-[15px] sm:flex-1")}
+            className={clsx(BTN_GO, "col-span-2 sm:flex-1", xl ? "min-h-[64px] text-[19px]" : "min-h-[52px] text-[15px]")}
           >
             <Check className="h-5 w-5" aria-hidden />
             {busy ? "Finishing…" : `Finish Loading ${loadFaceText(truck)}`}
@@ -183,7 +187,7 @@ export default function InProgressHeroPanel({
               type="button"
               onClick={onLogShortage}
               aria-pressed={shortagesOpen}
-              className={clsx(BTN_SECONDARY, "min-h-[52px]", shortagesOpen && "!border-sky-600/50 !text-sky-200")}
+              className={clsx(BTN_SECONDARY, xl ? "min-h-[64px] text-sm" : "min-h-[52px]", shortagesOpen && "!border-sky-600/50 !text-sky-200")}
             >
               {shortagesOpen ? "Hide shortages" : "Log shortage"}
             </button>
@@ -192,7 +196,7 @@ export default function InProgressHeroPanel({
               back without letting a real load be cancelled mid-run. */}
           <button
             type="button"
-            className={clsx(BTN_SECONDARY, "min-h-[52px]", !onLogShortage && "col-span-2")}
+            className={clsx(BTN_SECONDARY, xl ? "min-h-[64px] text-sm" : "min-h-[52px]", !onLogShortage && "col-span-2")}
             disabled={busy || elapsed >= 15}
             onClick={onCancel}
             title={elapsed < 15 ? `Locks in ${15 - elapsed}s` : "Cancel locked — this load is under way"}

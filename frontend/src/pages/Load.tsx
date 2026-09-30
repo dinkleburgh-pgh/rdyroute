@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
 import { ChevronsRight, MonitorPlay, Play, SquareParking, Undo2, X } from "lucide-react";
 import clsx from "clsx";
-import { format } from "date-fns";
 import {
   useBoard,
   useHolidayLoad,
@@ -31,7 +30,6 @@ import {
   countUnloadedFromContext,
   effectiveOperationalStatus,
   effectiveStatus,
-  getCoverageRouteNumber,
   getOperationalTruckType,
   isScheduledOff,
   loadedTruckNumbers,
@@ -50,19 +48,22 @@ import GarmentsStrip from "../components/load/GarmentsStrip";
 import NogsStrip from "../components/load/NogsStrip";
 import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import LoadDisplay from "../components/load/LoadDisplay";
-import DockCard from "../components/load/DockCard";
-import { SheetHead, loadFaceText } from "../components/load/loadUi";
+import YardLayout from "../components/load/YardLayout";
+import ClassicLayout from "../components/load/ClassicLayout";
+import FloorLayout from "../components/load/FloorLayout";
+import TonightCard from "../components/load/TonightCard";
+import type { LoadViewProps } from "../components/load/loadView";
+import { useLoadLayout } from "../hooks/useLoadLayout";
+import { SheetHead, loadFaceText, loadPairOf } from "../components/load/loadUi";
 import CoverageTag from "../components/CoverageTag";
 import { truckTypeLabel } from "../utils/truckType";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
 import PageHeader, { Sep, Stat } from "../components/PageHeader";
-import { QuietTile, SectionHeader, TILE_GRID, TILE_GRID_LG } from "../components/workflow/QuietTile";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
 import CollapsibleCoverage from "../components/CollapsibleCoverage";
 import Modal from "../components/Modal";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
-import EmptyState from "../components/EmptyState";
 import { hasRanAhead } from "../utils/offNote";
 
 /**
@@ -81,6 +82,8 @@ export default function Load() {
   // Operations "Load timer" switch: the header's 30-day pace follows it (the
   // hero panel and banners read it themselves).
   const showLoadTimer = useLoadTimerVisible();
+  // Yard or classic arrangement — this device's choice, from the header switch.
+  const [layout, setLayout] = useLoadLayout();
   // The URL is the source of truth for the display, so /load?display=1 is
   // bookmarkable and the device comes back up straight into it.
   const [params, setParams] = useSearchParams();
@@ -106,18 +109,6 @@ export default function Load() {
     onStarted: () => document.querySelector("main")?.scrollTo({ top: 0, behavior: "smooth" }),
   });
   const { busy, cancelLoad, requestStart, requestFinish } = actions;
-  const [statFilter, setStatFilter] = useState<"dust" | "uniform" | "spare" | "total" | null>(null);
-  const [loadedSort, setLoadedSort] = useState<"number" | "order">("number");
-  // The loaded wall is 30+ tiles by morning — long enough to bury the ready
-  // queue it now shares a rail with. Two rows, then a "+N more" expander
-  // (same pattern as Unload's unloaded wall).
-  const LOADED_PREVIEW = 10;
-  const [showAllLoaded, setShowAllLoaded] = useState(false);
-  // The page lives mounted on a dock tablet across the 6am rollover — an
-  // expansion from last night must not leave tomorrow's wall pre-expanded.
-  useEffect(() => {
-    setShowAllLoaded(false);
-  }, [runDate]);
   // Dust-garment finish confirmation — asks "Did you load garments?" before
   // finishing a truck flagged with dust garments.
 
@@ -144,13 +135,9 @@ export default function Load() {
 
   // The tile-face coverage pair: tonight's covered route, or the route whose
   // SPLIT overflow this truck carries (amber; the route also runs). One rule
-  // for every tile on this page so covered loads read alike everywhere.
-  const loadPair = (t: TruckWithState): { route: number; split?: boolean } | null => {
-    const cr = getCoverageRouteNumber(t);
-    if (cr != null) return { route: cr };
-    if (t.route_split_route != null) return { route: t.route_split_route, split: true };
-    return null;
-  };
+  // for every tile on this page AND the display (loadUi.loadPairOf), so
+  // covered loads read alike everywhere.
+  const loadPair = loadPairOf;
   function isRecurringCoverage(routeTruck: number, loadOnTruck: number): boolean {
     return recurringRules.some(
       (r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay),
@@ -279,32 +266,6 @@ export default function Load() {
         .sort((a, b) => a.truck_number - b.truck_number),
     [board],
   );
-  // Sort variant for the "Loaded today" grid.
-  const loadedSorted = useMemo(() => {
-    const arr = [...loaded];
-    if (loadedSort === "order") {
-      // Sort by when the truck was actually finished loading.
-      // Prefer load_finish_time (set by the V2 workflow); fall back to updated_at
-      // (a proxy for when the status was last changed) for trucks that were
-      // set to "loaded" without going through the timed workflow.
-      const toEpoch = (t: TruckWithState): number => {
-        const ft = t.state?.load_finish_time;
-        if (ft != null) return ft;
-        const ua = t.state?.updated_at;
-        if (ua) return new Date(ua).getTime() / 1000;
-        return Number.POSITIVE_INFINITY;
-      };
-      arr.sort((a, b) => {
-        const diff = toEpoch(a) - toEpoch(b);
-        if (diff !== 0) return diff;
-        return a.truck_number - b.truck_number;
-      });
-    } else {
-      arr.sort((a, b) => a.truck_number - b.truck_number);
-    }
-    return arr;
-  }, [loaded, loadedSort]);
-  const hiddenLoaded = showAllLoaded ? 0 : Math.max(0, loadedSorted.length - LOADED_PREVIEW);
 
   const notYetLoadedTrucks = useMemo(
     () =>
@@ -328,10 +289,6 @@ export default function Load() {
       (t) => getOperationalTruckType(t, loadContext.routeTruckByNumber) === "Spare",
     );
   }, [notYetLoadedTrucks, loadContext.routeTruckByNumber]);
-  const dustsLeft = dustsLeftTrucks.length;
-  const uniformsLeft = uniformsLeftTrucks.length;
-  const sparesLeft = sparesLeftTrucks.length;
-  const totalLeft = dustsLeft + uniformsLeft + sparesLeft;
   const totalLeftTrucks = useMemo(
     () => [...dustsLeftTrucks, ...uniformsLeftTrucks, ...sparesLeftTrucks].sort((a, b) => a.truck_number - b.truck_number),
     [dustsLeftTrucks, uniformsLeftTrucks, sparesLeftTrucks],
@@ -342,7 +299,6 @@ export default function Load() {
     () => countLoaded(board, loadDay, holidayLoad, unloadsDay, holidayUnload),
     [board, loadDay, unloadsDay, holidayLoad, holidayUnload],
   );
-  const loadPct = loadTotal > 0 ? Math.round((loadDone / loadTotal) * 100) : 0;
 
   const prevSplitHelpers = usePrevDaySplitHelpers(runDate);
   const unloadScheduleContext = useMemo(
@@ -358,7 +314,6 @@ export default function Load() {
     () => countUnloadedFromContext(unloadScheduleContext, prevDayCarriers),
     [unloadScheduleContext, prevDayCarriers],
   );
-  const unloadPct = unloadTotal > 0 ? Math.round((unloadDone / unloadTotal) * 100) : 0;
 
   // Debug: log a numerator > denominator overflow (with the offending truck)
   // to the server, so the intermittent "N+1 of N" is captured centrally.
@@ -414,6 +369,11 @@ export default function Load() {
           holidayLoad={holidayLoad}
           nextUpTruck={nextUpTruck}
           queuedNextUp={queuedNextUp}
+          staged={lineStaged}
+          readyPool={readyPool}
+          held={heldPool}
+          unfinished={unfinishedPool}
+          readyFocus={readyFocus}
           coverage={loadCoverage}
           isRecurringCoverage={isRecurringCoverage}
           garmentTrucks={dustGarmentTrucks}
@@ -433,11 +393,6 @@ export default function Load() {
   const pageGate = pageStatusFor(boardQuery);
   if (pageGate) return <PageStatus {...pageGate} />;
 
-  // Two blocks that change rails with the screen: on a phone they sit in the
-  // one column right where the crew needs them; on desktop they move to the
-  // right rail so the work rail is just the dock, Ready and Loaded. Built once
-  // and placed twice (CSS shows one), so the two copies cannot drift.
-  //
   // What Unload is emptying right now — and the one question it asks the load
   // crew. Shared with the full-screen display.
   const unloadCard = unloadingNow.length > 0 ? (
@@ -450,25 +405,71 @@ export default function Load() {
       renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
     />
   ) : null;
-  // Held and unfinished trucks are one idea to the load crew — ready soon, not
-  // yet — so they share one card of compact chips (nothing to tap here).
-  const notReadyCard = heldPool.length + unfinishedPool.length > 0 ? (
-    <div className="card">
-      <SectionHeader
-        label="Not ready yet"
-        count={heldPool.length + unfinishedPool.length}
-        hint="joins Ready when cleared"
+
+  // Everything a layout needs, derived once here. The layouts only arrange.
+  const view: LoadViewProps = {
+    runDate,
+    loading: inProgress ? (
+      <InProgressHeroPanel
+        truck={inProgress}
+        paceAvgSeconds={pace?.avg_seconds ?? null}
+        busy={busy === inProgress.truck_number}
+        loadDay={loadDay}
+        garment={cargo.garment}
+        nogs={cargo.nogs}
+        onFinish={() => requestFinish(inProgress)}
+        onCancel={() => cancelLoad(inProgress)}
+        onLogShortage={() => setShortagesOpen((v) => !v)}
+        shortagesOpen={shortagesOpen}
+        size={layout === "floor" ? "xl" : "md"}
       />
-      <div className="flex flex-wrap gap-2">
-        {heldPool.map((t) => (
-          <NotReadyChip key={t.truck_number} truck={t} pair={loadPair(t)} tone="text-st-dirty" dot="bg-st-dirty" label="On hold · clear in Fleet" />
-        ))}
-        {unfinishedPool.map((t) => (
-          <NotReadyChip key={t.truck_number} truck={t} pair={loadPair(t)} tone="text-st-unfinished" dot="bg-st-unfinished" label="Unload unfinished" />
-        ))}
-      </div>
-    </div>
-  ) : null;
+    ) : null,
+    shortages: inProgress && shortagesOpen ? <InlineShortages truck={inProgress} runDate={runDate} /> : null,
+    unloadCard,
+    unloadAnswered: unloadingNow.every((t) => t.state?.load_request != null),
+    tonightCard: (
+      <TonightCard
+        loadDone={loadDone}
+        loadTotal={loadTotal}
+        unloadDone={unloadDone}
+        unloadTotal={unloadTotal}
+        ranAhead={ranAhead.length}
+        left={{ dust: dustsLeftTrucks, uniform: uniformsLeftTrucks, spare: sparesLeftTrucks, total: totalLeftTrucks }}
+        pairOf={loadPair}
+      />
+    ),
+    // Collapsible coverage — shared banner, collapsed to chips by default.
+    // Same component on Fleet and Unload.
+    coverageCard: (
+      <CollapsibleCoverage
+        entries={loadCoverage}
+        title="Coverage today"
+        storageKey="rr-load-coverage-open"
+        tone="sky"
+        isRecurring={isRecurringCoverage}
+        truckOf={(n) => board.find((t) => t.truck_number === n)}
+        cardsClassName="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"
+      />
+    ),
+    // Standing load-workflow notes for today, edited on the Notes page.
+    notesCard: <WorkflowDayNotes scope="load" day={loadDay} />,
+    nextUp: queuedNextUp,
+    staged: lineStaged,
+    ready: readyPool,
+    held: heldPool,
+    unfinished: unfinishedPool,
+    loaded,
+    suggestions: suggestedNext,
+    inLine: inDock.size,
+    readyFocus,
+    busyTruck: busy,
+    canStart: !anyInProgress,
+    pairOf: loadPair,
+    onTruck: setReadyChoice,
+    onStart: requestStart,
+    onPickNextUp: () => setNextUpOpen(true),
+    onSuggest: (n) => setNextUp.mutate(n),
+  };
 
   return (
     <>
@@ -492,15 +493,40 @@ export default function Load() {
           </>
         }
         actions={
-          <button
-            type="button"
-            onClick={openDisplay}
-            title="Open the full-screen load display"
-            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
-          >
-            <MonitorPlay className="h-4 w-4" />
-            Display
-          </button>
+          <div className="flex shrink-0 items-center gap-2">
+            {/* Yard | Classic — this device's arrangement of the page. */}
+            <div className="inline-flex overflow-hidden rounded-lg border border-hairline text-[11px] font-semibold" role="group" aria-label="Load view">
+              {([["yard", "Yard"], ["classic", "Classic"], ["floor", "Floor"]] as const).map(([key, text], i) => (
+                <button
+                  key={key}
+                  type="button"
+                  aria-pressed={layout === key}
+                  onClick={() => setLayout(key)}
+                  title={{
+                    yard: "The dock on the left, the yard as one line on the right",
+                    classic: "The three-zone dock card over the Ready grid, reference on the right",
+                    floor: "Just what a loader acts on, one size up — no reference cards",
+                  }[key]}
+                  className={clsx(
+                    "px-2.5 py-1.5 transition-colors",
+                    i > 0 && "border-l border-hairline",
+                    layout === key ? "bg-track text-ink" : "bg-surface-2 text-ink-muted hover:text-ink",
+                  )}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={openDisplay}
+              title="Open the full-screen load display"
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-hairline bg-surface-2 px-3 py-1.5 text-xs font-semibold text-ink-soft active:scale-95"
+            >
+              <MonitorPlay className="h-4 w-4" />
+              Display
+            </button>
+          </div>
         }
       />
       <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.3 }} className="p-3 md:p-6 space-y-5">
@@ -516,286 +542,10 @@ export default function Load() {
           the load crew sees it here; swap-managing roles can assign from it. */}
       <CrossloadNoticeBar board={data ?? []} />
 
-      {/* Two rails: the WORK on the left — the dock (loading / up next /
-          staged), the unload dock's question, and what's left to load — with
-          the reference material (notes, coverage, tonight's numbers) on the
-          right. */}
-      <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
-        {/* ---------------- Left rail ---------------- */}
-        <div className="flex flex-col gap-4">
-          <DockCard
-            loading={
-              inProgress ? (
-                <InProgressHeroPanel
-                  truck={inProgress}
-                  paceAvgSeconds={pace?.avg_seconds ?? null}
-                  busy={busy === inProgress.truck_number}
-                  loadDay={loadDay}
-                  garment={cargo.garment}
-                  nogs={cargo.nogs}
-                  onFinish={() => requestFinish(inProgress)}
-                  onCancel={() => cancelLoad(inProgress)}
-                  onLogShortage={() => setShortagesOpen((v) => !v)}
-                  shortagesOpen={shortagesOpen}
-                />
-              ) : null
-            }
-            nextUp={queuedNextUp}
-            staged={lineStaged}
-            readyCount={readyPool.length}
-            suggestions={suggestedNext}
-            busyTruck={busy}
-            canStart={!anyInProgress}
-            pairOf={loadPair}
-            onTruck={setReadyChoice}
-            onStart={requestStart}
-            onPickNextUp={() => setNextUpOpen(true)}
-            onSuggest={(n) => setNextUp.mutate(n)}
-          />
-          {inProgress && shortagesOpen && <InlineShortages truck={inProgress} runDate={runDate} />}
-
-          {/* Phone: the unload question stays right under the dock. Desktop
-              moves it to the top of the right rail (below). */}
-          {unloadCard && <div className="lg:hidden">{unloadCard}</div>}
-
-        {/* ---------------- Ready to load ---------------- */}
-        <div className="card">
-          <SectionHeader
-            label="Ready to load"
-            count={readyPool.length}
-            hint={
-              inDock.size > 0
-                ? `+${inDock.size} in the dock above`
-                : readyPool.length > 0
-                  ? "tap to start, stage, or queue"
-                  : undefined
-            }
-          />
-          <div className={readyFocus ? TILE_GRID_LG : TILE_GRID}>
-            {readyPool.map((t) => (
-              <QuietTile
-                key={t.truck_number}
-                truck={t}
-                size={readyFocus ? "lg" : "md"}
-                disabled={busy === t.truck_number}
-                onClick={() => setReadyChoice(t)}
-                title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
-                numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
-                dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
-                pair={loadPair(t)}
-                sub={
-                  <span>
-                    {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
-                    {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
-                  </span>
-                }
-              />
-            ))}
-            {readyPool.length === 0 && (
-              <EmptyState compact className="col-span-full text-[13px] text-ink-muted">
-                {inDock.size > 0 ? "Everything ready is already in the dock." : "No trucks ready to load."}
-              </EmptyState>
-            )}
-          </div>
-        </div>
-
-        {notReadyCard && <div className="lg:hidden">{notReadyCard}</div>}
-
-        {/* ---------------- Loaded today ----------------
-            Lives IN the work rail: ready shrinks exactly as this grows, so
-            the column holds its height all night instead of hollowing out
-            beside the reference rail. Two rows, then the expander. */}
-        <div>
-          <SectionHeader label="Loaded today" count={loaded.length}>
-            {loaded.length > 1 && (
-              <div className="inline-flex overflow-hidden rounded-[7px] border border-hairline text-[11px] font-semibold">
-                {([["number", "# Number"], ["order", "Load order"]] as const).map(([key, text], i) => (
-                  <button
-                    key={key}
-                    type="button"
-                    onClick={() => setLoadedSort(key)}
-                    className={clsx(
-                      "px-3 py-1 transition-colors",
-                      i > 0 && "border-l border-hairline",
-                      loadedSort === key ? "bg-track text-ink" : "text-ink-muted hover:text-ink",
-                    )}
-                  >
-                    {text}
-                  </button>
-                ))}
-              </div>
-            )}
-          </SectionHeader>
-          <div className={TILE_GRID}>
-            {/* Tail slice, not head: the glance here is "did the truck I just
-                finished register" — under Load-order sort the freshest finishes
-                are LAST, so the preview keeps them and the expander (rendered
-                first) hides the early-evening tiles instead. Pips stay true by
-                offsetting past the hidden count. */}
-            {hiddenLoaded > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowAllLoaded(true)}
-                className="rounded-[10px] border border-dashed border-hairline bg-surface/40 px-3.5 py-3 text-sm font-semibold text-ink-muted transition-colors hover:text-ink"
-              >
-                + {hiddenLoaded} more
-              </button>
-            )}
-            {loadedSorted.slice(hiddenLoaded).map((t, idx) => (
-              <div key={t.truck_number} className="relative">
-                {loadedSort === "order" && (
-                  <span className="absolute -left-1.5 -top-1.5 z-10 flex h-5 min-w-[1.25rem] items-center justify-center rounded-pill bg-surface-2 px-1 text-[10px] font-bold text-st-loaded ring-1 ring-st-loaded/60">
-                    {hiddenLoaded + idx + 1}
-                  </span>
-                )}
-                <QuietTile
-                  truck={t}
-                  numberClass="text-st-loaded"
-                  dotClass="bg-st-loaded"
-                  pair={loadPair(t)}
-                  sub={
-                    <span className="text-ink-faint">
-                      {t.state?.load_finish_time
-                        ? `Done ${format(new Date(t.state.load_finish_time * 1000), "h:mm a")}`
-                        : "Loaded"}
-                    </span>
-                  }
-                />
-              </div>
-            ))}
-            {loaded.length === 0 && (
-              <EmptyState className="col-span-full">Nothing loaded yet.</EmptyState>
-            )}
-          </div>
-        </div>
-        </div>
-
-        {/* ---------------- Right rail ---------------- */}
-        <div className="flex flex-col gap-4">
-          {/* Desktop: the unload question heads this rail — the dock card and
-              Ready already fill the work rail, and the question is about the
-              other crew's truck, not ours. */}
-          {unloadCard && <div className="hidden lg:block">{unloadCard}</div>}
-
-          {/* Standing load-workflow notes for today, edited on the Notes page. */}
-          <WorkflowDayNotes scope="load" day={loadDay} />
-
-          {/* Collapsible coverage — shared banner, collapsed to chips by
-              default. Same component on Fleet and Unload. */}
-          <CollapsibleCoverage
-            entries={loadCoverage}
-            title="Coverage today"
-            storageKey="rr-load-coverage-open"
-            tone="sky"
-            isRecurring={isRecurringCoverage}
-            truckOf={(n) => board.find((t) => t.truck_number === n)}
-            cardsClassName="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"
-          />
-
-          {/* Tonight: progress, then what's left to load, then (on tap) the
-              trucks behind a count — one card instead of three. The dot
-              carries the category; the number stays ink so a big count can't
-              read as an alarm. */}
-          <div className="card overflow-hidden !p-0">
-            <div className="flex flex-col gap-2.5 px-4 py-3.5">
-              <div className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-ink-muted">Tonight</div>
-              <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
-              {ranAhead.length > 0 && (
-                <p className="text-[11px] font-semibold text-sky-300">
-                  {ranAhead.length} ran ahead — not in tonight's load
-                </p>
-              )}
-              <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
-            </div>
-            <div className="flex border-t border-hairline">
-              {([
-                { key: "dust", value: dustsLeft, label: "F.S. left", dot: "bg-st-dirty" },
-                { key: "uniform", value: uniformsLeft, label: "Uniforms left", dot: "bg-st-shop" },
-                { key: "spare", value: sparesLeft, label: "Spares left", dot: "bg-st-spare" },
-                { key: "total", value: totalLeft, label: "Total left", dot: null },
-              ] as const).map((cell, i) => (
-                <button
-                  key={cell.key}
-                  type="button"
-                  aria-pressed={statFilter === cell.key}
-                  onClick={() => setStatFilter(statFilter === cell.key ? null : cell.key)}
-                  className={clsx(
-                    "flex-1 px-1 py-3 text-center transition-colors",
-                    i < 3 && "border-r border-hairline",
-                    statFilter === cell.key ? "bg-surface-2" : "hover:bg-surface-2/60",
-                  )}
-                >
-                  <div className="font-mono text-2xl font-black tabular-nums text-ink">{cell.value}</div>
-                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                    {cell.dot && <span className={clsx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full", cell.dot)} />}
-                    {cell.label}
-                  </div>
-                </button>
-              ))}
-            </div>
-
-            {/* Stat drill-down */}
-            {statFilter && (() => {
-              const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
-              const statusLabel: Record<string, string> = { dirty: "Dirty", unloaded: "Unloaded", in_progress: "Loading" };
-              /* Compact chips, not full tiles: "total left" is 25-plus trucks
-                 most of the night, and two-column tiles ran the list far off
-                 screen. A chip carries everything the glance needs — number
-                 (pair form when covering), status colour, hold ring — and the
-                 whole set fits in a few rows. */
-              return (
-                <div className="animate-slide-down space-y-2.5 border-t border-hairline px-4 py-3.5">
-                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                    {statFilter === "dust" ? "F.S." : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
-                  </p>
-                  <div className="flex flex-wrap gap-1.5">
-                    {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
-                      const st = t.state?.status ?? "dirty";
-                      const pair = loadPair(t);
-                      const tone =
-                        st === "unloaded" ? "text-st-unloaded"
-                        : st === "in_progress" ? "text-st-inprogress"
-                        : "text-st-dirty";
-                      return (
-                        <span
-                          key={t.truck_number}
-                          className={clsx(
-                            "inline-flex items-center rounded-md border border-hairline bg-surface px-2 py-1.5 font-mono text-[13px] font-bold tabular-nums",
-                            tone,
-                            t.state?.priority_hold && "ring-1 ring-st-dirty/60",
-                          )}
-                          title={`${statusLabel[st] ?? st}${pair != null ? ` · covering route ${pair.route}` : ""}${t.state?.priority_hold ? " · hold" : ""}`}
-                        >
-                          {pair != null ? (
-                            <>
-                              <span className={pair.split ? "text-amber-300" : "text-sky-300"}>{pair.route}</span>
-                              <span className="px-0.5 text-ink-faint">{pair.split ? "+" : "→"}</span>
-                              {t.truck_number}
-                            </>
-                          ) : (
-                            <>#{t.truck_number}</>
-                          )}
-                        </span>
-                      );
-                    })}
-                    {trucks.length === 0 && <span className="text-sm text-ink-faint">All clear!</span>}
-                  </div>
-                  <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-faint">
-                    {([["bg-st-dirty", "Dirty"], ["bg-st-unloaded", "Unloaded"], ["bg-st-inprogress", "Loading"]] as const).map(([dot, label]) => (
-                      <span key={label} className="inline-flex items-center gap-1">
-                        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
-                        {label}
-                      </span>
-                    ))}
-                  </p>
-                </div>
-              );
-            })()}
-          </div>
-
-          {notReadyCard && <div className="hidden lg:block">{notReadyCard}</div>}
-        </div>
-      </div>
+      {/* The arrangement is this device's choice (header switch): the yard
+          view or the classic three-zone card. Both are fed the same view
+          props; only the layout components differ. */}
+      {layout === "yard" ? <YardLayout {...view} /> : layout === "floor" ? <FloorLayout {...view} /> : <ClassicLayout {...view} />}
 
       <LoadActionDialogs actions={actions} />
       {/* Truck chooser — what a truck in the dock or the Ready grid can
@@ -967,41 +717,6 @@ function ChoiceButton({
   );
 }
 
-/** One held / unfinished truck: number in its status colour, then why. */
-function NotReadyChip({
-  truck,
-  pair,
-  tone,
-  dot,
-  label,
-}: {
-  truck: TruckWithState;
-  pair: { route: number; split?: boolean } | null;
-  tone: string;
-  dot: string;
-  label: string;
-}) {
-  return (
-    <div className="inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-3 px-3 py-2">
-      <span className={clsx("font-mono text-[17px] font-black leading-none tabular-nums", tone)}>
-        {pair != null ? (
-          <>
-            <span className={pair.split ? "text-amber-300" : "text-sky-300"}>{pair.route}</span>
-            <span className="px-0.5 text-[13px] text-ink-faint">{pair.split ? "+" : "→"}</span>
-            {truck.truck_number}
-          </>
-        ) : (
-          <>#{truck.truck_number}</>
-        )}
-      </span>
-      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
-        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
-        {label}
-      </span>
-    </div>
-  );
-}
-
 /** "started 7:42 PM · 12:34" — hook-bearing, so its own component. */
 function UnloadingSinceLoad({ startSec }: { startSec: number }) {
   const elapsed = useElapsed(startSec);
@@ -1009,32 +724,6 @@ function UnloadingSinceLoad({ startSec }: { startSec: number }) {
     <span className="text-xs text-ink-muted">
       started {formatEasternTime(startSec)} · <span className="font-mono tabular-nums text-ink-soft">{formatDuration(elapsed)}</span>
     </span>
-  );
-}
-
-function ProgressRow({
-  label,
-  done,
-  total,
-  pct,
-  barColor,
-}: {
-  label: string;
-  done: number;
-  total: number;
-  pct: number;
-  barColor: string;
-}) {
-  return (
-    <div className="flex items-center gap-3">
-      <span className="w-[58px] text-xs font-semibold uppercase tracking-wide text-ink-muted">{label}</span>
-      <div className="h-2 flex-1 overflow-hidden rounded-full bg-track">
-        <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, backgroundColor: barColor }} />
-      </div>
-      <span className="w-24 text-right font-mono tabular-nums text-xs text-ink-muted">
-        {done}/{total} ({pct}%)
-      </span>
-    </div>
   );
 }
 
