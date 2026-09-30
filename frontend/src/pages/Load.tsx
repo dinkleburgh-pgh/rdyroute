@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "react-router-dom";
-import { MonitorPlay } from "lucide-react";
+import { ChevronsRight, MonitorPlay, Play, SquareParking, Undo2, X } from "lucide-react";
 import clsx from "clsx";
 import { format } from "date-fns";
 import {
@@ -39,7 +39,7 @@ import {
   loadingCargo,
 } from "../utils/truckStatus";
 import { reportProgressOverflow } from "../utils/debugLog";
-import { NextUpPanel, PaceBar, StartNextUpBanner, formatDuration, useElapsed } from "../components/LiveInProgress";
+import { NextUpPanel, formatDuration, useElapsed } from "../components/LiveInProgress";
 import { useLoadActions } from "../hooks/useLoadActions";
 import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 import { useLoadRequest } from "../hooks/useLoadRequest";
@@ -50,6 +50,10 @@ import GarmentsStrip from "../components/load/GarmentsStrip";
 import NogsStrip from "../components/load/NogsStrip";
 import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import LoadDisplay from "../components/load/LoadDisplay";
+import DockCard from "../components/load/DockCard";
+import { SheetHead } from "../components/load/loadUi";
+import CoverageTag from "../components/CoverageTag";
+import { truckTypeLabel } from "../utils/truckType";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
 import PageHeader, { Sep, Stat } from "../components/PageHeader";
 import { QuietTile, SectionHeader, TILE_GRID, TILE_GRID_LG } from "../components/workflow/QuietTile";
@@ -226,23 +230,41 @@ export default function Load() {
     () => ready.find((t) => t.truck_number === storedNextUp) ?? ready[0],
     [ready, storedNextUp],
   );
-  // Only an EXPLICITLY queued truck gets the big green start banner — the
-  // fallback above (first ready truck) is fine as a hint inside the in-progress
-  // panel, but it shouldn't put a one-tap "Start Loading" on a truck nobody
-  // actually picked.
+  // Only an EXPLICITLY queued truck fills the dock card's Up next slot and gets
+  // its one-tap "Start Loading" — the fallback above (first ready truck) is
+  // fine as a hint on the full-screen display, but it shouldn't put a Start
+  // button on a truck nobody actually picked.
   const queuedNextUp = useMemo(
     () => ready.find((t) => t.truck_number === storedNextUp) ?? null,
     [ready, storedNextUp],
   );
+  // THE DOCK. Every truck appears ONCE on this page, in the first zone it
+  // belongs to: Loading now → Up next → Staged → Ready → Not ready yet. Staged
+  // trucks used to sit in the Staged card AND the Ready grid, and the queued
+  // truck showed in three places — the page never said which was which.
+  const lineStaged = useMemo(
+    () => staged.filter((t) => t.truck_number !== queuedNextUp?.truck_number && t.state?.status !== "in_progress"),
+    [staged, queuedNextUp],
+  );
+  const inDock = useMemo(() => {
+    const s = new Set(lineStaged.map((t) => t.truck_number));
+    if (queuedNextUp) s.add(queuedNextUp.truck_number);
+    return s;
+  }, [lineStaged, queuedNextUp]);
+  const readyPool = useMemo(() => ready.filter((t) => !inDock.has(t.truck_number)), [ready, inDock]);
+  const heldPool = useMemo(() => heldReady.filter((t) => !inDock.has(t.truck_number)), [heldReady, inDock]);
+  const unfinishedPool = useMemo(() => unfinished.filter((t) => !inDock.has(t.truck_number)), [unfinished, inDock]);
   // Historical load-order suggestions ("usually loads ~3rd"), filtered to
-  // trucks that are actually ready tonight — top 3 by average position.
+  // ready trucks not already in the dock — top 3 by average position. Offered
+  // as one-tap picks in the empty Up next slot.
   const { data: seqSuggestions = [] } = useLoadSequenceSuggestions(14);
   const suggestedNext = useMemo(() => {
-    const readyNums = new Set(ready.map((t) => t.truck_number));
+    const poolNums = new Set(readyPool.map((t) => t.truck_number));
     return seqSuggestions
-      .filter((s) => s.avg_load_position != null && s.times_loaded >= 2 && readyNums.has(s.truck_number))
-      .slice(0, 3);
-  }, [seqSuggestions, ready]);
+      .filter((s) => s.avg_load_position != null && s.times_loaded >= 2 && poolNums.has(s.truck_number))
+      .slice(0, 3)
+      .map((s) => s.truck_number);
+  }, [seqSuggestions, readyPool]);
   // Loaded = physically loaded and scheduled for tomorrow.
   const loaded = useMemo(
     () => loadDisplayTrucks.filter((t) => effectiveOperationalStatus(t, loadDay, holidayLoad) === "loaded"),
@@ -375,7 +397,7 @@ export default function Load() {
   // Focus mode: the ready queue rarely holds more than ~10 trucks and spends
   // most of the night under 5 — render those few BIG (readable from across
   // the dock) instead of reserving a wall-sized grid for them.
-  const readyFocus = ready.length > 0 && ready.length <= 5;
+  const readyFocus = readyPool.length > 0 && readyPool.length <= 4;
 
   if (displayOpen) {
     return (
@@ -410,6 +432,43 @@ export default function Load() {
   // Loading / dead-connection gate — never render the fake empty day.
   const pageGate = pageStatusFor(boardQuery);
   if (pageGate) return <PageStatus {...pageGate} />;
+
+  // Two blocks that change rails with the screen: on a phone they sit in the
+  // one column right where the crew needs them; on desktop they move to the
+  // right rail so the work rail is just the dock, Ready and Loaded. Built once
+  // and placed twice (CSS shows one), so the two copies cannot drift.
+  //
+  // What Unload is emptying right now — and the one question it asks the load
+  // crew. Shared with the full-screen display.
+  const unloadCard = unloadingNow.length > 0 ? (
+    <NowUnloadingStrip
+      trucks={unloadingNow}
+      actions={loadRequest}
+      board={board}
+      loadDay={loadDay}
+      holidayLoad={holidayLoad}
+      renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
+    />
+  ) : null;
+  // Held and unfinished trucks are one idea to the load crew — ready soon, not
+  // yet — so they share one card of compact chips (nothing to tap here).
+  const notReadyCard = heldPool.length + unfinishedPool.length > 0 ? (
+    <div className="card">
+      <SectionHeader
+        label="Not ready yet"
+        count={heldPool.length + unfinishedPool.length}
+        hint="joins Ready when cleared"
+      />
+      <div className="flex flex-wrap gap-2">
+        {heldPool.map((t) => (
+          <NotReadyChip key={t.truck_number} truck={t} pair={loadPair(t)} tone="text-st-dirty" dot="bg-st-dirty" label="On hold · clear in Fleet" />
+        ))}
+        {unfinishedPool.map((t) => (
+          <NotReadyChip key={t.truck_number} truck={t} pair={loadPair(t)} tone="text-st-unfinished" dot="bg-st-unfinished" label="Unload unfinished" />
+        ))}
+      </div>
+    </div>
+  ) : null;
 
   return (
     <>
@@ -457,179 +516,90 @@ export default function Load() {
           the load crew sees it here; swap-managing roles can assign from it. */}
       <CrossloadNoticeBar board={data ?? []} />
 
-      {/* Two rails: the WORK on the left — what's loading, what's being
-          unloaded, and the ready queue — with the reference material (notes,
-          coverage, counts) on the right. Ready-to-load living down at page
-          level left the whole left rail empty whenever nothing was in
-          progress, beside a full right rail. */}
+      {/* Two rails: the WORK on the left — the dock (loading / up next /
+          staged), the unload dock's question, and what's left to load — with
+          the reference material (notes, coverage, tonight's numbers) on the
+          right. */}
       <div className="grid items-start gap-4 lg:grid-cols-[1.5fr_1fr]">
         {/* ---------------- Left rail ---------------- */}
         <div className="flex flex-col gap-4">
-          {inProgress ? (
-            <>
-              <InProgressHeroPanel
-                truck={inProgress}
-                paceAvgSeconds={pace?.avg_seconds ?? null}
-                busy={busy === inProgress.truck_number}
-                loadDay={loadDay}
-                nextUp={nextUpTruck}
-                garment={cargo.garment}
-                nogs={cargo.nogs}
-                onFinish={() => requestFinish(inProgress)}
-                onCancel={() => cancelLoad(inProgress)}
-                onChangeNextUp={() => setNextUpOpen(true)}
-                onLogShortage={() => setShortagesOpen((v) => !v)}
-              />
-              {shortagesOpen && <InlineShortages truck={inProgress} runDate={runDate} />}
-            </>
-          ) : queuedNextUp ? (
-            /* Nothing loading — hand straight off to the queued truck rather
-               than making the user find it again down in the ready grid. */
-            <StartNextUpBanner
-              truck={queuedNextUp}
-              paceAvgSeconds={pace?.avg_seconds ?? null}
-              busy={busy === queuedNextUp.truck_number}
-              onStart={() => requestStart(queuedNextUp)}
-            />
-          ) : null}
-
-          {/* What Unload is emptying right now — and the buttons that answer
-              it. Shared with the full-screen display so they cannot drift. */}
-          <NowUnloadingStrip
-            trucks={unloadingNow}
-            actions={loadRequest}
-            board={board}
-            loadDay={loadDay}
-            holidayLoad={holidayLoad}
-            renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
-          />
-
-        {/* ---------------- Staged ---------------- */}
-        {staged.length > 0 && (
-          <div className="card">
-            <SectionHeader label="Staged" count={staged.length} />
-            <div className={TILE_GRID}>
-              {staged.map((t) => (
-                <QuietTile
-                  key={t.truck_number}
-                  truck={t}
-                  size="md"
-                  onClick={() =>
-                    setStaged.mutate({ truck_number: t.truck_number, staged: false })
-                  }
-                  title="Tap to unstage"
-                  tag="Staged"
-                  tagClass="text-[#f59e0b]"
-                  numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
-                  dotClass="bg-[#f59e0b]"
-                  pair={loadPair(t)}
-                  sub={<span>Staged · tap to remove</span>}
+          <DockCard
+            loading={
+              inProgress ? (
+                <InProgressHeroPanel
+                  truck={inProgress}
+                  paceAvgSeconds={pace?.avg_seconds ?? null}
+                  busy={busy === inProgress.truck_number}
+                  loadDay={loadDay}
+                  garment={cargo.garment}
+                  nogs={cargo.nogs}
+                  onFinish={() => requestFinish(inProgress)}
+                  onCancel={() => cancelLoad(inProgress)}
+                  onLogShortage={() => setShortagesOpen((v) => !v)}
+                  shortagesOpen={shortagesOpen}
                 />
-              ))}
-            </div>
-          </div>
-        )}
+              ) : null
+            }
+            nextUp={queuedNextUp}
+            staged={lineStaged}
+            readyCount={readyPool.length}
+            suggestions={suggestedNext}
+            busyTruck={busy}
+            canStart={!anyInProgress}
+            pairOf={loadPair}
+            onTruck={setReadyChoice}
+            onStart={requestStart}
+            onPickNextUp={() => setNextUpOpen(true)}
+            onSuggest={(n) => setNextUp.mutate(n)}
+          />
+          {inProgress && shortagesOpen && <InlineShortages truck={inProgress} runDate={runDate} />}
 
-        {/* ---------------- Ready to load + On hold ---------------- */}
-        <div className="card flex flex-col gap-[18px]">
-          <div>
-            <SectionHeader label="Ready to load" count={ready.length}>
-              {suggestedNext.length > 0 && (
-                <span className="text-[11px] text-ink-faint">
-                  Usually next:{" "}
-                  <span className="font-mono font-bold text-ink-soft">
-                    {suggestedNext.map((sg) => `#${sg.truck_number}`).join(" · ")}
+          {/* Phone: the unload question stays right under the dock. Desktop
+              moves it to the top of the right rail (below). */}
+          {unloadCard && <div className="lg:hidden">{unloadCard}</div>}
+
+        {/* ---------------- Ready to load ---------------- */}
+        <div className="card">
+          <SectionHeader
+            label="Ready to load"
+            count={readyPool.length}
+            hint={
+              inDock.size > 0
+                ? `+${inDock.size} in the dock above`
+                : readyPool.length > 0
+                  ? "tap to start, stage, or queue"
+                  : undefined
+            }
+          />
+          <div className={readyFocus ? TILE_GRID_LG : TILE_GRID}>
+            {readyPool.map((t) => (
+              <QuietTile
+                key={t.truck_number}
+                truck={t}
+                size={readyFocus ? "lg" : "md"}
+                disabled={busy === t.truck_number}
+                onClick={() => setReadyChoice(t)}
+                title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
+                numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
+                dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
+                pair={loadPair(t)}
+                sub={
+                  <span>
+                    {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
+                    {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
                   </span>
-                </span>
-              )}
-              <button
-                type="button"
-                onClick={() => setNextUpOpen(true)}
-                className="btn-ghost px-3 py-1 text-[11px]"
-              >
-                {storedNextUp != null ? `Next Up: #${storedNextUp} · Change` : "Set Next Up"}
-              </button>
-            </SectionHeader>
-            {anyInProgress && (
-              <p className="mb-2 text-[11px] text-st-inprogress">
-                Finish the in-progress truck before starting another.
-              </p>
-            )}
-            <div className={readyFocus ? TILE_GRID_LG : TILE_GRID}>
-              {ready.map((t) => {
-                const cr = getCoverageRouteNumber(t);
-                return (
-                  <QuietTile
-                    key={t.truck_number}
-                    truck={t}
-                    size={readyFocus ? "lg" : "md"}
-                    disabled={busy === t.truck_number}
-                    onClick={() => setReadyChoice(t)}
-                    title={t.state?.wearers ? `${t.state.wearers} wearers` : undefined}
-                    tag={t.truck_number === storedNextUp ? "Next" : undefined}
-                    tagClass="text-[#3b82f6]"
-                    numberClass={t.truck_type === "Spare" ? "text-st-spare" : "text-st-unloaded"}
-                    dotClass={t.truck_type === "Spare" ? "bg-st-spare" : "bg-st-unloaded"}
-                    pair={loadPair(t)}
-                    sub={
-                      <span>
-                        {t.truck_type === "Spare" ? "Spare" : "Unloaded"}
-                        {t.state?.wearers ? ` · ${t.state.wearers} wearers` : ""}
-                        {t.state?.staged_at != null ? " · staged" : ""}
-                      </span>
-                    }
-                  />
-                );
-              })}
-              {ready.length === 0 && (
-                <EmptyState className="col-span-full">No trucks ready to load.</EmptyState>
-              )}
-            </div>
-          </div>
-
-          {heldReady.length > 0 && (
-            <div>
-              <SectionHeader label="On hold" count={heldReady.length} />
-              <div className={TILE_GRID}>
-                {heldReady.map((t) => (
-                  <QuietTile
-                    key={t.truck_number}
-                    truck={t}
-                    dim
-                    tag="Hold"
-                    tagClass="text-st-dirty"
-                    numberClass="text-st-dirty"
-                    dotClass="bg-st-dirty"
-                    sub={<span className="text-ink-faint">Clear in Fleet</span>}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
-
-          {unfinished.length > 0 && (
-            <div>
-              <SectionHeader
-                label="Unfinished"
-                count={unfinished.length}
-                hint="unload not done — will join Ready when finished"
+                }
               />
-              <div className={TILE_GRID}>
-                {unfinished.map((t) => (
-                  <QuietTile
-                    key={t.truck_number}
-                    truck={t}
-                    dim
-                    numberClass="text-st-unfinished"
-                    dotClass="bg-st-unfinished"
-                    pair={loadPair(t)}
-                    sub={<span className="text-ink-faint">Finish unload first</span>}
-                  />
-                ))}
-              </div>
-            </div>
-          )}
+            ))}
+            {readyPool.length === 0 && (
+              <EmptyState compact className="col-span-full text-[13px] text-ink-muted">
+                {inDock.size > 0 ? "Everything ready is already in the dock." : "No trucks ready to load."}
+              </EmptyState>
+            )}
+          </div>
         </div>
+
+        {notReadyCard && <div className="lg:hidden">{notReadyCard}</div>}
 
         {/* ---------------- Loaded today ----------------
             Lives IN the work rail: ready shrinks exactly as this grows, so
@@ -702,6 +672,11 @@ export default function Load() {
 
         {/* ---------------- Right rail ---------------- */}
         <div className="flex flex-col gap-4">
+          {/* Desktop: the unload question heads this rail — the dock card and
+              Ready already fill the work rail, and the question is about the
+              other crew's truck, not ours. */}
+          {unloadCard && <div className="hidden lg:block">{unloadCard}</div>}
+
           {/* Standing load-workflow notes for today, edited on the Notes page. */}
           <WorkflowDayNotes scope="load" day={loadDay} />
 
@@ -717,136 +692,167 @@ export default function Load() {
             cardsClassName="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1 xl:grid-cols-2"
           />
 
-          {/* Left-to-load counts — one card, four cells, no tinted tiles. The
-              dot carries the category; the number stays ink so a big count
-              can't read as an alarm. */}
-          <div className="card flex !px-0 !py-3.5">
-            {([
-              { key: "dust", value: dustsLeft, label: "F.S. left", dot: "bg-st-dirty" },
-              { key: "uniform", value: uniformsLeft, label: "Uniforms left", dot: "bg-st-shop" },
-              { key: "spare", value: sparesLeft, label: "Spares left", dot: "bg-st-spare" },
-              { key: "total", value: totalLeft, label: "Total left", dot: null },
-            ] as const).map((cell, i) => (
-              <button
-                key={cell.key}
-                type="button"
-                onClick={() => setStatFilter(statFilter === cell.key ? null : cell.key)}
-                className={clsx(
-                  "flex-1 px-1 text-center transition-colors",
-                  i < 3 && "border-r border-hairline",
-                  statFilter === cell.key ? "bg-surface-2" : "hover:bg-surface-2/60",
-                )}
-              >
-                <div className="font-mono text-2xl font-black tabular-nums text-ink">{cell.value}</div>
-                <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                  {cell.dot && <span className={clsx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full", cell.dot)} />}
-                  {cell.label}
-                </div>
-              </button>
-            ))}
-          </div>
-
-          {/* Stat drill-down */}
-          {statFilter && (() => {
-            const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
-            const statusLabel: Record<string, string> = { dirty: "Dirty", unloaded: "Unloaded", in_progress: "Loading" };
-            /* Compact chips, not full tiles: "total left" is 25-plus trucks
-               most of the night, and two-column tiles ran the list far off
-               screen. A chip carries everything the glance needs — number
-               (pair form when covering), status colour, hold ring — and the
-               whole set fits in a few rows. */
-            return (
-              <div className="card animate-slide-down space-y-2.5">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
-                  {statFilter === "dust" ? "F.S." : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
+          {/* Tonight: progress, then what's left to load, then (on tap) the
+              trucks behind a count — one card instead of three. The dot
+              carries the category; the number stays ink so a big count can't
+              read as an alarm. */}
+          <div className="card overflow-hidden !p-0">
+            <div className="flex flex-col gap-2.5 px-4 py-3.5">
+              <div className="text-[10.5px] font-bold uppercase tracking-[0.16em] text-ink-muted">Tonight</div>
+              <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
+              {ranAhead.length > 0 && (
+                <p className="text-[11px] font-semibold text-sky-300">
+                  {ranAhead.length} ran ahead — not in tonight's load
                 </p>
-                <div className="flex flex-wrap gap-1.5">
-                  {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
-                    const st = t.state?.status ?? "dirty";
-                    const pair = loadPair(t);
-                    const tone =
-                      st === "unloaded" ? "text-st-unloaded"
-                      : st === "in_progress" ? "text-st-inprogress"
-                      : "text-st-dirty";
-                    return (
-                      <span
-                        key={t.truck_number}
-                        className={clsx(
-                          "inline-flex items-center rounded-md border border-hairline bg-surface px-2 py-1.5 font-mono text-[13px] font-bold tabular-nums",
-                          tone,
-                          t.state?.priority_hold && "ring-1 ring-st-dirty/60",
-                        )}
-                        title={`${statusLabel[st] ?? st}${pair != null ? ` · covering route ${pair.route}` : ""}${t.state?.priority_hold ? " · hold" : ""}`}
-                      >
-                        {pair != null ? (
-                          <>
-                            <span className={pair.split ? "text-amber-300" : "text-sky-300"}>{pair.route}</span>
-                            <span className="px-0.5 text-ink-faint">{pair.split ? "+" : "→"}</span>
-                            {t.truck_number}
-                          </>
-                        ) : (
-                          <>#{t.truck_number}</>
-                        )}
+              )}
+              <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
+            </div>
+            <div className="flex border-t border-hairline">
+              {([
+                { key: "dust", value: dustsLeft, label: "F.S. left", dot: "bg-st-dirty" },
+                { key: "uniform", value: uniformsLeft, label: "Uniforms left", dot: "bg-st-shop" },
+                { key: "spare", value: sparesLeft, label: "Spares left", dot: "bg-st-spare" },
+                { key: "total", value: totalLeft, label: "Total left", dot: null },
+              ] as const).map((cell, i) => (
+                <button
+                  key={cell.key}
+                  type="button"
+                  aria-pressed={statFilter === cell.key}
+                  onClick={() => setStatFilter(statFilter === cell.key ? null : cell.key)}
+                  className={clsx(
+                    "flex-1 px-1 py-3 text-center transition-colors",
+                    i < 3 && "border-r border-hairline",
+                    statFilter === cell.key ? "bg-surface-2" : "hover:bg-surface-2/60",
+                  )}
+                >
+                  <div className="font-mono text-2xl font-black tabular-nums text-ink">{cell.value}</div>
+                  <div className="mt-1 text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                    {cell.dot && <span className={clsx("mr-1.5 inline-block h-1.5 w-1.5 rounded-full", cell.dot)} />}
+                    {cell.label}
+                  </div>
+                </button>
+              ))}
+            </div>
+
+            {/* Stat drill-down */}
+            {statFilter && (() => {
+              const trucks = statFilter === "dust" ? dustsLeftTrucks : statFilter === "uniform" ? uniformsLeftTrucks : statFilter === "spare" ? sparesLeftTrucks : totalLeftTrucks;
+              const statusLabel: Record<string, string> = { dirty: "Dirty", unloaded: "Unloaded", in_progress: "Loading" };
+              /* Compact chips, not full tiles: "total left" is 25-plus trucks
+                 most of the night, and two-column tiles ran the list far off
+                 screen. A chip carries everything the glance needs — number
+                 (pair form when covering), status colour, hold ring — and the
+                 whole set fits in a few rows. */
+              return (
+                <div className="animate-slide-down space-y-2.5 border-t border-hairline px-4 py-3.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.08em] text-ink-muted">
+                    {statFilter === "dust" ? "F.S." : statFilter === "uniform" ? "Uniforms" : statFilter === "spare" ? "Spares" : "All"} not yet loaded ({trucks.length})
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {trucks.map((t: (typeof totalLeftTrucks)[number]) => {
+                      const st = t.state?.status ?? "dirty";
+                      const pair = loadPair(t);
+                      const tone =
+                        st === "unloaded" ? "text-st-unloaded"
+                        : st === "in_progress" ? "text-st-inprogress"
+                        : "text-st-dirty";
+                      return (
+                        <span
+                          key={t.truck_number}
+                          className={clsx(
+                            "inline-flex items-center rounded-md border border-hairline bg-surface px-2 py-1.5 font-mono text-[13px] font-bold tabular-nums",
+                            tone,
+                            t.state?.priority_hold && "ring-1 ring-st-dirty/60",
+                          )}
+                          title={`${statusLabel[st] ?? st}${pair != null ? ` · covering route ${pair.route}` : ""}${t.state?.priority_hold ? " · hold" : ""}`}
+                        >
+                          {pair != null ? (
+                            <>
+                              <span className={pair.split ? "text-amber-300" : "text-sky-300"}>{pair.route}</span>
+                              <span className="px-0.5 text-ink-faint">{pair.split ? "+" : "→"}</span>
+                              {t.truck_number}
+                            </>
+                          ) : (
+                            <>#{t.truck_number}</>
+                          )}
+                        </span>
+                      );
+                    })}
+                    {trucks.length === 0 && <span className="text-sm text-ink-faint">All clear!</span>}
+                  </div>
+                  <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-faint">
+                    {([["bg-st-dirty", "Dirty"], ["bg-st-unloaded", "Unloaded"], ["bg-st-inprogress", "Loading"]] as const).map(([dot, label]) => (
+                      <span key={label} className="inline-flex items-center gap-1">
+                        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
+                        {label}
                       </span>
-                    );
-                  })}
-                  {trucks.length === 0 && <span className="text-sm text-ink-faint">All clear!</span>}
+                    ))}
+                  </p>
                 </div>
-                <p className="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-ink-faint">
-                  {([["bg-st-dirty", "Dirty"], ["bg-st-unloaded", "Unloaded"], ["bg-st-inprogress", "Loading"]] as const).map(([dot, label]) => (
-                    <span key={label} className="inline-flex items-center gap-1">
-                      <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
-                      {label}
-                    </span>
-                  ))}
-                </p>
-              </div>
-            );
-          })()}
-
-          {/* Load / Unload progress */}
-          <div className="card flex flex-col justify-center gap-2.5">
-            <ProgressRow label="Load" done={loadDone} total={loadTotal} pct={loadPct} barColor="#3b82f6" />
-            {ranAhead.length > 0 && (
-              <p className="text-[11px] font-semibold text-sky-300">
-                {ranAhead.length} ran ahead — not in tonight's load
-              </p>
-            )}
-            <ProgressRow label="Unload" done={unloadDone} total={unloadTotal} pct={unloadPct} barColor="#22c55e" />
+              );
+            })()}
           </div>
+
+          {notReadyCard && <div className="hidden lg:block">{notReadyCard}</div>}
         </div>
       </div>
 
-            <LoadActionDialogs actions={actions} />
-      {/* Ready-tile chooser: the three things a ready truck can become.
-          Start Loading starts straight away — no second confirmation. */}
+      <LoadActionDialogs actions={actions} />
+      {/* Truck chooser — what a truck in the dock or the Ready grid can
+          become. Start Loading starts straight away (no second confirmation;
+          useLoadActions.requestStart toasts anything that blocks it). Same
+          sheet as the garment check, so Finish stays in the family. */}
       {readyChoice && (() => {
         const t = readyChoice;
         const n = t.truck_number;
+        const st = t.state?.status;
         const isStaged = t.state?.staged_at != null;
         const isNext = storedNextUp === n;
-        const cannotStart = anyInProgress || busy === n;
+        const held = t.state?.priority_hold === true;
+        const isReady = st === "unloaded" && !held;
+        const startBlocked =
+          anyInProgress ? "Another truck is loading — finish it first"
+          : held ? "On hold — clear it in Fleet first"
+          : !isReady ? "Not unloaded yet"
+          : null;
+        const where =
+          isNext && isReady ? { text: "Up next", cls: "text-sky-300" }
+          : isStaged ? { text: "Staged", cls: "text-ink" }
+          : held ? { text: "On hold", cls: "text-st-dirty" }
+          : isReady ? { text: "Ready to load", cls: "text-st-unloaded" }
+          : st === "unfinished" ? { text: "Unload unfinished", cls: "text-st-unfinished" }
+          : { text: "Not unloaded yet", cls: "text-st-dirty" };
+        const pair = loadPair(t);
         const close = () => setReadyChoice(null);
         return (
-          <Modal
-            open
-            onClose={close}
-            size="sm"
-            sheet
-            title={<span>Truck <span className="font-mono">#{n}</span></span>}
-          >
-            <div className="flex flex-col gap-2">
+          <Modal open onClose={close} size="sm" sheet>
+            <SheetHead
+              eyebrow={where.text}
+              eyebrowClass={where.cls}
+              truckNumber={n}
+              onClose={close}
+              detail={
+                <>
+                  <span>{truckTypeLabel(t.truck_type)}</span>
+                  {t.state?.wearers ? <span>· {t.state.wearers} wearers</span> : null}
+                  {pair && <CoverageTag route={pair.route} truck={n} split={pair.split} />}
+                </>
+              }
+            />
+            <div className="mt-5 flex flex-col gap-2">
               <ChoiceButton
-                label="Start Loading"
-                hint={cannotStart ? "Finish the in-progress truck first" : "Starts the load now"}
-                tone="blue"
-                disabled={cannotStart}
+                icon={<Play className="h-4 w-4 fill-current" />}
+                label={`Start Loading #${n}`}
+                hint={startBlocked ?? "Starts the load now"}
+                tone="go"
+                disabled={startBlocked != null || busy === n}
                 onClick={() => { close(); requestStart(t); }}
               />
               <ChoiceButton
+                icon={isStaged ? <Undo2 className="h-4 w-4" /> : <SquareParking className="h-4 w-4" />}
                 label={isStaged ? "Unstage" : "Stage"}
                 hint={isStaged ? "Take it back out of the lane" : "Pulled up to the lane, ready to go"}
-                tone="amber"
+                tone="neutral"
                 disabled={setStaged.isPending}
                 onClick={() => {
                   setStaged.mutate({ truck_number: n, staged: !isStaged, expected_status: t.state?.status ?? null });
@@ -854,14 +860,16 @@ export default function Load() {
                 }}
               />
               <ChoiceButton
-                label={isNext ? "Clear Next Up" : "Set Next Up"}
+                icon={isNext ? <X className="h-4 w-4" /> : <ChevronsRight className="h-4 w-4" />}
+                label={isNext ? "Take off Up next" : "Put Up next"}
                 hint={
-                  isNext ? "It is queued next right now"
-                  : storedNextUp != null ? `Replaces #${storedNextUp} as next`
+                  isNext ? "It's queued next right now"
+                  : !isReady ? "Only ready trucks can be queued"
+                  : storedNextUp != null ? `Replaces #${storedNextUp}`
                   : "Queue it as the next load"
                 }
                 tone="sky"
-                disabled={setNextUp.isPending || clearNextUp.isPending}
+                disabled={setNextUp.isPending || clearNextUp.isPending || (!isNext && !isReady)}
                 onClick={() => {
                   if (isNext) clearNextUp.mutate();
                   else setNextUp.mutate(n);
@@ -907,20 +915,25 @@ export default function Load() {
 // Sub-components
 // ---------------------------------------------------------------------------
 
+/** Each chooser row wears the colour of where it sends the truck: go-green
+ *  to Loading, neutral to the lane (Staged is white on the dock card), sky to
+ *  Up next. */
 const CHOICE_TONES = {
-  blue: "border-blue-500/40 bg-blue-500/10 text-blue-200 hover:bg-blue-500/20",
-  amber: "border-amber-500/40 bg-amber-500/10 text-amber-200 hover:bg-amber-500/20",
-  sky: "border-sky-500/40 bg-sky-500/10 text-sky-200 hover:bg-sky-500/20",
+  go: "border-transparent bg-[#15803d] text-white enabled:hover:bg-[#16a34a]",
+  neutral: "border-hairline bg-surface-2 text-ink enabled:hover:bg-track",
+  sky: "border-sky-500/30 bg-sky-500/[0.08] text-sky-100 enabled:hover:bg-sky-500/[0.14]",
 } as const;
 
-/** One row of the ready-tile chooser: a verb and one line on what it does. */
+/** One row of the truck chooser: an icon, a verb, one line on what it does. */
 function ChoiceButton({
+  icon,
   label,
   hint,
   tone,
   disabled,
   onClick,
 }: {
+  icon: React.ReactNode;
   label: string;
   hint: string;
   tone: keyof typeof CHOICE_TONES;
@@ -933,13 +946,59 @@ function ChoiceButton({
       disabled={disabled}
       onClick={onClick}
       className={clsx(
-        "flex min-h-[56px] w-full flex-col items-start justify-center rounded-xl border px-4 py-2.5 text-left transition-colors disabled:cursor-not-allowed disabled:opacity-40",
+        "flex min-h-[60px] w-full items-center gap-3.5 rounded-xl border px-4 py-2.5 text-left transition-colors active:scale-[0.99] disabled:cursor-not-allowed disabled:opacity-45",
         CHOICE_TONES[tone],
       )}
     >
-      <span className="text-[15px] font-bold">{label}</span>
-      <span className="text-[12px] font-normal opacity-70">{hint}</span>
+      <span
+        className={clsx(
+          "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg",
+          tone === "go" ? "bg-white/15" : tone === "sky" ? "bg-sky-400/15" : "bg-track",
+        )}
+        aria-hidden
+      >
+        {icon}
+      </span>
+      <span className="flex min-w-0 flex-col">
+        <span className="text-[15px] font-bold">{label}</span>
+        <span className="text-[12px] font-normal opacity-75">{hint}</span>
+      </span>
     </button>
+  );
+}
+
+/** One held / unfinished truck: number in its status colour, then why. */
+function NotReadyChip({
+  truck,
+  pair,
+  tone,
+  dot,
+  label,
+}: {
+  truck: TruckWithState;
+  pair: { route: number; split?: boolean } | null;
+  tone: string;
+  dot: string;
+  label: string;
+}) {
+  return (
+    <div className="inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-3 px-3 py-2">
+      <span className={clsx("font-mono text-[17px] font-black leading-none tabular-nums", tone)}>
+        {pair != null ? (
+          <>
+            <span className={pair.split ? "text-amber-300" : "text-sky-300"}>{pair.route}</span>
+            <span className="px-0.5 text-[13px] text-ink-faint">{pair.split ? "+" : "→"}</span>
+            {truck.truck_number}
+          </>
+        ) : (
+          <>#{truck.truck_number}</>
+        )}
+      </span>
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
+        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
+        {label}
+      </span>
+    </div>
   );
 }
 
@@ -947,8 +1006,8 @@ function ChoiceButton({
 function UnloadingSinceLoad({ startSec }: { startSec: number }) {
   const elapsed = useElapsed(startSec);
   return (
-    <span className="text-xs text-amber-200/80">
-      started {formatEasternTime(startSec)} · <span className="font-mono tabular-nums">{formatDuration(elapsed)}</span>
+    <span className="text-xs text-ink-muted">
+      started {formatEasternTime(startSec)} · <span className="font-mono tabular-nums text-ink-soft">{formatDuration(elapsed)}</span>
     </span>
   );
 }

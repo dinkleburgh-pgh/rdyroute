@@ -1,11 +1,13 @@
 import clsx from "clsx";
-import { Undo2 } from "lucide-react";
+import { Check, Undo2 } from "lucide-react";
 import CoverageTag from "../CoverageTag";
 import { DustGarmentIcon } from "../icons";
 import { PaceBar, formatDuration, useElapsed } from "../LiveInProgress";
 import { getCoverageRouteNumber } from "../../utils/truckStatus";
+import { truckTypeLabel } from "../../utils/truckType";
 import { useLoadTimerVisible } from "../../hooks/useLoadTimerVisible";
 import { CARGO_FLASH, GARMENT_FLASH_TONE, NOGS_FLASH_TONE } from "./cargoFlash";
+import { BTN_GO, BTN_SECONDARY, ZONE, ZoneLabel } from "./loadUi";
 import type { TruckWithState } from "../../types";
 
 const LOAD_DAY_NAMES: Record<number, string> = {
@@ -52,6 +54,7 @@ export default function InProgressHeroPanel({
   onShortSheet,
   onChangeNextUp,
   onLogShortage,
+  shortagesOpen = false,
   variant = "page",
 }: {
   truck: TruckWithState;
@@ -69,11 +72,14 @@ export default function InProgressHeroPanel({
   onCancel: () => void;
   /** Display only — opens the short-sheet drawer for this truck. */
   onShortSheet?: () => void;
-  /** Opens the next-up picker. Rendered as a button under the Next Up number
-   *  so the queue can be changed without leaving the timer. */
+  /** Display only — opens the next-up picker. Rendered as a button under the
+   *  Next Up number so the queue can be changed without leaving the timer.
+   *  (The page shows Up next as its own zone; `nextUp` is display-only too.) */
   onChangeNextUp?: () => void;
   /** Page variant only — reveals the inline shortage logger below the card. */
   onLogShortage?: () => void;
+  /** Page variant only — the logger is open, so the button reads "Hide". */
+  shortagesOpen?: boolean;
   variant?: "page" | "display";
 }) {
   const big = variant === "display";
@@ -105,25 +111,35 @@ export default function InProgressHeroPanel({
 
   const coverRoute = getCoverageRouteNumber(truck);
 
-  // PAGE variant — the quiet instrument card. Colour is a signal only: amber
-  // on the clock and the top rule, nothing else. The display variant below is
-  // left alone; it is read from across a dock and needs the big centred type.
+  // PAGE variant — the "Loading now" zone of the Load page's dock card. No
+  // card chrome of its own (the dock card owns it) and no Next Up row: Up next
+  // is its own zone directly beneath, so the queue is never shown twice. The
+  // display variant below is left alone; it is read from across a dock and
+  // needs the big centred type.
   if (!big) {
     return (
-      <section className="card overflow-hidden !p-0">
-        <div className="h-[2px] w-full animate-pulse bg-st-inprogress" />
-        <div className="flex flex-col gap-4 px-[22px] py-[18px]">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:gap-6">
-            <div className="sm:min-w-[190px]">
-              <div className="text-[9.5px] font-bold uppercase tracking-[0.18em] text-ink-muted">Loading now</div>
-              <div className="mt-1 font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums text-ink">
-                #{truck.truck_number}
-              </div>
-              <div className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-[11px] text-ink-muted">
-                <span>
-                  Load Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` — ${LOAD_DAY_NAMES[loadDay]}` : ""}
-                </span>
-                {truck.state?.wearers ? <span>· {truck.state.wearers} wearers</span> : null}
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-stretch sm:gap-6">
+          <div className="min-w-0 sm:min-w-[210px]">
+            <ZoneLabel zone="loading" pulse>Loading now</ZoneLabel>
+            <div className={clsx("mt-2 font-mono text-[52px] font-black leading-none tracking-[-0.02em] tabular-nums", ZONE.loading.number)}>
+              #{truck.truck_number}
+            </div>
+            <div className="mt-2 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-[12px] text-ink-muted">
+              <span>{truckTypeLabel(truck.truck_type)}</span>
+              <span className="text-ink-faint">·</span>
+              <span>
+                Load Day {loadDay}{LOAD_DAY_NAMES[loadDay] ? ` — ${LOAD_DAY_NAMES[loadDay]}` : ""}
+              </span>
+              {truck.state?.wearers ? (
+                <>
+                  <span className="text-ink-faint">·</span>
+                  <span>{truck.state.wearers} wearers</span>
+                </>
+              ) : null}
+            </div>
+            {(coverRoute != null || hasGarment || hasNogs) && (
+              <div className="mt-2 flex flex-wrap items-center gap-1.5">
                 {coverRoute != null && <CoverageTag route={coverRoute} truck={truck.truck_number} />}
                 {hasGarment && (
                   <span className={clsx(CARGO_PILL, GARMENT_PILL, "px-2 py-0.5 text-xs")} style={GARMENT_FLASH_TONE}>
@@ -138,70 +154,58 @@ export default function InProgressHeroPanel({
                   </span>
                 )}
               </div>
-            </div>
-            {showTimer && (
-              <>
-                <div className="hidden w-px self-stretch bg-hairline sm:block" />
-                <div className="flex-1">
-                  <div className="mb-2 flex items-baseline justify-between gap-3">
-                    <span className={clsx("font-mono text-[46px] font-black leading-none tracking-[-0.02em] tabular-nums", timerColor)}>
-                      {formatDuration(elapsed)}
-                    </span>
-                    {paceLabel && <span className={clsx("text-xs", paceLabelColor)}>{paceLabel}</span>}
-                  </div>
-                  <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={6} />
+            )}
+          </div>
+          {showTimer && (
+            <>
+              <div className="hidden w-px self-stretch bg-hairline sm:block" />
+              <div className="flex flex-1 flex-col justify-end">
+                <div className="mb-2.5 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+                  <span className={clsx("font-mono text-[52px] font-black leading-none tracking-[-0.02em] tabular-nums", timerColor)}>
+                    {formatDuration(elapsed)}
+                  </span>
+                  {paceLabel && <span className={clsx("text-xs", paceLabelColor)}>{paceLabel}</span>}
                 </div>
-              </>
-            )}
-          </div>
-
-          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-hairline bg-surface-3 px-3.5 py-2.5">
-            <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-ink-muted">Next up</span>
-            <span className="font-mono text-xl font-black tabular-nums text-ink-soft">
-              {nextUp ? `#${nextUp.truck_number}` : "—"}
-            </span>
-            {showTimer && nextUp && paceAvgSeconds != null && (
-              <span className="text-[11px] text-ink-faint">avg {formatDuration(paceAvgSeconds)}</span>
-            )}
-            {nextUp && getCoverageRouteNumber(nextUp) != null && (
-              <CoverageTag route={getCoverageRouteNumber(nextUp)!} truck={nextUp.truck_number} />
-            )}
-            {onChangeNextUp && (
-              <button type="button" onClick={onChangeNextUp} className="btn-ghost ml-auto px-3 py-1 text-[11px]">
-                {nextUp ? "Change" : "Set Next Up"}
-              </button>
-            )}
-          </div>
-
-          <div className="flex flex-col gap-2.5 sm:flex-row">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={onFinish}
-              className="flex-1 rounded-lg py-3.5 text-sm font-bold text-white transition-opacity disabled:opacity-50"
-              style={{ background: "#15803d" }}
-            >
-              {busy ? "Finishing…" : `Finish Loading #${truck.truck_number}`}
-            </button>
-            {/* The 15s lock stays: it exists so a mis-tapped Start can be taken
-                back without letting a real load be cancelled mid-run. */}
-            <button
-              type="button"
-              className="btn-ghost px-5 py-3.5 text-xs"
-              disabled={busy || elapsed >= 15}
-              onClick={onCancel}
-              title={elapsed < 15 ? `Locks in ${15 - elapsed}s` : "Cancel locked — this load is under way"}
-            >
-              {elapsed < 15 ? `Cancel (${15 - elapsed}s)` : "Cancel"}
-            </button>
-            {onLogShortage && (
-              <button type="button" onClick={onLogShortage} className="btn-ghost px-5 py-3.5 text-xs">
-                Log Shortage
-              </button>
-            )}
-          </div>
+                <PaceBar elapsed={elapsed} paceAvgSeconds={paceAvgSeconds} height={8} />
+              </div>
+            </>
+          )}
         </div>
-      </section>
+
+        {/* Finish owns the row; the two small ones share the next on a phone. */}
+        <div className="grid grid-cols-2 gap-2 sm:flex">
+          <button
+            type="button"
+            disabled={busy}
+            onClick={onFinish}
+            className={clsx(BTN_GO, "col-span-2 min-h-[52px] text-[15px] sm:flex-1")}
+          >
+            <Check className="h-5 w-5" aria-hidden />
+            {busy ? "Finishing…" : `Finish Loading #${truck.truck_number}`}
+          </button>
+          {onLogShortage && (
+            <button
+              type="button"
+              onClick={onLogShortage}
+              aria-pressed={shortagesOpen}
+              className={clsx(BTN_SECONDARY, "min-h-[52px]", shortagesOpen && "!border-sky-600/50 !text-sky-200")}
+            >
+              {shortagesOpen ? "Hide shortages" : "Log shortage"}
+            </button>
+          )}
+          {/* The 15s lock stays: it exists so a mis-tapped Start can be taken
+              back without letting a real load be cancelled mid-run. */}
+          <button
+            type="button"
+            className={clsx(BTN_SECONDARY, "min-h-[52px]", !onLogShortage && "col-span-2")}
+            disabled={busy || elapsed >= 15}
+            onClick={onCancel}
+            title={elapsed < 15 ? `Locks in ${15 - elapsed}s` : "Cancel locked — this load is under way"}
+          >
+            {elapsed < 15 ? `Cancel (${15 - elapsed}s)` : "Cancel locked"}
+          </button>
+        </div>
+      </div>
     );
   }
 

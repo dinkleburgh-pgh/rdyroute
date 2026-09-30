@@ -1,8 +1,11 @@
 import clsx from "clsx";
+import { Check } from "lucide-react";
 import CoverageTag from "../CoverageTag";
 import { getCoverageRouteNumber, loadNeedFor } from "../../utils/truckStatus";
 import type { LoadRequestActions } from "../../hooks/useLoadRequest";
+import type { LoadRequestValue } from "../../api/hooks";
 import type { TruckWithState } from "../../types";
+import { BTN_LINK, ZoneLabel } from "./loadUi";
 
 /**
  * What Unload is emptying right now — and the load crew's answer to it.
@@ -10,30 +13,21 @@ import type { TruckWithState } from "../../types";
  * Rendered by BOTH the Load page and the full-screen Load Display, which is the
  * whole point: the display is the load crew's primary surface, and a second
  * hand-maintained copy of this strip would drift the moment either one changed.
- * `dense` drops chrome for the display (coverage tag, elapsed clock, the
- * trailing sentence) — but never the buttons and never their size. The display
- * runs at 1.5x zoom on a wall, and shrinking a target there is a trap.
+ * `dense` drops chrome for the display (coverage tag, elapsed clock) — but
+ * never the answer and never its size. The display runs at 1.5x zoom on a
+ * wall, and shrinking a target there is a trap.
  *
- * The answer is ADVISORY. "Back out of it" raises a flag on the dock's board;
+ * The answer is ONE question with two equal choices — "Need it for tonight's
+ * load?" Yes, pull it forward / No, back it out. It replaced a green pill that
+ * looked like a button, a red button, and a ghost Confirm, three weights for
+ * one decision. The schedule's own answer is pre-marked (dashed) until a person
+ * taps: tapping it confirms it, tapping the other overrides it, and either way
+ * the choice fills solid.
+ *
+ * The answer is ADVISORY. "Back it out" raises a flag on the dock's board;
  * it does not stop the unload, and nothing here should imply that it does —
- * which is why the labels are "asked", not "told".
+ * which is why the status line says "sent", not "done".
  */
-/** The alternative action — same weight in both states of the strip. */
-const ACTION_BTN =
-  "min-h-[44px] rounded-lg border border-hairline bg-surface-2 px-4 text-sm font-semibold text-ink transition-colors hover:bg-surface disabled:opacity-50";
-/**
- * Backing out is the one answer that takes work off the dock's plan, so it
- * carries the app's red. Pulling forward keeps the neutral treatment — it
- * agrees with what the crew is already doing.
- */
-const BACK_OUT_BTN =
-  "min-h-[44px] rounded-lg border border-st-dirty/50 bg-st-dirty/10 px-4 text-sm font-semibold text-st-dirty transition-colors hover:bg-st-dirty/20 disabled:opacity-50";
-/** The quiet one that sits beside it (Confirm / Clear). */
-const GHOST_BTN =
-  "min-h-[44px] rounded-lg border border-hairline px-4 text-sm font-semibold text-ink-muted transition-colors hover:text-ink disabled:opacity-50";
-/** The current answer, worded by the caller. */
-const PILL = "rounded-md px-2.5 py-1 text-xs font-bold";
-
 export default function NowUnloadingStrip({
   trucks,
   actions,
@@ -56,145 +50,165 @@ export default function NowUnloadingStrip({
   if (trucks.length === 0) return null;
 
   return (
-    <div
-      className={clsx(
-        // Quiet by design: amber is reserved for the loading card's rule and
-        // clock. This strip is reference, not an alarm.
-        "rounded-[10px] border border-hairline bg-surface-3",
-        dense ? "space-y-2 px-3 py-2" : "space-y-2 px-4 py-2.5",
-      )}
-    >
-      {trucks.map((t) => {
-        const req = t.state?.load_request ?? null;
-        const isBusy = actions.busy === t.truck_number;
+    <section className="card overflow-hidden !p-0">
+      {trucks.map((t, i) => {
         const cov = getCoverageRouteNumber(t);
-        // What the schedule already says. Shown until a person disagrees.
-        const need = loadNeedFor(t, board, loadDay, holidayLoad);
-        const suggested: "want" | "skip" = need.needed ? "want" : "skip";
+        const startSec = t.state!.unloading_started_at!;
         return (
-          /* Two deliberate rows at every width — identity, then the answer.
-             The strip lives in the Load page's left rail and the display's
-             work column, and neither is wide enough for the old single line:
-             it wrapped the pill and buttons into a crowded right-hung clump
-             with mismatched heights. */
-          <div key={t.truck_number} className={clsx("flex", dense ? "flex-row items-stretch gap-3" : "flex-col gap-2")}>
+          <div
+            key={t.truck_number}
+            className={clsx(
+              dense ? "flex items-stretch gap-4 p-3" : "px-4 py-3.5 sm:px-[22px]",
+              i > 0 && "border-t border-hairline",
+            )}
+          >
             {dense ? (
               /* The display's square. From across the dock the one thing this
                  strip has to say is WHICH truck is coming off — so the number
                  gets a box of its own, fixed in size so it cannot stretch with
                  the answer column beside it. The start time is static text:
                  the display has no live clock here on purpose (see renderClock). */
-              <div className="flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-xl border-2 border-amber-500/70 bg-amber-950/40 text-center">
-                <span className="text-[9px] font-bold uppercase tracking-[0.16em] text-amber-300">
-                  Now unloading
-                </span>
-                <span className="font-mono text-4xl font-black leading-none tabular-nums text-ink">
+              <div className="flex h-28 w-28 shrink-0 flex-col items-center justify-center rounded-xl border border-hairline bg-surface-3 text-center">
+                <ZoneLabel zone="unloading" className="!gap-1.5 !text-[9px] !tracking-[0.12em]">Unloading</ZoneLabel>
+                <span className="mt-1 font-mono text-4xl font-black leading-none tabular-nums text-ink">
                   #{t.truck_number}
                 </span>
-                <span className="mt-1 text-[11px] font-semibold text-amber-200/80">
-                  since {new Date(t.state!.unloading_started_at! * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
+                <span className="mt-1 text-[11px] font-semibold text-ink-muted">
+                  since {new Date(startSec * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}
                 </span>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-                <span className="text-[10px] font-bold uppercase tracking-widest text-amber-300">
-                  Now unloading
-                </span>
-                <span className="font-mono text-lg font-black tabular-nums text-ink">
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5">
+                <ZoneLabel zone="unloading">At the unload dock</ZoneLabel>
+                <span className="font-mono text-[22px] font-black leading-none tabular-nums text-ink">
                   #{t.truck_number}
                 </span>
                 {cov != null && <CoverageTag route={cov} truck={t.truck_number} />}
-                {renderClock?.(t.state!.unloading_started_at!)}
+                {renderClock && <span className="ml-auto">{renderClock(startSec)}</span>}
               </div>
             )}
 
-            <div className={clsx(dense && "flex min-w-0 flex-1 flex-col justify-center")}>
-            {req == null ? (
-              <div className="flex flex-wrap items-center gap-2">
-                {/* The schedule's own answer, stated before anyone taps. Load
-                    only has to touch this to disagree with it. */}
-                <span
-                  className={clsx(
-                    PILL,
-                    "inline-flex min-h-[32px] w-full items-center justify-center gap-1 sm:w-auto sm:flex-1 sm:justify-start",
-                    need.needed
-                      ? "bg-emerald-600/15 text-emerald-300 ring-1 ring-emerald-600/40"
-                      : "bg-track/25 text-ink-soft ring-1 ring-slate-500/40",
-                  )}
-                >
-                  {need.needed ? "Pull it forward" : "Back it out"}
-                  <span className="ml-1 font-normal opacity-70">· {need.reason}</span>
-                </span>
-                {actions.canAct && (
-                  <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
-                    {/* Named plainly for the action it takes, not phrased as a
-                        rebuttal — it reads the same length as Change/Clear in
-                        the other state, and needs no dense variant. */}
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => void actions.set(t, suggested === "want" ? "skip" : "want")}
-                      className={clsx("flex-1 sm:flex-none", suggested === "want" ? BACK_OUT_BTN : ACTION_BTN)}
-                    >
-                      {suggested === "want" ? "Back it out" : "Pull it forward"}
-                    </button>
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => void actions.set(t, suggested)}
-                      className={clsx("flex-1 sm:flex-none", GHOST_BTN)}
-                      title="Tell the dock a person checked this, not just the schedule"
-                    >
-                      Confirm
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <span
-                  className={clsx(
-                    PILL,
-                    "inline-flex min-h-[32px] w-full items-center justify-center gap-1 sm:w-auto sm:flex-1 sm:justify-start",
-                    req === "want"
-                      ? "bg-emerald-600/20 text-emerald-300 ring-1 ring-emerald-600/40"
-                      : "bg-track/30 text-ink-soft ring-1 ring-slate-500/40",
-                  )}
-                >
-                  {req === "want" ? "Asked to pull forward" : "Asked to back out"}
-                  {t.state?.load_request_at != null &&
-                    ` · ${new Date(t.state.load_request_at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`}
-                </span>
-                {actions.canAct && (
-                  <div className="flex w-full gap-2 sm:w-auto sm:shrink-0">
-                    {/* Same pairing as the auto state: the alternative action
-                        first, the quiet one beside it. */}
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => void actions.set(t, req === "want" ? "skip" : "want")}
-                      className={clsx("flex-1 sm:flex-none", req === "want" ? BACK_OUT_BTN : ACTION_BTN)}
-                    >
-                      {req === "want" ? "Back it out" : "Pull it forward"}
-                    </button>
-                    {/* Clearing has to stay reachable — a mis-tap on a tablet is
-                        the likeliest single failure of this whole feature. */}
-                    <button
-                      type="button"
-                      disabled={isBusy}
-                      onClick={() => void actions.set(t, null)}
-                      className={clsx("flex-1 sm:flex-none", GHOST_BTN)}
-                    >
-                      Clear
-                    </button>
-                  </div>
-                )}
-              </div>
-            )}
+            <div className={clsx(dense ? "flex min-w-0 flex-1 flex-col justify-center" : "mt-3")}>
+              <LoadAnswer truck={t} actions={actions} board={board} loadDay={loadDay} holidayLoad={holidayLoad} dense={dense} />
             </div>
           </div>
         );
       })}
+    </section>
+  );
+}
+
+const CHOICES: { value: LoadRequestValue; label: string }[] = [
+  { value: "want", label: "Yes — pull it forward" },
+  { value: "skip", label: "No — back it out" },
+];
+
+/** Tone per choice: filled once a person has answered, dashed while it is
+ *  only the schedule's suggestion. Pull-forward is the ready green; backing
+ *  out stays neutral — it is a routine answer, not an alarm. */
+const TONES: Record<LoadRequestValue, { chosen: string; suggested: string }> = {
+  want: {
+    chosen: "border-emerald-500/60 bg-emerald-600/25 text-emerald-100",
+    suggested: "border-dashed border-emerald-500/55 bg-emerald-500/[0.06] text-emerald-200",
+  },
+  skip: {
+    chosen: "border-slate-300/40 bg-slate-400/20 text-ink",
+    suggested: "border-dashed border-slate-400/55 bg-slate-400/[0.06] text-ink-soft",
+  },
+};
+
+function LoadAnswer({
+  truck,
+  actions,
+  board,
+  loadDay,
+  holidayLoad,
+  dense,
+}: {
+  truck: TruckWithState;
+  actions: LoadRequestActions;
+  board: TruckWithState[];
+  loadDay: number;
+  holidayLoad?: boolean;
+  dense: boolean;
+}) {
+  const req = truck.state?.load_request ?? null;
+  const isBusy = actions.busy === truck.truck_number;
+  // What the schedule already says. Shown until a person answers.
+  const need = loadNeedFor(truck, board, loadDay, holidayLoad);
+  const suggested: LoadRequestValue = need.needed ? "want" : "skip";
+  const sentAt =
+    truck.state?.load_request_at != null
+      ? new Date(truck.state.load_request_at * 1000).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })
+      : null;
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5">
+        <span className={clsx("font-semibold text-ink", dense ? "text-base" : "text-[13px]")}>
+          Need it for tonight's load?
+        </span>
+        <span className={clsx("text-ink-faint", dense ? "text-xs" : "text-[11.5px]")}>
+          Schedule: {need.reason}
+        </span>
+      </div>
+
+      <div role="radiogroup" aria-label={`Need #${truck.truck_number} for tonight's load?`} className="grid grid-cols-2 gap-2">
+        {CHOICES.map((c) => {
+          const chosen = req === c.value;
+          const isSuggestion = req == null && suggested === c.value;
+          return (
+            <button
+              key={c.value}
+              type="button"
+              role="radio"
+              aria-checked={chosen}
+              disabled={isBusy || !actions.canAct}
+              // Re-tapping the standing answer is a no-op, not a second write.
+              onClick={() => { if (!chosen) void actions.set(truck, c.value); }}
+              title={isSuggestion ? "The schedule's answer — tap to confirm it to the dock" : undefined}
+              className={clsx(
+                "flex min-h-[48px] flex-col items-center justify-center gap-0.5 rounded-lg border px-2 py-1.5 text-center font-semibold leading-tight transition-colors disabled:cursor-default",
+                dense ? "text-base" : "text-sm",
+                chosen ? TONES[c.value].chosen
+                : isSuggestion ? TONES[c.value].suggested
+                : "border-hairline bg-surface-2 text-ink-muted enabled:hover:bg-track enabled:hover:text-ink",
+                isBusy && "opacity-60",
+              )}
+            >
+              <span className="inline-flex items-center gap-1.5">
+                {chosen && <Check className="h-4 w-4 shrink-0" aria-hidden />}
+                {c.label}
+              </span>
+              {isSuggestion && (
+                <span className="text-[9.5px] font-bold uppercase tracking-[0.12em] opacity-75">Suggested</span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={clsx("mt-2 flex min-h-[24px] items-center justify-between gap-2", dense ? "text-xs" : "text-[11.5px]")}>
+        {req == null ? (
+          <span className="text-ink-faint">
+            {actions.canAct
+              ? "Tap to confirm the suggestion or change it — the unload dock sees your answer."
+              : "Nobody from Load has answered yet."}
+          </span>
+        ) : (
+          <span className="inline-flex items-center gap-1.5 text-ink-muted">
+            <Check className="h-3.5 w-3.5 text-st-unloaded" aria-hidden />
+            Sent to the unload dock{sentAt ? ` · ${sentAt}` : ""}
+          </span>
+        )}
+        {/* Clearing has to stay reachable — a mis-tap on a tablet is the
+            likeliest single failure of this whole feature. */}
+        {req != null && actions.canAct && (
+          <button type="button" disabled={isBusy} onClick={() => void actions.set(truck, null)} className={clsx(BTN_LINK, "shrink-0")}>
+            Clear
+          </button>
+        )}
+      </div>
     </div>
   );
 }
