@@ -7,9 +7,8 @@ import { useArrivalCode, useNextUp, useShortages } from "../../api/hooks";
 import { ShortageLogger } from "../../pages/Shorts";
 import { NextUpPanel, StartNextUpBanner } from "../LiveInProgress";
 import CoverageCards from "../CoverageCards";
+import WorkflowCard from "../WorkflowCard";
 import GarmentsStrip from "./GarmentsStrip";
-import YardQueue from "./YardQueue";
-import { loadPairOf } from "./loadUi";
 import NogsStrip from "./NogsStrip";
 import InProgressHeroPanel from "./InProgressHeroPanel";
 import LoadNotesPanel from "./LoadNotesPanel";
@@ -50,11 +49,6 @@ export default function LoadDisplay({
   holidayLoad,
   nextUpTruck,
   queuedNextUp,
-  staged,
-  readyPool,
-  held,
-  unfinished,
-  readyFocus,
   coverage,
   isRecurringCoverage,
   garmentTrucks,
@@ -77,13 +71,6 @@ export default function LoadDisplay({
   holidayLoad?: boolean;
   nextUpTruck?: TruckWithState;
   queuedNextUp: TruckWithState | null;
-  /** The yard, exactly as the page derives it (see Load.tsx): the lane minus
-   *  the queued truck, ready trucks not in the line, and what's not ready. */
-  staged: TruckWithState[];
-  readyPool: TruckWithState[];
-  held: TruckWithState[];
-  unfinished: TruckWithState[];
-  readyFocus: boolean;
   coverage: CoverageEntry[];
   isRecurringCoverage: (route: number, cover: number) => boolean;
   garmentTrucks: TruckWithState[];
@@ -275,25 +262,42 @@ export default function LoadDisplay({
                 dense
               />
 
-              {/* The same yard the page shows — one numbered line, so the two
-                  surfaces can never disagree about what goes next. On the
-                  display a tap starts the truck (no chooser here). */}
-              <YardQueue
-                dense
-                nextUp={queuedNextUp}
-                staged={staged}
-                ready={readyPool}
-                held={held}
-                unfinished={unfinished}
-                suggestions={[]}
-                busyTruck={busy}
-                canStart={!inProgress}
-                readyFocus={readyFocus}
-                pairOf={loadPairOf}
-                onTruck={requestStart}
-                onStart={requestStart}
-                onPickNextUp={() => setNextUpOpen(true)}
-              />
+              <div className="card">
+                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-st-unloaded">
+                  Ready to load ({readySorted.length})
+                </h3>
+                {readySorted.length === 0 ? (
+                  <p className="py-4 text-center text-sm text-ink-faint">Nothing ready.</p>
+                ) : (
+                  <div
+                    className="grid gap-2"
+                    style={{ gridTemplateColumns: "repeat(auto-fill,minmax(150px,1fr))" }}
+                  >
+                    {readySorted.map((t) => (
+                      <button
+                        key={t.truck_number}
+                        type="button"
+                        disabled={Boolean(inProgress) || busy === t.truck_number}
+                        onClick={() => requestStart(t)}
+                        className={clsx(
+                          "text-left transition-all",
+                          inProgress ? "cursor-not-allowed opacity-50" : "active:scale-[0.98]",
+                        )}
+                      >
+                        <WorkflowCard
+                          truck={t}
+                          compact
+                          accent="text-st-unloaded"
+                          statusLabel="Unloaded"
+                          statusClassName="bg-[#16a34a] text-white"
+                          interactive={!inProgress}
+                          ringClassName="hover:ring-st-unloaded"
+                        />
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
 
             </div>
 
