@@ -3,7 +3,8 @@
 .env.*
 !.env.example
 !.env.usb.example
-!production.env
+# Live prod secrets: exists only on the NAS (and in Portainer's stack env). Never commit.
+production.env
 
 # Local runtime data
 .data/

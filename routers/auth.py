@@ -184,7 +184,10 @@ def get_current_user(
         )
     now_ts = datetime.now(timezone.utc).timestamp()
     sess = db.get(SessionModel, sid)
-    if sess is None or sess.expires_ts <= now_ts:
+    # The session must also belong to the token's subject. Without this, anyone
+    # holding the signing key could pair their OWN live sid with another
+    # username (e.g. an admin) and be served as that user.
+    if sess is None or sess.expires_ts <= now_ts or sess.username != username:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Session revoked or expired",
