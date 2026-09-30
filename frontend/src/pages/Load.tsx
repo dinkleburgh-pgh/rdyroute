@@ -82,7 +82,8 @@ export default function Load() {
   // Operations "Load timer" switch: the header's 30-day pace follows it (the
   // hero panel and banners read it themselves).
   const showLoadTimer = useLoadTimerVisible();
-  // Yard or classic arrangement — this device's choice, from the header switch.
+  // Classic (default), yard or floor arrangement — this device's choice, from
+  // the header switch.
   const [layout, setLayout] = useLoadLayout();
   // The URL is the source of truth for the display, so /load?display=1 is
   // bookmarkable and the device comes back up straight into it.
@@ -496,7 +497,7 @@ export default function Load() {
           <div className="flex shrink-0 items-center gap-2">
             {/* Yard | Classic — this device's arrangement of the page. */}
             <div className="inline-flex overflow-hidden rounded-lg border border-hairline text-[11px] font-semibold" role="group" aria-label="Load view">
-              {([["yard", "Yard"], ["classic", "Classic"], ["floor", "Floor"]] as const).map(([key, text], i) => (
+              {([["classic", "Classic"], ["yard", "Yard"], ["floor", "Floor"]] as const).map(([key, text], i) => (
                 <button
                   key={key}
                   type="button"
@@ -542,9 +543,9 @@ export default function Load() {
           the load crew sees it here; swap-managing roles can assign from it. */}
       <CrossloadNoticeBar board={data ?? []} />
 
-      {/* The arrangement is this device's choice (header switch): the yard
-          view or the classic three-zone card. Both are fed the same view
-          props; only the layout components differ. */}
+      {/* The arrangement is this device's choice (header switch): classic by
+          default, or the yard / floor views. All are fed the same view props;
+          only the layout components differ. */}
       {layout === "yard" ? <YardLayout {...view} /> : layout === "floor" ? <FloorLayout {...view} /> : <ClassicLayout {...view} />}
 
       <LoadActionDialogs actions={actions} />
