@@ -27,7 +27,6 @@ export default function DockCard({
   nextUp,
   staged,
   readyCount,
-  suggestions,
   busyTruck,
   canStart,
   pairOf,
@@ -44,8 +43,6 @@ export default function DockCard({
   staged: TruckWithState[];
   /** Trucks still in the Ready grid — only steers the idle hint. */
   readyCount: number;
-  /** "Usually next" truck numbers, offered when nothing is queued. */
-  suggestions: number[];
   busyTruck: number | null;
   /** False while a truck is loading (one at a time). */
   canStart: boolean;
@@ -57,8 +54,8 @@ export default function DockCard({
   onSuggest: (truckNumber: number) => void;
 }) {
   // With nothing queued, the lane's front truck is the obvious next pick —
-  // offer it first, ahead of the history suggestions (which only cover the
-  // Ready grid, never the lane).
+  // offered as a one-tap chip. (History-based "usually next" picks were
+  // dropped: the crew found them noise.)
   const laneFirst = nextUp
     ? null
     : staged.find((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true) ?? null;
@@ -130,15 +127,10 @@ export default function DockCard({
           ) : (
             <div className="flex min-h-[76px] flex-col justify-center gap-2 rounded-[10px] border border-dashed border-sky-500/25 px-3.5 py-3">
               <span className="text-[13px] text-ink-muted">Nothing queued.</span>
-              {(laneFirst || suggestions.length > 0) && (
+              {laneFirst && (
                 <div className="flex flex-wrap items-center gap-1.5">
                   <span className="text-[11px] text-ink-faint">Queue:</span>
-                  {laneFirst && (
-                    <SuggestChip n={laneFirst.truck_number} note="1st in lane" onPick={onSuggest} />
-                  )}
-                  {suggestions.map((n) => (
-                    <SuggestChip key={n} n={n} note="usually next" onPick={onSuggest} />
-                  ))}
+                  <SuggestChip n={laneFirst.truck_number} note="1st in lane" onPick={onSuggest} />
                 </div>
               )}
             </div>
