@@ -51,7 +51,7 @@ import NogsStrip from "../components/load/NogsStrip";
 import CrossloadNoticeBar from "../components/CrossloadNoticeBar";
 import LoadDisplay from "../components/load/LoadDisplay";
 import DockCard from "../components/load/DockCard";
-import { SheetHead } from "../components/load/loadUi";
+import { SheetHead, loadFaceText } from "../components/load/loadUi";
 import CoverageTag from "../components/CoverageTag";
 import { truckTypeLabel } from "../utils/truckType";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
@@ -829,20 +829,20 @@ export default function Load() {
             <SheetHead
               eyebrow={where.text}
               eyebrowClass={where.cls}
-              truckNumber={n}
+              truck={t}
               onClose={close}
               detail={
                 <>
                   <span>{truckTypeLabel(t.truck_type)}</span>
                   {t.state?.wearers ? <span>· {t.state.wearers} wearers</span> : null}
-                  {pair && <CoverageTag route={pair.route} truck={n} split={pair.split} />}
+                  {pair?.split && <CoverageTag route={pair.route} truck={n} split />}
                 </>
               }
             />
             <div className="mt-5 flex flex-col gap-2">
               <ChoiceButton
                 icon={<Play className="h-4 w-4 fill-current" />}
-                label={`Start Loading #${n}`}
+                label={`Start Loading ${loadFaceText(t)}`}
                 hint={startBlocked ?? "Starts the load now"}
                 tone="go"
                 disabled={startBlocked != null || busy === n}

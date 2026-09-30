@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 import { ChevronRight, Play } from "lucide-react";
 import CoverageTag from "../CoverageTag";
 import { truckTypeLabel } from "../../utils/truckType";
-import { BTN_GO, BTN_LINK, ZONE, ZoneLabel } from "./loadUi";
+import { BTN_GO, BTN_LINK, LoadFace, ZONE, ZoneLabel, loadFaceText } from "./loadUi";
 import type { TruckWithState } from "../../types";
 
 export type LoadPair = { route: number; split?: boolean } | null;
@@ -64,7 +64,7 @@ export default function DockCard({
     : staged.find((t) => t.state?.status === "unloaded" && t.state?.priority_hold !== true) ?? null;
 
   const idleHint = nextUp
-    ? `#${nextUp.truck_number} is up next — start it when the dock is ready.`
+    ? `${loadFaceText(nextUp)} is up next — start it when the dock is ready.`
     : staged.length > 0
       ? "Tap a staged truck to start it, or queue one up next."
       : readyCount > 0
@@ -96,7 +96,7 @@ export default function DockCard({
                 className={clsx(BTN_GO, "min-h-[52px] w-full text-[15px] sm:w-auto")}
               >
                 <Play className="h-4 w-4 fill-current" aria-hidden />
-                {busyTruck === nextUp.truck_number ? "Starting…" : `Start Loading #${nextUp.truck_number}`}
+                {busyTruck === nextUp.truck_number ? "Starting…" : `Start Loading ${loadFaceText(nextUp)}`}
               </button>
             )}
           </div>
@@ -253,16 +253,10 @@ function Slot({
       )}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-          <span
-            className={clsx(
-              "font-mono font-black leading-none tracking-[-0.01em] tabular-nums",
-              big ? "text-[34px]" : "text-[24px]",
-              ZONE[zone].number,
-            )}
-          >
-            #{truck.truck_number}
-          </span>
-          {pair && <CoverageTag route={pair.route} truck={truck.truck_number} split={pair.split} />}
+          {/* Route first when covering (LoadFace); a split keeps the truck
+              first and wears the amber split tag instead. */}
+          <LoadFace truck={truck} size={big ? "md" : "sm"} numberClass={ZONE[zone].number} />
+          {pair?.split && <CoverageTag route={pair.route} truck={truck.truck_number} split />}
         </div>
         <div className="mt-1.5 flex items-baseline gap-1.5 text-[11.5px] leading-snug text-ink-muted">
           <span className={clsx("h-1.5 w-1.5 shrink-0 -translate-y-px rounded-full", dotClass ?? ZONE[zone].dot)} />

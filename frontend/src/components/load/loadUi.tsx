@@ -1,6 +1,71 @@
 import clsx from "clsx";
 import type { ReactNode } from "react";
 import { X } from "lucide-react";
+import { getCoverageRouteNumber } from "../../utils/truckStatus";
+import type { TruckWithState } from "../../types";
+
+/**
+ * What the crew is actually loading. A spare (or swap truck) covering a route
+ * is loading THAT ROUTE's freight — so the route is the headline and the truck
+ * number is the "which one to pull up" detail, not the other way round. A
+ * split keeps the truck first: its own route runs, it just carries overflow.
+ */
+export function loadFace(t: TruckWithState): { number: number; onTruck: number | null } {
+  const route = getCoverageRouteNumber(t);
+  return route != null
+    ? { number: route, onTruck: t.truck_number }
+    : { number: t.truck_number, onTruck: null };
+}
+
+/** Text form for buttons and hints: "#62", or "55 → 62" when covering. */
+export function loadFaceText(t: TruckWithState): string {
+  const f = loadFace(t);
+  return f.onTruck != null ? `${f.number} → ${f.onTruck}` : `#${f.number}`;
+}
+
+const FACE_SIZES = {
+  sm: { big: "text-[24px]", small: "text-[13px]" },
+  md: { big: "text-[34px]", small: "text-[16px]" },
+  sheet: { big: "text-[40px]", small: "text-[18px]" },
+  lg: { big: "text-[52px]", small: "text-[22px]" },
+  xl: { big: "text-[92px]", small: "text-[36px]" },
+} as const;
+
+/**
+ * The number as the crew reads it: the route big, then "→ on #truck" a size
+ * down when the truck covers one (the app-wide ROUTE → ON TRUCK idiom, see
+ * CoverageTag). `numberClass` colours the headline; the truck stays ink so it
+ * is always legible — that is the one they have to find on the lot.
+ */
+export function LoadFace({
+  truck,
+  numberClass,
+  size = "md",
+  className,
+}: {
+  truck: TruckWithState;
+  numberClass: string;
+  size?: keyof typeof FACE_SIZES;
+  className?: string;
+}) {
+  const f = loadFace(truck);
+  const s = FACE_SIZES[size];
+  return (
+    <span
+      className={clsx("inline-flex flex-wrap items-baseline gap-x-2 gap-y-0.5", className)}
+      title={f.onTruck != null ? `Route ${f.number}'s load rides on truck ${f.onTruck}` : undefined}
+    >
+      <span className={clsx("font-mono font-black leading-none tracking-[-0.02em] tabular-nums", s.big, numberClass)}>
+        #{f.number}
+      </span>
+      {f.onTruck != null && (
+        <span className={clsx("whitespace-nowrap font-mono font-bold leading-none tabular-nums text-ink-soft", s.small)}>
+          <span className="font-normal text-ink-faint">→ on</span> #{f.onTruck}
+        </span>
+      )}
+    </span>
+  );
+}
 
 /**
  * The Load page's small shared vocabulary: the three zone colours and the
@@ -77,13 +142,13 @@ export const BTN_LINK =
 export function SheetHead({
   eyebrow,
   eyebrowClass = "text-ink-muted",
-  truckNumber,
+  truck,
   detail,
   onClose,
 }: {
   eyebrow: ReactNode;
   eyebrowClass?: string;
-  truckNumber: number;
+  truck: TruckWithState;
   detail?: ReactNode;
   onClose: () => void;
 }) {
@@ -91,9 +156,7 @@ export function SheetHead({
     <div className="flex items-start justify-between gap-3">
       <div className="min-w-0">
         <div className={clsx("text-[10.5px] font-bold uppercase tracking-[0.16em]", eyebrowClass)}>{eyebrow}</div>
-        <div className="mt-1 font-mono text-[40px] font-black leading-none tracking-[-0.02em] tabular-nums text-ink">
-          #{truckNumber}
-        </div>
+        <LoadFace truck={truck} size="sheet" numberClass="text-ink" className="mt-1" />
         {detail && <div className="mt-2 flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-muted">{detail}</div>}
       </div>
       <button

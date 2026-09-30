@@ -38,6 +38,7 @@ import { ShortageLogger } from "../pages/Shorts";
 import { DEFAULT_TRACKED_ITEMS, findTrackedItem, topCatOf, useShortageItemLabel } from "./shorts/HierarchyPicker";
 import { useAuth } from "../contexts/AuthContext";
 import CoverageTag from "./CoverageTag";
+import { LoadFace, loadFaceText } from "./load/loadUi";
 import LoadNotesPanel from "./load/LoadNotesPanel";
 import { workdayNumbers } from "./Clock";
 import { buildOperationalDayContext, effectiveStatus, getCoverageRouteNumber, isScheduledOff } from "../utils/truckStatus";
@@ -619,7 +620,6 @@ export function StartNextUpBanner({
   onStart: () => void;
   blockedReason?: string | null;
 }) {
-  const coverageRoute = getCoverageRouteNumber(truck);
   const showTimer = useLoadTimerVisible();
   return (
     <section
@@ -631,16 +631,15 @@ export function StartNextUpBanner({
         <div className="min-w-0 flex-1 text-center sm:text-left">
           <div className="text-[10px] font-bold uppercase tracking-widest text-ink-muted">Next up</div>
           <div className="flex flex-wrap items-baseline justify-center gap-x-3 gap-y-1 sm:justify-start">
-            <span className="font-mono text-[46px] font-black leading-none tabular-nums tracking-[-0.02em]" style={{ color: "#7dd3fc" }}>
-              #{truck.truck_number}
-            </span>
+            {/* Route first when covering — the crew loads a route, and the
+                truck number is the one to pull up (see loadUi.LoadFace). */}
+            <LoadFace truck={truck} size="lg" numberClass="text-[#7dd3fc]" />
             <span className="text-sm text-ink-muted">
               {truckTypeLabel(truck.truck_type)}
               {truck.state?.wearers ? ` · ${truck.state.wearers} wearers` : ""}
               {showTimer && paceAvgSeconds != null ? ` · avg ${formatDuration(paceAvgSeconds)}` : ""}
             </span>
           </div>
-          {coverageRoute != null && <CoverageTag route={coverageRoute} truck={truck.truck_number} className="mt-1.5" />}
           {blockedReason && <p className="mt-1.5 text-xs text-st-inprogress">{blockedReason}</p>}
         </div>
         <button
@@ -650,7 +649,7 @@ export function StartNextUpBanner({
           className="w-full rounded-lg px-5 py-3 text-sm font-bold text-white transition-opacity disabled:opacity-50 sm:w-auto"
           style={{ background: "#16a34a" }}
         >
-          {busy ? "Starting…" : `Start Loading #${truck.truck_number}`}
+          {busy ? "Starting…" : `Start Loading ${loadFaceText(truck)}`}
         </button>
       </div>
     </section>

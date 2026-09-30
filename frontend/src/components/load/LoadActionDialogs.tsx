@@ -31,7 +31,7 @@ export default function LoadActionDialogs({ actions }: { actions: LoadActions })
       <SheetHead
         eyebrow="Before you finish"
         eyebrowClass="text-amber-300"
-        truckNumber={g.truck_number}
+        truck={g}
         onClose={closeGarment}
       />
       <div className="mt-4 flex items-start gap-3 rounded-lg border border-amber-600/50 bg-amber-950/40 px-3 py-3">
