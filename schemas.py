@@ -708,6 +708,9 @@ class ShortageMatrixVM(BaseModel):
     rows: list[ShortageRowVM] = Field(default_factory=list, max_length=500)
     truck_totals: list[int] = Field(max_length=200)    # aligned to trucks
     grand_total: int
+    # Split HELPER truck -> the route whose overflow it carried; headers render
+    # the amber ROUTE+TRUCK pair so a split load reads as its own sheet entry.
+    split_by_truck: dict[int, int] = Field(default_factory=dict)
 
     @model_validator(mode="after")
     def _aligned(self) -> "ShortageMatrixVM":

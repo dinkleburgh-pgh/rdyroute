@@ -91,6 +91,8 @@ export interface ShortageMatrixVM {
   rows: ShortageRowVM[];
   truck_totals: number[]; // aligned to trucks
   grand_total: number;
+  /** Split HELPER truck -> the route whose overflow it carried (pair headers). */
+  split_by_truck?: Record<number, number>;
 }
 
 export interface ShortageTruckItemVM {

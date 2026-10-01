@@ -496,9 +496,16 @@ def _sheet_cards_html(s: ShortagesSectionVM | None) -> str:
                 f'<span class="dot" style="background:{r.dot_hex}"></span>{_e(r.label)}</span>'
                 f'<span class="mono scqty">{int(r.cells[idx])}</span></div>'
             )
+        split_route = m.split_by_truck.get(int(truck))
+        num_html = (
+            f'<span class="mono scnum"><span style="color:#fbbf24">{int(split_route)}</span>'
+            f'<span class="dim">+</span>{int(truck)}</span>'
+            if split_route is not None
+            else f'<span class="mono scnum">{int(truck)}</span>'
+        )
         cards.append(
             f'<div class="sc"><div class="sch">'
-            f'<span class="mono scnum">{int(truck)}</span>'
+            f"{num_html}"
             f'<span class="mono scttl">{int(m.truck_totals[idx])} <span class="dim">qty</span></span>'
             f'</div>{"".join(body)}</div>'
         )
@@ -551,7 +558,15 @@ def _short_grid_html(s: ShortagesSectionVM | None) -> str:
         return "".join(out)
 
     header = ['<th class="item">Item</th>']
-    header += [f"<th>{int(t)}</th>" for t in m.trucks]
+    header += [
+        (
+            f'<th><span style="color:#fbbf24">{int(m.split_by_truck[int(t)])}</span>'
+            f'<span class="dim">+</span>{int(t)}</th>'
+            if int(t) in m.split_by_truck
+            else f"<th>{int(t)}</th>"
+        )
+        for t in m.trucks
+    ]
     header.append('<th class="tot">Tot</th>')
 
     body = []

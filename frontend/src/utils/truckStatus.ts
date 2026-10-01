@@ -198,6 +198,19 @@ export function getCoverageRouteNumber(t: TruckWithState): number | null {
 }
 
 /**
+ * Split HELPER truck → the route whose overflow it carries today. The shorts
+ * surfaces use this to give a split load its own sheet entry: shorts are
+ * stored under the HELPER's truck number (the physical load), labelled with
+ * the amber ROUTE + TRUCK pair. Only today's board carries split info —
+ * historical dates resolve to an empty map and render plain numbers.
+ */
+export function splitHelpersByTruck(board: TruckWithState[]): Map<number, number> {
+  const m = new Map<number, number>();
+  for (const t of board) if (t.route_split_route != null) m.set(t.truck_number, t.route_split_route);
+  return m;
+}
+
+/**
  * Route this truck has physically TAKEN OVER — meaning the covered route's
  * own truck did NOT run and must never appear/count alongside its cover.
  *

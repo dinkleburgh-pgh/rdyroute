@@ -16,6 +16,7 @@ import type { Shortage, TruckWithState } from "../../types";
 import { useTrackedItems, type TrackedItem } from "../../api/hooks";
 import { catalogOrDefault, useCategoryPalette, type CategoryPalette } from "./HierarchyPicker";
 import { buildShortageMatrix } from "./shortageMatrix";
+import { splitHelpersByTruck } from "../../utils/truckStatus";
 
 type SheetViewProps = {
   shorts: Shortage[];
@@ -65,6 +66,9 @@ export function ShortageSheetContent({
     () => new Map(board.map((t) => [t.truck_number, t.truck_type])),
     [board],
   );
+  // Split helpers head their column/card with the amber ROUTE+TRUCK pair —
+  // only today's board knows splits, so historical sheets show plain numbers.
+  const splitByHelper = useMemo(() => splitHelpersByTruck(board), [board]);
 
   const dotOf = palette.dotClass;
   const chipOf = palette.chipClass;
@@ -123,9 +127,17 @@ export function ShortageSheetContent({
                   <th
                     key={n}
                     className="sticky top-0 z-[15] w-10 border-b border-r border-slate-700 bg-slate-900 px-0.5 py-1 text-center font-mono text-sm font-black tabular-nums text-slate-100"
-                    title={truckTypeByNum.get(n) ?? undefined}
+                    title={splitByHelper.has(n) ? `Split — route ${splitByHelper.get(n)}'s overflow on #${n}` : (truckTypeByNum.get(n) ?? undefined)}
                   >
-                    {n}
+                    {splitByHelper.has(n) ? (
+                      <>
+                        <span className="text-amber-300">{splitByHelper.get(n)}</span>
+                        <span className="text-slate-500">+</span>
+                        {n}
+                      </>
+                    ) : (
+                      n
+                    )}
                   </th>
                 ))}
                 <th className="sticky right-0 top-0 z-20 w-12 border-b border-l border-slate-700 bg-slate-900 px-1 py-1 text-center text-[9px] font-bold uppercase tracking-wider text-amber-400">
@@ -215,7 +227,17 @@ export function ShortageSheetContent({
             {trucks.map((n) => (
               <div key={n} className="break-inside-avoid rounded-lg border border-slate-800 bg-slate-900/60">
                 <div className="flex items-baseline justify-between gap-2 border-b border-slate-800 px-2 py-1">
-                  <span className="font-mono text-lg font-black tabular-nums text-slate-100">{n}</span>
+                  <span className="font-mono text-lg font-black tabular-nums text-slate-100">
+                    {splitByHelper.has(n) ? (
+                      <>
+                        <span className="text-amber-300">{splitByHelper.get(n)}</span>
+                        <span className="text-sm text-slate-500">+</span>
+                        {n}
+                      </>
+                    ) : (
+                      n
+                    )}
+                  </span>
                   <span className="text-[9px] font-semibold uppercase tracking-wider text-amber-400">
                     {truckTotals.get(n) ?? 0} qty
                   </span>

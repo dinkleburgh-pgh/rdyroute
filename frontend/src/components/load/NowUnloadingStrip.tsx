@@ -36,6 +36,7 @@ export default function NowUnloadingStrip({
   holidayLoad,
   dense = false,
   renderClock,
+  onQuickStart,
 }: {
   trucks: TruckWithState[];
   actions: LoadRequestActions;
@@ -46,6 +47,10 @@ export default function NowUnloadingStrip({
   dense?: boolean;
   /** The page's live elapsed-time component; omitted on the dense display. */
   renderClock?: (startSec: number) => React.ReactNode;
+  /** One-tap fast path: finish the unload AND start loading this truck.
+   *  Load-page only (the wall display never offers it — it skips the unload
+   *  crew's own confirmation, so it stays a deliberate, close-up tap). */
+  onQuickStart?: (t: TruckWithState) => void;
 }) {
   if (trucks.length === 0) return null;
 
@@ -91,6 +96,17 @@ export default function NowUnloadingStrip({
             <div className={clsx(dense ? "flex min-w-0 flex-1 flex-col justify-center" : "mt-3")}>
               <LoadAnswer truck={t} actions={actions} board={board} loadDay={loadDay} holidayLoad={holidayLoad} dense={dense} />
             </div>
+
+            {!dense && onQuickStart && (
+              <button
+                type="button"
+                onClick={() => onQuickStart(t)}
+                className="mt-2.5 inline-flex items-center gap-1.5 rounded-lg border border-sky-600/50 bg-sky-900/30 px-3 py-1.5 text-xs font-bold text-sky-200 transition-colors hover:bg-sky-800/40 active:scale-95"
+              >
+                <Check className="h-3.5 w-3.5" />
+                Unloaded — Start Loading
+              </button>
+            )}
           </div>
         );
       })}

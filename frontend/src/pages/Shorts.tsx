@@ -30,7 +30,7 @@ import ShortSheetEditor from "../components/shorts/ShortSheetEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
 import HierarchyPicker, { DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit, shortageItemLabel, useCategoryPalette, useShortageItemLabel } from "../components/shorts/HierarchyPicker";
 import type { TrackedItem } from "../api/hooks";
-import { isScheduledOff } from "../utils/truckStatus";
+import { isScheduledOff, splitHelpersByTruck } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
 import { truckTypeLabel } from "../utils/truckType";
 
@@ -56,22 +56,30 @@ function TruckPicker({
   recentLog?: Shortage[];
 }) {
   const itemLabelOf = useShortageItemLabel();
+  const splitByHelper = splitHelpersByTruck(board);
   const routeTrucks = board
     .filter((t) => t.truck_type !== "Spare")
     .sort((a, b) => a.truck_number - b.truck_number);
 
   // Running routes = the route trucks actually scheduled to run this load day
-  // (holiday runs every route). Mirrors VerifyShortSheet / the board, so the
-  // sheet lists exactly the routes that need writing up and re-derives live
-  // whenever the fleet schedule changes.
-  const running = routeTrucks.filter(
-    (t) => t.is_active && (holiday || !isScheduledOff(t, loadDay)),
-  );
+  // (holiday runs every route), PLUS today's split helpers — a split load is
+  // its own sheet entry even when the helper is a spare or an off-day truck,
+  // otherwise its shorts have nowhere to go. Mirrors VerifyShortSheet / the
+  // board, so the sheet lists exactly the routes that need writing up and
+  // re-derives live whenever the fleet schedule changes.
+  const running = [
+    ...routeTrucks.filter((t) => t.is_active && (holiday || !isScheduledOff(t, loadDay))),
+    ...board.filter((t) => splitByHelper.has(t.truck_number)),
+  ]
+    .filter((t, i, arr) => arr.findIndex((x) => x.truck_number === t.truck_number) === i)
+    .sort((a, b) => a.truck_number - b.truck_number);
 
-  // A route that already has shorts logged is always shown (even if it's off or
-  // inactive) so nothing anyone logged can be hidden. "To log" is limited to
-  // running routes that don't have shorts yet.
-  const withShorts    = routeTrucks.filter((t) => shortsByTruck.has(t.truck_number));
+  // A truck that already has shorts logged is always shown (even a spare, an
+  // off route, or an inactive one) so nothing anyone logged can be hidden.
+  // "To log" is limited to running entries that don't have shorts yet.
+  const withShorts = board
+    .filter((t) => shortsByTruck.has(t.truck_number))
+    .sort((a, b) => a.truck_number - b.truck_number);
   const withoutShorts = running.filter((t) => !shortsByTruck.has(t.truck_number));
   const runningLogged = running.filter((t) => shortsByTruck.has(t.truck_number)).length;
 
@@ -135,9 +143,17 @@ function TruckPicker({
                 whileHover={{ scale: 1.06, transition: { type: "spring", stiffness: 400, damping: 20 } }}
                 whileTap={{ scale: 0.93 }}
               >
-                <span className="text-2xl font-black leading-none">{t.truck_number}</span>
+                {splitByHelper.has(t.truck_number) ? (
+                  <span className="flex items-baseline gap-0.5 text-2xl font-black leading-none tabular-nums">
+                    <span className="text-amber-300">{splitByHelper.get(t.truck_number)}</span>
+                    <span className="text-sm font-bold text-ink-muted">+</span>
+                    <span>{t.truck_number}</span>
+                  </span>
+                ) : (
+                  <span className="text-2xl font-black leading-none">{t.truck_number}</span>
+                )}
                 <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-ink-muted">
-                  {truckTypeLabel(t.truck_type)}
+                  {splitByHelper.has(t.truck_number) ? "Split load" : truckTypeLabel(t.truck_type)}
                 </span>
               </motion.button>
             ))}
@@ -164,7 +180,15 @@ function TruckPicker({
                   whileHover={{ scale: 1.06, transition: { type: "spring", stiffness: 400, damping: 20 } }}
                   whileTap={{ scale: 0.93 }}
                 >
-                  <span className="text-xl font-black leading-none text-amber-200">{t.truck_number}</span>
+                  {splitByHelper.has(t.truck_number) ? (
+                    <span className="flex items-baseline gap-0.5 text-xl font-black leading-none tabular-nums text-amber-200">
+                      <span className="text-amber-300">{splitByHelper.get(t.truck_number)}</span>
+                      <span className="text-xs font-bold text-amber-500">+</span>
+                      <span>{t.truck_number}</span>
+                    </span>
+                  ) : (
+                    <span className="text-xl font-black leading-none text-amber-200">{t.truck_number}</span>
+                  )}
                   <span className="mt-0.5 text-[10px] font-semibold text-amber-400">
                     {count} item{count !== 1 ? "s" : ""}
                   </span>

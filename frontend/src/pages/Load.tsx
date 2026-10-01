@@ -19,6 +19,7 @@ import {
   useClearNextUp,
   usePrevDayCarriers,
   usePrevDaySplitHelpers,
+  useUpsertTruckState,
 } from "../api/hooks";
 import { ShortageLogger } from "./Shorts";
 import { todayIso } from "../api/client";
@@ -357,6 +358,21 @@ export default function Load() {
 
   const anyInProgress = actions.anyInProgress;
 
+  // One-tap fast path on the unloading card: finish the unload exactly the
+  // way Unload's own button does (server stamps unloaded_at), then hand the
+  // truck straight to requestStart — which keeps every start guard (one load
+  // at a time, holds, uncovered spares) and its blocked-reason toasts.
+  const quickUpsert = useUpsertTruckState();
+  async function quickUnloadStart(t: TruckWithState) {
+    await quickUpsert.mutateAsync({
+      truck_number: t.truck_number,
+      run_date: runDate,
+      status: "unloaded",
+      wearers: t.state?.wearers ?? 0,
+    });
+    requestStart({ ...t, state: { ...t.state!, status: "unloaded" } });
+  }
+
   // All dust trucks — show garment checklist regardless of schedule/status
   const dustGarmentTrucks = board
     .filter((t) => t.truck_type === "Dust")
@@ -426,6 +442,7 @@ export default function Load() {
       loadDay={loadDay}
       holidayLoad={holidayLoad}
       renderClock={(startSec) => <UnloadingSinceLoad startSec={startSec} />}
+      onQuickStart={quickUnloadStart}
     />
   ) : null;
   // Held and unfinished trucks are one idea to the load crew — ready soon, not

@@ -1003,6 +1003,11 @@ function ReportBody({
                 })),
                 truck_totals: m.trucks.map((n) => m.truckTotals.get(n) ?? 0),
                 grand_total: m.grandTotal,
+                split_by_truck: Object.fromEntries(
+                  (board ?? [])
+                    .filter((t) => t.route_split_route != null && m.trucks.includes(t.truck_number))
+                    .map((t) => [t.truck_number, t.route_split_route as number]),
+                ),
               }
             : null,
       };

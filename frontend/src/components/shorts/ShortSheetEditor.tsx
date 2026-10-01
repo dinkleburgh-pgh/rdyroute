@@ -24,7 +24,7 @@ import {
 import type { Shortage, TruckWithState } from "../../types";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
-import { isScheduledOff } from "../../utils/truckStatus";
+import { isScheduledOff, splitHelpersByTruck } from "../../utils/truckStatus";
 import ConfirmDialog from "../ConfirmDialog";
 import SheetPhotoPane from "./SheetPhotoPane";
 import ShortageSheetView from "./ShortageSheetView";
@@ -158,12 +158,20 @@ export default function ShortSheetEditor({
   };
 
   // --- Truck column set (the sheet's trucks), persisted per run-date ---
+  // Scheduled route trucks PLUS today's split helpers — a split load gets its
+  // own column (stored under the helper's number, headed by the ROUTE pair).
+  const splitByHelper = useMemo(() => splitHelpersByTruck(board), [board]);
   const runningRoutes = useMemo(
     () =>
-      board
-        .filter((t) => t.truck_type !== "Spare" && t.is_active && (holiday || !isScheduledOff(t, loadDay)))
-        .map((t) => t.truck_number),
-    [board, holiday, loadDay],
+      [
+        ...new Set([
+          ...board
+            .filter((t) => t.truck_type !== "Spare" && t.is_active && (holiday || !isScheduledOff(t, loadDay)))
+            .map((t) => t.truck_number),
+          ...splitByHelper.keys(),
+        ]),
+      ].sort((a, b) => a - b),
+    [board, holiday, loadDay, splitByHelper],
   );
   const trucksWithData = useMemo(() => [...new Set(shorts.map((s) => s.truck_number))], [shorts]);
 
@@ -274,6 +282,7 @@ export default function ShortSheetEditor({
         onToggle={toggleTruck}
         onSelectRunning={() => persistPicked([...new Set([...runningRoutes, ...trucksWithData])])}
         onClear={() => persistPicked([...trucksWithData])}
+        splitByHelper={splitByHelper}
       />
 
       {/* Mode switch */}
@@ -316,6 +325,7 @@ export default function ShortSheetEditor({
         <GridMode
           rows={hideEmpty ? rows.filter((r) => rowTotal(r) > 0) : rows}
           columns={columns}
+          splitByHelper={splitByHelper}
           cellDisplay={cellDisplay}
           setDraft={setDraft}
           saveCell={saveCell}
@@ -328,6 +338,7 @@ export default function ShortSheetEditor({
         <GuidedMode
           rows={rows}
           columns={columns}
+          splitByHelper={splitByHelper}
           guidedIdx={Math.min(guidedIdx, Math.max(0, rows.length - 1))}
           setGuidedIdx={setGuidedIdx}
           filledRowKeys={filledRowKeys}
@@ -351,6 +362,7 @@ export default function ShortSheetEditor({
           <PaperMode
             rows={paperRows}
             columns={columns}
+            splitByHelper={splitByHelper}
             truckIdx={Math.min(paperTruckIdx, Math.max(0, columns.length - 1))}
             setTruckIdx={setPaperTruckIdx}
             cellDisplay={cellDisplay}
@@ -384,10 +396,23 @@ export default function ShortSheetEditor({
 
 // ---------------------------------------------------------------------------
 
+/** A sheet column's number — split helpers read as the amber ROUTE+TRUCK pair. */
+function TruckNumLabel({ n, split }: { n: number; split?: number }) {
+  if (split == null) return <>#{n}</>;
+  return (
+    <span title={`Split load — route ${split}'s overflow on #${n}`}>
+      <span className="text-amber-300">{split}</span>
+      <span className="text-slate-500">+</span>
+      {n}
+    </span>
+  );
+}
+
 function TruckColumnPicker({
   candidates,
   picked,
   withData,
+  splitByHelper,
   filter,
   setFilter,
   onToggle,
@@ -397,6 +422,7 @@ function TruckColumnPicker({
   candidates: number[];
   picked: number[];
   withData: Set<number>;
+  splitByHelper: Map<number, number>;
   filter: string;
   setFilter: (v: string) => void;
   onToggle: (n: number) => void;
@@ -451,7 +477,7 @@ function TruckColumnPicker({
               )}
               title={withData.has(n) ? "Has shortages logged" : undefined}
             >
-              #{n}
+              <TruckNumLabel n={n} split={splitByHelper.get(n)} />
               {withData.has(n) && <span className="ml-1 inline-block h-1.5 w-1.5 rounded-full bg-amber-400 align-middle" />}
             </button>
           );
@@ -466,6 +492,7 @@ function TruckColumnPicker({
 function GridMode({
   rows,
   columns,
+  splitByHelper,
   cellDisplay,
   setDraft,
   saveCell,
@@ -476,6 +503,7 @@ function GridMode({
 }: {
   rows: SheetRow[];
   columns: number[];
+  splitByHelper: Map<number, number>;
   cellDisplay: (row: SheetRow, truck: number) => string;
   setDraft: (row: SheetRow, truck: number, v: string) => void;
   saveCell: (row: SheetRow, truck: number) => void;
@@ -533,7 +561,15 @@ function GridMode({
             </th>
             {columns.map((t) => (
               <th key={t} className="sticky top-0 z-10 border-b border-slate-800 bg-slate-900 px-2 py-2 text-center text-xs font-bold tabular-nums text-slate-200">
-                #{t}
+                {splitByHelper.has(t) ? (
+                  <span title={`Split load — route ${splitByHelper.get(t)}'s overflow on #${t}`}>
+                    <span className="text-amber-300">{splitByHelper.get(t)}</span>
+                    <span className="text-slate-500">+</span>
+                    {t}
+                  </span>
+                ) : (
+                  <>#{t}</>
+                )}
               </th>
             ))}
             <th className="sticky right-0 top-0 z-20 border-b border-l border-slate-800 bg-slate-900 px-2 py-2 text-center text-xs font-semibold text-slate-400">Σ</th>
@@ -627,6 +663,7 @@ function FragmentRow({ children }: { children: ReactNode }) {
 function PaperMode({
   rows,
   columns,
+  splitByHelper,
   truckIdx,
   setTruckIdx,
   cellDisplay,
@@ -638,6 +675,7 @@ function PaperMode({
 }: {
   rows: PaperRow[];
   columns: number[];
+  splitByHelper: Map<number, number>;
   truckIdx: number;
   setTruckIdx: (n: number) => void;
   cellDisplay: (row: SheetRow, truck: number) => string;
@@ -683,7 +721,7 @@ function PaperMode({
                     : "border-slate-700 bg-slate-800 text-slate-300 hover:border-slate-500",
               )}
             >
-              #{t}
+              <TruckNumLabel n={t} split={splitByHelper.get(t)} />
               {filled > 0 && <span className="ml-1 text-[10px] font-semibold opacity-80">{filled}</span>}
             </button>
           );
@@ -777,6 +815,7 @@ function PaperMode({
 function GuidedMode({
   rows,
   columns,
+  splitByHelper,
   guidedIdx,
   setGuidedIdx,
   filledRowKeys,
@@ -789,6 +828,7 @@ function GuidedMode({
 }: {
   rows: SheetRow[];
   columns: number[];
+  splitByHelper: Map<number, number>;
   guidedIdx: number;
   setGuidedIdx: (n: number) => void;
   filledRowKeys: Set<string>;
@@ -829,7 +869,9 @@ function GuidedMode({
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-4">
           {columns.map((t) => (
             <label key={t} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/40 px-2 py-1.5">
-              <span className="w-12 shrink-0 text-sm font-extrabold tabular-nums text-white">#{t}</span>
+              <span className="w-14 shrink-0 text-sm font-extrabold tabular-nums text-white">
+                <TruckNumLabel n={t} split={splitByHelper.get(t)} />
+              </span>
               <input
                 className="w-full rounded bg-slate-800/60 px-2 py-1 text-center text-sm tabular-nums text-white outline-none focus:bg-slate-700 focus:ring-1 focus:ring-blue-500"
                 type="text"

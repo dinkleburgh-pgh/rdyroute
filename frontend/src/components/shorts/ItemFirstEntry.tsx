@@ -23,7 +23,7 @@ import {
 } from "../../api/hooks";
 import { useAuth } from "../../contexts/AuthContext";
 import { useToast } from "../../contexts/ToastContext";
-import { isScheduledOff } from "../../utils/truckStatus";
+import { isScheduledOff, splitHelpersByTruck } from "../../utils/truckStatus";
 import type { Shortage, TruckWithState } from "../../types";
 import AnimateCard from "../AnimateCard";
 import HierarchyPicker, {
@@ -121,13 +121,20 @@ export default function ItemFirstEntry({
     setPickerResetKey((k) => k + 1);
   }, [runDate]);
 
-  // Running routes for this sheet's date — same roster logic as TruckPicker.
+  // Running routes for this sheet's date — same roster logic as TruckPicker:
+  // scheduled route trucks PLUS today's split helpers (a split load is its
+  // own sheet entry, even on a spare or off-day helper).
+  const splitByHelper = useMemo(() => splitHelpersByTruck(board), [board]);
   const running = useMemo(() => {
-    return board
-      .filter((t) => t.truck_type !== "Spare")
-      .sort((a, b) => a.truck_number - b.truck_number)
-      .filter((t) => t.is_active && (holiday || !isScheduledOff(t, loadDay)));
-  }, [board, holiday, loadDay]);
+    return [
+      ...board
+        .filter((t) => t.truck_type !== "Spare")
+        .filter((t) => t.is_active && (holiday || !isScheduledOff(t, loadDay))),
+      ...board.filter((t) => splitByHelper.has(t.truck_number)),
+    ]
+      .filter((t, i, arr) => arr.findIndex((x) => x.truck_number === t.truck_number) === i)
+      .sort((a, b) => a.truck_number - b.truck_number);
+  }, [board, holiday, loadDay, splitByHelper]);
 
   // Trucks that already have THIS item logged today (dupe warning, not a block).
   const alreadyLoggedQty = useMemo(() => {
@@ -539,7 +546,15 @@ export default function ItemFirstEntry({
                     transition={{ type: "spring", stiffness: 400, damping: 30, delay: i * 0.015 }}
                     whileTap={{ scale: 0.93 }}
                   >
-                    <span className="text-2xl font-black leading-none">{t.truck_number}</span>
+                    {splitByHelper.has(t.truck_number) ? (
+                      <span className="flex items-baseline gap-0.5 text-2xl font-black leading-none tabular-nums">
+                        <span className="text-amber-300">{splitByHelper.get(t.truck_number)}</span>
+                        <span className="text-sm font-bold text-slate-400">+</span>
+                        <span>{t.truck_number}</span>
+                      </span>
+                    ) : (
+                      <span className="text-2xl font-black leading-none">{t.truck_number}</span>
+                    )}
                     {sel ? (
                       <span className="mt-0.5 text-[10px] font-bold text-blue-200">
                         ×{Math.max(1, parseInt(qtyByTruck.get(t.truck_number) ?? "1", 10) || 1)}
@@ -551,7 +566,7 @@ export default function ItemFirstEntry({
                       </span>
                     ) : (
                       <span className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-slate-400">
-                        {truckTypeLabel(t.truck_type)}
+                        {splitByHelper.has(t.truck_number) ? "Split load" : truckTypeLabel(t.truck_type)}
                       </span>
                     )}
                   </motion.button>
