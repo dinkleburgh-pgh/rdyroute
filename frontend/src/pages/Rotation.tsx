@@ -150,7 +150,7 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
         })
         .join("");
       return `<tr class="${s.is_floater ? "floater" : ""}">
-        <th>${esc(s.section_name)}${s.is_floater ? '<span class="tag">floater</span>' : ""}</th>${cells}
+        <th>${esc(s.section_name)}</th>${cells}
       </tr>`;
     })
     .join("");
@@ -169,11 +169,9 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
   th.wk.sel .rel { color: #111; }
   th.wk .dates { display: block; font-size: 12.5px; color: #333; font-weight: 700; margin-top: 2px; }
   td { font-size: 17px; font-weight: 800; }
-  td.sel { background: #f1f1f1; }
-  th.wk.sel { background: #f1f1f1; }
+  td.sel, th.wk.sel { background: #f1f1f1; border-left: 2px solid #111; border-right: 2px solid #111; }
   td.empty { color: #999; font-weight: 500; font-size: 13px; }
   tr.floater th { color: #777; }
-  .tag { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid #bbb; border-radius: 999px; font-size: 9px; letter-spacing: 0.08em; color: #777; }
   .foot { margin-top: 20px; font-size: 11px; color: #888; }
 </style></head><body>
 <h1>Section rotation</h1>
@@ -182,7 +180,7 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
   <thead><tr><th></th>${head}</tr></thead>
   <tbody>${body}</tbody>
 </table>
-<p class="foot">Printed ${esc(new Date().toLocaleString())} · ReadyRoute — everyone rotates through every section before repeating one.</p>
+<p class="foot">Printed ${esc(new Date().toLocaleString())} · ReadyRoute</p>
 <script>window.onload = function () { window.focus(); window.print(); };</script>
 </body></html>`;
   const w = window.open("", "_blank", "width=1040,height=760");
