@@ -306,6 +306,10 @@ export function useUpsertTruckState() {
                 ...(vars.arrived_at         !== undefined && { arrived_at: vars.arrived_at }),
                 ...(vars.unloading_started_at !== undefined && { unloading_started_at: vars.unloading_started_at }),
                 ...(vars.status !== undefined && STAGE_CLEARING.has(vars.status) && { staged_at: null }),
+                // Mirror of the server rule: a genuine status CHANGE clears
+                // needs_checked (the truck has plainly been seen). Explicit
+                // needs_checked in the same write still wins; echoes clear nothing.
+                ...(vars.needs_checked === undefined && vars.status !== undefined && vars.status !== t.state?.status && { needs_checked: false }),
                 ...(vars.driver_claimed_route !== undefined && { driver_claimed_route: vars.driver_claimed_route }),
                 ...(vars.state_source       !== undefined && vars.state_source !== null && { state_source: vars.state_source }),
               },

@@ -1240,6 +1240,20 @@ def update_truck_state(
     if row.status in _STAGE_CLEARING:
         row.staged_at = None
 
+    # ---- needs_checked: a status change IS the check -----------------------
+    # The flag marks a truck nobody has been near (Setup Day's absent list /
+    # the status sheet). The moment someone MOVES its status — starts the
+    # unload, loads it, marks it dirty, anything — the truck has plainly been
+    # seen, so the flag clears itself. An explicit needs_checked in the same
+    # payload still wins, and a status ECHO (wizard writes repeat the current
+    # status) clears nothing.
+    if (
+        "needs_checked" not in updates
+        and row.status != previous_status
+        and row.needs_checked
+    ):
+        row.needs_checked = False
+
     append_truck_state_activity(
         db,
         actor_user=_user,

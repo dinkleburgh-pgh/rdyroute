@@ -636,17 +636,6 @@ export default function RunDay() {
     () => new Set([...unloadCards, ...loadCards].map((c) => c.number)),
     [unloadCards, loadCards],
   );
-  const needsCheckedCount = board.filter((t) => t.state?.needs_checked && laneNums.has(t.truck_number)).length;
-  const unfinishedCount = board.filter((t) => t.state?.status === "unfinished" && laneNums.has(t.truck_number)).length;
-  const notedCount = [...notesByTruck.keys()].filter((n) => laneNums.has(n)).length;
-  const attentionTotal = needsAssignment.length + needsCheckedCount + unfinishedCount;
-
-  function jumpToAssign() {
-    pickMobileLane("load");
-    // The lane may be hidden on a phone until the state above lands.
-    window.setTimeout(() => document.getElementById("assign")?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
-  }
-
   const truckOf = (n: number) => boardByNum.get(n);
 
   // Loading / dead-connection gate — never render the fake empty day.
@@ -747,51 +736,13 @@ export default function RunDay() {
       <div className="space-y-3 p-3 sm:p-4 lg:space-y-4 lg:p-6">
 
         {/* ---------------- pulse row ----------------
-            The two progress meters live INSIDE their lanes (above the coverage
-            cards) — this row keeps only the cross-lane cards. */}
-        <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
-          {/* Needs attention: the four counts from lg up; one tappable line on a phone. */}
-          <PulseCard amber={attentionTotal > 0} className={clsx("col-span-2", showNotesCard ? "lg:col-span-2" : "lg:col-span-4")}>
-            <div className="hidden items-center gap-2 lg:flex">
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
-              <span className={clsx("text-[11px] font-bold uppercase tracking-[0.08em]", attentionTotal > 0 ? "text-amber-400" : "text-ink-muted")}>
-                Needs attention
-              </span>
-            </div>
-            <div className="hidden grid-cols-2 gap-x-3 gap-y-1 text-xs text-ink-soft lg:grid">
-              <button
-                type="button"
-                onClick={jumpToAssign}
-                disabled={needsAssignment.length === 0}
-                className={clsx("flex justify-between gap-2 text-left", needsAssignment.length > 0 ? "font-semibold text-amber-200 hover:underline" : "text-ink-soft")}
-              >
-                <span>Unassigned OOS</span>
-                <span className="font-mono">{needsAssignment.length}</span>
-              </button>
-              <span className="flex justify-between gap-2"><span>Needs checked</span><span className="font-mono">{needsCheckedCount}</span></span>
-              <span className="flex justify-between gap-2"><span>Unfinished</span><span className="font-mono">{unfinishedCount}</span></span>
-              <span className="flex justify-between gap-2"><span>Trucks with notes</span><span className="font-mono">{notedCount}</span></span>
-            </div>
-            <button
-              type="button"
-              onClick={jumpToAssign}
-              disabled={needsAssignment.length === 0}
-              className="flex min-h-[28px] items-center gap-2 text-left text-xs font-semibold text-amber-200 disabled:text-ink-soft lg:hidden"
-            >
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
-              <span>
-                {needsAssignment.length > 0
-                  ? `${needsAssignment.length} route${needsAssignment.length === 1 ? "" : "s"} need${needsAssignment.length === 1 ? "s" : ""} a truck`
-                  : "Nothing needs assigning"}
-              </span>
-              <span className="ml-auto font-normal text-ink-muted">
-                {unfinishedCount} unfinished · {needsCheckedCount} check
-              </span>
-            </button>
-          </PulseCard>
-
-          {notesCard}
-        </div>
+            The meters live INSIDE their lanes, and the old "Needs attention"
+            block is gone (its one real action — assigning an uncovered OOS
+            route — lives inline in the Load lane with the actual dropdowns).
+            Only the shift notes remain up here. */}
+        {notesCard && (
+          <div className="grid grid-cols-2 gap-2 lg:gap-3">{notesCard}</div>
+        )}
 
         <MobileLaneSwitch lane={mobileLane} onChange={pickMobileLane} unloadLeft={unloadLeft} loadLeft={loadLeft} />
 

@@ -316,6 +316,9 @@ def assign_truck_to_batch(
             # physically unloaded can hit — end the unload here too, so neither
             # the marker nor the load crew's request outlives the work.
             _end_unloading(state)
+            # And the status moved, so the truck has plainly been seen — the
+            # same needs_checked self-clear the PUT handler applies.
+            state.needs_checked = False
         state.wearers = effective_wearers
         state.batch_id = payload.batch_number
         state.state_source = TruckStateSource.workflow.value
