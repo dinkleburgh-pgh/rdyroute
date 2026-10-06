@@ -215,7 +215,10 @@ export function WorkingCard({
     <AnimateCard
       hoverScale={1}
       className={clsx(
-        "relative flex min-h-[64px] items-center gap-2.5 overflow-hidden rounded-[10px] border bg-surface py-2 pl-3 pr-2.5",
+        // flex-wrap + truncating label: on a narrow tablet column the badges
+        // drop to their own row instead of running under the status word or
+        // getting clipped by overflow-hidden (the "Garments"/note-chip overlap).
+        "relative flex min-h-[64px] flex-wrap items-center gap-x-2.5 gap-y-1 overflow-hidden rounded-[10px] border bg-surface py-2 pl-3 pr-2.5",
         CARD_SHADOW,
         emphasis ? "border-amber-500/60 ring-[3px] ring-amber-500/20" : "border-hairline",
       )}
@@ -225,13 +228,17 @@ export function WorkingCard({
         {number}
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-        <span className="whitespace-nowrap text-xs font-bold text-ink">{label ?? STATUS_LABELS[status]}</span>
+        <span className="truncate text-xs font-bold text-ink">{label ?? STATUS_LABELS[status]}</span>
         <span className="truncate text-[10px] text-ink-muted" title={subLine}>
           {subLine}
         </span>
       </span>
-      {badge && <Badge b={badge} />}
-      {notes && notes.length > 0 && <NotesBadge truckNumber={number} notes={notes} />}
+      {(badge || (notes && notes.length > 0)) && (
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {badge && <Badge b={badge} />}
+          {notes && notes.length > 0 && <NotesBadge truckNumber={number} notes={notes} />}
+        </span>
+      )}
     </AnimateCard>
   );
 }
@@ -252,7 +259,7 @@ export function ReadyCard({
     <AnimateCard
       hoverScale={1}
       className={clsx(
-        "relative flex min-h-[48px] items-center gap-2.5 overflow-hidden rounded-[10px] border border-hairline bg-surface py-1.5 pl-3 pr-2.5",
+        "relative flex min-h-[48px] flex-wrap items-center gap-x-2.5 gap-y-1 overflow-hidden rounded-[10px] border border-hairline bg-surface py-1.5 pl-3 pr-2.5",
         CARD_SHADOW,
       )}
     >
@@ -263,8 +270,12 @@ export function ReadyCard({
       <span className="min-w-0 flex-1 truncate text-[10px] text-ink-muted" title={sub}>
         {sub}
       </span>
-      {badge && <Badge b={badge} />}
-      {notes && notes.length > 0 && <NotesBadge truckNumber={number} notes={notes} />}
+      {(badge || (notes && notes.length > 0)) && (
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {badge && <Badge b={badge} />}
+          {notes && notes.length > 0 && <NotesBadge truckNumber={number} notes={notes} />}
+        </span>
+      )}
     </AnimateCard>
   );
 }

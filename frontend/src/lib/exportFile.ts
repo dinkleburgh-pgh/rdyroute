@@ -1,47 +1,28 @@
 import { Capacitor } from "@capacitor/core";
 
 /**
- * Save or share a generated file so it lands somewhere the user can use it —
- * email, text, or the device's files. Delivery differs by platform because the
- * primitives differ:
+ * Save a generated file so it lands somewhere the user can use it. Delivery
+ * differs by platform because the primitives differ:
  *
- *   - Installed app (Capacitor native): `<a download>` and the Web Share API are
- *     no-ops in the plugin-less WebView, so write the blob to the cache and hand
- *     it to the OS share sheet via @capacitor/share (email / text / Save).
- *   - Mobile browser: the Web Share API (with a file) opens the native share
- *     sheet — the reliable way to save/share on a phone browser.
- *   - Desktop browser: a normal blob-URL download.
+ *   - Installed app (Capacitor native): `<a download>` is a no-op in the
+ *     plugin-less WebView, so write the blob to the cache and hand it to the
+ *     OS share sheet via @capacitor/share (email / text / Save).
+ *   - Any browser (desktop OR tablet/phone): a plain blob-URL download. This
+ *     used to open the Web Share sheet on coarse-pointer devices, but the
+ *     crew's tablets want the FILE in Downloads, not a share dialog — and
+ *     modern mobile browsers handle `<a download>` on blob URLs fine.
  *
  * Always ends in *something*; never a silent no-op.
  */
-export async function exportFile(blob: Blob, filename: string, mime: string): Promise<void> {
+export async function exportFile(blob: Blob, filename: string, _mime: string): Promise<void> {
   if (Capacitor.isNativePlatform()) {
     try {
       await nativeShare(blob, filename);
       return;
     } catch (e) {
-      // Fall through to the web paths if the native bridge/plugin is missing
+      // Fall through to the web path if the native bridge/plugin is missing
       // (e.g. an old APK loading new web code during rollout).
       console.error("exportFile: native share failed, falling back", e);
-    }
-  }
-
-  const file = new File([blob], filename, { type: mime });
-  const coarse =
-    typeof window.matchMedia === "function" &&
-    (window.matchMedia("(any-pointer: coarse)").matches || window.matchMedia("(pointer: coarse)").matches);
-  if (
-    coarse &&
-    typeof navigator.canShare === "function" &&
-    typeof navigator.share === "function" &&
-    navigator.canShare({ files: [file] })
-  ) {
-    try {
-      await navigator.share({ files: [file], title: filename });
-      return;
-    } catch (e) {
-      if (e instanceof DOMException && e.name === "AbortError") return; // user dismissed
-      // else fall through to a plain download
     }
   }
 

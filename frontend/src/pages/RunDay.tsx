@@ -611,6 +611,11 @@ export default function RunDay() {
   const unloadDoneCards = unloadCards.filter((c) => c.group === "done");
   const unloadOff = unloadCards.filter((c) => c.group === "off");
   const loadWorking = loadCards.filter((c) => c.group === "working");
+  // A truck actively LOADING is the lane's live work, not "not ready" — it
+  // gets its own group. (A dirty truck the dock is on keeps its "Unloading"
+  // label and stays in Not ready: it really isn't ready to load yet.)
+  const loadLoadingCards = loadWorking.filter((c) => c.status === "in_progress" && c.label !== "Unloading");
+  const loadNotReadyCards = loadWorking.filter((c) => !(c.status === "in_progress" && c.label !== "Unloading"));
   const loadReady = loadCards.filter((c) => c.group === "ready");
   const loadDoneCards = loadCards.filter((c) => c.group === "done");
   const loadOff = loadCards.filter((c) => c.group === "off");
@@ -1025,13 +1030,24 @@ export default function RunDay() {
                   )}
                 </div>
 
+                {loadLoadingCards.length > 0 && (
+                  <div className="flex flex-col gap-2">
+                    <GroupHeader label="Loading" count={loadLoadingCards.length} />
+                    <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                      {loadLoadingCards.map((c) => (
+                        <WorkingCard key={c.key} number={c.number} status={c.status} label={c.label} sub={c.sub} badge={c.badge} notes={c.notes} sinceSec={c.sinceSec} emphasis={c.emphasis} />
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 <div className="flex flex-col gap-2">
-                  <GroupHeader label="Not ready" count={loadWorking.length} />
-                  {loadWorking.length === 0 ? (
+                  <GroupHeader label="Not ready" count={loadNotReadyCards.length} />
+                  {loadNotReadyCards.length === 0 ? (
                     <p className="py-2 text-center text-sm text-ink-faint">Everything is unloaded.</p>
                   ) : (
                     <div className="grid grid-cols-2 gap-2 md:grid-cols-3 lg:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
-                      {loadWorking.map((c) => (
+                      {loadNotReadyCards.map((c) => (
                         <WorkingCard key={c.key} number={c.number} status={c.status} label={c.label} sub={c.sub} badge={c.badge} notes={c.notes} sinceSec={c.sinceSec} emphasis={c.emphasis} />
                       ))}
                     </div>
