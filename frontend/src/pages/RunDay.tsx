@@ -654,7 +654,7 @@ export default function RunDay() {
   if (pageGate) return <PageStatus {...pageGate} />;
 
   const notesCard = showNotesCard && (
-    <PulseCard amber={Boolean(dailyNotes) || notesEditing} className="col-span-2 lg:col-span-1">
+    <PulseCard amber={Boolean(dailyNotes) || notesEditing} className="col-span-2 lg:col-span-2">
       <div className="flex items-center gap-2">
         <Clock className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
         <span className={clsx("text-[11px] font-bold uppercase tracking-[0.08em]", dailyNotes ? "text-amber-400" : "text-ink-muted")}>
@@ -746,47 +746,12 @@ export default function RunDay() {
       />
       <div className="space-y-3 p-3 sm:p-4 lg:space-y-4 lg:p-6">
 
-        {/* ---------------- pulse row ---------------- */}
+        {/* ---------------- pulse row ----------------
+            The two progress meters live INSIDE their lanes (above the coverage
+            cards) — this row keeps only the cross-lane cards. */}
         <div className="grid grid-cols-2 gap-2 lg:grid-cols-4 lg:gap-3">
-          <Meter
-            label="Unload"
-            day={unloadDayLabel}
-            done={unloadDone}
-            total={unloadTotal}
-            segments={[
-              { value: unloadDone, className: "bg-st-unloaded" },
-              { value: unloadingNow, className: "bg-st-inprogress" },
-              { value: unloadToGo, className: "bg-st-dirty" },
-            ]}
-            legend={[
-              { value: unloadDone, label: "unloaded", className: "text-green-400" },
-              { value: unloadingNow, label: "unloading", className: "text-amber-400" },
-              { value: unloadToGo, label: "to go", className: "text-red-400" },
-            ]}
-            trailing={unloadSpareCount > 0 ? `${unloadSpareCount} spare${unloadSpareCount === 1 ? "" : "s"}` : undefined}
-          />
-          <Meter
-            label="Load"
-            day={loadDayLabel}
-            done={loadDone}
-            total={loadTotal}
-            segments={[
-              { value: loadDone, className: "bg-st-loaded" },
-              { value: loadReadyCount, className: "bg-st-unloaded" },
-              { value: loadLoading, className: "bg-st-inprogress" },
-              { value: loadNotReady, className: "bg-st-dirty" },
-            ]}
-            legend={[
-              { value: loadDone, label: "loaded", className: "text-blue-300" },
-              { value: loadReadyCount, label: "ready", className: "text-green-400" },
-              { value: loadLoading, label: "loading", className: "text-amber-400" },
-              { value: loadNotReady, label: "not ready", className: "text-red-400" },
-            ]}
-            trailing={loadSpareCount > 0 ? `${loadSpareCount} spare${loadSpareCount === 1 ? "" : "s"}` : undefined}
-          />
-
           {/* Needs attention: the four counts from lg up; one tappable line on a phone. */}
-          <PulseCard amber={attentionTotal > 0} className={clsx("col-span-2", showNotesCard ? "lg:col-span-1" : "lg:col-span-2")}>
+          <PulseCard amber={attentionTotal > 0} className={clsx("col-span-2", showNotesCard ? "lg:col-span-2" : "lg:col-span-4")}>
             <div className="hidden items-center gap-2 lg:flex">
               <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-400" aria-hidden />
               <span className={clsx("text-[11px] font-bold uppercase tracking-[0.08em]", attentionTotal > 0 ? "text-amber-400" : "text-ink-muted")}>
@@ -855,6 +820,24 @@ export default function RunDay() {
             />
             <div style={{ display: "grid", gridTemplateRows: unloadCollapsed ? "0fr" : "1fr", transition: "grid-template-rows 220ms ease" }}>
               <div className="flex flex-col gap-3 overflow-hidden">
+
+                <Meter
+                  label="Unload"
+                  day={unloadDayLabel}
+                  done={unloadDone}
+                  total={unloadTotal}
+                  segments={[
+                    { value: unloadDone, className: "bg-st-unloaded" },
+                    { value: unloadingNow, className: "bg-st-inprogress" },
+                    { value: unloadToGo, className: "bg-st-dirty" },
+                  ]}
+                  legend={[
+                    { value: unloadDone, label: "unloaded", className: "text-green-400" },
+                    { value: unloadingNow, label: "unloading", className: "text-amber-400" },
+                    { value: unloadToGo, label: "to go", className: "text-red-400" },
+                  ]}
+                  trailing={unloadSpareCount > 0 ? `${unloadSpareCount} spare${unloadSpareCount === 1 ? "" : "s"}` : undefined}
+                />
 
                 {/* Previous load-day coverage: what is being unloaded today was covered then. */}
                 {prevEntries.length > 0 && (
@@ -938,6 +921,26 @@ export default function RunDay() {
             />
             <div style={{ display: "grid", gridTemplateRows: loadCollapsed ? "0fr" : "1fr", transition: "grid-template-rows 220ms ease" }}>
               <div className="flex flex-col gap-3 overflow-hidden">
+
+                <Meter
+                  label="Load"
+                  day={loadDayLabel}
+                  done={loadDone}
+                  total={loadTotal}
+                  segments={[
+                    { value: loadDone, className: "bg-st-loaded" },
+                    { value: loadReadyCount, className: "bg-st-unloaded" },
+                    { value: loadLoading, className: "bg-st-inprogress" },
+                    { value: loadNotReady, className: "bg-st-dirty" },
+                  ]}
+                  legend={[
+                    { value: loadDone, label: "loaded", className: "text-blue-300" },
+                    { value: loadReadyCount, label: "ready", className: "text-green-400" },
+                    { value: loadLoading, label: "loading", className: "text-amber-400" },
+                    { value: loadNotReady, label: "not ready", className: "text-red-400" },
+                  ]}
+                  trailing={loadSpareCount > 0 ? `${loadSpareCount} spare${loadSpareCount === 1 ? "" : "s"}` : undefined}
+                />
 
                 {/* OOS routes with nobody covering them yet — shown until coverage
                     is actually recorded for TODAY. Action rows, not a callout. */}
