@@ -8,6 +8,7 @@ import {
   useRenameRotationSection,
   useRotationHistory,
   useRotationPeople,
+  useRotationStale,
   useRotationWeek,
   useUpdateRotationPerson,
 } from "../api/hooks";
@@ -227,6 +228,10 @@ export default function Rotation() {
   const { data: board, isLoading } = useRotationWeek(week);
   const { data: people = [] } = useRotationPeople();
   const { data: history = [] } = useRotationHistory(8);
+  const { data: staleData } = useRotationStale();
+  // Same lesson as the Audit strip: a 401/HTML response must never poison the
+  // page — only ever map over a real array.
+  const staleWeeks = Array.isArray(staleData) ? staleData : [];
   const assign = useAssignRotation();
   const advance = useAdvanceRotation();
   const addPerson = useAddRotationPerson();
@@ -264,6 +269,19 @@ export default function Rotation() {
   }
 
   const [newName, setNewName] = useState("");
+  const [newStart, setNewStart] = useState<"this" | "next">("this");
+  const [removing, setRemoving] = useState<{ id: number; name: string } | null>(null);
+  function submitPerson() {
+    if (!newName.trim()) return;
+    addPerson.mutate({
+      name: newName.trim(),
+      // "Added Friday, starts Monday": an explicit next-week start keeps a
+      // rebuild of the current week from pulling the newcomer in early.
+      ...(newStart === "next" ? { active_since: addWeeks(thisWeek, 1) } : {}),
+    });
+    setNewName("");
+    setNewStart("this");
+  }
   const [err, setErr] = useState<string | null>(null);
   const [rebuildOpen, setRebuildOpen] = useState(false);
 
@@ -383,6 +401,34 @@ export default function Rotation() {
           <div className="rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-3 text-[13px] text-red-200">{err}</div>
         )}
 
+        {/* Roster drift: built weeks that no longer match who's on the
+            rotation. Rebuilding stays the lead's call (it discards hand
+            edits), so this prompts instead of acting. */}
+        {staleWeeks.length > 0 && (
+          <div className="rounded-xl border border-amber-500/40 bg-amber-500/[0.08] px-4 py-3">
+            <p className="text-[11px] font-bold uppercase tracking-[0.08em] text-amber-400">
+              Roster changed after these weeks were built
+            </p>
+            <div className="mt-2 flex flex-col gap-1.5">
+              {staleWeeks.map((sw) => (
+                <button
+                  key={sw.week_start}
+                  type="button"
+                  className="flex flex-wrap items-baseline gap-x-2.5 gap-y-0.5 text-left text-[13px] text-amber-100 hover:underline"
+                  title="Open this week and rebuild it"
+                  onClick={() => {
+                    setWeek(sw.week_start);
+                    setRebuildOpen(true);
+                  }}
+                >
+                  <span className="font-mono font-bold tabular-nums">{prettyWeek(sw.week_start)}</span>
+                  <span className="text-[12px] text-amber-200/80">{sw.reasons.join(" · ")} — tap to rebuild</span>
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
         {/* ---------------- the board ---------------- */}
         <div>
           <div className="mb-2.5 flex flex-wrap items-center gap-x-2.5 gap-y-1">
@@ -451,9 +497,12 @@ export default function Rotation() {
                         )}
                       </span>
                     </div>
-                    <p className={clsx("mt-2 flex-1 truncate text-[22px] font-black leading-tight tracking-tight", empty ? "text-ink-faint" : "text-ink")}>
+                    <p className={clsx("mt-2 flex-1 truncate text-[22px] font-black leading-tight tracking-tight", empty ? "text-ink-faint" : slot.person_active === false ? "text-amber-300 line-through decoration-2" : "text-ink")}>
                       {slot.person_name ?? (slot.is_floater ? "Skipped" : "Unassigned")}
                     </p>
+                    {slot.person_active === false && (
+                      <p className="text-[10px] font-semibold text-amber-400">Left the rotation — pick someone or rebuild the week</p>
+                    )}
                     <label className="sr-only" htmlFor={`slot-${slot.section_id}`}>
                       Who works {slot.section_name} this week
                     </label>
@@ -471,6 +520,11 @@ export default function Rotation() {
                       }
                     >
                       <option value="">{slot.is_floater ? "— skipped —" : "— unassigned —"}</option>
+                      {slot.person_active === false && slot.person_id != null && (
+                        <option value={slot.person_id} disabled>
+                          {slot.person_name} (left)
+                        </option>
+                      )}
                       {people.map((p) => (
                         <option key={p.id} value={p.id}>
                           {p.name}
@@ -499,20 +553,23 @@ export default function Rotation() {
               value={newName}
               onChange={(e) => setNewName(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === "Enter" && newName.trim()) {
-                  addPerson.mutate(newName.trim());
-                  setNewName("");
-                }
+                if (e.key === "Enter") submitPerson();
               }}
             />
+            <select
+              className="input w-32 py-1.5 text-xs"
+              title="Which week they start counting for the rotation"
+              value={newStart}
+              onChange={(e) => setNewStart(e.target.value as "this" | "next")}
+            >
+              <option value="this">This week</option>
+              <option value="next">Next Monday</option>
+            </select>
             <button
               type="button"
               className="rounded-lg border border-sky-500/40 bg-sky-500/10 px-4 text-xs font-semibold text-sky-200 transition-colors hover:bg-sky-500/20 disabled:opacity-50"
               disabled={!newName.trim() || addPerson.isPending}
-              onClick={() => {
-                addPerson.mutate(newName.trim());
-                setNewName("");
-              }}
+              onClick={submitPerson}
             >
               Add
             </button>
@@ -523,13 +580,18 @@ export default function Rotation() {
             <ul className="flex flex-wrap gap-2">
               {people.map((p) => (
                 <li key={p.id} className="flex items-center gap-2 rounded-lg border border-hairline bg-surface-2/60 py-1.5 pl-3 pr-1.5">
-                  <span className="text-[13px] font-semibold text-ink">{p.name}</span>
+                  <span
+                    className="text-[13px] font-semibold text-ink"
+                    title={p.active_since ? `On the rotation since ${prettyWeek(p.active_since)}` : undefined}
+                  >
+                    {p.name}
+                  </span>
                   <button
                     type="button"
                     title="Remove from the rotation (history keeps the name)"
                     aria-label={`Remove ${p.name} from the rotation`}
                     className="inline-flex h-6 w-6 items-center justify-center rounded-md text-ink-faint transition-colors hover:bg-track hover:text-ink"
-                    onClick={() => updatePerson.mutate({ id: p.id, is_active: false })}
+                    onClick={() => setRemoving({ id: p.id, name: p.name })}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>
@@ -589,6 +651,18 @@ export default function Rotation() {
         </div>
       </div>
 
+      <ConfirmDialog
+        open={removing != null}
+        title={`Remove ${removing?.name ?? ""} from the rotation?`}
+        description="History keeps their name on past weeks. Any current or upcoming week still naming them will show a rebuild prompt until it's rebuilt or edited."
+        confirmLabel="Remove"
+        variant="danger"
+        busy={updatePerson.isPending}
+        onConfirm={() => {
+          if (removing) updatePerson.mutate({ id: removing.id, is_active: false }, { onSettled: () => setRemoving(null) });
+        }}
+        onCancel={() => setRemoving(null)}
+      />
       <ConfirmDialog
         open={rebuildOpen}
         title={`Rebuild the week of ${prettyWeek(week)}?`}

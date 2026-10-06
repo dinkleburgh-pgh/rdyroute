@@ -977,6 +977,7 @@ export function useArrivalCode() {
 
 import type {
   RotationPerson,
+  RotationStaleWeek,
   RotationSection,
   RotationWeek,
 } from "../../types";
@@ -1021,13 +1022,23 @@ function invalidateRotation(qc: ReturnType<typeof useQueryClient>) {
   qc.invalidateQueries({ queryKey: ["rotation"] });
   qc.invalidateQueries({ queryKey: ["rotation-history"] });
   qc.invalidateQueries({ queryKey: ["rotation-people"] });
+  qc.invalidateQueries({ queryKey: ["rotation-stale"] });
+}
+
+/** Built current/future weeks that no longer match the roster (rebuild prompts). */
+export function useRotationStale() {
+  return useQuery({
+    queryKey: ["rotation-stale"],
+    queryFn: async () => (await api.get<RotationStaleWeek[]>("/rotation/stale")).data,
+    refetchInterval: 60_000,
+  });
 }
 
 export function useAddRotationPerson() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (name: string) =>
-      (await api.post<RotationPerson>("/rotation/people", { name })).data,
+    mutationFn: async (args: { name: string; active_since?: string }) =>
+      (await api.post<RotationPerson>("/rotation/people", args)).data,
     onSuccess: () => invalidateRotation(qc),
   });
 }
@@ -1035,7 +1046,7 @@ export function useAddRotationPerson() {
 export function useUpdateRotationPerson() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (args: { id: number; name?: string; is_active?: boolean; sort_order?: number }) => {
+    mutationFn: async (args: { id: number; name?: string; is_active?: boolean; sort_order?: number; active_since?: string }) => {
       const { id, ...body } = args;
       return (await api.patch<RotationPerson>(`/rotation/people/${id}`, body)).data;
     },

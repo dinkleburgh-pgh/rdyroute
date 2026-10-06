@@ -13,7 +13,7 @@ from __future__ import annotations
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from database import get_db
@@ -24,6 +24,7 @@ from schemas import (
     RotationAssignIn,
     RotationPersonIn,
     RotationPersonOut,
+    RotationStaleWeekOut,
     RotationSectionIn,
     RotationSectionOut,
     RotationWeekOut,
@@ -90,6 +91,8 @@ def _serialise_week(db: Session, week: date) -> RotationWeekOut:
                 "is_floater": sec.is_floater,
                 "person_id": person.id if person else None,
                 "person_name": person.name if person else None,
+                # A ghost: still assigned, but no longer on the rotation.
+                "person_active": person.is_active if person else True,
             }
         )
     return RotationWeekOut(week_start=week, sections=out)
@@ -161,13 +164,35 @@ def add_person(
     name = (payload.name or "").strip()
     if not name:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Name is required")
+    existing = db.scalars(
+        select(RotationPerson).where(func.lower(RotationPerson.name) == name.lower())
+    ).first()
+    if existing is not None and existing.is_active:
+        raise HTTPException(status.HTTP_409_CONFLICT, f"{existing.name} is already on the rotation")
+    if existing is not None:
+        # Re-adding a removed name REACTIVATES the same person. A twin row
+        # would sever their history — the no-back-to-back and no-repeat rules
+        # read it, and a severed newcomer measurably lands on what they just
+        # worked. Their roster run restarts at the given (or current) week.
+        existing.is_active = True
+        existing.active_since = _week_start(payload.active_since)
+        if payload.sort_order is not None:
+            existing.sort_order = payload.sort_order
+        db.commit()
+        db.refresh(existing)
+        return existing
     order = payload.sort_order
     if order is None:
         last = db.scalars(
             select(RotationPerson).order_by(RotationPerson.sort_order.desc())
         ).first()
         order = (last.sort_order + 1) if last else 1
-    person = RotationPerson(name=name, sort_order=order, is_active=True, active_since=_week_start())
+    # active_since defaults to this week; an explicit date (normalised to its
+    # Monday) covers "added Friday, starts Monday" without a rebuild of the
+    # current week pulling the newcomer in early.
+    person = RotationPerson(
+        name=name, sort_order=order, is_active=True, active_since=_week_start(payload.active_since)
+    )
     db.add(person)
     db.commit()
     db.refresh(person)
@@ -191,9 +216,15 @@ def update_person(
         data["name"] = (data["name"] or "").strip()
         if not data["name"]:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Name cannot be blank")
+    if data.get("active_since") is not None:
+        data["active_since"] = _week_start(data["active_since"])
+    elif "active_since" in data:
+        # An explicit null means "leave it alone", not "erase the start week".
+        data.pop("active_since")
     # Coming back onto the rotation starts a new roster run: the weeks they were
-    # away must not read as weeks they sat out.
-    if data.get("is_active") is True and not person.is_active:
+    # away must not read as weeks they sat out. An explicit start date in the
+    # same request wins over the reset.
+    if data.get("is_active") is True and not person.is_active and "active_since" not in data:
         person.active_since = _week_start()
     for field, value in data.items():
         setattr(person, field, value)
@@ -227,6 +258,58 @@ def history(
     return [_serialise_week(db, this_week - timedelta(weeks=i)) for i in range(weeks)]
 
 
+@router.get("/stale", response_model=list[RotationStaleWeekOut])
+def stale_weeks(
+    db: Session = Depends(get_db),
+    _: User = Depends(require_non_guest),
+):
+    """Current and FUTURE built weeks whose rows no longer match the roster —
+    they name someone who has left, or were built before someone joined and
+    still have an open seat. The page turns these into a rebuild prompt;
+    nothing rebuilds automatically, because a rebuild discards hand edits and
+    that trade stays the lead's call."""
+    this_week = _week_start()
+    rows = list(
+        db.scalars(
+            select(RotationAssignment).where(RotationAssignment.week_start >= this_week)
+        ).all()
+    )
+    if not rows:
+        return []
+    people = {p.id: p for p in db.scalars(select(RotationPerson)).all()}
+    active = [p for p in people.values() if p.is_active]
+    n_sections = len(_sections(db))
+    by_week: dict[date, list[RotationAssignment]] = {}
+    for r in rows:
+        by_week.setdefault(r.week_start, []).append(r)
+    out: list[RotationStaleWeekOut] = []
+    for wk in sorted(by_week):
+        wrows = by_week[wk]
+        assigned = {r.person_id for r in wrows}
+        gone = sorted(
+            p.name for pid in assigned if (p := people.get(pid)) is not None and not p.is_active
+        )
+        # Someone eligible with no row only matters while the week still has an
+        # open seat — with more people than sections, sitting out is normal.
+        missing = (
+            sorted(
+                p.name
+                for p in active
+                if p.id not in assigned and (p.active_since is None or p.active_since <= wk)
+            )
+            if len(wrows) < n_sections
+            else []
+        )
+        reasons: list[str] = []
+        if gone:
+            reasons.append(f"assigned to {', '.join(gone)} — no longer on the rotation")
+        if missing:
+            reasons.append(f"built before {', '.join(missing)} joined")
+        if reasons:
+            out.append(RotationStaleWeekOut(week_start=wk, reasons=reasons))
+    return out
+
+
 @router.put("/assign", response_model=RotationWeekOut)
 def assign(
     payload: RotationAssignIn,
@@ -258,6 +341,11 @@ def assign(
         person = db.get(RotationPerson, payload.person_id)
         if person is None:
             raise HTTPException(status.HTTP_404_NOT_FOUND, f"No person {payload.person_id}")
+        if not person.is_active:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"{person.name} has left the rotation — re-add them first or pick someone else",
+            )
         if row is None:
             db.add(
                 RotationAssignment(

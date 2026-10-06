@@ -1394,6 +1394,9 @@ class RotationPersonOut(BaseModel):
     name: str
     sort_order: int
     is_active: bool
+    # The Monday their current roster run started — the week the planner
+    # first considers them eligible.
+    active_since: date | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -1401,6 +1404,11 @@ class RotationPersonIn(BaseModel):
     name: str | None = None
     sort_order: int | None = None
     is_active: bool | None = None
+    # Any date in their start week; the router normalises it to that Monday.
+    # On add it defaults to this week — a Friday add for a Monday start passes
+    # next Monday here so a rebuild of the current week can't pull them in
+    # early. Given alongside a reactivation it overrides the reset-to-now.
+    active_since: date | None = None
 
 
 class RotationAssignIn(BaseModel):
@@ -1424,8 +1432,17 @@ class RotationSlotOut(BaseModel):
     # not an error state.
     person_id: int | None = None
     person_name: str | None = None
+    # False = the assigned person has since left the rotation — a ghost the
+    # lead should rebuild away. History keeps the name; the UI marks it.
+    person_active: bool = True
 
 
 class RotationWeekOut(BaseModel):
     week_start: date
     sections: list[RotationSlotOut]
+
+
+class RotationStaleWeekOut(BaseModel):
+    """A built current/future week whose rows no longer match the roster."""
+    week_start: date
+    reasons: list[str] = Field(default_factory=list, max_length=8)

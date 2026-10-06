@@ -447,6 +447,8 @@ export interface RotationPerson {
   name: string;
   sort_order: number;
   is_active: boolean;
+  /** Monday their current roster run started (planner eligibility). */
+  active_since?: string | null;
 }
 
 export interface RotationSlot {
@@ -456,6 +458,13 @@ export interface RotationSlot {
   /** null = unfilled. For the floater that is the ordinary short-handed case. */
   person_id: number | null;
   person_name: string | null;
+  /** false = assigned to someone who has since left the rotation. */
+  person_active?: boolean;
+}
+
+export interface RotationStaleWeek {
+  week_start: string;
+  reasons: string[];
 }
 
 export interface RotationWeek {
