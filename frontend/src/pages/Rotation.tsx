@@ -78,11 +78,12 @@ function esc(s: string): string {
 /** Weeks printed around the selected one — the sheet exists for transparency
  *  (nobody can camp the easy section if the wall shows the recent weeks and
  *  the next one), so it prints a WINDOW, not a single week. */
-// The hero band at the top of the sheet carries "what am I on" — so the
-// history grid underneath reads plain chronological, oldest to newest, with
-// the printed week shaded and ruled in place.
-const PRINT_OFFSETS = [-3, -2, -1, 0, 1] as const;
-const SEL_IDX = PRINT_OFFSETS.indexOf(0); // the printed week's column
+// The hero band at the top of the sheet IS the printed week, so the grid
+// below never repeats it: offset 0 is fetched only to feed the hero, and the
+// grid columns read Next Week, then the past receding — exactly the order
+// the crew asked to read it in.
+const PRINT_OFFSETS = [0, 1, -1, -2, -3] as const;
+const SEL_IDX = 0; // the printed week: hero only, never a grid column
 
 /** "Mon Sep 28 – Fri Oct 2" — unambiguous even torn off and pinned up. */
 function clearSpan(iso: string): string {
@@ -133,17 +134,18 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
   // A week nobody built prints as a quiet "—" column, not five "unassigned"s.
   const weekFilled = boards.map((b) => b.sections.some((s) => s.person_name != null));
 
-  const head = boards
-    .map((b, i) => {
-      const sel = i === SEL_IDX;
-      return `<th class="wk${sel ? " sel" : ""}"><span class="rel">${esc(relativeLabel(b.week_start, thisWeek))}</span><span class="dates">${esc(clearSpan(b.week_start))}</span></th>`;
+  const gridIdx = boards.map((_, i) => i).filter((i) => i !== SEL_IDX);
+  const head = gridIdx
+    .map((i) => {
+      const b = boards[i];
+      return `<th class="wk"><span class="rel">${esc(relativeLabel(b.week_start, thisWeek))}</span><span class="dates">${esc(clearSpan(b.week_start))}</span></th>`;
     })
     .join("");
   const body = anchor.sections
     .map((s) => {
-      const cells = byWeek
-        .map((m, i) => {
-          const slot = m.get(s.section_id);
+      const cells = gridIdx
+        .map((i) => {
+          const slot = byWeek[i].get(s.section_id);
           const filled = slot?.person_name != null;
           const name = filled
             ? slot!.person_name!
@@ -152,7 +154,7 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
               : s.is_floater
                 ? "— skipped —"
                 : "— unassigned —";
-          return `<td class="${filled ? "" : "empty"}${i === SEL_IDX ? " sel" : ""}">${esc(name)}</td>`;
+          return `<td class="${filled ? "" : "empty"}">${esc(name)}</td>`;
         })
         .join("");
       return `<tr class="${s.is_floater ? "floater" : ""}">
@@ -194,10 +196,8 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
   thead th { border-bottom: 2px solid #111; vertical-align: bottom; }
   tbody th { width: 13%; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #444; font-weight: 700; }
   th.wk .rel { display: block; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #888; font-weight: 700; }
-  th.wk.sel .rel { color: #111; }
   th.wk .dates { display: block; font-size: 11.5px; color: #333; font-weight: 700; margin-top: 2px; }
   td { font-size: 15px; font-weight: 700; }
-  td.sel, th.wk.sel { background: #f1f1f1; border-left: 2px solid #111; border-right: 2px solid #111; }
   td.empty { color: #999; font-weight: 500; font-size: 12px; }
   tr.floater th { color: #777; }
   .foot { margin-top: 16px; font-size: 11px; color: #888; }
