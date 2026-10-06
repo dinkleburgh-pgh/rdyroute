@@ -56,7 +56,12 @@ function triggerDownload(blob: Blob, filename: string): void {
   document.body.appendChild(a);
   a.click();
   a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 15000);
+  // Revoke LATE. Chrome only starts writing the file after the user answers
+  // any "Save as" dialog — revoking the blob URL while that dialog sits open
+  // (the old 15s timer) strands the download as a dead .pdf.crdownload.
+  // Holding a few-MB blob for 10 minutes costs nothing, and leaving the page
+  // frees it regardless.
+  setTimeout(() => URL.revokeObjectURL(url), 10 * 60_000);
 }
 
 async function nativeShare(blob: Blob, filename: string): Promise<void> {
