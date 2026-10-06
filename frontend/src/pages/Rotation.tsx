@@ -78,8 +78,11 @@ function esc(s: string): string {
 /** Weeks printed around the selected one — the sheet exists for transparency
  *  (nobody can camp the easy section if the wall shows the recent weeks and
  *  the next one), so it prints a WINDOW, not a single week. */
-const PRINT_WEEKS_BACK = 3;
-const PRINT_WEEKS_FORWARD = 1;
+// Column order is reading order, not calendar order: the week being printed
+// comes FIRST, then the week ahead, then the past receding — "what am I on,
+// what's next, and proof it's been rotating".
+const PRINT_OFFSETS = [0, 1, -1, -2, -3] as const;
+const SEL_IDX = 0; // the printed/selected week's position in PRINT_OFFSETS
 
 /** "Mon Sep 28 – Fri Oct 2" — unambiguous even torn off and pinned up. */
 function clearSpan(iso: string): string {
@@ -108,8 +111,7 @@ function relativeLabel(iso: string, thisWeek: string): string {
  * same from every browser.
  */
 async function printRotation(week: string, thisWeek: string): Promise<boolean> {
-  const keys: string[] = [];
-  for (let i = -PRINT_WEEKS_BACK; i <= PRINT_WEEKS_FORWARD; i++) keys.push(addWeeks(week, i));
+  const keys = PRINT_OFFSETS.map((o) => addWeeks(week, o));
   const boards = await Promise.all(
     keys.map(async (k): Promise<RotationWeek> => {
       try {
@@ -120,14 +122,14 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
     }),
   );
   // The selected week anchors the row order; other weeks map by section id.
-  const anchor = boards[PRINT_WEEKS_BACK];
+  const anchor = boards[SEL_IDX];
   const byWeek = boards.map((b) => new Map(b.sections.map((s) => [s.section_id, s])));
   // A week nobody built prints as a quiet "—" column, not five "unassigned"s.
   const weekFilled = boards.map((b) => b.sections.some((s) => s.person_name != null));
 
   const head = boards
     .map((b, i) => {
-      const sel = i === PRINT_WEEKS_BACK;
+      const sel = i === SEL_IDX;
       return `<th class="wk${sel ? " sel" : ""}"><span class="rel">${esc(relativeLabel(b.week_start, thisWeek))}</span><span class="dates">${esc(clearSpan(b.week_start))}</span></th>`;
     })
     .join("");
@@ -144,7 +146,7 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
               : s.is_floater
                 ? "— skipped —"
                 : "— unassigned —";
-          return `<td class="${filled ? "" : "empty"}${i === PRINT_WEEKS_BACK ? " sel" : ""}">${esc(name)}</td>`;
+          return `<td class="${filled ? "" : "empty"}${i === SEL_IDX ? " sel" : ""}">${esc(name)}</td>`;
         })
         .join("");
       return `<tr class="${s.is_floater ? "floater" : ""}">
