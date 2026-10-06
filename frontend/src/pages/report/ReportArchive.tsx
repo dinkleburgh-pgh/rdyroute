@@ -7,6 +7,7 @@
 import clsx from "clsx";
 import { Archive } from "lucide-react";
 import Modal from "../../components/Modal";
+import { HeaderPill } from "../../components/PageHeader";
 import EmptyState from "../../components/EmptyState";
 import { useReportArchiveList, type ReportArchiveItem, type ReportArchiveSource } from "../../api/hooks";
 import { APP_TIMEZONE, formatEasternTime, formatRunDate, isoDate } from "../../utils/dates";
@@ -61,13 +62,13 @@ function weekdayOf(iso: string): string {
 /** Header pill for a day shown from its snapshot — the saved twin of the LIVE pill. */
 export function SavedPill({ item }: { item: ReportArchiveItem }) {
   return (
-    <span
+    <HeaderPill
+      tone="saved"
+      icon={<Archive className="h-3 w-3" aria-hidden />}
       title={`Saved ${savedAtLabel(item, true)} · ${SOURCE_LABEL[item.source]}${item.app_version ? ` · ${item.app_version}` : ""}`}
-      className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-sky-400/30 bg-sky-400/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-sky-300"
     >
-      <Archive className="h-3 w-3" aria-hidden />
       Saved {savedAtLabel(item)}
-    </span>
+    </HeaderPill>
   );
 }
 

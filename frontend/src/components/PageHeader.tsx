@@ -60,6 +60,54 @@ export default function PageHeader({
   );
 }
 
+const PILL_TONE: Record<string, { pill: string; dot: string }> = {
+  inprogress: {
+    pill: "border-st-inprogress/30 bg-st-inprogress/10 text-st-inprogress",
+    dot: "bg-st-inprogress",
+  },
+  dirty: {
+    pill: "border-st-dirty/40 bg-st-dirty/10 text-st-dirty",
+    dot: "bg-st-dirty",
+  },
+  saved: {
+    pill: "border-sky-400/30 bg-sky-400/10 text-sky-300",
+    dot: "bg-sky-400",
+  },
+};
+
+/** The titleBadge pill (LIVE, "N to go", "Saved 5:58 AM"): status dot + tiny caps. */
+export function HeaderPill({
+  tone,
+  pulse,
+  icon,
+  title,
+  children,
+}: {
+  tone: keyof typeof PILL_TONE;
+  /** Pulse the dot — the pill marks a feed that is updating right now. */
+  pulse?: boolean;
+  /** Replaces the status dot (e.g. the archive icon on a Saved pill). */
+  icon?: ReactNode;
+  title?: string;
+  children: ReactNode;
+}) {
+  const t = PILL_TONE[tone];
+  return (
+    <span
+      title={title}
+      className={clsx(
+        "inline-flex shrink-0 items-center gap-1.5 rounded-pill border px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]",
+        t.pill,
+      )}
+    >
+      {icon ?? (
+        <span className={clsx("h-1.5 w-1.5 rounded-full", t.dot, pulse && "animate-pulse")} />
+      )}
+      {children}
+    </span>
+  );
+}
+
 const TONE_DOT: Record<string, string> = {
   dirty: "bg-st-dirty",
   unloaded: "bg-st-unloaded",

@@ -25,7 +25,7 @@ import CoverageTag from "../components/CoverageTag";
 import OverbatchedChip from "../components/OverbatchedChip";
 import { capacityColor, capacityPct } from "../utils/batchCapacity";
 import LoadWorkflowCard from "../components/WorkflowCard";
-import PageHeader, { Sep, Stat } from "../components/PageHeader";
+import PageHeader, { HeaderPill, Sep, Stat } from "../components/PageHeader";
 import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/QuietTile";
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
@@ -844,12 +844,7 @@ export default function Unload() {
     <>
       <PageHeader
         title="Unload"
-        titleBadge={
-          <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-dirty/40 bg-st-dirty/10 px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.14em] text-st-dirty">
-            <span className="h-1.5 w-1.5 rounded-full bg-st-dirty" />
-            {toGo} to go
-          </span>
-        }
+        titleBadge={<HeaderPill tone="dirty">{toGo} to go</HeaderPill>}
         meta={
           <>
             <Stat value={`${unloadDone}/${unloadTotal}`} label="unloaded" tone="unloaded" />

@@ -55,7 +55,7 @@ import { SheetHead, loadFaceText } from "../components/load/loadUi";
 import CoverageTag from "../components/CoverageTag";
 import { truckTypeLabel } from "../utils/truckType";
 import type { TruckWithState, RecurringRouteSwap } from "../types";
-import PageHeader, { Sep, Stat } from "../components/PageHeader";
+import PageHeader, { HeaderPill, Sep, Stat } from "../components/PageHeader";
 import { QuietTile, SectionHeader, TILE_GRID, TILE_GRID_LG } from "../components/workflow/QuietTile";
 import WorkflowDayNotes from "../components/WorkflowDayNotes";
 import { motion } from "framer-motion";
@@ -469,12 +469,7 @@ export default function Load() {
     <>
       <PageHeader
         title="Load"
-        titleBadge={anyInProgress ? (
-          <span className="inline-flex items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[9.5px] font-semibold uppercase tracking-[0.18em] text-st-inprogress">
-            <span className="h-1.5 w-1.5 rounded-full bg-st-inprogress animate-pulse" />
-            Live
-          </span>
-        ) : undefined}
+        titleBadge={anyInProgress ? <HeaderPill tone="inprogress" pulse>Live</HeaderPill> : undefined}
         meta={
           <>
             <Stat value={`${loadDone}/${loadTotal}`} label="loaded" tone="loaded" />

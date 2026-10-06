@@ -26,7 +26,7 @@ import { useSearchParams } from "react-router-dom";
 import { useQueryClient } from "@tanstack/react-query";
 import { AnimatePresence, motion } from "framer-motion";
 import clsx from "clsx";
-import PageHeader from "../components/PageHeader";
+import PageHeader, { HeaderPill } from "../components/PageHeader";
 import DownloadImageButton from "../components/DownloadImageButton";
 import ConfirmDialog from "../components/ConfirmDialog";
 import { captureNodeToPngBlob } from "../lib/captureImage";
@@ -258,15 +258,6 @@ interface ReportChrome {
   keepDateBarOnGate: boolean;
 }
 
-function LivePill() {
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-pill border border-st-inprogress/30 bg-st-inprogress/10 px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-st-inprogress">
-      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-st-inprogress" />
-      Live
-    </span>
-  );
-}
-
 /**
  * The Report page: which day, and which reading of it. Today is always live. A
  * past day opens from its end-of-shift snapshot when it has one (with a
@@ -344,7 +335,11 @@ export default function LiveReport() {
     !isToday && view === null && snapshotQuery.data === undefined && snapshotQuery.isFetching;
 
   const chrome: ReportChrome = {
-    badge: isToday ? <LivePill /> : savedSnapshot ? <SavedPill item={savedSnapshot} /> : undefined,
+    badge: isToday ? (
+      <HeaderPill tone="inprogress" pulse>Live</HeaderPill>
+    ) : savedSnapshot ? (
+      <SavedPill item={savedSnapshot} />
+    ) : undefined,
     // Hold the ?pdf=1 handoff until the archive lookup (or a stale snapshot's
     // background refetch) has settled, so it prints the reading the page will
     // actually show: the saved snapshot when there is one, otherwise live.
