@@ -6,8 +6,8 @@ import { useMemo, useState, useEffect, useCallback } from "react";
 import { CheckCircle2, Circle, RotateCcw, ClipboardCheck } from "lucide-react";
 import clsx from "clsx";
 import PageHeader, { Stat } from "../components/PageHeader";
-import { useFleet, useHolidayLoad } from "../api/hooks";
-import { isScheduledOff } from "../utils/truckStatus";
+import { useBoard, useFleet, useHolidayLoad } from "../api/hooks";
+import { isScheduledOff, splitHelpersByTruck } from "../utils/truckStatus";
 import { workdayNumbers } from "../components/Clock";
 import { todayIso } from "../api/client";
 import { TRUCK_TYPE_LABEL } from "../utils/truckType";
@@ -25,6 +25,18 @@ const DAY_LABELS: Record<number, string> = {
   4: "Thu",
   5: "Fri",
 };
+
+/** A tile's number — split helpers read as the amber ROUTE+TRUCK pair (see ShortSheetEditor). */
+function TileNum({ n, split }: { n: number; split?: number }) {
+  if (split == null) return <>{n}</>;
+  return (
+    <span title={`Split load — route ${split}'s overflow on #${n}`}>
+      <span className="text-amber-300">{split}</span>
+      <span className="text-slate-500">+</span>
+      {n}
+    </span>
+  );
+}
 
 function storageKey(dateStr: string, day: number, holiday: boolean, secondDay: number) {
   return holiday
@@ -54,6 +66,7 @@ function saveChecked(dateStr: string, day: number, holiday: boolean, secondDay: 
 
 export default function VerifyShortSheet() {
   const { data: fleet } = useFleet(false);
+  const { data: board } = useBoard();
   const { loadDay: todayLoadDay } = useMemo(() => workdayNumbers(), []);
   const dateStr = todayIso();
 
@@ -80,21 +93,37 @@ export default function VerifyShortSheet() {
     saveChecked(dateStr, selectedDay, holiday, secondDay, checked);
   }, [checked, dateStr, selectedDay, holiday, secondDay]);
 
+  // Split info only lives on today's board — fold helpers in only when the
+  // verification is for today's actual load day.
+  const splitByHelper = useMemo(
+    () =>
+      selectedDay === todayLoadDay && board
+        ? splitHelpersByTruck(board)
+        : new Map<number, number>(),
+    [board, selectedDay, todayLoadDay],
+  );
+
   // The route trucks that make up the short sheet.
   //  - Normal: just the trucks running on the selected (main) day.
   //  - Holiday: the full sheet (38) — main-day routes PLUS the routes off the
   //    main day, which run on the second day to make up the total.
+  //  - Plus today's split helpers — a split load is its own sheet entry
+  //    (stored under the helper's number) even when the helper is a spare or
+  //    an off-day truck, so it needs its own verification tile too.
   const runningTrucks = useMemo(() => {
     if (!fleet) return [];
-    return fleet
-      .filter(
-        (t) =>
-          t.is_active &&
-          t.truck_type !== "Spare" &&
-          (holiday || !isScheduledOff(t, selectedDay)),
-      )
-      .sort((a, b) => a.truck_number - b.truck_number);
-  }, [fleet, selectedDay, holiday]);
+    const scheduled = fleet.filter(
+      (t) =>
+        t.is_active &&
+        t.truck_type !== "Spare" &&
+        (holiday || !isScheduledOff(t, selectedDay)),
+    );
+    const have = new Set(scheduled.map((t) => t.truck_number));
+    const helpers = (board ?? []).filter(
+      (t) => splitByHelper.has(t.truck_number) && !have.has(t.truck_number),
+    );
+    return [...scheduled, ...helpers].sort((a, b) => a.truck_number - b.truck_number);
+  }, [fleet, board, selectedDay, holiday, splitByHelper]);
 
   // In holiday mode, which day a route belongs to: main day if it runs then,
   // otherwise the second (catch-up) day.
@@ -314,12 +343,14 @@ export default function VerifyShortSheet() {
                   )}
                 >
                   <span className="text-2xl font-black leading-none tabular-nums text-ink">
-                    {truck.truck_number}
+                    <TileNum n={truck.truck_number} split={splitByHelper.get(truck.truck_number)} />
                   </span>
                   <span className="text-[10px] text-ink-muted">
-                    {TYPE_LABEL[truck.truck_type] ?? truck.truck_type}
+                    {splitByHelper.has(truck.truck_number)
+                      ? "Split load"
+                      : TYPE_LABEL[truck.truck_type] ?? truck.truck_type}
                   </span>
-                  {holiday && (
+                  {holiday && !splitByHelper.has(truck.truck_number) && (
                     <span
                       className={clsx(
                         "rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none",
@@ -355,12 +386,14 @@ export default function VerifyShortSheet() {
                   )}
                 >
                   <span className="text-2xl font-black leading-none tabular-nums text-ink-soft">
-                    {truck.truck_number}
+                    <TileNum n={truck.truck_number} split={splitByHelper.get(truck.truck_number)} />
                   </span>
                   <span className="text-[10px] text-ink-muted">
-                    {TYPE_LABEL[truck.truck_type] ?? truck.truck_type}
+                    {splitByHelper.has(truck.truck_number)
+                      ? "Split load"
+                      : TYPE_LABEL[truck.truck_type] ?? truck.truck_type}
                   </span>
-                  {holiday && (
+                  {holiday && !splitByHelper.has(truck.truck_number) && (
                     <span
                       className={clsx(
                         "rounded px-1.5 py-0.5 text-[9px] font-semibold leading-none",
