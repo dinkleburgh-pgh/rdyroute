@@ -14,7 +14,8 @@ import {
 import { useAuth } from "../contexts/AuthContext";
 import ConfirmDialog from "../components/ConfirmDialog";
 import PageHeader, { Sep, Stat } from "../components/PageHeader";
-import type { RotationSlot } from "../types";
+import { api } from "../api/client";
+import type { RotationSlot, RotationWeek } from "../types";
 
 /** Monday of the week containing d, as YYYY-MM-DD in LOCAL time.
  *  Never use toISOString() here - it shifts to UTC and lands on the wrong
@@ -74,44 +75,115 @@ function esc(s: string): string {
   return s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
 }
 
+/** Weeks printed around the selected one — the sheet exists for transparency
+ *  (nobody can camp the easy section if the wall shows the recent weeks and
+ *  the next one), so it prints a WINDOW, not a single week. */
+const PRINT_WEEKS_BACK = 3;
+const PRINT_WEEKS_FORWARD = 1;
+
+/** "Mon Sep 28 – Fri Oct 2" — unambiguous even torn off and pinned up. */
+function clearSpan(iso: string): string {
+  const mon = localDate(iso);
+  const fri = new Date(mon);
+  fri.setDate(mon.getDate() + 4);
+  const f = (d: Date) => d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
+  return `${f(mon)} – ${f(fri)}`;
+}
+
+/** The column's relative tag, anchored on the REAL current week. */
+function relativeLabel(iso: string, thisWeek: string): string {
+  const diff = Math.round((localDate(iso).getTime() - localDate(thisWeek).getTime()) / (7 * 86400000));
+  if (diff === 0) return "THIS WEEK";
+  if (diff === -1) return "last week";
+  if (diff === 1) return "next week";
+  return diff < 0 ? `${-diff} weeks ago` : `in ${diff} weeks`;
+}
+
 /**
- * The printable week: a self-contained page in its own window, black on
- * white, one big row per section. Built here rather than with a print
- * stylesheet so the app shell (nav, top bar, the other cards) never has to
- * know about printing — and the sheet looks the same from every browser.
+ * The printable rotation: a self-contained page in its own window, black on
+ * white — sections down the side, a window of weeks across the top (past
+ * weeks, the selected week, and the next one), each column headed by its
+ * explicit Mon–Fri dates. Built here rather than with a print stylesheet so
+ * the app shell never has to know about printing — and the sheet looks the
+ * same from every browser.
  */
-function printWeek(week: string, slots: RotationSlot[]) {
-  const rows = slots
+async function printRotation(week: string, thisWeek: string): Promise<boolean> {
+  const keys: string[] = [];
+  for (let i = -PRINT_WEEKS_BACK; i <= PRINT_WEEKS_FORWARD; i++) keys.push(addWeeks(week, i));
+  const boards = await Promise.all(
+    keys.map(async (k): Promise<RotationWeek> => {
+      try {
+        return (await api.get<RotationWeek>("/rotation", { params: { week: k } })).data;
+      } catch {
+        return { week_start: k, sections: [] };
+      }
+    }),
+  );
+  // The selected week anchors the row order; other weeks map by section id.
+  const anchor = boards[PRINT_WEEKS_BACK];
+  const byWeek = boards.map((b) => new Map(b.sections.map((s) => [s.section_id, s])));
+  // A week nobody built prints as a quiet "—" column, not five "unassigned"s.
+  const weekFilled = boards.map((b) => b.sections.some((s) => s.person_name != null));
+
+  const head = boards
+    .map((b, i) => {
+      const sel = i === PRINT_WEEKS_BACK;
+      return `<th class="wk${sel ? " sel" : ""}"><span class="rel">${esc(relativeLabel(b.week_start, thisWeek))}</span><span class="dates">${esc(clearSpan(b.week_start))}</span></th>`;
+    })
+    .join("");
+  const body = anchor.sections
     .map((s) => {
-      const name = s.person_name ?? (s.is_floater ? "— skipped —" : "— unassigned —");
-      return `<tr class="${s.person_name ? "" : "empty"}${s.is_floater ? " floater" : ""}">
-        <th>${esc(s.section_name)}${s.is_floater ? '<span class="tag">floater</span>' : ""}</th>
-        <td>${esc(name)}</td>
+      const cells = byWeek
+        .map((m, i) => {
+          const slot = m.get(s.section_id);
+          const filled = slot?.person_name != null;
+          const name = filled
+            ? slot!.person_name!
+            : slot == null || !weekFilled[i]
+              ? "—"
+              : s.is_floater
+                ? "— skipped —"
+                : "— unassigned —";
+          return `<td class="${filled ? "" : "empty"}${i === PRINT_WEEKS_BACK ? " sel" : ""}">${esc(name)}</td>`;
+        })
+        .join("");
+      return `<tr class="${s.is_floater ? "floater" : ""}">
+        <th>${esc(s.section_name)}${s.is_floater ? '<span class="tag">floater</span>' : ""}</th>${cells}
       </tr>`;
     })
     .join("");
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Section rotation — week of ${esc(prettyWeek(week))}</title>
 <style>
-  @page { margin: 18mm; }
+  @page { margin: 14mm; size: landscape; }
   body { font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; padding: 24px; }
-  h1 { font-size: 28px; margin: 0 0 2px; letter-spacing: -0.01em; }
-  .sub { font-size: 15px; color: #555; margin: 0 0 22px; }
-  table { width: 100%; border-collapse: collapse; }
-  th, td { text-align: left; padding: 14px 10px; border-bottom: 1px solid #ccc; vertical-align: middle; }
-  th { width: 36%; font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: #444; font-weight: 700; }
-  td { font-size: 30px; font-weight: 800; }
-  tr.empty td { color: #999; font-weight: 500; font-size: 22px; }
+  h1 { font-size: 26px; margin: 0 0 2px; letter-spacing: -0.01em; }
+  .sub { font-size: 14px; color: #555; margin: 0 0 18px; }
+  table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+  th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid #ccc; vertical-align: middle; }
+  thead th { border-bottom: 2px solid #111; vertical-align: bottom; }
+  tbody th { width: 15%; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #444; font-weight: 700; }
+  th.wk .rel { display: block; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #888; font-weight: 700; }
+  th.wk.sel .rel { color: #111; }
+  th.wk .dates { display: block; font-size: 12.5px; color: #333; font-weight: 700; margin-top: 2px; }
+  td { font-size: 17px; font-weight: 800; }
+  td.sel { background: #f1f1f1; }
+  th.wk.sel { background: #f1f1f1; }
+  td.empty { color: #999; font-weight: 500; font-size: 13px; }
   tr.floater th { color: #777; }
-  .tag { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid #bbb; border-radius: 999px; font-size: 10px; letter-spacing: 0.08em; color: #777; }
-  .foot { margin-top: 26px; font-size: 11px; color: #888; }
+  .tag { display: inline-block; margin-left: 8px; padding: 1px 6px; border: 1px solid #bbb; border-radius: 999px; font-size: 9px; letter-spacing: 0.08em; color: #777; }
+  .foot { margin-top: 20px; font-size: 11px; color: #888; }
 </style></head><body>
 <h1>Section rotation</h1>
-<p class="sub">Week of ${esc(prettyWeek(week))} · ${esc(weekSpan(week))}</p>
-<table>${rows}</table>
-<p class="foot">Printed ${esc(new Date().toLocaleString())} · ReadyRoute</p>
+<p class="sub">Printed for the week of <b>${esc(clearSpan(week))}, ${localDate(week).getFullYear()}</b> — the shaded column. Each column is one work week, Monday–Friday.</p>
+<table>
+  <thead><tr><th></th>${head}</tr></thead>
+  <tbody>${body}</tbody>
+</table>
+<p class="foot">Printed ${esc(new Date().toLocaleString())} · ReadyRoute — everyone rotates through every section before repeating one.</p>
 <script>window.onload = function () { window.focus(); window.print(); };</script>
 </body></html>`;
-  const w = window.open("", "_blank", "width=760,height=920");
+  const w = window.open("", "_blank", "width=1040,height=760");
   if (!w) return false;
   w.document.open();
   w.document.write(html);
@@ -187,8 +259,15 @@ export default function Rotation() {
     );
   }
 
-  function doPrint() {
-    if (!printWeek(week, slots)) setErr("The browser blocked the print window — allow pop-ups for this site and try again.");
+  async function doPrint() {
+    setErr(null);
+    try {
+      if (!(await printRotation(week, thisWeek))) {
+        setErr("The browser blocked the print window — allow pop-ups for this site and try again.");
+      }
+    } catch {
+      setErr("Could not load the surrounding weeks for the print sheet.");
+    }
   }
 
   return (
