@@ -503,6 +503,9 @@ export default function Rotation() {
                     {slot.person_active === false && (
                       <p className="text-[10px] font-semibold text-amber-400">Left the rotation — pick someone or rebuild the week</p>
                     )}
+                    {slot.pinned && slot.person_active !== false && (
+                      <p className="text-[10px] font-semibold text-sky-300">Pinned — holds this section every week</p>
+                    )}
                     <label className="sr-only" htmlFor={`slot-${slot.section_id}`}>
                       Who works {slot.section_name} this week
                     </label>
@@ -586,6 +589,32 @@ export default function Rotation() {
                   >
                     {p.name}
                   </span>
+                  <select
+                    className="max-w-[7rem] rounded-md border border-hairline bg-surface py-0.5 pl-1.5 pr-5 text-[10px] text-ink-soft"
+                    title="Pin to one section — they hold it every week while everyone else rotates around them"
+                    aria-label={`Where ${p.name} works`}
+                    value={p.pinned_section_id ?? ""}
+                    disabled={updatePerson.isPending}
+                    onChange={(e) => {
+                      setErr(null);
+                      updatePerson.mutate(
+                        { id: p.id, pinned_section_id: e.target.value === "" ? null : Number(e.target.value) },
+                        {
+                          onError: (er: unknown) => {
+                            const detail = (er as { response?: { data?: { detail?: string } } })?.response?.data?.detail;
+                            setErr(detail ?? "Could not pin that section.");
+                          },
+                        },
+                      );
+                    }}
+                  >
+                    <option value="">Rotates</option>
+                    {slots.map((sec) => (
+                      <option key={sec.section_id} value={sec.section_id}>
+                        Pin: {sec.section_name}
+                      </option>
+                    ))}
+                  </select>
                   <button
                     type="button"
                     title="Remove from the rotation (history keeps the name)"

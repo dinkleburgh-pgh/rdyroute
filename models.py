@@ -982,6 +982,13 @@ class RotationPerson(Base):
     # past week: on the roster with no row means they sat that week out.
     # NULL = no record, treated as on the roster throughout.
     active_since: Mapped[date | None] = mapped_column(Date, nullable=True)
+    # Pin: while set, every build gives this person exactly this section and
+    # plans everyone else fairly around them. The two real cases: a newcomer
+    # held on the training section while they learn, and a supervisor who
+    # only ever floats. NULL = rotates normally.
+    pinned_section_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("rotation_sections.id"), nullable=True
+    )
 
 
 class RotationAssignment(Base):

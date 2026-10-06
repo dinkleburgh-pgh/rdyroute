@@ -1397,6 +1397,9 @@ class RotationPersonOut(BaseModel):
     # The Monday their current roster run started — the week the planner
     # first considers them eligible.
     active_since: date | None = None
+    # While set, every build gives them exactly this section (training pin /
+    # floats-only supervisor); everyone else rotates fairly around them.
+    pinned_section_id: int | None = None
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -1409,6 +1412,8 @@ class RotationPersonIn(BaseModel):
     # next Monday here so a rebuild of the current week can't pull them in
     # early. Given alongside a reactivation it overrides the reset-to-now.
     active_since: date | None = None
+    # Set = pin to that section; explicit null clears the pin.
+    pinned_section_id: int | None = None
 
 
 class RotationAssignIn(BaseModel):
@@ -1435,6 +1440,8 @@ class RotationSlotOut(BaseModel):
     # False = the assigned person has since left the rotation — a ghost the
     # lead should rebuild away. History keeps the name; the UI marks it.
     person_active: bool = True
+    # True = this person is pinned to this section (they don't rotate).
+    pinned: bool = False
 
 
 class RotationWeekOut(BaseModel):

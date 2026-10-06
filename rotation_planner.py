@@ -91,6 +91,7 @@ def plan_week(
     rosters: Sequence[Collection[int]] | None = None,
     following: Mapping[int, int] | None = None,
     floaters: Collection[int] = (),
+    fixed: Mapping[int, int] | None = None,
 ) -> dict[int, int]:
     """Decide one week.
 
@@ -121,11 +122,31 @@ def plan_week(
               The cycle spreads floater weeks between the mains, then sit-out
               weeks across all of them.
 
+    fixed     {section_id: person_id} pairs decided OUTSIDE the fairness
+              solve — a person pinned to a section (the newcomer on the
+              training section, the supervisor who only floats). Those
+              sections and people are carved out and everyone else is planned
+              fairly around them; the pairs come back in the returned plan.
+
     Returns {section_id: person_id} for every section that gets filled.
     Sections left out are unfilled that week (the floater when short-handed).
     People left out sit the week out (only when there are more people than
     sections).
     """
+    if fixed:
+        pin = {s: p for s, p in fixed.items() if s in set(sections) and p in set(people)}
+        if pin:
+            pinned_people = set(pin.values())
+            rest = plan_week(
+                [s for s in sections if s not in pin],
+                [p for p in people if p not in pinned_people],
+                history,
+                rosters,
+                following=following,
+                floaters=[f for f in floaters if f not in pin],
+            )
+            rest.update(pin)
+            return rest
     week = _Week(sections, people, history, rosters, following, floaters)
     if not week.people or not week.sections:
         return {}

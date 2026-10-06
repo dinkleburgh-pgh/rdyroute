@@ -449,6 +449,8 @@ export interface RotationPerson {
   is_active: boolean;
   /** Monday their current roster run started (planner eligibility). */
   active_since?: string | null;
+  /** Pinned to one section (training / floats-only); null = rotates. */
+  pinned_section_id?: number | null;
 }
 
 export interface RotationSlot {
@@ -460,6 +462,8 @@ export interface RotationSlot {
   person_name: string | null;
   /** false = assigned to someone who has since left the rotation. */
   person_active?: boolean;
+  /** true = this person is pinned to this section (they don't rotate). */
+  pinned?: boolean;
 }
 
 export interface RotationStaleWeek {

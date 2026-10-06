@@ -1046,7 +1046,7 @@ export function useAddRotationPerson() {
 export function useUpdateRotationPerson() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (args: { id: number; name?: string; is_active?: boolean; sort_order?: number; active_since?: string }) => {
+    mutationFn: async (args: { id: number; name?: string; is_active?: boolean; sort_order?: number; active_since?: string; pinned_section_id?: number | null }) => {
       const { id, ...body } = args;
       return (await api.patch<RotationPerson>(`/rotation/people/${id}`, body)).data;
     },

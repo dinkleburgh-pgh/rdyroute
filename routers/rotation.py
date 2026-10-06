@@ -93,6 +93,7 @@ def _serialise_week(db: Session, week: date) -> RotationWeekOut:
                 "person_name": person.name if person else None,
                 # A ghost: still assigned, but no longer on the rotation.
                 "person_active": person.is_active if person else True,
+                "pinned": bool(person and person.pinned_section_id == sec.id),
             }
         )
     return RotationWeekOut(week_start=week, sections=out)
@@ -216,6 +217,22 @@ def update_person(
         data["name"] = (data["name"] or "").strip()
         if not data["name"]:
             raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Name cannot be blank")
+    if "pinned_section_id" in data and data["pinned_section_id"] is not None:
+        sec = db.get(RotationSection, data["pinned_section_id"])
+        if sec is None:
+            raise HTTPException(status.HTTP_404_NOT_FOUND, f"No section {data['pinned_section_id']}")
+        clash = db.scalars(
+            select(RotationPerson).where(
+                RotationPerson.pinned_section_id == sec.id,
+                RotationPerson.is_active.is_(True),
+                RotationPerson.id != person_id,
+            )
+        ).first()
+        if clash is not None:
+            raise HTTPException(
+                status.HTTP_409_CONFLICT,
+                f"{clash.name} is already pinned to {sec.name} — unpin them first",
+            )
     if data.get("active_since") is not None:
         data["active_since"] = _week_start(data["active_since"])
     elif "active_since" in data:
@@ -305,6 +322,19 @@ def stale_weeks(
             reasons.append(f"assigned to {', '.join(gone)} — no longer on the rotation")
         if missing:
             reasons.append(f"built before {', '.join(missing)} joined")
+        # Pin drift: a pinned person sitting on some OTHER section (or absent
+        # while a seat is open) means the week predates the pin.
+        by_person = {r.person_id: r.section_id for r in wrows}
+        drifted = sorted(
+            p.name
+            for p in active
+            if p.pinned_section_id is not None
+            and (p.active_since is None or p.active_since <= wk)
+            and by_person.get(p.id) != p.pinned_section_id
+            and (p.id in by_person or len(wrows) < n_sections)
+        )
+        if drifted:
+            reasons.append(f"built before {', '.join(drifted)} was pinned to a section")
         if reasons:
             out.append(RotationStaleWeekOut(week_start=wk, reasons=reasons))
     return out
@@ -438,6 +468,16 @@ def advance(
         for r in sorted(_week_rows(db, target + timedelta(weeks=1)), key=lambda r: r.section_id)
     }
 
+    # Pins: a pinned person holds exactly their section; the solve plans
+    # everyone else fairly around them. Two active people can't share a pin
+    # (update_person enforces it), so last-write-wins here is unreachable.
+    section_ids = {s.id for s in sections}
+    fixed = {
+        p.pinned_section_id: p.id
+        for p in people
+        if p.pinned_section_id is not None and p.pinned_section_id in section_ids
+    }
+
     # `sections` is in fill order (main first, floater last), which is what
     # makes the floater the one left empty when short-handed.
     plan = plan_week(
@@ -447,6 +487,7 @@ def advance(
         rosters,
         following=following or None,
         floaters=[s.id for s in sections if s.is_floater],
+        fixed=fixed or None,
     )
     for sec in sections:
         person_id = plan.get(sec.id)
