@@ -78,11 +78,11 @@ function esc(s: string): string {
 /** Weeks printed around the selected one — the sheet exists for transparency
  *  (nobody can camp the easy section if the wall shows the recent weeks and
  *  the next one), so it prints a WINDOW, not a single week. */
-// Column order is reading order, not calendar order: the week being printed
-// comes FIRST, then the week ahead, then the past receding — "what am I on,
-// what's next, and proof it's been rotating".
-const PRINT_OFFSETS = [0, 1, -1, -2, -3] as const;
-const SEL_IDX = 0; // the printed/selected week's position in PRINT_OFFSETS
+// The hero band at the top of the sheet carries "what am I on" — so the
+// history grid underneath reads plain chronological, oldest to newest, with
+// the printed week shaded and ruled in place.
+const PRINT_OFFSETS = [-3, -2, -1, 0, 1] as const;
+const SEL_IDX = PRINT_OFFSETS.indexOf(0); // the printed week's column
 
 /** "Mon Sep 28 – Fri Oct 2" — unambiguous even torn off and pinned up. */
 function clearSpan(iso: string): string {
@@ -93,9 +93,15 @@ function clearSpan(iso: string): string {
   return `${f(mon)} – ${f(fri)}`;
 }
 
-/** The column's relative tag, anchored on the REAL current week. */
+/** The column's relative tag, anchored on the REAL current week. Week counts
+ *  go through UTC noon so a DST hour can never shift a column into its
+ *  neighbour's label (two columns both reading "3 weeks ago"). */
 function relativeLabel(iso: string, thisWeek: string): string {
-  const diff = Math.round((localDate(iso).getTime() - localDate(thisWeek).getTime()) / (7 * 86400000));
+  const utcNoon = (k: string) => {
+    const [y, m, d] = k.split("-").map(Number);
+    return Date.UTC(y, m - 1, d, 12);
+  };
+  const diff = Math.round((utcNoon(iso) - utcNoon(thisWeek)) / (7 * 86400000));
   if (diff === 0) return "THIS WEEK";
   if (diff === -1) return "last week";
   if (diff === 1) return "next week";
@@ -155,27 +161,51 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
     })
     .join("");
 
+  // The hero band: the printed week read HORIZONTALLY — section names across
+  // the top, this week's person big under each. This is what the crew reads;
+  // the grid below is the receipts.
+  const hero = anchor.sections
+    .map((s) => {
+      const filled = s.person_name != null;
+      const name = filled ? s.person_name! : s.is_floater ? "— skipped —" : "— unassigned —";
+      return `<div class="hcell${s.is_floater ? " hfloat" : ""}">
+        <div class="hsec">${esc(s.section_name)}</div>
+        <div class="hname${filled ? "" : " hempty"}">${esc(name)}</div>
+      </div>`;
+    })
+    .join("");
+
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Section rotation — week of ${esc(prettyWeek(week))}</title>
 <style>
   @page { margin: 14mm; size: landscape; }
   body { font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; padding: 24px; }
   h1 { font-size: 26px; margin: 0 0 2px; letter-spacing: -0.01em; }
-  .sub { font-size: 14px; color: #555; margin: 0 0 18px; }
+  .sub { font-size: 14px; color: #555; margin: 0 0 14px; }
+  .hero { display: flex; border: 2px solid #111; border-radius: 10px; overflow: hidden; margin-bottom: 26px; }
+  .hcell { flex: 1 1 0; padding: 14px 12px 16px; border-left: 1px solid #ccc; text-align: center; }
+  .hcell:first-child { border-left: 0; }
+  .hsec { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #444; font-weight: 700; margin-bottom: 6px; }
+  .hfloat .hsec { color: #888; }
+  .hname { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; }
+  .hname.hempty { font-size: 16px; font-weight: 500; color: #999; padding-top: 8px; }
+  h2 { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: #666; margin: 0 0 8px; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-  th, td { text-align: left; padding: 11px 10px; border-bottom: 1px solid #ccc; vertical-align: middle; }
+  th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid #ccc; vertical-align: middle; }
   thead th { border-bottom: 2px solid #111; vertical-align: bottom; }
-  tbody th { width: 15%; font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #444; font-weight: 700; }
-  th.wk .rel { display: block; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: #888; font-weight: 700; }
+  tbody th { width: 13%; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #444; font-weight: 700; }
+  th.wk .rel { display: block; font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #888; font-weight: 700; }
   th.wk.sel .rel { color: #111; }
-  th.wk .dates { display: block; font-size: 12.5px; color: #333; font-weight: 700; margin-top: 2px; }
-  td { font-size: 17px; font-weight: 800; }
+  th.wk .dates { display: block; font-size: 11.5px; color: #333; font-weight: 700; margin-top: 2px; }
+  td { font-size: 15px; font-weight: 700; }
   td.sel, th.wk.sel { background: #f1f1f1; border-left: 2px solid #111; border-right: 2px solid #111; }
-  td.empty { color: #999; font-weight: 500; font-size: 13px; }
+  td.empty { color: #999; font-weight: 500; font-size: 12px; }
   tr.floater th { color: #777; }
-  .foot { margin-top: 20px; font-size: 11px; color: #888; }
+  .foot { margin-top: 16px; font-size: 11px; color: #888; }
 </style></head><body>
 <h1>Section rotation</h1>
-<p class="sub">Printed for the week of <b>${esc(clearSpan(week))}, ${localDate(week).getFullYear()}</b> — the shaded column. Each column is one work week, Monday–Friday.</p>
+<p class="sub">Week of <b>${esc(clearSpan(week))}, ${localDate(week).getFullYear()}</b>${week === thisWeek ? " — this week" : ""}</p>
+<div class="hero">${hero}</div>
+<h2>Recent &amp; next weeks</h2>
 <table>
   <thead><tr><th></th>${head}</tr></thead>
   <tbody>${body}</tbody>
