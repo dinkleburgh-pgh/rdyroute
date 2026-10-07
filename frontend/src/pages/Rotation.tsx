@@ -79,12 +79,12 @@ function esc(s: string): string {
 /** Weeks printed around the selected one — the sheet exists for transparency
  *  (nobody can camp the easy section if the wall shows the recent weeks and
  *  the next one), so it prints a WINDOW, not a single week. */
-// The hero band at the top of the sheet IS the printed week, so the grid
-// below never repeats it: offset 0 is fetched only to feed the hero, and the
-// grid columns read Next Week, then the past receding — exactly the order
-// the crew asked to read it in.
-const PRINT_OFFSETS = [0, 1, -1, -2, -3] as const;
+// The hero band at the top of the sheet IS the printed week; the grid below
+// is pure history — the three weeks before it, labelled relative to the hero
+// (never "this week", never a future projection).
+const PRINT_OFFSETS = [0, -1, -2, -3] as const;
 const SEL_IDX = 0; // the printed week: hero only, never a grid column
+const GRID_LABELS = ["Last week", "2 weeks ago", "3 weeks ago"];
 
 /** "Mon Sep 28 – Fri Oct 2" — unambiguous even torn off and pinned up. */
 function clearSpan(iso: string): string {
@@ -93,21 +93,6 @@ function clearSpan(iso: string): string {
   fri.setDate(mon.getDate() + 4);
   const f = (d: Date) => d.toLocaleDateString(undefined, { weekday: "short", month: "short", day: "numeric" });
   return `${f(mon)} – ${f(fri)}`;
-}
-
-/** The column's relative tag, anchored on the REAL current week. Week counts
- *  go through UTC noon so a DST hour can never shift a column into its
- *  neighbour's label (two columns both reading "3 weeks ago"). */
-function relativeLabel(iso: string, thisWeek: string): string {
-  const utcNoon = (k: string) => {
-    const [y, m, d] = k.split("-").map(Number);
-    return Date.UTC(y, m - 1, d, 12);
-  };
-  const diff = Math.round((utcNoon(iso) - utcNoon(thisWeek)) / (7 * 86400000));
-  if (diff === 0) return "THIS WEEK";
-  if (diff === -1) return "last week";
-  if (diff === 1) return "next week";
-  return diff < 0 ? `${-diff} weeks ago` : `in ${diff} weeks`;
 }
 
 /**
@@ -137,9 +122,9 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
 
   const gridIdx = boards.map((_, i) => i).filter((i) => i !== SEL_IDX);
   const head = gridIdx
-    .map((i) => {
+    .map((i, col) => {
       const b = boards[i];
-      return `<th class="wk"><span class="rel">${esc(relativeLabel(b.week_start, thisWeek))}</span><span class="dates">${esc(clearSpan(b.week_start))}</span></th>`;
+      return `<th class="wk"><span class="rel">${esc(GRID_LABELS[col] ?? "")}</span><span class="dates">${esc(clearSpan(b.week_start))}</span></th>`;
     })
     .join("");
   const body = anchor.sections
@@ -206,7 +191,7 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
 <h1>Section rotation</h1>
 <p class="sub">Week of <b>${esc(clearSpan(week))}, ${localDate(week).getFullYear()}</b>${week === thisWeek ? " — this week" : ""}</p>
 <div class="hero">${hero}</div>
-<h2>Recent &amp; next weeks</h2>
+<h2>Recent weeks</h2>
 <table>
   <thead><tr><th></th>${head}</tr></thead>
   <tbody>${body}</tbody>
