@@ -68,7 +68,11 @@ export function effectiveStatus(
   holidayMode = false,
 ): TruckStatus {
   const raw = (t.state?.status ?? "dirty") as TruckStatus;
-  if (t.is_oos && raw !== "dirty") return "oos";
+  // An OOS truck may still have cargo on it — the unload-side statuses
+  // (dirty, unfinished) keep showing so it can move through the unload
+  // workflow without leaving OOS. Everything else reads OOS: once unloaded
+  // it leaves the unload boards and sits on OOS until the flag is cleared.
+  if (t.is_oos && raw !== "dirty" && raw !== "unfinished") return "oos";
   if (
     !holidayMode &&
     t.truck_type !== "Spare" &&

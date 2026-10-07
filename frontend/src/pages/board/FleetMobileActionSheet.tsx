@@ -231,11 +231,16 @@ export default function FleetMobileActionSheet({
   // The Load board's "now unloading" marker (one truck at a time, server-
   // enforced). It only fits a truck with something on it — Dirty/Unfinished —
   // so on any other live status the stamp ASKS, then sets Dirty and starts the
-  // marker in one write. Off/OOS/shop trucks are not on the dock at all: no
-  // status we would silently move them to, so the stamp is simply disabled.
+  // marker in one write. Off/shop trucks are not on the dock at all: no status
+  // we would silently move them to, so the stamp is simply disabled. OOS is
+  // NOT blocked — an OOS truck may still have cargo to unload; the ask path
+  // sets it Dirty for the unload workflow while the OOS flag stays raised.
+  // Workable is judged on the RAW status: an is_oos truck that is still
+  // Dirty/Unfinished starts the stamp directly, no ask needed.
   const unloadingActive = truck.state?.unloading_started_at != null;
-  const unloadWorkable = status === "dirty" || status === "unfinished";
-  const unloadBlocked = status === "off" || status === "oos" || status === "shop";
+  const rawStatus = (truck.state?.status ?? "dirty") as TruckStatus;
+  const unloadWorkable = rawStatus === "dirty" || rawStatus === "unfinished";
+  const unloadBlocked = status === "off" || status === "shop";
   const dockButtons =
     Number(arrivedEnabled) + Number(outsideActive || outsideEnabled) + Number(paperBayActive || paperBayEnabled);
 
@@ -402,6 +407,7 @@ export default function FleetMobileActionSheet({
                 <p className="mt-0.5 text-[11px] text-amber-300/70">
                   Unloading only fits a Dirty or Unfinished truck. This changes the status and
                   starts the marker the Load board shows, in one step.
+                  {truck.is_oos && " The truck stays OOS — unloading it does not put it back in service."}
                 </p>
                 <div className="mt-2 flex gap-2">
                   <button
