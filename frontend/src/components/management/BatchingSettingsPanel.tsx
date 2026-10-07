@@ -9,7 +9,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useUpsertSetting } from "../../api/hooks";
 import { asBool, FieldRow, SaveButton } from "./shared";
-import BatchingPanel from "./BatchingPanel";
 import BatchingQuickEntry from "./BatchingQuickEntry";
 import { DEFAULT_WEARER_CAP } from "../../utils/batchCapacity";
 
@@ -99,11 +98,10 @@ export default function BatchingSettingsPanel({ map }: { map: Map<string, unknow
         <SaveButton dirty={dirty} saving={upsert.isPending} onSave={save} onRevert={() => setForm(initial)} />
       </div>
 
-      {/* Type-through entry first: it is the fastest way in when you are working
-          from the paper sheet. The full grid below stays for reviewing and
-          fixing what is already assigned. */}
+      {/* Type-through entry: the fastest way in when working from the paper
+          sheet. Reviewing and fixing assignments happens on the Batches board
+          — the old end-of-day grid here duplicated it and was removed. */}
       <BatchingQuickEntry />
-      <BatchingPanel />
     </div>
   );
 }

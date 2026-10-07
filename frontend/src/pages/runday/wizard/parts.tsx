@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import clsx from "clsx";
 import { Check, X } from "lucide-react";
 
-export const STEP_NAMES = ["Run mode", "Garments", "NOGs", "Swaps", "Not here", "Notes"] as const;
+export const STEP_NAMES = ["Run mode", "Garments", "NOGs", "Swaps", "Notes"] as const;
 
 export type ChipTone = "garments" | "nogs" | "absent" | "ranAhead";
 
@@ -153,10 +153,9 @@ export function WizardHeader({
             <li key={name}>
               <button
                 type="button"
-                disabled={!done}
                 aria-current={cur ? "step" : undefined}
                 onClick={() => onJump(n)}
-                className="flex w-full flex-col gap-1.5 text-left disabled:cursor-default"
+                className="flex w-full flex-col gap-1.5 text-left"
               >
                 <span className={clsx("h-1 rounded-pill", done || cur ? "bg-accent" : "bg-track")} />
                 <span

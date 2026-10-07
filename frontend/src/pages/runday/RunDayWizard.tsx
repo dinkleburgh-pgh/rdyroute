@@ -253,7 +253,6 @@ export default function RunDayWizard({
   );
   const editableDustTrucks = dustTrucks;
   const editableSpecialTrucks = specialTrucks;
-  const [absentSelected, setAbsentSelected] = useState<Set<number>>(new Set());
   // "Ran ahead" — trucks skipping TONIGHT'S load (holiday weeks run trucks on
   // their off days, so their next load is already done). Seeded from the
   // sentinel so re-running Setup Day shows what's already flagged.
@@ -295,16 +294,7 @@ export default function RunDayWizard({
     });
   }
 
-  function toggleAbsent(num: number) {
-    setAbsentSelected((prev) => {
-      const next = new Set(prev);
-      if (next.has(num)) next.delete(num);
-      else next.add(num);
-      return next;
-    });
-  }
-
-  async function saveGarmentsAndAdvance() {
+  async function saveGarments() {
     await Promise.all(
       editableDustTrucks.map((t) =>
         upsert.mutateAsync({
@@ -315,10 +305,14 @@ export default function RunDayWizard({
         }),
       ),
     );
+  }
+
+  async function saveGarmentsAndAdvance() {
+    await saveGarments();
     setStep(3);
   }
 
-  async function saveNogsAndAdvance() {
+  async function saveNogs() {
     // NOGs: delta-only writes — the grid spans the whole fleet, and stamping
     // forty untouched rows "wizard" would make every day look human-edited.
     const tasks: Promise<unknown>[] = [];
@@ -339,6 +333,10 @@ export default function RunDayWizard({
       }
     }
     await Promise.all(tasks);
+  }
+
+  async function saveNogsAndAdvance() {
+    await saveNogs();
     setStep(4);
   }
 
@@ -370,91 +368,28 @@ export default function RunDayWizard({
     }
   }
 
-  async function saveAbsentAndAdvance() {
-    const tasks: Promise<unknown>[] = [];
-    // Absent trucks: raise Needs Checked and touch NOTHING else.
-    //
-    // This used to park them at "unloaded" (spares at "spare"), which closed
-    // the job before anyone had been near the truck — it dropped out of the
-    // crew's work list and out of the unload denominator, and the only thing
-    // left pointing at it was a badge nobody was hunting for. It also cost
-    // real load work: truck 88 went loaded -> unloaded through here on
-    // 2026-07-16 and had to be put back by hand.
-    //
-    // Saying "this truck isn't here yet" is an observation, not a decision
-    // about where it is in its day, so the status stays exactly as it was and
-    // the flag does the talking.
-    for (const num of absentSelected) {
-      const truck = specialTrucks.find((t) => t.truck_number === num);
-      if (!truck) continue;
-      tasks.push(upsert.mutateAsync({
-        truck_number: num,
-        run_date: runDate,
-        needs_checked: true,
-        // Echo the CURRENT status rather than omitting it: on the rare truck
-        // with no row yet, the create fallback would otherwise default the row
-        // to "dirty" — inventing a status change through the one path that is
-        // supposed to make none. A spare with no row gets "spare" for the same
-        // reason (dirty would invent unload work it never had).
-        ...(truck.state
-          ? { status: truck.state.status, wearers: truck.state.wearers }
-          : truck.truck_type === "Spare"
-            ? { status: "spare" as const }
-            : {}),
-        state_source: "wizard",
-      }));
-    }
-
-    // Non-absent returning trucks: auto-set to unloaded.
-    // These trucks were off yesterday and are back today — they were already
-    // loaded/pushed the day before, so they return in an unloaded state.
-    // Guard: don't downgrade a truck that's already further along this shift —
-    // re-running Setup Day must not reset in-progress/loaded work back to unloaded.
-    for (const t of returningTrucks) {
-      if (absentSelected.has(t.truck_number)) continue;
-      if (t.state?.status === "in_progress" || t.state?.status === "loaded") continue;
-      tasks.push(upsert.mutateAsync({
-        truck_number: t.truck_number,
-        run_date: runDate,
-        status: "unloaded",
-        state_source: "wizard",
-      }));
-    }
-
-    // Ran-ahead toggles: sentinel only, status echoed — the truck keeps its
-    // morning unload work and just leaves tonight's load roster.
-    if (ranAheadSelected != null) {
-      for (const t of ranAheadCandidates) {
-        const was = hasRanAhead(t.state?.off_note);
-        const now = ranAheadPicked.has(t.truck_number);
-        if (was === now) continue;
-        tasks.push(upsert.mutateAsync({
+  /** Returning trucks (off yesterday, back today) come back clean — they
+   *  were loaded and pushed the day before. This write lived on the removed
+   *  "Trucks not here" page; it is load-bearing, so Finish does it silently.
+   *  Guard: never downgrade a truck already in progress or loaded. */
+  async function syncReturningTrucks() {
+    const tasks = returningTrucks
+      .filter((t) => t.state?.status !== "in_progress" && t.state?.status !== "loaded")
+      .map((t) =>
+        upsert.mutateAsync({
           truck_number: t.truck_number,
           run_date: runDate,
-          off_note: now
-            ? addNoteToken(t.state?.off_note, RAN_AHEAD)
-            : removeNoteToken(t.state?.off_note, RAN_AHEAD),
-          ...(t.state ? { status: t.state.status, wearers: t.state.wearers } : {}),
+          status: "unloaded",
           state_source: "wizard",
-        }));
-      }
-    }
-
-    // allSettled, not all: the server now rejects a wizard write that would undo
-    // load work, and one such 409 must not abort the rest of the step. A truck
-    // being skipped is the guard doing its job, so it is reported, not thrown.
-    const results = await Promise.allSettled(tasks);
-    const skipped = results.filter((r) => r.status === "rejected").length;
-    if (skipped > 0) {
-      toast.info(
-        `${skipped} truck${skipped === 1 ? "" : "s"} left as ${skipped === 1 ? "it is" : "they are"} — ` +
-        "already loaded or in progress for today.",
+        }),
       );
-    }
-    setStep(6);
+    // allSettled: the server rejects a wizard write that would undo load
+    // work, and one such 409 must not block finishing the wizard.
+    await Promise.allSettled(tasks);
   }
 
   async function saveNotesAndFinish() {
+    await syncReturningTrucks();
     await setDailyNotes.mutateAsync({ runDate, notes: notesText ?? dailyNotes });
     await upsertSetting.mutateAsync({ key: `day_setup_source_${runDate}`, value: "wizard" });
     await setWizardCompleted.mutateAsync(runDate);
@@ -462,21 +397,31 @@ export default function RunDayWizard({
   }
 
   const dateLabel = format(new Date(`${runDate}T12:00:00`), "EEE, MMM d");
-  const footerPending = step === 2 || step === 3 || step === 5 ? upsert.isPending : step === 6 ? setDailyNotes.isPending : false;
+  const footerPending = step === 2 || step === 3 ? upsert.isPending : step === 5 ? setDailyNotes.isPending || upsert.isPending : false;
   const nextByStep: Record<number, () => void> = {
     1: () => setStep(2),
     2: saveGarmentsAndAdvance,
     3: saveNogsAndAdvance,
     4: () => setStep(5),
-    5: saveAbsentAndAdvance,
-    6: saveNotesAndFinish,
+    5: saveNotesAndFinish,
   };
   const setAll = (setter: (s: Set<number>) => void, nums: number[]) => (all: boolean) =>
     setter(new Set(all ? nums : []));
 
+  /** Stepper tap: go straight to that page. The page being LEFT still saves
+   *  (same write its own Continue makes), so a jump can't silently drop the
+   *  toggles someone just set. Fire-and-forget: the writes are idempotent
+   *  upserts and the destination page doesn't depend on them. */
+  function jumpToStep(target: number) {
+    if (target === step) return;
+    if (step === 2) void saveGarments();
+    if (step === 3) void saveNogs();
+    setStep(target);
+  }
+
   return (
     <Modal open onClose={onClose} size="md" bodyClassName="">
-        <WizardHeader step={step} dateLabel={dateLabel} onClose={onClose} onJump={setStep} />
+        <WizardHeader step={step} dateLabel={dateLabel} onClose={onClose} onJump={jumpToStep} />
 
         <div className="max-h-[calc(100dvh-15rem)] overflow-y-auto px-5 pb-5">
           {/* Step 1: Run Mode */}
@@ -969,39 +914,8 @@ export default function RunDayWizard({
             );
           })()}
 
-          {/* Step 5: Trucks Not Here */}
+          {/* Step 5: Daily Notes + summary */}
           {step === 5 && (
-            <div className="space-y-5">
-              <StepHeading title="Trucks not here" help="They keep their current status. This only flags them Needs Checked." />
-              <ChipGroup
-                title="Returning & spare trucks that are absent"
-                help="Tap each truck that isn't here today."
-                tone="absent"
-                trucks={editableSpecialTrucks.map((t) => t.truck_number)}
-                selected={absentSelected}
-                onToggle={toggleAbsent}
-                onSetAll={setAll(setAbsentSelected, editableSpecialTrucks.map((t) => t.truck_number))}
-                cols={3}
-                empty="No returning or spare trucks found."
-              />
-              {ranAheadCandidates.length > 0 && (
-                <ChipGroup
-                  divider
-                  title="Ran ahead — skip tonight's load"
-                  help="Ran their route early this week (holiday double). They still unload as normal."
-                  tone="ranAhead"
-                  trucks={ranAheadCandidates.map((t) => t.truck_number)}
-                  selected={ranAheadPicked}
-                  onToggle={toggleRanAhead}
-                  onSetAll={setAll(setRanAheadSelected, ranAheadCandidates.map((t) => t.truck_number))}
-                  cols={3}
-                />
-              )}
-            </div>
-          )}
-
-          {/* Step 6: Daily Notes + summary */}
-          {step === 6 && (
             <div className="space-y-4">
               <StepHeading title="Notes for today" help="Anything the next shift should know." />
               <textarea
@@ -1017,7 +931,6 @@ export default function RunDayWizard({
                   ["unloads", unloadBase + (holidayUnload ? unloadExtra : 0)],
                   ["garments", dustSelected.size],
                   ["NOGs", nogsPicked.size],
-                  ["absent", absentSelected.size],
                   ["swaps", coverages.length],
                 ].map(([label, n]) => (
                   <div key={label} className="rounded-lg border border-hairline bg-surface-3 px-3 py-2">
@@ -1034,7 +947,7 @@ export default function RunDayWizard({
           step={step}
           pending={footerPending}
           onBack={() => (step === 1 ? onClose() : setStep(step - 1))}
-          onSkip={step === 2 ? () => setStep(3) : step === 3 ? () => setStep(4) : step === 5 ? () => setStep(6) : undefined}
+          onSkip={step === 2 ? () => setStep(3) : step === 3 ? () => setStep(4) : undefined}
           onNext={nextByStep[step]}
         />
     </Modal>
