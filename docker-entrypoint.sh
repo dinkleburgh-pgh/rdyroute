@@ -81,7 +81,8 @@ c.close()
         fi
     done
     if [ $_pg_ok -eq 1 ]; then
-        printf '[entrypoint] postgres connection OK — using %s\n' "$DATABASE_URL"
+        # Never the password: this line lands in docker logs on every start.
+        printf '[entrypoint] postgres connection OK — using %s\n' "$(printf '%s' "$DATABASE_URL" | sed -E 's#(://[^:/@]+):[^@]*@#\1:***@#')"
     else
         printf '[entrypoint] postgres unreachable after 4 attempts — falling back to SQLite\n'
         DATABASE_URL="sqlite:////app/.data/truckv2_prod.db"
