@@ -164,8 +164,8 @@ export default function RunDayWizard({
   // ✕ clears the right record(s). A board-only coverage with no raw id can't be
   // removed here, but it still shows so the list is never short.
   const coverages = useMemo(() => {
-    const out: { key: string; route_truck: number; load_on_truck: number; swapId?: number; spareId?: number }[] = [];
-    const upsert = (route: number, load: number, patch: { swapId?: number; spareId?: number }) => {
+    const out: { key: string; route_truck: number; load_on_truck: number; swapId?: number; spareId?: number; split?: boolean }[] = [];
+    const upsert = (route: number, load: number, patch: { swapId?: number; spareId?: number; split?: boolean }) => {
       const ex = out.find((o) => o.route_truck === route && o.load_on_truck === load);
       if (ex) Object.assign(ex, patch);
       else out.push({ key: `cov-${route}-${load}`, route_truck: route, load_on_truck: load, ...patch });
@@ -174,13 +174,17 @@ export default function RunDayWizard({
       const route = t.route_swap_route ?? t.state?.oos_spare_route;
       if (route != null) upsert(route, t.truck_number, {});
     }
-    for (const s of swaps) upsert(s.route_truck, s.load_on_truck, { swapId: s.id });
+    for (const s of swaps) upsert(s.route_truck, s.load_on_truck, { swapId: s.id, split: s.is_split === true });
     for (const a of spareAssignments.filter((a) => !a.returned)) upsert(a.covering_route_truck, a.spare_truck_number, { spareId: a.id });
     return out.sort((a, b) => a.route_truck - b.route_truck);
   }, [board, swaps, spareAssignments]);
   const coveredRouteSet = useMemo(() => new Set(coverages.map((c) => c.route_truck)), [coverages]);
   const [swapRoute, setSwapRoute] = useState<string>("");
   const [swapLoadOn, setSwapLoadOn] = useState<string>("");
+  // Split load: the route truck still RUNS — the helper only carries its
+  // overflow. Same createSwap call, split flag on (the Route Swaps modal's
+  // old checkbox, restored here after the wizard redesign dropped it).
+  const [swapSplit, setSwapSplit] = useState(false);
   const [swapError, setSwapError] = useState<string | null>(null);
   // Per-OOS-truck "load on" selections (auto-saved when set)
   const [oosLoadOns, setOosLoadOns] = useState<Record<number, string>>({});
@@ -314,10 +318,11 @@ export default function RunDayWizard({
     if (rt === lo) { setSwapError("Route truck and load-on truck must be different."); return; }
     setSwapError(null);
     try {
-      await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, two_way: false });
+      await createSwap.mutateAsync({ run_date: runDate, route_truck: rt, load_on_truck: lo, two_way: false, split: swapSplit });
       recordSwapHistory(rt, lo);
       setSwapRoute("");
       setSwapLoadOn("");
+      setSwapSplit(false);
     } catch (err: unknown) {
             setSwapError(errorDetail(err) ?? "Failed to save swap.");
     }
@@ -744,9 +749,20 @@ export default function RunDayWizard({
                   {coverages.map((c) => (
                     <div key={c.key} className="flex items-center justify-between gap-2 rounded-md border border-blue-900/50 bg-blue-950/20 px-3 py-2">
                       <span className="text-sm font-bold text-ink-soft">
-                        Route <span className="text-red-400">#{c.route_truck}</span>
-                        <span className="mx-1 text-ink-muted">→</span>
-                        Load On <span className="text-blue-300">#{c.load_on_truck}</span>
+                        {c.split ? (
+                          <>
+                            Route <span className="text-amber-300">#{c.route_truck}</span>
+                            <span className="mx-1 text-ink-muted">+</span>
+                            <span className="text-amber-300">#{c.load_on_truck}</span>
+                            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400">split — route still runs</span>
+                          </>
+                        ) : (
+                          <>
+                            Route <span className="text-red-400">#{c.route_truck}</span>
+                            <span className="mx-1 text-ink-muted">→</span>
+                            Load On <span className="text-blue-300">#{c.load_on_truck}</span>
+                          </>
+                        )}
                       </span>
                       <button
                         className="rounded px-2 py-0.5 text-xs text-red-500 hover:bg-track disabled:opacity-40"
@@ -870,13 +886,24 @@ export default function RunDayWizard({
                     </select>
                   </div>
                 </div>
+                <label className="flex items-center gap-2 text-xs text-ink-soft">
+                  <input
+                    type="checkbox"
+                    className="h-4 w-4 accent-amber-500"
+                    checked={swapSplit}
+                    onChange={(e) => { setSwapSplit(e.target.checked); setSwapError(null); }}
+                  />
+                  <span>
+                    Split load — the route truck still runs; the second truck carries its overflow
+                  </span>
+                </label>
                 {swapError && <p className="text-xs text-red-400">{swapError}</p>}
                 <button
-                  className="w-full btn-primary text-sm"
+                  className={swapSplit ? "w-full rounded-lg border border-amber-500/50 bg-amber-500/15 py-2 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-500/25 disabled:opacity-50" : "w-full btn-primary text-sm"}
                   disabled={!swapRoute || !swapLoadOn || createSwap.isPending}
                   onClick={addSwap}
                 >
-                  {createSwap.isPending ? "Saving…" : "Add Swap"}
+                  {createSwap.isPending ? "Saving…" : swapSplit ? "Add Split Load" : "Add Swap"}
                 </button>
               </div>
             </div>
