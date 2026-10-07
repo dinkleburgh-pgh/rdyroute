@@ -26,7 +26,7 @@ const DAY_LABELS: Record<number, string> = {
   5: "Fri",
 };
 
-/** A tile's number — split helpers read as the amber ROUTE+TRUCK pair (see ShortSheetEditor). */
+/** A tile's number — split helpers read as the amber ROUTE+TRUCK pair (see splitHelpersByTruck). */
 function TileNum({ n, split }: { n: number; split?: number }) {
   if (split == null) return <>{n}</>;
   return (

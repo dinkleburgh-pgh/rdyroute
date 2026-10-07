@@ -26,7 +26,6 @@ import AnimateCard from "../components/AnimateCard";
 import PageHeader from "../components/PageHeader";
 import ShortageImportPanel from "../components/shorts/ShortageImportPanel";
 import ItemFirstEntry from "../components/shorts/ItemFirstEntry";
-import ShortSheetEditor from "../components/shorts/ShortSheetEditor";
 import ConfirmDialog from "../components/ConfirmDialog";
 import HierarchyPicker, { DEFAULT_TRACKED_ITEMS, findTrackedItem, qtyWithUnit, shortageItemLabel, useCategoryPalette, useShortageItemLabel } from "../components/shorts/HierarchyPicker";
 import type { TrackedItem } from "../api/hooks";
@@ -472,14 +471,13 @@ export function ShortageLogger({
 // Shorts (root)
 // ---------------------------------------------------------------------------
 
-type ViewMode = "byItem" | "log" | "sheet" | "imports";
+type ViewMode = "byItem" | "log" | "imports";
 
 /** One definition for the entry-mode tabs, so the desktop row and the mobile
  *  grid can't drift in label or order. */
 const VIEW_MODES: { id: ViewMode; label: string }[] = [
   { id: "byItem", label: "By item" },
   { id: "log", label: "By truck" },
-  { id: "sheet", label: "Sheet" },
   { id: "imports", label: "Import sheets" },
 ];
 
@@ -494,9 +492,9 @@ export function ShortsWorkspace() {
 
   // A day whose sheet photo is uploaded but whose quantities aren't typed yet
   // has no shortages, so it never appeared in the logged-date list — which made
-  // the photo unreachable from the editor that exists to transcribe it. Offer
-  // both, newest first, so "upload the sheet, then type it in" can actually be
-  // done in that order.
+  // the photo unreachable from the entry tabs that transcribe it. Offer both,
+  // newest first, so "upload the sheet, then type it in" can actually be done
+  // in that order.
   const shortDates = useMemo(() => {
     const merged = new Set<string>(loggedDates);
     for (const imp of sheetImports) {
@@ -622,15 +620,6 @@ export function ShortsWorkspace() {
         <div className="p-3 md:p-6">
           <ShortageImportPanel defaultRunDate={runDate} lockedRunDate />
         </div>
-      ) : viewMode === "sheet" ? (
-        <ShortSheetEditor
-          shorts={shorts}
-          board={board}
-          runDate={runDate}
-          loadDay={loadDay}
-          holiday={holiday}
-          onOpenImports={() => setViewMode("imports")}
-        />
       ) : viewMode === "byItem" ? (
         <ItemFirstEntry
           runDate={runDate}
