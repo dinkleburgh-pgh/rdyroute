@@ -754,7 +754,7 @@ export default function RunDayWizard({
                             Route <span className="text-amber-300">#{c.route_truck}</span>
                             <span className="mx-1 text-ink-muted">+</span>
                             <span className="text-amber-300">#{c.load_on_truck}</span>
-                            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400">split — route still runs</span>
+                            <span className="ml-1.5 text-[10px] font-semibold uppercase tracking-wide text-amber-400">split</span>
                           </>
                         ) : (
                           <>
