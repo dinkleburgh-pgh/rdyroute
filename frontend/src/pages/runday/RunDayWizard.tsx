@@ -30,11 +30,11 @@ import { useAuth } from "../../contexts/AuthContext";
 import { format } from "date-fns";
 import { workdayNumbers } from "../../components/Clock";
 import { useToast } from "../../contexts/ToastContext";
-import { DustGarmentIcon } from "../../components/icons";
 import type { TruckWithState } from "../../types";
 import { effectiveStatus, getCoverageRouteNumber, getSwapHistory, isScheduledOff, previousWorkday, recordSwapHistory } from "../../utils/truckStatus";
 import { errorDetail } from "../../api/errors";
 import Modal from "../../components/Modal";
+import { ChipGroup, StepHeading, WizardFooter, WizardHeader } from "./wizard/parts";
 import { RAN_AHEAD, addNoteToken, hasRanAhead, removeNoteToken } from "../../utils/offNote";
 
 export default function RunDayWizard({
@@ -425,24 +425,23 @@ export default function RunDayWizard({
     onClose();
   }
 
-  const STEP_TITLES = [
-    "",
-    "Step 1 of 5 — Run Mode",
-    "Step 2 of 5 — Garments & NOGs",
-    "Step 3 of 5 — Route Swaps",
-    "Step 4 of 5 — Trucks Not Here",
-    "Step 5 of 5 — Daily Notes",
-  ];
+  const dateLabel = format(new Date(`${runDate}T12:00:00`), "EEE, MMM d");
+  const footerPending = step === 2 || step === 4 ? upsert.isPending : step === 5 ? setDailyNotes.isPending : false;
+  const nextByStep: Record<number, () => void> = {
+    1: () => setStep(2),
+    2: saveDustAndAdvance,
+    3: () => setStep(4),
+    4: saveAbsentAndAdvance,
+    5: saveNotesAndFinish,
+  };
+  const setAll = (setter: (s: Set<number>) => void, nums: number[]) => (all: boolean) =>
+    setter(new Set(all ? nums : []));
 
   return (
     <Modal open onClose={onClose} size="md" bodyClassName="">
-        <div className="flex items-center justify-between border-b border-hairline px-5 py-4">
-          <span className="text-sm font-bold uppercase tracking-wide text-ink-muted">Setup Day</span>
-          <span className="text-xs font-semibold text-blue-400">{STEP_TITLES[step]}</span>
-          <button className="text-ink-muted hover:text-ink-soft" onClick={onClose}>✕</button>
-        </div>
+        <WizardHeader step={step} dateLabel={dateLabel} onClose={onClose} onJump={setStep} />
 
-        <div className="p-5">
+        <div className="max-h-[calc(100dvh-15rem)] overflow-y-auto px-5 pb-5">
           {/* Step 1: Run Mode */}
           {step === 1 && (
             <div className="space-y-4">
@@ -488,11 +487,10 @@ export default function RunDayWizard({
                   )}
                 </div>
               )}
-              <p className="text-center text-xl font-extrabold text-ink">Set today's run mode.</p>
-              <p className="text-center text-xs text-ink-muted">
-                Load and Unload can run independently on holiday. Load is for tomorrow's ship,
-                Unload is for today's ship returning.
-              </p>
+              <StepHeading
+                title="Set today's run mode."
+                help="Load and Unload can run independently on holiday. Load is for tomorrow's ship, Unload is for today's ship returning."
+              />
 
               {/* Master shortcut: Normal / Holiday (sets both sides at once) */}
               <div className="grid grid-cols-2 gap-2">
@@ -608,68 +606,36 @@ export default function RunDayWizard({
                   This happens entering/leaving a holiday week (e.g.&nbsp;Fri load=holiday, Mon unload=holiday).
                 </div>
               )}
-
-              <div className="flex gap-2 pt-2">
-                <button className="flex-1 btn-ghost text-sm" onClick={onClose}>Close</button>
-                <button className="flex-1 btn-primary text-sm" onClick={() => setStep(2)}>Continue</button>
-              </div>
             </div>
           )}
 
           {/* Step 2: Garments & NOGs */}
           {step === 2 && (
-            <div className="space-y-4">
-              <DustGarmentIcon className="mx-auto h-16 w-16 text-amber-300" style={{ color: "#fcd34d" }} />
-              <p className="text-center text-xl font-extrabold text-ink">Select F.S. trucks with garments</p>
-              {editableDustTrucks.length === 0 ? (
-                <p className="text-center text-sm text-ink-muted">No F.S. trucks in fleet.</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {editableDustTrucks.map((t) => (
-                    <button
-                      key={t.truck_number}
-                      className={clsx(
-                        "rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors",
-                        dustSelected.has(t.truck_number)
-                          ? "border-emerald-500 bg-emerald-900/40 text-emerald-200"
-                          : "border-hairline bg-surface-2 text-ink-soft hover:bg-track",
-                      )}
-                      onClick={() => toggleDust(t.truck_number)}
-                    >
-                      #{t.truck_number}
-                    </button>
-                  ))}
-                </div>
-              )}
-
+            <div className="space-y-5">
+              <StepHeading title="Garments & NOGs" help="Pick the trucks with garments, then the trucks sending NOGs out." />
+              <ChipGroup
+                title="F.S. trucks with garments"
+                help="Tap each truck that came back with garments."
+                tone="garments"
+                trucks={editableDustTrucks.map((t) => t.truck_number)}
+                selected={dustSelected}
+                onToggle={toggleDust}
+                onSetAll={setAll(setDustSelected, editableDustTrucks.map((t) => t.truck_number))}
+                empty="No F.S. trucks in fleet."
+              />
               {/* NOGs — set at the start of the day, exactly like the garments
                   above; the Load page's strip then tracks them out the door. */}
-              <div className="space-y-2 border-t border-hairline pt-3">
-                <p className="text-center text-sm font-extrabold text-rose-300">NOGs — not our garments</p>
-                <p className="text-center text-xs text-ink-muted">Pick trucks sending NOGs back out today.</p>
-                <div className="grid max-h-48 grid-cols-4 gap-2 overflow-y-auto pr-1">
-                  {nogsCandidates.map((t) => (
-                    <button
-                      key={t.truck_number}
-                      className={clsx(
-                        "rounded-lg border px-2 py-2 text-sm font-bold transition-colors",
-                        nogsPicked.has(t.truck_number)
-                          ? "border-rose-500 bg-rose-900/40 text-rose-200"
-                          : "border-hairline bg-surface-2 text-ink-soft hover:bg-track",
-                      )}
-                      onClick={() => toggleNogs(t.truck_number)}
-                    >
-                      #{t.truck_number}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div className="flex gap-2 pt-2">
-                <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(1)}>Back</button>
-                <button className="flex-1 btn-primary text-sm" disabled={upsert.isPending} onClick={saveDustAndAdvance}>Save & Continue</button>
-              </div>
-              <button className="w-full btn-ghost text-sm" onClick={() => setStep(3)}>Skip</button>
+              <ChipGroup
+                divider
+                title="NOGs — not our garments"
+                help="Tap trucks sending NOGs back out today."
+                tone="nogs"
+                trucks={nogsCandidates.map((t) => t.truck_number)}
+                selected={nogsPicked}
+                onToggle={toggleNogs}
+                onSetAll={setAll(setNogsSelected, nogsCandidates.map((t) => t.truck_number))}
+                scroll
+              />
             </div>
           )}
 
@@ -685,9 +651,8 @@ export default function RunDayWizard({
               (t) => t.truck_type !== "Spare" && t.is_oos && !swappedRoutes.has(t.truck_number),
             ).sort((a, b) => a.truck_number - b.truck_number);
             return (
-            <div className="space-y-3 max-h-[70vh] overflow-y-auto">
-              <p className="text-center text-xl font-extrabold text-ink">Set any route swaps.</p>
-              <p className="text-center text-xs text-ink-muted">Route swaps: one truck loads another's route today.</p>
+            <div className="space-y-3">
+              <StepHeading title="Set any route swaps." help="One truck loads another's route today." />
 
               {/* OOS trucks needing a covering truck */}
               {unswappedOos.length > 0 && (
@@ -914,76 +879,45 @@ export default function RunDayWizard({
                   {createSwap.isPending ? "Saving…" : "Add Swap"}
                 </button>
               </div>
-              <div className="flex gap-2 pt-1">
-                <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(2)}>Back</button>
-                <button className="flex-1 btn-primary text-sm" onClick={() => setStep(4)}>Continue</button>
-              </div>
             </div>
             );
           })()}
 
           {/* Step 4: Trucks Not Here */}
           {step === 4 && (
-            <div className="space-y-4">
-              <p className="text-center text-xl font-extrabold text-ink">What trucks are NOT here?</p>
-              <p className="text-center text-xs text-ink-muted">Select returning or spare trucks that are absent today. They keep their current status — this only flags them Needs Checked.</p>
-              {editableSpecialTrucks.length === 0 ? (
-                <p className="text-center text-sm text-ink-muted">No returning or spare trucks found.</p>
-              ) : (
-                <div className="grid grid-cols-3 gap-2">
-                  {editableSpecialTrucks.map((t) => (
-                    <button
-                      key={t.truck_number}
-                      className={clsx(
-                        "rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors",
-                        absentSelected.has(t.truck_number)
-                          ? "border-red-500 bg-red-900/40 text-red-200"
-                          : "border-hairline bg-surface-2 text-ink-soft hover:bg-track",
-                      )}
-                      onClick={() => toggleAbsent(t.truck_number)}
-                    >
-                      #{t.truck_number}
-                    </button>
-                  ))}
-                </div>
-              )}
+            <div className="space-y-5">
+              <StepHeading title="Trucks not here" help="They keep their current status. This only flags them Needs Checked." />
+              <ChipGroup
+                title="Returning & spare trucks that are absent"
+                help="Tap each truck that isn't here today."
+                tone="absent"
+                trucks={editableSpecialTrucks.map((t) => t.truck_number)}
+                selected={absentSelected}
+                onToggle={toggleAbsent}
+                onSetAll={setAll(setAbsentSelected, editableSpecialTrucks.map((t) => t.truck_number))}
+                cols={3}
+                empty="No returning or spare trucks found."
+              />
               {ranAheadCandidates.length > 0 && (
-                <div className="space-y-2 border-t border-hairline pt-3">
-                  <p className="text-center text-base font-extrabold text-ink">Ran ahead — skip tonight's load</p>
-                  <p className="text-center text-xs text-ink-muted">
-                    Ran their route early this week (holiday double) — nothing to load tonight.
-                    They still unload as normal.
-                  </p>
-                  <div className="grid grid-cols-3 gap-2">
-                    {ranAheadCandidates.map((t) => (
-                      <button
-                        key={t.truck_number}
-                        className={clsx(
-                          "rounded-lg border px-3 py-2.5 text-sm font-bold transition-colors",
-                          ranAheadPicked.has(t.truck_number)
-                            ? "border-sky-500 bg-sky-900/40 text-sky-200"
-                            : "border-hairline bg-surface-2 text-ink-soft hover:bg-track",
-                        )}
-                        onClick={() => toggleRanAhead(t.truck_number)}
-                      >
-                        #{t.truck_number}
-                      </button>
-                    ))}
-                  </div>
-                </div>
+                <ChipGroup
+                  divider
+                  title="Ran ahead — skip tonight's load"
+                  help="Ran their route early this week (holiday double). They still unload as normal."
+                  tone="ranAhead"
+                  trucks={ranAheadCandidates.map((t) => t.truck_number)}
+                  selected={ranAheadPicked}
+                  onToggle={toggleRanAhead}
+                  onSetAll={setAll(setRanAheadSelected, ranAheadCandidates.map((t) => t.truck_number))}
+                  cols={3}
+                />
               )}
-              <div className="flex gap-2 pt-2">
-                <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(3)}>Back</button>
-                <button className="flex-1 btn-primary text-sm" disabled={upsert.isPending} onClick={saveAbsentAndAdvance}>Save & Continue</button>
-              </div>
-              <button className="w-full btn-ghost text-sm" onClick={() => setStep(5)}>Skip</button>
             </div>
           )}
 
-          {/* Step 5: Daily Notes */}
+          {/* Step 5: Daily Notes + summary */}
           {step === 5 && (
             <div className="space-y-4">
-              <p className="text-center text-xl font-extrabold text-ink">Add any notes about today.</p>
+              <StepHeading title="Notes for today" help="Anything the next shift should know." />
               <textarea
                 className="input w-full resize-none text-sm"
                 rows={4}
@@ -991,27 +925,32 @@ export default function RunDayWizard({
                 value={notesText ?? dailyNotes}
                 onChange={(e) => setNotesText(e.target.value)}
               />
-              <div className="flex gap-2 pt-2">
-                <button className="flex-1 btn-ghost text-sm" onClick={() => setStep(4)}>Back</button>
-                <button className="flex-1 btn-primary text-sm" disabled={setDailyNotes.isPending} onClick={saveNotesAndFinish}>Save & Finish</button>
-              </div>
-              <button className="w-full btn-ghost text-sm" onClick={onClose}>Close without saving</button>
+              <dl className="grid grid-cols-3 gap-2">
+                {[
+                  ["loads", loadBase + (holidayLoad ? loadExtra : 0)],
+                  ["unloads", unloadBase + (holidayUnload ? unloadExtra : 0)],
+                  ["garments", dustSelected.size],
+                  ["NOGs", nogsPicked.size],
+                  ["absent", absentSelected.size],
+                  ["swaps", coverages.length],
+                ].map(([label, n]) => (
+                  <div key={label} className="rounded-lg border border-hairline bg-surface-3 px-3 py-2">
+                    <dd className="font-mono text-[22px] font-semibold leading-7 tabular-nums text-ink">{n}</dd>
+                    <dt className="text-xs text-ink-muted">{label}</dt>
+                  </div>
+                ))}
+              </dl>
             </div>
           )}
         </div>
 
-        {/* Step indicator dots */}
-        <div className="flex justify-center gap-1.5 pb-4">
-          {[1, 2, 3, 4, 5].map((s) => (
-            <div
-              key={s}
-              className={clsx(
-                "h-1.5 rounded-full transition-all",
-                s === step ? "w-4 bg-blue-400" : s < step ? "w-1.5 bg-blue-700" : "w-1.5 bg-track",
-              )}
-            />
-          ))}
-        </div>
+        <WizardFooter
+          step={step}
+          pending={footerPending}
+          onBack={() => (step === 1 ? onClose() : setStep(step - 1))}
+          onSkip={step === 2 ? () => setStep(3) : step === 4 ? () => setStep(5) : undefined}
+          onNext={nextByStep[step]}
+        />
     </Modal>
   );
 }
