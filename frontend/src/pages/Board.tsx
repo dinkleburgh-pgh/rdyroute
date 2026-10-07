@@ -73,12 +73,13 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
   const [confirmTruck, setConfirmTruck] = useState<TruckWithState | null>(null);
   const [fleetFilters, setFleetFilters] = useState<Set<TruckStatus | "all" | "Uniform" | "Dust">>(new Set(["all"]));
   // Fleet card size — S/M/L density so the whole fleet can be made to fit
-  // whatever screen the board lives on. Sticks per device.
+  // whatever screen the board lives on. Small is the default (fit the most
+  // trucks); the choice sticks per device.
   const [cardSize, setCardSize] = useState<"s" | "m" | "l">(() => {
     try {
       const v = localStorage.getItem("rr-fleet-card-size");
-      return v === "s" || v === "l" ? v : "m";
-    } catch { return "m"; }
+      return v === "m" || v === "l" ? v : "s";
+    } catch { return "s"; }
   });
   function pickCardSize(v: "s" | "m" | "l") {
     setCardSize(v);
@@ -755,52 +756,12 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           onApplyBulk={applyBulkEdit}
         />
       )}
-      {/* Master coverage overview — the same big ROUTE → TRUCK cards as Load
-          and Unload, split into two blocks the way those pages split them:
-          today's coverage in the sky frame (Load's "Coverage today"), the
-          previous day's in the amber frame (Unload's prev-coverage banner).
-          One mixed block made a stale pairing look current. */}
-      {fleetMode && (
-        <CollapsibleCoverage
-          entries={fleetCoverage.filter((e) => !e.prev)}
-          title="Coverage today"
-          storageKey="rr-fleet-coverage-open"
-          tone="sky"
-          truckOf={(n) => data?.find((t) => t.truck_number === n)}
-        />
-      )}
-      {fleetMode && (
-        <CollapsibleCoverage
-          entries={fleetCoverage.filter((e) => e.prev)}
-          title="Previous day coverage"
-          storageKey="rr-fleet-prev-coverage-open"
-          tone="amber"
-          truckOf={(n) => data?.find((t) => t.truck_number === n)}
-          showPrevBadge={false}
-        />
-      )}
-      {/* Previous Day Coverage — directly below the bulk-edit section */}
-      {fleetMode && (
-        <div className="flex justify-start">
-          <button
-            type="button"
-            onClick={() => setPrevCovOpen(true)}
-            className="inline-flex items-center justify-center gap-2 rounded-md border border-hairline bg-surface/60 px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-hairline hover:bg-surface-2"
-          >
-            <ArrowLeftRight className="h-4 w-4 text-ink-muted" />
-            Previous Day Coverage
-          </button>
-        </div>
-      )}
-
       {isLoading && <p className="text-ink-muted">Loading…</p>}
       {error && (
         <p className="text-red-400">Failed to load board. Is the backend running?</p>
       )}
 
       {fleetMode && data && !isReadOnly && <CrossloadNoticeBar board={data} />}
-
-      {fleetMode && data && <RouteCardPanel data={data} runDate={runDate} />}
 
       {filter === "in_progress" && (
         <LiveInProgress runDate={runDate} />
@@ -825,9 +786,51 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
       )}
 
       {filter !== "in_progress" && (
-      <>
+      <div className={clsx(fleetMode && "flex flex-col gap-4 lg:flex-row lg:items-start")}>
+      {/* Coverage rail — the master coverage banners (the same big
+          ROUTE → TRUCK cards as Load and Unload, today's in the sky frame,
+          the previous day's in amber — one mixed block made a stale pairing
+          look current) plus the Route Card assignment panel. On big screens
+          it sits beside the truck grid so the fleet starts at the top of the
+          page; below lg it stacks above the grid as before. */}
       {fleetMode && (
-        <div className="-mt-1 flex items-center justify-end gap-2">
+        <aside className="flex min-w-0 flex-col gap-3 lg:order-2 lg:w-72 lg:shrink-0">
+          {/* The cards grid is viewport-based (lg:grid-cols-3) but at lg+ this
+              rail is a narrow fixed column, so force one card per row there;
+              below lg the rail is full width and keeps the stacked layout. */}
+          <CollapsibleCoverage
+            entries={fleetCoverage.filter((e) => !e.prev)}
+            title="Coverage today"
+            storageKey="rr-fleet-coverage-open"
+            tone="sky"
+            truckOf={(n) => data?.find((t) => t.truck_number === n)}
+            cardsClassName="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1"
+          />
+          <CollapsibleCoverage
+            entries={fleetCoverage.filter((e) => e.prev)}
+            title="Previous day coverage"
+            storageKey="rr-fleet-prev-coverage-open"
+            tone="amber"
+            truckOf={(n) => data?.find((t) => t.truck_number === n)}
+            showPrevBadge={false}
+            cardsClassName="grid grid-cols-1 gap-2.5 sm:grid-cols-2 lg:grid-cols-1"
+          />
+          <div className="flex justify-start">
+            <button
+              type="button"
+              onClick={() => setPrevCovOpen(true)}
+              className="inline-flex items-center justify-center gap-2 rounded-md border border-hairline bg-surface/60 px-4 py-2 text-sm font-semibold text-ink-soft transition-colors hover:border-hairline hover:bg-surface-2"
+            >
+              <ArrowLeftRight className="h-4 w-4 text-ink-muted" />
+              Previous Day Coverage
+            </button>
+          </div>
+          {data && <RouteCardPanel data={data} runDate={runDate} />}
+        </aside>
+      )}
+      <div className={clsx(fleetMode && "min-w-0 flex-1 space-y-3 lg:order-1")}>
+      {fleetMode && (
+        <div className="flex items-center justify-end gap-2">
           <span className="text-[10px] font-semibold uppercase tracking-[0.08em] text-ink-muted">Card size</span>
           <div className="inline-flex overflow-hidden rounded-lg border border-hairline text-[11px] font-semibold">
             {(["s", "m", "l"] as const).map((v, i) => (
@@ -1109,8 +1112,9 @@ export default function Board({ fleetMode = false }: { fleetMode?: boolean } = {
           <EmptyState className="col-span-full">No trucks match this filter.</EmptyState>
         )}
       </div>
+      </div>
 
-    </>
+    </div>
     )} {/* end filter !== "in_progress" */}
 
       {offScheduleDialogOpen && (
