@@ -612,10 +612,25 @@ export default function Unload() {
     return dayTemplate.wearers[prevCoverOf(t) ?? t.truck_number] ?? 0;
   }
 
-  function openTruckMenu(t: TruckWithState) {
+  // Tapping a truck on the work rail starts its unload. The "Unloading now"
+  // card that appears carries the clock, batch entry, cancel and unfinished,
+  // so nothing opens on top of it — the card IS the workspace. It lands at the
+  // top of the rail while the tapped tile may sit well below on a tablet, so
+  // bring it into view.
+  function startUnload(t: TruckWithState) {
     setBatchNum(String(t.state?.batch_id ?? currentBatchDefault));
     setWearers(String(defaultWearersFor(t)));
     beginUnloading(t);
+    window.setTimeout(() => {
+      document
+        .getElementById(`unloading-now-${t.truck_number}`)
+        ?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 150);
+  }
+  // Unloaded-today tiles open the small menu: undo, or (re)assign the batch.
+  function openTruckMenu(t: TruckWithState) {
+    setBatchNum(String(t.state?.batch_id ?? currentBatchDefault));
+    setWearers(String(defaultWearersFor(t)));
     setMenuTruck(t);
   }
   function toggleBatch(t: TruckWithState) {
@@ -646,7 +661,7 @@ export default function Unload() {
     const batchTarget = carriedRouteOf(t) ?? t.truck_number;
     const isUnfin = t.state?.status === "unfinished";
     return (
-      <section className="card overflow-hidden !p-0">
+      <section id={`unloading-now-${t.truck_number}`} className="card overflow-hidden !p-0">
         <div className="h-[2px] w-full animate-pulse bg-st-inprogress" />
         <div className="flex flex-col gap-4 px-[22px] py-[18px]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
@@ -680,6 +695,17 @@ export default function Unload() {
                   {req === "want" ? "Load: pull forward" : "Load: back it out"}
                 </span>
               )}
+              {/* Nobody from Load has weighed in, so say what the schedule
+                  says — quieter, a fact about tomorrow, not a request. */}
+              {req == null && (() => {
+                const need = loadNeedOf(t);
+                if (need == null) return null;
+                return (
+                  <p className={clsx("mt-2 text-[11px] leading-snug", need.needed ? "text-cyan-300/90" : "text-ink-faint")}>
+                    <span className="font-semibold">{need.needed ? "Loads tomorrow" : "Not loading tomorrow"}</span> — {need.reason}.
+                  </p>
+                );
+              })()}
             </div>
           </div>
 
@@ -739,7 +765,10 @@ export default function Unload() {
           )}
 
           <div className="flex flex-col gap-2.5 sm:flex-row">
-            {batchingDisabled && (
+            {/* Batching finishes the unload — except when it can't: switched
+                off, or pre-batch mode where the sheet was keyed in before the
+                truck was emptied, so done needs its own button. */}
+            {(batchingDisabled || prebatchMode) && (
               <button
                 type="button"
                 disabled={isBusy}
@@ -753,7 +782,16 @@ export default function Unload() {
             <button type="button" className="btn-ghost px-5 py-3 text-xs" disabled={isBusy} onClick={() => void cancelUnloading(t)}>
               Not unloading — cancel
             </button>
-            {!isUnfin && (
+            {isUnfin ? (
+              <button
+                type="button"
+                className="btn-ghost px-5 py-3 text-xs"
+                disabled={isBusy}
+                onClick={() => upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" })}
+              >
+                Back to Dirty
+              </button>
+            ) : (
               <button
                 type="button"
                 className="btn-ghost px-5 py-3 text-xs !text-st-unfinished"
@@ -811,7 +849,7 @@ export default function Unload() {
         highlight={highlightTruck === t.truck_number}
         dotClass={dot}
         numberClass={numberTone}
-        onClick={() => openTruckMenu(t)}
+        onClick={() => startUnload(t)}
         pair={cd.route != null ? { route: cd.route, split: cd.split } : null}
         tag={
           kind === "requested" ? "Hold"
@@ -1112,7 +1150,9 @@ export default function Unload() {
           </div>
         </section>
 
-        {/* Truck action menu (cards style + unloaded-today taps) */}
+        {/* Unloaded-today menu: undo, or (re)assign the batch. Starting an
+            unload no longer opens a window — the Unloading-now card is the
+            workspace for that. */}
         {menuTruck && (() => {
           const t = allTrucks.find((x) => x.truck_number === menuTruck.truck_number) ?? menuTruck;
           const isUnfin = t.state?.status === "unfinished";
@@ -1139,14 +1179,6 @@ export default function Unload() {
                       {isUnfin ? " · Unfinished" : ""}
                       {cd.route != null && <CoverageTag route={cd.route} truck={t.truck_number} split={cd.split} />}
                     </p>
-                    {/* Start Unloading keeps this window open — the tablet sits
-                        on the truck for the whole job — so the clock lives here
-                        too, and Mark Unloaded is one tap away when it's done. */}
-                    {unloadingAt(t) != null && (
-                      <p className="mt-1.5">
-                        <UnloadingSince startSec={unloadingAt(t)!} />
-                      </p>
-                    )}
                   </div>
                   <button className="btn-ghost" onClick={close}>Close</button>
                 </div>
@@ -1192,103 +1224,9 @@ export default function Unload() {
                     )}
                   </>
                 ) : (
-                  <>
-                    {/* Opening this truck already started its unload — the Load
-                        board is watching the marker. Assigning the batch below
-                        is what finishes it, so there is no separate "Start" or
-                        "Mark Unloaded" left to forget. */}
-                    <p className="rounded-lg border border-amber-600/40 bg-amber-950/25 px-3 py-2.5 text-xs leading-snug text-amber-200">
-                      {unloadingAt(t) != null
-                        ? "Unloading now — assign the batch below when it's empty and that marks it unloaded."
-                        : "Assign the batch below when it's empty — that marks it unloaded."}
-                    </p>
-
-                    {/* What Load said about this truck. Advisory: it sits above
-                        "Not unloading — cancel" because that's the action a
-                        "back out" suggests, but nothing here presses it. The
-                        unloader still decides. */}
-                    {unloadingAt(t) != null && t.state?.load_request != null && (
-                      <p className="rounded-lg border border-cyan-600/40 bg-cyan-950/30 px-3 py-2.5 text-sm font-semibold leading-snug text-cyan-200">
-                        {t.state.load_request === "want"
-                          ? "Load wants this one — pull it forward."
-                          : "Load asked to back out of this one."}
-                        {t.state.load_request_at != null && (
-                          <span className="ml-1 font-normal text-cyan-300/70">
-                            · {formatEasternTime(t.state.load_request_at)}
-                          </span>
-                        )}
-                      </p>
-                    )}
-                    {/* Nobody from Load has looked at this one yet, so say what
-                        the schedule says — quieter, and worded as a fact about
-                        tomorrow rather than as a request from a person. */}
-                    {unloadingAt(t) != null && t.state?.load_request == null && (() => {
-                      const need = loadNeedOf(t);
-                      if (need == null) return null;
-                      return (
-                        <p className={clsx(
-                          "rounded-lg border px-3 py-2.5 text-xs leading-snug",
-                          need.needed
-                            ? "border-cyan-700/30 bg-cyan-950/20 text-cyan-300/90"
-                            : "border-hairline bg-surface-2/40 text-ink-soft",
-                        )}>
-                          <span className="font-semibold">
-                            {need.needed ? "Loads tomorrow" : "Not loading tomorrow"}
-                          </span>{" "}
-                          — {need.reason}.
-                        </p>
-                      );
-                    })()}
-
-                    {/* Batching is what completes a truck now, so when it
-                        can't be (switched off entirely, or pre-batch mode where
-                        assigning deliberately leaves status alone) there has to
-                        be another way to say done. */}
-                    {(batchingDisabled || prebatchMode) && (
-                      <button className="w-full rounded-lg bg-emerald-600 py-3.5 text-sm font-bold text-white shadow-sm transition-colors hover:bg-emerald-500 disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnloaded(t); close(); }}>
-                        {isBusy ? "…" : "Mark Unloaded"}
-                      </button>
-                    )}
-
-                    {unloadingAt(t) != null && (
-                      <button className="w-full rounded-lg border border-amber-600/50 bg-amber-950/30 py-2.5 text-sm font-semibold text-amber-200 transition-colors hover:bg-amber-900/40 disabled:opacity-50" disabled={isBusy} onClick={() => void cancelUnloading(t)}>
-                        Not unloading — cancel
-                      </button>
-                    )}
-
-                    {/* The escape hatch: a truck that cannot be finished
-                        tonight leaves the flow here instead of via batching. */}
-                    {isUnfin ? (
-                      <button className="w-full rounded-lg border border-hairline bg-surface-2/60 py-2.5 text-sm font-medium text-ink-soft transition-colors hover:bg-track" onClick={() => { upsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "dirty" }); close(); }}>
-                        Back to Dirty
-                      </button>
-                    ) : (
-                      <button className="w-full rounded-lg border border-hairline bg-surface-2/60 py-2.5 text-sm font-medium text-st-unfinished transition-colors hover:bg-track disabled:opacity-50" disabled={isBusy} onClick={async () => { await markUnfinished(t); close(); }}>
-                        Mark Unfinished
-                      </button>
-                    )}
-
-                    {/* One returned load, one card, under the original route
-                        — but the card still has to be fillable from the truck
-                        that physically brought it back, because that is the
-                        truck on the dock and the one whose status moves. */}
-                    {!batchingDisabled && (
-                      <section>
-                        <p className="label">
-                          {carriedRouteOf(t) != null ? `Batch — as route #${carriedRouteOf(t)}` : "Batch"}
-                        </p>
-                        <div className="grid grid-cols-6 gap-1.5">
-                          {[1, 2, 3, 4, 5, 6].map((n) => (
-                            <button key={n} type="button" onClick={() => setBatchNum(String(n))} className={batchNum === String(n) ? "rounded-md bg-emerald-600 py-2 text-center text-base font-bold text-white ring-2 ring-emerald-400" : "rounded-md bg-track py-2 text-center text-base font-bold text-ink-soft hover:bg-track"}>{n}</button>
-                          ))}
-                        </div>
-                        <input type="number" min={0} className="input mt-2" placeholder="Wearers" value={wearers} onChange={(e) => setWearers(e.target.value)} />
-                        <button className="btn-primary mt-2 w-full font-semibold" disabled={assign.isPending || isBusy} onClick={async () => { await assignBatch(carriedRouteOf(t) ?? t.truck_number, t); close(); }}>
-                          {assign.isPending || isBusy ? "Saving…" : "Assign Batch — Mark Unloaded"}
-                        </button>
-                      </section>
-                    )}
-                  </>
+                  <p className="rounded-lg border border-hairline bg-surface-2/60 px-3 py-3 text-sm leading-snug text-ink-soft">
+                    Back on the work rail — tap it there to start unloading.
+                  </p>
                 )}
             </Modal>
           );
