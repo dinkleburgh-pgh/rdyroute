@@ -330,7 +330,7 @@ export default function FleetCard({ truck, index, ...ctx }: { truck: TruckWithSt
                 board={data ?? []}
                 coveringTruckByRoute={coveringTruckByRoute}
                 coveringRouteByTruckNum={coveringRouteByTruckNum}
-                isOos={displayStatus === "oos"}
+                needsCoverage={displayStatus === "oos" && (holidayLoad || !isScheduledOff(truck, runDayNum))}
                 onNavigate={setDetailNum}
               />
               {truck.state?.has_nogs && (

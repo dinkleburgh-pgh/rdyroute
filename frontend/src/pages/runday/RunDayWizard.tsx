@@ -655,9 +655,14 @@ export default function RunDayWizard({
             const swappedRoutes = coveredRouteSet;
             // Match the Fleet board's "Needs assignment" detection exactly: a
             // route truck is OOS via the is_oos FLAG (its status may read
-            // dirty/unloaded), not only when status is literally "oos".
+            // dirty/unloaded), not only when status is literally "oos". An OOS
+            // route scheduled off tonight needs no coverage, so it never asks.
             const unswappedOos = board.filter(
-              (t) => t.truck_type !== "Spare" && t.is_oos && !swappedRoutes.has(t.truck_number),
+              (t) =>
+                t.truck_type !== "Spare" &&
+                t.is_oos &&
+                !swappedRoutes.has(t.truck_number) &&
+                (holidayLoad || !isScheduledOff(t, loadDay)),
             ).sort((a, b) => a.truck_number - b.truck_number);
             return (
             <div className="space-y-3">

@@ -33,7 +33,7 @@ export default function CoverageCardBadges({
   board,
   coveringTruckByRoute,
   coveringRouteByTruckNum,
-  isOos,
+  needsCoverage,
   onNavigate,
 }: {
   truck: TruckWithState;
@@ -42,7 +42,8 @@ export default function CoverageCardBadges({
   coveringTruckByRoute: Map<number, { num: number; status: TruckStatus | undefined }>;
   /** carrier truck -> covered route (live only) */
   coveringRouteByTruckNum: Map<number, number>;
-  isOos: boolean;
+  /** OOS AND its route actually runs tonight — an OOS route scheduled off needs nobody. */
+  needsCoverage: boolean;
   onNavigate: (n: number) => void;
 }) {
   const statusOf = (n: number): TruckStatus | undefined =>
@@ -58,7 +59,7 @@ export default function CoverageCardBadges({
   const splitHelper = board.find((t) => t.route_split_route === truck.truck_number)?.truck_number ?? null;
 
   const anyCoverage = carrierRoute != null || splitCarry != null || coveredBy != null || splitHelper != null;
-  const showNeeds = isOos && !anyCoverage;
+  const showNeeds = needsCoverage && !anyCoverage;
   if (!anyCoverage && !showNeeds) return null;
 
   const btn = "transition-transform active:scale-95";
