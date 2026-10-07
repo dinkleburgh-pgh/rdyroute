@@ -441,7 +441,7 @@ export default function RunDayWizard({
     <Modal open onClose={onClose} size="md" bodyClassName="">
         <WizardHeader step={step} dateLabel={dateLabel} onClose={onClose} onJump={setStep} />
 
-        <div className="max-h-[calc(100dvh-15rem)] overflow-y-auto px-5 pb-5">
+        <div className="max-h-[calc(100dvh-20rem)] overflow-y-auto px-5 pb-5">
           {/* Step 1: Run Mode */}
           {step === 1 && (
             <div className="space-y-4">
