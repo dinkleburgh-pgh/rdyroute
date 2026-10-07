@@ -120,9 +120,9 @@ function TimerButton({
 }
 
 // Day-to-day statuses only. `oos` and `spare` are deliberately NOT here:
-// they are deeper configuration (the OOS toggle lives in Manage truck; spare is
-// a truck type), not something to flip from the quick menu. Six entries = two
-// even rows of three.
+// they are deeper configuration (the OOS toggle lives in the Flags section;
+// spare is a truck type), not something to flip from the quick menu. Six
+// entries = two even rows of three.
 const STATUS_ACTIONS: TruckStatus[] = [
   "dirty",
   "unfinished",
@@ -650,6 +650,47 @@ export default function FleetMobileActionSheet({
                     wearers: truck.state?.wearers ?? 0,
                   })
                 }
+              />
+              {/* OOS is a FLAG, not a status: the raw status stays put so a
+                  truck with cargo keeps its place in the unload workflow
+                  (Dirty/Unfinished pass through effectiveStatus). Flagging a
+                  LOADED truck also raises Needs crossloaded — its freight has
+                  to ride something else — mirroring the server's loaded→oos
+                  rule, which only fires on a status write. Clearing the flag
+                  only rescues a dead raw "oos" to Dirty; coverage teardown
+                  stays on the OOS board's "Remove from OOS". */}
+              <FlagRow
+                label="Out of service"
+                hint={
+                  truck.is_oos
+                    ? "Truck is out of service — route needs coverage"
+                    : "Take out of service — won't load, still unloads"
+                }
+                on={truck.is_oos}
+                disabled={setOos.isPending || upsert.isPending}
+                onToggle={() => {
+                  if (!truck.is_oos) {
+                    setOos.mutate({ truck_number: truck.truck_number, is_oos: true });
+                    if (rawStatus === "loaded" && !truck.state?.needs_crossload) {
+                      upsert.mutate({
+                        truck_number: truck.truck_number,
+                        run_date: runDate,
+                        needs_crossload: true,
+                        wearers: truck.state?.wearers ?? 0,
+                      });
+                    }
+                  } else {
+                    setOos.mutate({ truck_number: truck.truck_number, is_oos: false });
+                    if (rawStatus === "oos") {
+                      upsert.mutate({
+                        truck_number: truck.truck_number,
+                        run_date: runDate,
+                        status: "dirty",
+                        wearers: truck.state?.wearers ?? 0,
+                      });
+                    }
+                  }
+                }}
               />
             </div>
           </div>

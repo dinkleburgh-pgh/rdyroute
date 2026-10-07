@@ -14,21 +14,6 @@ export default function FleetTruckEditor({ truck, runDate }: { truck: TruckWithS
   const offDays: number[] = truck.scheduled_off_days ?? [];
   const [editingOffDays, setEditingOffDays] = useState(false);
   const [pendingOffDays, setPendingOffDays] = useState<number[]>([]);
-  const isOos = truck.is_oos || (truck.state?.status ?? "dirty") === "oos";
-
-  function toggleOos(checked: boolean) {
-    update.mutate({
-      truck_number: truck.truck_number,
-      is_oos: checked,
-    });
-    upsertState.mutate({
-      truck_number: truck.truck_number,
-      run_date: runDate,
-      status: checked ? "oos" : "dirty",
-      wearers: truck.state?.wearers ?? 0,
-    });
-  }
-
   function openOffDayEditor() {
     setPendingOffDays([...offDays]);
     setEditingOffDays(true);
@@ -92,25 +77,8 @@ export default function FleetTruckEditor({ truck, runDate }: { truck: TruckWithS
         </label>
       </div>
 
-      {/* Out of Service */}
-      <div className="flex items-center justify-between gap-4">
-        <div>
-          <p className="text-sm font-medium text-slate-200">Out of Service (OOS)</p>
-          <p className="text-xs text-slate-500">
-            Truck is unavailable for today's run and needs coverage.
-          </p>
-        </div>
-        <label className="relative inline-flex cursor-pointer items-center">
-          <input
-            type="checkbox"
-            className="peer sr-only"
-            checked={isOos}
-            disabled={upsertState.isPending}
-            onChange={(e) => toggleOos(e.target.checked)}
-          />
-          <div className="h-6 w-11 rounded-full bg-slate-700 peer-checked:bg-red-600 peer-disabled:opacity-50 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:bg-white after:transition-all peer-checked:after:translate-x-full" />
-        </label>
-      </div>
+      {/* OOS moved to the Flags section of the truck window — one home, so
+          the two controls can't disagree about what toggling it writes. */}
 
       {/* Currently unloading — the marker the Load board reads.
           Only offered on dirty/unfinished because the server rejects anything
