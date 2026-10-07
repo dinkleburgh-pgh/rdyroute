@@ -165,16 +165,16 @@ async function printRotation(week: string, thisWeek: string): Promise<boolean> {
 
   const html = `<!doctype html><html><head><meta charset="utf-8"><title>Section rotation — week of ${esc(prettyWeek(week))}</title>
 <style>
-  @page { margin: 14mm; size: landscape; }
+  @page { margin: 14mm; } /* no fixed orientation — portrait and landscape both fit */
   body { font-family: "IBM Plex Sans", "Segoe UI", system-ui, sans-serif; color: #111; margin: 0; padding: 24px; }
   h1 { font-size: 26px; margin: 0 0 2px; letter-spacing: -0.01em; }
   .sub { font-size: 14px; color: #555; margin: 0 0 14px; }
   .hero { display: flex; border: 2px solid #111; border-radius: 10px; overflow: hidden; margin-bottom: 26px; }
-  .hcell { flex: 1 1 0; padding: 14px 12px 16px; border-left: 1px solid #ccc; text-align: center; }
+  .hcell { flex: 1 1 0; min-width: 0; padding: 14px 8px 16px; border-left: 1px solid #ccc; text-align: center; }
   .hcell:first-child { border-left: 0; }
   .hsec { font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase; color: #444; font-weight: 700; margin-bottom: 6px; }
   .hfloat .hsec { color: #888; }
-  .hname { font-size: 30px; font-weight: 800; letter-spacing: -0.01em; }
+  .hname { font-size: clamp(17px, 3.4vw, 30px); font-weight: 800; letter-spacing: -0.01em; overflow-wrap: anywhere; }
   .hname.hempty { font-size: 16px; font-weight: 500; color: #999; padding-top: 8px; }
   h2 { font-size: 13px; letter-spacing: 0.1em; text-transform: uppercase; color: #666; margin: 0 0 8px; }
   table { width: 100%; border-collapse: collapse; table-layout: fixed; }
