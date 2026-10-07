@@ -21,6 +21,7 @@ import {
   useSetHolidayUnload,
   useSetWizardCompleted,
   usePrevDayCarriers,
+  useNogsUsual,
   usePrevDaySplitHelpers,
   useUpsertSetting,
   useUpsertTruckState,
@@ -140,6 +141,19 @@ export default function RunDayWizard({
     [board],
   );
   const [nogsSelected, setNogsSelected] = useState<Set<number> | null>(null);
+  // "Usual NOGs" for this weekday, from the day log: those trucks list FIRST
+  // and the rest hide behind an expander — most days the usual handful is the
+  // whole answer, and one short grid beats a 40-chip scroll on a phone.
+  const { data: nogsUsualRaw } = useNogsUsual();
+  const [nogsExpanded, setNogsExpanded] = useState(false);
+  const nogsWeekday = (new Date(`${runDate}T12:00:00`).getDay() + 6) % 7;
+  const usualNogs = useMemo(() => {
+    const candidateNums = new Set(nogsCandidates.map((t) => t.truck_number));
+    return (Array.isArray(nogsUsualRaw) ? nogsUsualRaw : [])
+      .filter((r) => r.weekday === nogsWeekday && r.share >= 0.5 && candidateNums.has(r.truck_number))
+      .sort((a, b) => b.share - a.share)
+      .map((r) => r.truck_number);
+  }, [nogsUsualRaw, nogsWeekday, nogsCandidates]);
   const nogsPicked =
     nogsSelected ??
     new Set(nogsCandidates.filter((t) => t.state?.has_nogs === true).map((t) => t.truck_number));
@@ -148,6 +162,16 @@ export default function RunDayWizard({
     if (next.has(num)) next.delete(num); else next.add(num);
     setNogsSelected(next);
   }
+  // Usual trucks first, the rest only when expanded (picked trucks always show).
+  const nogsAllOrdered = (() => {
+    const usualSet = new Set(usualNogs);
+    return [...usualNogs, ...nogsCandidates.map((t) => t.truck_number).filter((n) => !usualSet.has(n))];
+  })();
+  const nogsVisible =
+    nogsExpanded || usualNogs.length === 0
+      ? nogsAllOrdered
+      : nogsAllOrdered.filter((n) => usualNogs.includes(n) || nogsPicked.has(n));
+  const WEEKDAY_NAMES = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"];
 
   const { data: swaps = [] } = useRouteSwaps(runDate);
   const { data: spareAssignments = [] } = useSpareAssignments(runDate);
@@ -280,17 +304,24 @@ export default function RunDayWizard({
     });
   }
 
-  async function saveDustAndAdvance() {
-    const tasks: Promise<unknown>[] = editableDustTrucks.map((t) =>
-      upsert.mutateAsync({
-        truck_number: t.truck_number,
-        run_date: runDate,
-        has_dust_garment: dustSelected.has(t.truck_number),
-        state_source: "wizard",
-      }),
+  async function saveGarmentsAndAdvance() {
+    await Promise.all(
+      editableDustTrucks.map((t) =>
+        upsert.mutateAsync({
+          truck_number: t.truck_number,
+          run_date: runDate,
+          has_dust_garment: dustSelected.has(t.truck_number),
+          state_source: "wizard",
+        }),
+      ),
     );
+    setStep(3);
+  }
+
+  async function saveNogsAndAdvance() {
     // NOGs: delta-only writes — the grid spans the whole fleet, and stamping
     // forty untouched rows "wizard" would make every day look human-edited.
+    const tasks: Promise<unknown>[] = [];
     if (nogsSelected != null) {
       for (const t of nogsCandidates) {
         const was = t.state?.has_nogs === true;
@@ -308,7 +339,7 @@ export default function RunDayWizard({
       }
     }
     await Promise.all(tasks);
-    setStep(3);
+    setStep(4);
   }
 
   async function addSwap() {
@@ -420,7 +451,7 @@ export default function RunDayWizard({
         "already loaded or in progress for today.",
       );
     }
-    setStep(5);
+    setStep(6);
   }
 
   async function saveNotesAndFinish() {
@@ -431,13 +462,14 @@ export default function RunDayWizard({
   }
 
   const dateLabel = format(new Date(`${runDate}T12:00:00`), "EEE, MMM d");
-  const footerPending = step === 2 || step === 4 ? upsert.isPending : step === 5 ? setDailyNotes.isPending : false;
+  const footerPending = step === 2 || step === 3 || step === 5 ? upsert.isPending : step === 6 ? setDailyNotes.isPending : false;
   const nextByStep: Record<number, () => void> = {
     1: () => setStep(2),
-    2: saveDustAndAdvance,
-    3: () => setStep(4),
-    4: saveAbsentAndAdvance,
-    5: saveNotesAndFinish,
+    2: saveGarmentsAndAdvance,
+    3: saveNogsAndAdvance,
+    4: () => setStep(5),
+    5: saveAbsentAndAdvance,
+    6: saveNotesAndFinish,
   };
   const setAll = (setter: (s: Set<number>) => void, nums: number[]) => (all: boolean) =>
     setter(new Set(all ? nums : []));
@@ -614,13 +646,13 @@ export default function RunDayWizard({
             </div>
           )}
 
-          {/* Step 2: Garments & NOGs */}
+          {/* Step 2: Garments */}
           {step === 2 && (
             <div className="space-y-5">
-              <StepHeading title="Garments & NOGs" help="Pick the trucks with garments, then the trucks sending NOGs out." />
+              <StepHeading title="F.S. garments" help="Tap each truck that came back with garments." />
               <ChipGroup
                 title="F.S. trucks with garments"
-                help="Tap each truck that came back with garments."
+                help="They flash on the Load Display while that truck loads."
                 tone="garments"
                 trucks={editableDustTrucks.map((t) => t.truck_number)}
                 selected={dustSelected}
@@ -628,24 +660,51 @@ export default function RunDayWizard({
                 onSetAll={setAll(setDustSelected, editableDustTrucks.map((t) => t.truck_number))}
                 empty="No F.S. trucks in fleet."
               />
-              {/* NOGs — set at the start of the day, exactly like the garments
-                  above; the Load page's strip then tracks them out the door. */}
-              <ChipGroup
-                divider
-                title="NOGs — not our garments"
-                help="Tap trucks sending NOGs back out today."
-                tone="nogs"
-                trucks={nogsCandidates.map((t) => t.truck_number)}
-                selected={nogsPicked}
-                onToggle={toggleNogs}
-                onSetAll={setAll(setNogsSelected, nogsCandidates.map((t) => t.truck_number))}
-                scroll
-              />
             </div>
           )}
 
-          {/* Step 3: Route Swaps */}
-          {step === 3 && (() => {
+          {/* Step 3: NOGs — set at the start of the day, like the garments;
+              the Load page's strip then tracks them out the door. */}
+          {step === 3 && (
+            <div className="space-y-5">
+              <StepHeading title="NOGs — not our garments" help="Tap trucks sending NOGs back out today." />
+              <ChipGroup
+                title="Trucks sending NOGs out"
+                help={
+                  usualNogs.length > 0 && !nogsExpanded
+                    ? `Usual for ${WEEKDAY_NAMES[nogsWeekday]} — tap any that apply.`
+                    : "Tap trucks sending NOGs back out today."
+                }
+                tone="nogs"
+                trucks={nogsVisible}
+                selected={nogsPicked}
+                onToggle={toggleNogs}
+                onSetAll={setAll(setNogsSelected, nogsVisible)}
+              />
+              {usualNogs.length > 0 && (
+                nogsExpanded ? (
+                  <button
+                    type="button"
+                    className="w-full rounded-lg border border-dashed border-hairline bg-surface/40 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                    onClick={() => setNogsExpanded(false)}
+                  >
+                    Show the usual trucks only
+                  </button>
+                ) : nogsAllOrdered.length > nogsVisible.length ? (
+                  <button
+                    type="button"
+                    className="w-full rounded-lg border border-dashed border-hairline bg-surface/40 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                    onClick={() => setNogsExpanded(true)}
+                  >
+                    + {nogsAllOrdered.length - nogsVisible.length} more trucks
+                  </button>
+                ) : null
+              )}
+            </div>
+          )}
+
+          {/* Step 4: Route Swaps */}
+          {step === 4 && (() => {
             // OOS trucks that don't yet have a swap assigned (covered via either
             // a route swap or a spare assignment).
             const swappedRoutes = coveredRouteSet;
@@ -910,8 +969,8 @@ export default function RunDayWizard({
             );
           })()}
 
-          {/* Step 4: Trucks Not Here */}
-          {step === 4 && (
+          {/* Step 5: Trucks Not Here */}
+          {step === 5 && (
             <div className="space-y-5">
               <StepHeading title="Trucks not here" help="They keep their current status. This only flags them Needs Checked." />
               <ChipGroup
@@ -941,8 +1000,8 @@ export default function RunDayWizard({
             </div>
           )}
 
-          {/* Step 5: Daily Notes + summary */}
-          {step === 5 && (
+          {/* Step 6: Daily Notes + summary */}
+          {step === 6 && (
             <div className="space-y-4">
               <StepHeading title="Notes for today" help="Anything the next shift should know." />
               <textarea
@@ -975,7 +1034,7 @@ export default function RunDayWizard({
           step={step}
           pending={footerPending}
           onBack={() => (step === 1 ? onClose() : setStep(step - 1))}
-          onSkip={step === 2 ? () => setStep(3) : step === 4 ? () => setStep(5) : undefined}
+          onSkip={step === 2 ? () => setStep(3) : step === 3 ? () => setStep(4) : step === 5 ? () => setStep(6) : undefined}
           onNext={nextByStep[step]}
         />
     </Modal>

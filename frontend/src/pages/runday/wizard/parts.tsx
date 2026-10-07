@@ -7,7 +7,7 @@ import type { ReactNode } from "react";
 import clsx from "clsx";
 import { Check, X } from "lucide-react";
 
-export const STEP_NAMES = ["Run mode", "Garments", "Swaps", "Not here", "Notes"] as const;
+export const STEP_NAMES = ["Run mode", "Garments", "NOGs", "Swaps", "Not here", "Notes"] as const;
 
 export type ChipTone = "garments" | "nogs" | "absent" | "ranAhead";
 
@@ -78,7 +78,6 @@ export function ChipGroup({
   onSetAll,
   divider,
   cols = 4,
-  scroll,
   empty,
 }: {
   title: string;
@@ -90,7 +89,6 @@ export function ChipGroup({
   onSetAll: (all: boolean) => void;
   divider?: boolean;
   cols?: 3 | 4;
-  scroll?: boolean;
   empty?: string;
 }) {
   return (
@@ -110,7 +108,7 @@ export function ChipGroup({
       {trucks.length === 0 ? (
         <p className="text-center text-sm text-ink-muted">{empty ?? "No trucks."}</p>
       ) : (
-        <div className={clsx("grid gap-2", cols === 3 ? "grid-cols-3" : "grid-cols-3 sm:grid-cols-4", scroll && "max-h-56 overflow-y-auto pr-1")}>
+        <div className={clsx("grid gap-2", cols === 3 ? "grid-cols-3" : "grid-cols-3 sm:grid-cols-4")}>
           {trucks.map((n) => (
             <TruckChip key={n} num={n} tone={tone} selected={selected.has(n)} onToggle={() => onToggle(n)} />
           ))}

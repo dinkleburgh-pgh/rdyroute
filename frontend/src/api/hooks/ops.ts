@@ -866,3 +866,22 @@ export function useApplyDayGap() {
     },
   });
 }
+
+/** How often each route carried NOGs per weekday (0 = Monday) — the
+ *  "usual NOGs" read behind Setup Day's suggested-first list. */
+export interface NogsUsual {
+  truck_number: number;
+  weekday: number;
+  flagged_days: number;
+  operating_days: number;
+  share: number;
+  last_flagged: string;
+}
+
+export function useNogsUsual(weeks = 8) {
+  return useQuery({
+    queryKey: ["nogs-usual", weeks],
+    queryFn: async () => (await api.get<NogsUsual[]>("/trucks/nogs-usual", { params: { weeks } })).data,
+    staleTime: 10 * 60_000,
+  });
+}
