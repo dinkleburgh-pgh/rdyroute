@@ -516,8 +516,6 @@ export default function Load() {
             truck={t}
             pair={loadPair(t)}
             tone="text-st-dirty"
-            dot="bg-st-dirty"
-            label="Dirty · tap when empty"
             disabled={bulkUnloading}
             onClick={() => markUnloaded(t)}
           />
@@ -1037,8 +1035,9 @@ function NotReadyChip({
   truck: TruckWithState;
   pair: { route: number; split?: boolean } | null;
   tone: string;
-  dot: string;
-  label: string;
+  /** The reason line; omitted for the compact number-only chip. */
+  dot?: string;
+  label?: string;
   onClick?: () => void;
   disabled?: boolean;
 }) {
@@ -1055,13 +1054,18 @@ function NotReadyChip({
           <>#{truck.truck_number}</>
         )}
       </span>
-      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
-        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
-        {label}
-      </span>
+      {label && (
+        <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
+          <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
+          {label}
+        </span>
+      )}
     </>
   );
-  const base = "inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-3 px-3 py-2";
+  const base = clsx(
+    "inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-3",
+    label ? "px-3 py-2" : "px-2.5 py-1.5",
+  );
   if (onClick) {
     return (
       <button
