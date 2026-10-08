@@ -30,7 +30,7 @@ import { QuietTile, SectionHeader, TILE_GRID } from "../components/workflow/Quie
 import type { TruckWithState } from "../types";
 import AnimateCard from "../components/AnimateCard";
 import { motion } from "framer-motion";
-import { MapPin } from "lucide-react";
+import { ChevronsRight, MapPin, Undo2 } from "lucide-react";
 import { format } from "date-fns";
 import clsx from "clsx";
 import { truckTypeLabel } from "../utils/truckType";
@@ -661,8 +661,40 @@ export default function Unload() {
     const batchTarget = carriedRouteOf(t) ?? t.truck_number;
     const isUnfin = t.state?.status === "unfinished";
     return (
-      <section id={`unloading-now-${t.truck_number}`} className="card overflow-hidden !p-0">
-        <div className="h-[2px] w-full animate-pulse bg-st-inprogress" />
+      <section
+        id={`unloading-now-${t.truck_number}`}
+        className={clsx(
+          "card overflow-hidden !p-0",
+          req === "want" && "ring-2 ring-cyan-400 shadow-[0_0_0_5px_rgba(34,211,238,0.22)]",
+        )}
+      >
+        <div className={clsx("h-[2px] w-full animate-pulse", req === "want" ? "bg-cyan-400" : "bg-st-inprogress")} />
+        {/* Load's answer, first and loudest — the dock is in a hurry and this
+            is the one thing they must not miss: a solid band the width of the
+            card, headline-sized, with what to do about it. */}
+        {req != null && (
+          <div
+            className={clsx(
+              "flex items-center gap-3 px-[22px] py-3",
+              req === "want" ? "bg-cyan-400 text-cyan-950" : "bg-amber-400 text-amber-950",
+            )}
+          >
+            {req === "want" ? (
+              <ChevronsRight className="h-8 w-8 shrink-0 animate-pulse" strokeWidth={2.75} aria-hidden />
+            ) : (
+              <Undo2 className="h-8 w-8 shrink-0" strokeWidth={2.75} aria-hidden />
+            )}
+            <div className="min-w-0 flex-1">
+              <div className="text-[20px] font-black uppercase leading-none tracking-[0.04em] sm:text-[24px]">
+                {req === "want" ? "Load wants this truck next" : "Load: back this one out"}
+              </div>
+              <div className="mt-1 text-[12.5px] font-semibold leading-snug opacity-85">
+                {req === "want" ? "Pull it forward — they are waiting on it." : "Not loading tonight — park it once it is empty."}
+                {t.state?.load_request_at != null && ` · asked ${formatEasternTime(t.state.load_request_at)}`}
+              </div>
+            </div>
+          </div>
+        )}
         <div className="flex flex-col gap-4 px-[22px] py-[18px]">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6">
             <div className="sm:min-w-[190px]">
@@ -688,13 +720,6 @@ export default function Unload() {
                   <span className="text-[11px] text-ink-faint">started {formatEasternTime(startedAt)}</span>
                 )}
               </div>
-              {/* What Load said about this truck — their answer belongs where
-                  the crew is already looking, not two sections away. */}
-              {req != null && (
-                <span className="mt-2 inline-flex rounded-md bg-cyan-500/15 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.08em] text-cyan-200 ring-1 ring-cyan-500/30">
-                  {req === "want" ? "Load: pull forward" : "Load: back it out"}
-                </span>
-              )}
               {/* Nobody from Load has weighed in, so say what the schedule
                   says — quieter, a fact about tomorrow, not a request. */}
               {req == null && (() => {
