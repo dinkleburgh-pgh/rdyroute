@@ -44,7 +44,7 @@ import { useLoadActions } from "../hooks/useLoadActions";
 import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 import { useLoadRequest } from "../hooks/useLoadRequest";
 import NowUnloadingStrip from "../components/load/NowUnloadingStrip";
-import ConfirmDialog from "../components/ConfirmDialog";
+import StillToUnloadCard from "../components/load/StillToUnloadGrid";
 import LoadActionDialogs from "../components/load/LoadActionDialogs";
 import InProgressHeroPanel from "../components/load/InProgressHeroPanel";
 import GarmentsStrip from "../components/load/GarmentsStrip";
@@ -386,22 +386,6 @@ export default function Load() {
         .sort((a, b) => a.truck_number - b.truck_number),
     [loadDisplayTrucks],
   );
-  const [confirmAllUnload, setConfirmAllUnload] = useState(false);
-  const [bulkUnloading, setBulkUnloading] = useState(false);
-  function markUnloaded(t: TruckWithState) {
-    quickUpsert.mutate({ truck_number: t.truck_number, run_date: runDate, status: "unloaded", wearers: t.state?.wearers ?? 0 });
-  }
-  async function markAllUnloaded() {
-    setBulkUnloading(true);
-    try {
-      for (const t of stillDirty) {
-        await quickUpsert.mutateAsync({ truck_number: t.truck_number, run_date: runDate, status: "unloaded", wearers: t.state?.wearers ?? 0 });
-      }
-    } finally {
-      setBulkUnloading(false);
-      setConfirmAllUnload(false);
-    }
-  }
 
   // All dust trucks — show garment checklist regardless of schedule/status
   const dustGarmentTrucks = board
@@ -442,6 +426,7 @@ export default function Load() {
           isRecurringCoverage={isRecurringCoverage}
           garmentTrucks={dustGarmentTrucks}
           nogsTrucks={nogsTrucks}
+          stillDirty={stillDirty}
           loadedCount={loadDone}
           loadTotal={loadTotal}
           onExit={closeDisplay}
@@ -490,35 +475,6 @@ export default function Load() {
         ))}
         {unfinishedPool.map((t) => (
           <NotReadyChip key={t.truck_number} truck={t} pair={loadPair(t)} tone="text-st-unfinished" dot="bg-st-unfinished" label="Unload unfinished" />
-        ))}
-      </div>
-    </div>
-  ) : null;
-  // TEMPORARY (see stillDirty): the unload shortcut. Same chip as above, but
-  // tappable — one tap marks the truck Unloaded and it moves to Ready.
-  const toUnloadCard = stillDirty.length > 0 ? (
-    <div className="card">
-      <div className="flex items-start justify-between gap-3">
-        <SectionHeader label="Still to unload" count={stillDirty.length} hint="tap a truck once it's empty" />
-        <button
-          type="button"
-          disabled={bulkUnloading}
-          onClick={() => setConfirmAllUnload(true)}
-          className="shrink-0 rounded-md border border-hairline bg-surface-2/60 px-2.5 py-1 text-[11px] font-semibold text-ink-soft transition-colors hover:bg-track disabled:opacity-50"
-        >
-          Mark all unloaded
-        </button>
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {stillDirty.map((t) => (
-          <NotReadyChip
-            key={t.truck_number}
-            truck={t}
-            pair={loadPair(t)}
-            tone="text-st-dirty"
-            disabled={bulkUnloading}
-            onClick={() => markUnloaded(t)}
-          />
         ))}
       </div>
     </div>
@@ -648,7 +604,8 @@ export default function Load() {
         </div>
 
         {notReadyCard && <div className="lg:hidden">{notReadyCard}</div>}
-        {toUnloadCard && <div className="lg:hidden">{toUnloadCard}</div>}
+        {/* TEMPORARY (see stillDirty): the unload shortcut card. */}
+        <StillToUnloadCard trucks={stillDirty} board={board} runDate={runDate} markAll className="lg:hidden" />
 
         {/* ---------------- Loaded today ----------------
             Lives IN the work rail: ready shrinks exactly as this grows, so
@@ -838,19 +795,10 @@ export default function Load() {
           </div>
 
           {notReadyCard && <div className="hidden lg:block">{notReadyCard}</div>}
-          {toUnloadCard && <div className="hidden lg:block">{toUnloadCard}</div>}
+          <StillToUnloadCard trucks={stillDirty} board={board} runDate={runDate} markAll className="hidden lg:block" />
         </div>
       </div>
 
-      <ConfirmDialog
-        open={confirmAllUnload}
-        title={`Mark all ${stillDirty.length} trucks unloaded?`}
-        description="Every truck still showing Dirty for tonight's load becomes Unloaded and joins Ready. A wrong one can be set back to Dirty from its Fleet truck window."
-        confirmLabel="Mark all unloaded"
-        busy={bulkUnloading}
-        onConfirm={() => void markAllUnloaded()}
-        onCancel={() => setConfirmAllUnload(false)}
-      />
       <LoadActionDialogs actions={actions} />
       {/* Truck chooser — what a truck in the dock or the Ready grid can
           become. Start Loading starts straight away (no second confirmation;
@@ -1021,28 +969,22 @@ function ChoiceButton({
   );
 }
 
-/** One held / unfinished truck: number in its status colour, then why.
- *  With onClick it becomes a button (the temporary unload shortcut). */
+/** One held / unfinished truck: number in its status colour, then why. */
 function NotReadyChip({
   truck,
   pair,
   tone,
   dot,
   label,
-  onClick,
-  disabled,
 }: {
   truck: TruckWithState;
   pair: { route: number; split?: boolean } | null;
   tone: string;
-  /** The reason line; omitted for the compact number-only chip. */
-  dot?: string;
-  label?: string;
-  onClick?: () => void;
-  disabled?: boolean;
+  dot: string;
+  label: string;
 }) {
-  const face = (
-    <>
+  return (
+    <div className="inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-3 px-3 py-2">
       <span className={clsx("font-mono text-[17px] font-black leading-none tabular-nums", tone)}>
         {pair != null ? (
           <>
@@ -1054,31 +996,12 @@ function NotReadyChip({
           <>#{truck.truck_number}</>
         )}
       </span>
-      {label && (
-        <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
-          <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
-          {label}
-        </span>
-      )}
-    </>
+      <span className="inline-flex items-center gap-1.5 text-[11.5px] text-ink-muted">
+        <span className={clsx("h-1.5 w-1.5 rounded-full", dot)} />
+        {label}
+      </span>
+    </div>
   );
-  const base = clsx(
-    "inline-flex items-center gap-2.5 rounded-lg border border-hairline bg-surface-3",
-    label ? "px-3 py-2" : "px-2.5 py-1.5",
-  );
-  if (onClick) {
-    return (
-      <button
-        type="button"
-        onClick={onClick}
-        disabled={disabled}
-        className={clsx(base, "text-left transition-colors hover:border-st-unloaded hover:bg-surface-2 active:scale-95 disabled:opacity-50")}
-      >
-        {face}
-      </button>
-    );
-  }
-  return <div className={base}>{face}</div>;
 }
 
 /** "started 7:42 PM · 12:34" — hook-bearing, so its own component. */

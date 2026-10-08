@@ -15,6 +15,7 @@ import LoadNotesPanel from "./LoadNotesPanel";
 import type { LoadActions } from "../../hooks/useLoadActions";
 import type { LoadRequestActions } from "../../hooks/useLoadRequest";
 import NowUnloadingStrip from "./NowUnloadingStrip";
+import StillToUnloadCard from "./StillToUnloadGrid";
 import { loadingCargo, type CoverageEntry } from "../../utils/truckStatus";
 import type { TruckWithState } from "../../types";
 
@@ -53,6 +54,7 @@ export default function LoadDisplay({
   isRecurringCoverage,
   garmentTrucks,
   nogsTrucks,
+  stillDirty = [],
   loadedCount,
   loadTotal,
   onExit,
@@ -76,6 +78,8 @@ export default function LoadDisplay({
   garmentTrucks: TruckWithState[];
   /** Trucks flagged has_nogs today — NOGs going back out with the load. */
   nogsTrucks: TruckWithState[];
+  /** TEMPORARY: tonight's dirty trucks for the one-tap unload shortcut. */
+  stillDirty?: TruckWithState[];
   loadedCount: number;
   loadTotal: number;
   onExit: () => void;
@@ -261,6 +265,11 @@ export default function LoadDisplay({
                 holidayLoad={holidayLoad}
                 dense
               />
+
+              {/* TEMPORARY unload shortcut — the same tiles as the Load page;
+                  the display is zoomed so 48px tiles read as ~72px here. No
+                  Mark all on the wall: bulk stays on the Load page. */}
+              <StillToUnloadCard trucks={stillDirty} board={board} runDate={runDate} variant="display" />
 
               <div className="card">
                 <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-st-unloaded">
