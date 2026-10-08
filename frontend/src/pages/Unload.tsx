@@ -665,18 +665,25 @@ export default function Unload() {
         id={`unloading-now-${t.truck_number}`}
         className={clsx(
           "card overflow-hidden !p-0",
-          req === "want" && "ring-2 ring-cyan-400 shadow-[0_0_0_5px_rgba(34,211,238,0.22)]",
+          req === "want" && "ring-2 ring-green-400 shadow-[0_0_0_5px_rgba(74,222,128,0.25)]",
+          req === "skip" && "ring-2 ring-red-500 shadow-[0_0_0_5px_rgba(239,68,68,0.25)]",
         )}
       >
-        <div className={clsx("h-[2px] w-full animate-pulse", req === "want" ? "bg-cyan-400" : "bg-st-inprogress")} />
+        <div
+          className={clsx(
+            "h-[2px] w-full animate-pulse",
+            req === "want" ? "bg-green-400" : req === "skip" ? "bg-red-500" : "bg-st-inprogress",
+          )}
+        />
         {/* Load's answer, first and loudest — the dock is in a hurry and this
             is the one thing they must not miss: a solid band the width of the
-            card, headline-sized, with what to do about it. */}
+            card, headline-sized, with what to do about it. Traffic light:
+            green = go, pull it forward; red = stop, back it out. */}
         {req != null && (
           <div
             className={clsx(
               "flex items-center gap-3 px-[22px] py-3",
-              req === "want" ? "bg-cyan-400 text-cyan-950" : "bg-amber-400 text-amber-950",
+              req === "want" ? "bg-green-500 text-green-950" : "bg-red-600 text-white",
             )}
           >
             {req === "want" ? (
