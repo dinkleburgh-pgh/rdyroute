@@ -388,6 +388,23 @@ export default function Load() {
         .sort((a, b) => a.truck_number - b.truck_number),
     [loadDisplayTrucks],
   );
+  // NOT HERE / NEEDS CHECKED. Trucks flagged needs_checked (absent at Setup
+  // Day, or flagged from the Fleet sheet) that still need unloading. Whole
+  // board, not just tonight's load roster: an absent truck that is off
+  // tomorrow still has to be emptied. Each truck shows ONCE on the page, so
+  // these leave the plain Still-to-unload card. Tapping one marks it Unloaded,
+  // which clears the flag server-side (a status change IS the check).
+  const notHere = useMemo(
+    () =>
+      board
+        .filter((t) => t.state?.needs_checked === true && t.state.status === "dirty" && t.state.unloading_started_at == null)
+        .sort((a, b) => a.truck_number - b.truck_number),
+    [board],
+  );
+  const stillDirtyHere = useMemo(
+    () => stillDirty.filter((t) => t.state?.needs_checked !== true),
+    [stillDirty],
+  );
 
   // All dust trucks — show garment checklist regardless of schedule/status
   const dustGarmentTrucks = board
@@ -483,6 +500,19 @@ export default function Load() {
       </div>
     </div>
   ) : null;
+  // Same tap-to-unload grid as Still to unload, amber like Needs Checked
+  // everywhere else. Hidden when nothing is flagged (the card returns null).
+  const notHereCard = (className: string) => (
+    <StillToUnloadCard
+      trucks={notHere}
+      board={board}
+      runDate={runDate}
+      label="Not here / Needs checked"
+      hint="still to unload · tap once it's empty"
+      numberClass="text-amber-400"
+      className={className}
+    />
+  );
 
   return (
     <>
@@ -611,7 +641,8 @@ export default function Load() {
 
         {notReadyCard && <div className="lg:hidden">{notReadyCard}</div>}
         {/* TEMPORARY (see stillDirty): the unload shortcut card. */}
-        <StillToUnloadCard trucks={stillDirty} board={board} runDate={runDate} markAll className="lg:hidden" />
+        <StillToUnloadCard trucks={stillDirtyHere} board={board} runDate={runDate} markAll className="lg:hidden" />
+        {notHereCard("lg:hidden")}
 
         {/* ---------------- Loaded today ----------------
             Lives IN the work rail: ready shrinks exactly as this grows, so
@@ -801,7 +832,8 @@ export default function Load() {
           </div>
 
           {notReadyCard && <div className="hidden lg:block">{notReadyCard}</div>}
-          <StillToUnloadCard trucks={stillDirty} board={board} runDate={runDate} markAll className="hidden lg:block" />
+          <StillToUnloadCard trucks={stillDirtyHere} board={board} runDate={runDate} markAll className="hidden lg:block" />
+          {notHereCard("hidden lg:block")}
         </div>
       </div>
 

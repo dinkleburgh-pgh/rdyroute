@@ -41,6 +41,9 @@ export default function StillToUnloadCard({
   variant = "page",
   markAll = false,
   className,
+  label = "Still to unload",
+  hint = "tap once it's empty · tap again to undo",
+  numberClass = "text-st-dirty",
 }: {
   /** Tonight's dirty trucks, already sorted. */
   trucks: TruckWithState[];
@@ -53,6 +56,11 @@ export default function StillToUnloadCard({
   markAll?: boolean;
   /** Outer wrapper classes (the Load page places the card per breakpoint). */
   className?: string;
+  /** Card title (page variant). The Not Here / Needs Checked card reuses this grid. */
+  label?: string;
+  hint?: string;
+  /** Colour of a not-yet-done truck number. */
+  numberClass?: string;
 }) {
   const upsert = useUpsertTruckState();
   const [justDone, setJustDone] = useState<Map<number, Done>>(() => new Map());
@@ -93,7 +101,15 @@ export default function StillToUnloadCard({
 
   function undo(d: Done) {
     if (Date.now() - d.at < BOUNCE_GUARD_MS) return;
-    upsert.mutate({ truck_number: d.truck.truck_number, run_date: runDate, status: "dirty", wearers: d.truck.state?.wearers ?? 0 });
+    // Marking unloaded clears Needs Checked server-side (a status change IS
+    // the check), so an undo puts the flag back with the status.
+    upsert.mutate({
+      truck_number: d.truck.truck_number,
+      run_date: runDate,
+      status: "dirty",
+      wearers: d.truck.state?.wearers ?? 0,
+      ...(d.truck.state?.needs_checked ? { needs_checked: true } : {}),
+    });
     forget(d.truck.truck_number);
   }
 
@@ -146,7 +162,7 @@ export default function StillToUnloadCard({
               "flex min-h-[48px] w-full select-none touch-manipulation flex-col items-center justify-center rounded-lg border px-1 font-mono font-black leading-none tabular-nums transition-colors active:scale-[0.97] disabled:opacity-50",
               isDone
                 ? "border-st-unloaded bg-st-unloaded/15 text-st-unloaded"
-                : "border-hairline bg-surface-3 text-st-dirty hover:border-st-unloaded hover:bg-surface-2",
+                : clsx("border-hairline bg-surface-3 hover:border-st-unloaded hover:bg-surface-2", numberClass),
             )}
           >
             <span className={pair ? "text-[15px]" : "text-[20px]"}>
@@ -183,7 +199,7 @@ export default function StillToUnloadCard({
       <div className="card">
         {variant === "page" ? (
           <div className="flex items-start justify-between gap-3">
-            <SectionHeader label="Still to unload" count={trucks.length} hint="tap once it's empty · tap again to undo" />
+            <SectionHeader label={label} count={trucks.length} hint={hint} />
             {markAllButton}
           </div>
         ) : (
