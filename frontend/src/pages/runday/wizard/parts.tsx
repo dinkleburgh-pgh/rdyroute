@@ -131,7 +131,7 @@ export function WizardHeader({
   onJump: (s: number) => void;
 }) {
   return (
-    <div className="px-5 pt-4">
+    <div className="shrink-0 px-5 pt-4">
       <div className="flex items-center">
         <span className="text-[11px] font-bold uppercase tracking-[0.08em] text-ink-muted">Setup Day</span>
         <span className="ml-3 text-sm font-semibold text-ink">{dateLabel}</span>
@@ -194,7 +194,7 @@ export function WizardFooter({
 }) {
   const last = step === STEP_NAMES.length;
   return (
-    <div className="flex items-center gap-2 border-t border-hairline bg-surface-2 px-5 py-3 pb-safe">
+    <div className="flex shrink-0 items-center gap-2 border-t border-hairline bg-surface-2 px-5 py-3">
       <button type="button" className="btn-ghost min-h-[44px] px-4 text-sm font-semibold" onClick={onBack}>
         {step === 1 ? "Close" : "Back"}
       </button>

@@ -44,6 +44,17 @@
   .pr-safe  { padding-right:  env(safe-area-inset-right); }
   /* Main content bottom padding = bottom-nav height + home-indicator safe area */
   .pb-nav-safe { padding-bottom: calc(3.5rem + env(safe-area-inset-bottom)); }
+  /* A centered dialog whose bottom button row must stay clear of the screen
+     edge and the home indicator (Setup Day). Capped short of the visible
+     viewport minus the safe areas, and a column so only its middle scrolls.
+     !important: it overrides Modal's own max-h/overflow utilities, and
+     Tailwind mangles env() inside arbitrary calc() values. */
+  .modal-fit-safe {
+    display: flex !important;
+    flex-direction: column;
+    overflow: hidden !important;
+    max-height: min(88svh, calc(100svh - 4rem - env(safe-area-inset-top) - env(safe-area-inset-bottom))) !important;
+  }
 }
 
 @keyframes priorityGlow {
