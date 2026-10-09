@@ -10,7 +10,12 @@ import type { AxiosProgressEvent } from "axios";
 import { api, todayIso } from "../client";
 import * as offlineQueue from "../offlineQueue";
 import { logDebug } from "../../utils/debugLog";
-import { buildCoverageList, buildPrevDayCoverage, resolvePrevRunDate, type CoverageEntry } from "../../utils/truckStatus";
+import { buildCoverageList, buildPrevDayCoverage, getCoverageRouteNumber, resolvePrevRunDate, type CoverageEntry } from "../../utils/truckStatus";
+import { subDays } from "date-fns";
+import { isoDate } from "../../utils/dates";
+import { LAST_RETURN_DAYS, describeReturn, lastReturnByRoute, routePrevLoadDate, type LastReturn } from "../../utils/lastReturn";
+import { usePrevOperatingDay } from "./coverage";
+import { useBoard } from "./core";
 import {
   WEARER_DEFAULTS_REVIEW_KEY,
   parseWearerDefaultsReview,
@@ -76,6 +81,7 @@ export function useCreateAuditEntry() {
       quantity?: number;
       note?: string;
       warn_on_next_load?: boolean;
+      route_override?: number;
     }) => (await api.post<AuditEntry>("/audit/entries", payload)).data,
     onSuccess: () => qc.invalidateQueries({ queryKey: ["audit"] }),
   });
@@ -89,23 +95,52 @@ export function useDeleteAuditEntry() {
   });
 }
 
-/**
- * Unacknowledged load warnings, grouped by truck number.
- *
- * The endpoint has existed since the audit feature shipped — its docstring
- * says it is "used by the loader workflow to surface warnings before starting
- * a truck" — but nothing on the load side ever rendered it. The Load Display
- * is the first consumer.
- */
-export function useActiveWarnings(runDate: string = todayIso()) {
+/** Audit entries over a run_date range [since, before), optionally one route's. */
+export function useAuditReturns({ since, before, route = null }: { since: string; before: string; route?: number | null }) {
   return useQuery({
-    queryKey: ["active-warnings", runDate],
+    queryKey: ["audit", "returns", since, before, route ?? "all"],
     queryFn: async () =>
-      (await api.get<Record<string, AuditEntry[]>>("/audit/active-warnings", {
-        params: { run_date: runDate },
+      (await api.get<AuditEntry[]>("/audit/entries", {
+        params: { since, before, ...(route != null ? { route } : {}) },
       })).data,
-    staleTime: 30_000,
+    staleTime: 5 * 60_000,
+    // audit_updated invalidates this live; the poll covers an event missed
+    // while the socket was down (a deploy, a tunnel blip) on an all-night wall.
     refetchInterval: 60_000,
+  });
+}
+
+/**
+ * Each route's Last return for the loads of `runDate` (utils/lastReturn.ts).
+ * `forTruck` matches the route a truck carries tonight — its coverage route,
+ * else its own number.
+ */
+export function useLastReturns(runDate: string) {
+  const since = isoDate(subDays(new Date(`${runDate}T12:00:00`), LAST_RETURN_DAYS));
+  const { data } = useAuditReturns({ since, before: runDate });
+  const { data: prevOp } = usePrevOperatingDay(runDate);
+  // The route trucks' schedules — "last load" steps back over a route's off nights.
+  const { data: board } = useBoard(runDate);
+  return useMemo(() => {
+    const byRoute = lastReturnByRoute(Array.isArray(data) ? data : []);
+    const prevDay = resolvePrevRunDate(runDate, prevOp);
+    const boardByNum = new Map((Array.isArray(board) ? board : []).map((t) => [t.truck_number, t]));
+    const forTruck = (t?: TruckWithState | null): LastReturn | null => {
+      if (!t) return null;
+      const route = getCoverageRouteNumber(t) ?? t.truck_number;
+      const r = byRoute.get(route);
+      return r ? describeReturn(r, runDate, routePrevLoadDate(boardByNum.get(route), prevDay)) : null;
+    };
+    return { byRoute, forTruck };
+  }, [data, prevOp, runDate, board]);
+}
+
+export function useUpdateAuditEntry() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, ...patch }: { id: string; warn_on_next_load?: boolean; warning_applied?: boolean; note?: string }) =>
+      (await api.patch<AuditEntry>(`/audit/entries/${id}`, patch)).data,
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["audit"] }),
   });
 }
 

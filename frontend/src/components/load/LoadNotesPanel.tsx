@@ -1,23 +1,22 @@
 import { useEffect, useState, type ReactNode } from "react";
 import clsx from "clsx";
-import { AlertTriangleIcon } from "../icons";
 import { todayIso } from "../../api/client";
+import ReturnReminder from "./ReturnReminder";
 import {
-  useActiveWarnings,
   useActiveWorkflowNotes,
+  useLastReturns,
   useDailyNotes,
   useNotices,
   useSettings,
   useTruckNotes,
 } from "../../api/hooks";
 import type { TruckNote, TruckWithState } from "../../types";
-import { useItemDisplayName } from "../shorts/HierarchyPicker";
 
 /**
  * Everything the loader needs to know right now, loudest first.
  *
- * The pieces existed but were scattered: audit load-warnings had an endpoint
- * built for exactly this and no UI at all; notices only ever appeared as a
+ * The pieces existed but were scattered: the route's last audit return (Last
+ * return, utils/lastReturn.ts) had no load-side surface at all; notices only ever appeared as a
  * transient toast; truck notes lived on the /notes board and inside the board's
  * in-progress hero. This gathers them against the truck actually being loaded.
  *
@@ -46,7 +45,7 @@ const ROTATE_MS = 8000;
  * was never actually on screen. Rotating gives every section the full width and
  * a guaranteed turn.
  *
- * Only the informational sections rotate. Audit warnings and loud notices stay
+ * Only the informational sections rotate. Last-return reminders and loud notices stay
  * pinned above this by the caller: a warning that is only visible one tick in
  * three is a warning that gets missed.
  */
@@ -128,13 +127,12 @@ export default function LoadNotesPanel({
   runDate: string;
   className?: string;
 }) {
-  const itemDisplayName = useItemDisplayName();
   // The truck is loaded FOR a particular day, which isn't always today's
   // default — prefer its own stamp.
   const dayNum = truck?.state?.load_day_num ?? loadDay;
   const truckNumber = truck?.truck_number;
 
-  const { data: warningsByTruck = {} } = useActiveWarnings(runDate);
+  const lastReturns = useLastReturns(runDate);
   const { data: notices = [] } = useNotices(true);
   // Passing loadDay lets the server drop non-matching workday notes for us —
   // supported since the notes router shipped, never used until now.
@@ -147,7 +145,7 @@ export default function LoadNotesPanel({
   // Standing load-workflow notes: the persistent set plus this load day's.
   const workflowNotes = useActiveWorkflowNotes("load", dayNum);
 
-  const warnings = truckNumber != null ? warningsByTruck[String(truckNumber)] ?? [] : [];
+  const ret = lastReturns.forTruck(truck);
   const truckNotes =
     truckNumber != null
       ? notes.filter((n) => n.truck_number === truckNumber && applies(n, dayNum))
@@ -158,18 +156,22 @@ export default function LoadNotesPanel({
     .map((t) => ({
       truck: t,
       notes: notes.filter((n) => n.truck_number === t.truck_number && applies(n, dayNum)),
-      warnings: warningsByTruck[String(t.truck_number)] ?? [],
+      // Coming up: only the loud reminders (last load / same weekday).
+      ret: (() => {
+        const r = lastReturns.forTruck(t);
+        return r?.tone === "loud" ? r : null;
+      })(),
     }))
-    .filter((g) => g.notes.length > 0 || g.warnings.length > 0);
+    .filter((g) => g.notes.length > 0 || g.ret != null);
   const loudNotices = notices.filter((n) => n.severity !== "info");
   const offNote = truck?.state?.off_note?.trim() ?? "";
   const shopNote = truck?.state?.shop_note?.trim() ?? "";
   const shiftNote = shiftNotesEnabled ? dailyNotes.trim() : "";
 
-  const upcomingCount = upcomingNotes.reduce((n, g) => n + g.notes.length + g.warnings.length, 0);
+  const upcomingCount = upcomingNotes.reduce((n, g) => n + g.notes.length + (g.ret ? 1 : 0), 0);
   const workflowLines = [...workflowNotes.persistent, ...workflowNotes.day];
   const count =
-    warnings.length + truckNotes.length + loudNotices.length + upcomingCount +
+    (ret ? 1 : 0) + truckNotes.length + loudNotices.length + upcomingCount +
     workflowLines.length + (offNote ? 1 : 0) + (shopNote ? 1 : 0) + (shiftNote ? 1 : 0);
 
   return (
@@ -192,20 +194,8 @@ export default function LoadNotesPanel({
         </p>
       )}
 
-      {/* 1 — audit load warnings: the loudest thing on this surface */}
-      {warnings.map((w) => (
-        <div key={w.id} className="rounded-xl border border-st-dirty/50 bg-st-dirty/10 px-3 py-2">
-          <div className="flex items-start gap-2">
-            <AlertTriangleIcon className="mt-0.5 h-4 w-4 shrink-0 text-st-dirty" />
-            <div className="min-w-0">
-              <p className="text-base font-bold text-st-dirty">
-                Load warning · {itemDisplayName(w.item_label)} ×{w.quantity}
-              </p>
-              {w.note && <p className="mt-0.5 text-xl font-bold leading-snug text-ink">{w.note}</p>}
-            </div>
-          </div>
-        </div>
-      ))}
+      {/* 1 — the route's last audit return: pinned, never rotated */}
+      {ret && <ReturnReminder ret={ret} big />}
 
       {/* 2 — fleet notices that demand attention */}
       {loudNotices.map((n) => (
@@ -283,12 +273,7 @@ export default function LoadNotesPanel({
           {upcomingNotes.map((g) => (
             <div key={g.truck.truck_number} className="rounded-lg border border-hairline bg-surface-2 px-2.5 py-1.5">
               <p className="font-mono text-xs font-bold tabular-nums text-ink-soft">#{g.truck.truck_number}</p>
-              {g.warnings.map((w) => (
-                <p key={w.id} className="mt-0.5 flex gap-1.5 text-xs leading-snug text-st-dirty">
-                  <AlertTriangleIcon className="mt-0.5 h-3 w-3 shrink-0" />
-                  <span>{itemDisplayName(w.item_label)} ×{w.quantity}{w.note ? ` — ${w.note}` : ""}</span>
-                </p>
-              ))}
+              {g.ret && <ReturnReminder ret={g.ret} variant="line" className="mt-0.5" />}
               {g.notes.map((n) => (
                 <p key={n.id} className="mt-0.5 text-xs leading-snug text-ink-muted">
                   {n.created_by === "driver" ? "Driver: " : ""}{n.body}

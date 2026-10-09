@@ -94,14 +94,25 @@ def list_audit_entries(
     run_date: date | None = Query(default=None),
     truck_number: int | None = Query(default=None),
     warn_only: bool = Query(default=False, description="Return only entries with warn_on_next_load=true"),
+    route: int | None = Query(default=None, description="Route the entry is filed under: route_override, else truck_number"),
+    since: date | None = Query(default=None, description="Inclusive lower bound on run_date"),
+    before: date | None = Query(default=None, description="Exclusive upper bound on run_date"),
     _user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    """Audit entries, newest first. since/before/route feed the Last Return
+    reminders (Load) and the Past returns history (Audit)."""
     q = select(AuditEntry).order_by(AuditEntry.recorded_at.desc())
     if run_date:
         q = q.where(AuditEntry.run_date == run_date)
+    if since is not None:
+        q = q.where(AuditEntry.run_date >= since)
+    if before is not None:
+        q = q.where(AuditEntry.run_date < before)
     if truck_number is not None:
         q = q.where(AuditEntry.truck_number == truck_number)
+    if route is not None:
+        q = q.where(func.coalesce(AuditEntry.route_override, AuditEntry.truck_number) == route)
     if warn_only:
         q = q.where(AuditEntry.warn_on_next_load == True, AuditEntry.warning_applied == False)
     return db.scalars(q).all()
@@ -540,6 +551,9 @@ def active_warnings(
     db: Session = Depends(get_db),
 ):
     """
+    No UI consumer since Last Return (2026-10) — kept one release so stale
+    wall/APK bundles don't 404; delete after.
+
     Return all unacknowledged load-warning entries for a run-date, grouped by truck.
     Used by the loader workflow to surface warnings before starting a truck.
     """

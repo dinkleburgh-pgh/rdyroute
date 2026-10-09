@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { format } from "date-fns";
 import {
   useBoard,
+  useLastReturns,
   useHolidayLoad,
   useHolidayUnload,
   useLoadDayOverride,
@@ -45,6 +46,7 @@ import { useLoadTimerVisible } from "../hooks/useLoadTimerVisible";
 import { useLoadRequest } from "../hooks/useLoadRequest";
 import NowUnloadingStrip from "../components/load/NowUnloadingStrip";
 import StillToUnloadCard from "../components/load/StillToUnloadGrid";
+import ReturnReminder from "../components/load/ReturnReminder";
 import LoadActionDialogs from "../components/load/LoadActionDialogs";
 import InProgressHeroPanel from "../components/load/InProgressHeroPanel";
 import GarmentsStrip from "../components/load/GarmentsStrip";
@@ -401,6 +403,8 @@ export default function Load() {
   // Whose garments / NOGs ride on the truck being loaded (coverage-aware):
   // their strip icons flash, and the hero shows + flashes them.
   const cargo = loadingCargo(inProgress, board);
+  // Each route's last audit return, reminded on its loads (utils/lastReturn).
+  const lastReturns = useLastReturns(runDate);
 
   // Focus mode: the ready queue rarely holds more than ~10 trucks and spends
   // most of the night under 5 — render those few BIG (readable from across
@@ -542,6 +546,7 @@ export default function Load() {
                   onCancel={() => cancelLoad(inProgress)}
                   onLogShortage={() => setShortagesOpen((v) => !v)}
                   shortagesOpen={shortagesOpen}
+                  lastReturn={lastReturns.forTruck(inProgress)}
                 />
               ) : null
             }
@@ -555,6 +560,7 @@ export default function Load() {
             onStart={requestStart}
             onPickNextUp={() => setNextUpOpen(true)}
             onSuggest={(n) => setNextUp.mutate(n)}
+            returnOf={lastReturns.forTruck}
           />
           {inProgress && shortagesOpen && <InlineShortages truck={inProgress} runDate={runDate} />}
 
@@ -841,6 +847,7 @@ export default function Load() {
                 </>
               }
             />
+            <ReturnReminder ret={lastReturns.forTruck(t)} className="mt-4" />
             <div className="mt-5 flex flex-col gap-2">
               <ChoiceButton
                 icon={<Play className="h-4 w-4 fill-current" />}

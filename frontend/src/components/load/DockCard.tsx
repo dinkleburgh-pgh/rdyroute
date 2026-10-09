@@ -5,6 +5,8 @@ import CoverageTag from "../CoverageTag";
 import { truckTypeLabel } from "../../utils/truckType";
 import { BTN_GO, BTN_LINK, LoadFace, ZONE, ZoneLabel, loadFaceText } from "./loadUi";
 import type { TruckWithState } from "../../types";
+import { ReturnTag } from "./ReturnReminder";
+import type { LastReturn } from "../../utils/lastReturn";
 
 export type LoadPair = { route: number; split?: boolean } | null;
 
@@ -34,6 +36,7 @@ export default function DockCard({
   onStart,
   onPickNextUp,
   onSuggest,
+  returnOf,
 }: {
   /** The Loading-now zone (InProgressHeroPanel), or null when the dock is free. */
   loading: ReactNode | null;
@@ -52,6 +55,10 @@ export default function DockCard({
   onStart: (t: TruckWithState) => void;
   onPickNextUp: () => void;
   onSuggest: (truckNumber: number) => void;
+  /** The route's last audit return — tagged on the Up next / Staged slots
+   *  (loud ones only), which the direct Start button reaches without the
+   *  chooser sheet. */
+  returnOf?: (t: TruckWithState) => LastReturn | null;
 }) {
   // With nothing queued, the lane's front truck is the obvious next pick —
   // offered as a one-tap chip. (History-based "usually next" picks were
@@ -121,6 +128,7 @@ export default function DockCard({
                   {truckTypeLabel(nextUp.truck_type)}
                   {nextUp.state?.wearers ? ` · ${nextUp.state.wearers} wearers` : ""}
                   {nextUp.state?.staged_at != null ? " · in the lane" : ""}
+                  <ReturnTag ret={returnOf?.(nextUp) ?? null} />
                 </>
               }
             />
@@ -152,7 +160,7 @@ export default function DockCard({
                   position={i + 1}
                   pair={pairOf(t)}
                   onClick={() => onTruck(t)}
-                  sub={stagedSub(t)}
+                  sub={<>{stagedSub(t)}<ReturnTag ret={returnOf?.(t) ?? null} /></>}
                   dotClass={stagedDot(t)}
                 />
               ))}

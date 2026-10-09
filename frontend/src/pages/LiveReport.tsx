@@ -1071,7 +1071,7 @@ function ReportBody({
           { label: "Trucks audited", value: String(auditByTruck.length) },
           { label: "Items logged", value: String(itemsLogged) },
           { label: "Pieces removed", value: String(piecesRemoved) },
-          { label: "Open warnings", value: String(openWarnings), tone: openWarnings > 0 ? "#fbbf24" : null },
+          ...(openWarnings > 0 ? [{ label: "Open warnings", value: String(openWarnings), tone: "#fbbf24" }] : []),
         ],
         chips: catRollup.map(([cat, qty]) => ({
           category: cat,
@@ -1825,11 +1825,13 @@ function ReportBody({
         {/* ===================== LOAD · AUDIT ===================== */}
         {showSection("audit") && (
         <Section eyebrow="Load" title="Audit" sectionKey="audit">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {/* Open warnings counts legacy arm-first flags only; every return
+              now reminds by itself (Last return), so the tile hides at 0. */}
+          <div className={clsx("grid grid-cols-2 gap-2", openWarnings > 0 ? "sm:grid-cols-4" : "sm:grid-cols-3")}>
             <Kpi label="Trucks audited" value={auditByTruck.length} />
             <Kpi label="Items logged" value={itemsLogged} />
             <Kpi label="Pieces removed" value={piecesRemoved} />
-            <Kpi label="Open warnings" value={openWarnings} tone={openWarnings > 0 ? "text-amber-400" : undefined} />
+            {openWarnings > 0 && <Kpi label="Open warnings" value={openWarnings} tone="text-amber-400" />}
           </div>
           {catRollup.length > 0 && (
             <div className="flex flex-wrap gap-1.5">

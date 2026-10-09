@@ -7,6 +7,8 @@ import { useLoadTimerVisible } from "../../hooks/useLoadTimerVisible";
 import { CARGO_FLASH, GARMENT_FLASH_TONE, NOGS_FLASH_TONE } from "./cargoFlash";
 import { BTN_GO, BTN_SECONDARY, LoadFace, ZONE, ZoneLabel, loadFace, loadFaceText } from "./loadUi";
 import type { TruckWithState } from "../../types";
+import ReturnReminder from "./ReturnReminder";
+import type { LastReturn } from "../../utils/lastReturn";
 
 const LOAD_DAY_NAMES: Record<number, string> = {
   1: "Monday",
@@ -53,6 +55,7 @@ export default function InProgressHeroPanel({
   onChangeNextUp,
   onLogShortage,
   shortagesOpen = false,
+  lastReturn = null,
   variant = "page",
 }: {
   truck: TruckWithState;
@@ -78,6 +81,9 @@ export default function InProgressHeroPanel({
   onLogShortage?: () => void;
   /** Page variant only — the logger is open, so the button reads "Hide". */
   shortagesOpen?: boolean;
+  /** Page variant only — the route's last audit return (the Load Display
+   *  shows it in LoadNotesPanel instead). */
+  lastReturn?: LastReturn | null;
   variant?: "page" | "display";
 }) {
   const big = variant === "display";
@@ -166,6 +172,8 @@ export default function InProgressHeroPanel({
             </>
           )}
         </div>
+
+        {lastReturn && <ReturnReminder ret={lastReturn} />}
 
         {/* Finish owns the row; the two small ones share the next on a phone. */}
         <div className="grid grid-cols-2 gap-2 sm:flex">

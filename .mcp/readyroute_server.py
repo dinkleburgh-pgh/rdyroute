@@ -439,9 +439,15 @@ Stored in AppSetting "tracked_items_map" — managed in Management → Notices &
 Falls back to DEFAULT_TRACKED_ITEMS constant if none configured.
 
 ## Modifier bar
-- "warn on next load" toggle — sets warn_on_next_load on the audit entry
-- "+ note / route" — reveals note input + route override input
+- "+ note / route" — reveals note input + "Filed under route" (defaults to tonight's coverage route)
 - "photos" — reveals PhotosPanel for the selected truck
+
+## Last return (Audit -> Load reminders)
+Every audit entry is a return, filed under route_override ?? truck_number, and reminds that
+route's loads for 14 days (utils/lastReturn.ts): loud on the route's own last load or the same
+weekday, a quiet line otherwise. "Past returns · Route N" shows 90 days (tap an item to log it
+again); each logged row has a "Reminds / No remind" toggle (mute = warning_applied && !warn_on_next_load).
+API: GET /audit/entries?route=&since=&before= (before is exclusive).
 
 ## Photos
 Stored in audit_photos/{run_date}/ directory.

@@ -91,6 +91,11 @@ export function useRealtimeSync(): { isWsConnected: boolean } {
           // other for something, and the dock works heads-down.
           if (event.run_date) qc.invalidateQueries({ queryKey: ["board", event.run_date] });
           window.dispatchEvent(new CustomEvent("readyroute:app-event", { detail: event }));
+        } else if (event.type === "audit_updated") {
+          // An audit entry was logged, muted or deleted on another device —
+          // refresh the Audit page and the Load side's Last return reminders.
+          qc.invalidateQueries({ queryKey: ["audit"] });
+          qc.invalidateQueries({ queryKey: ["audit-last-audited"] });
         } else if (event.type === "report_archived") {
           // A day was archived (end of shift, catch-up, or an admin's
           // re-save): open Report pages pick up the new snapshot.

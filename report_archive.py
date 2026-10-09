@@ -322,7 +322,10 @@ def build_inputs(db: Session, run_date: date) -> dict:
         ),
         "audit_entries": _dump(
             AuditEntryOut,
-            list_audit_entries(run_date=run_date, truck_number=None, warn_only=False, _user=None, db=db),
+            list_audit_entries(
+                run_date=run_date, truck_number=None, warn_only=False,
+                route=None, since=None, before=None, _user=None, db=db,
+            ),
         ),
         "spares": _dump(
             SpareAssignOut, list_assignments(run_date=run_date, returned=None, _user=None, db=db)

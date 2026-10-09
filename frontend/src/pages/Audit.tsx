@@ -5,6 +5,8 @@
  * Phase 2: ItemLogger  — hierarchical category → sub → item selection.
  */
 import { useState, useMemo, useRef, useEffect, type FormEvent } from "react";
+import { Bell, BellOff, History } from "lucide-react";
+import { subDays } from "date-fns";
 import { motion } from "framer-motion";
 import AnimateCard from "../components/AnimateCard";
 import clsx from "clsx";
@@ -22,6 +24,9 @@ import {
   useDeleteAuditPhoto,
   useUploadAuditPhoto,
   useTrackedItems,
+  useAuditReturns,
+  useLastReturns,
+  useUpdateAuditEntry,
   type TrackedItem,
 } from "../api/hooks";
 import { todayIso } from "../api/client";
@@ -34,6 +39,17 @@ import { errorDetail } from "../api/errors";
 import { useLastAudited } from "../api/hooks";
 import { format } from "date-fns";
 import EmptyState from "../components/EmptyState";
+import { getCoverageRouteNumber } from "../utils/truckStatus";
+import { isoDate } from "../utils/dates";
+import {
+  LAST_RETURN_DAYS,
+  RETURN_HISTORY_DAYS,
+  fmtReturnDate,
+  groupReturnDays,
+  isMuted,
+  lastReturnByRoute,
+  type ReturnDay,
+} from "../utils/lastReturn";
 
 // ---------------------------------------------------------------------------
 // TruckPicker
@@ -44,12 +60,16 @@ function TruckPicker({
   board,
   entriesByTruck,
   topItems,
+  lastReturnOf,
   onSelect,
 }: {
   runDate: string;
   board: TruckWithState[];
   entriesByTruck: Map<number, AuditEntry[]>;
   topItems: Array<{ route: number; item_label: string; total_qty: number }>;
+  /** The last return (within LAST_RETURN_DAYS) of the route this truck carries
+   *  tonight — the same lookup the Load side and the logger's filing use. */
+  lastReturnOf: (t: TruckWithState) => ReturnDay | null;
   onSelect: (t: TruckWithState) => void;
 }) {
   const itemDisplayName = useItemDisplayName();
@@ -109,6 +129,18 @@ function TruckPicker({
                 <span className={clsx("mt-0.5 text-[10px] font-medium", isAudited ? "font-semibold text-emerald-400" : "uppercase tracking-wider text-slate-400")}>
                   {isAudited ? `${count} item${count !== 1 ? "s" : ""}` : truckTypeLabel(t.truck_type)}
                 </span>
+                {!isAudited && (() => {
+                  const ret = lastReturnOf(t);
+                  return ret ? (
+                    <span
+                      className="mt-0.5 inline-flex items-center gap-0.5 text-[10px] font-semibold text-teal-300"
+                      title={`Last return ${fmtReturnDate(ret.runDate)} · ${ret.total} pcs`}
+                    >
+                      <History className="h-2.5 w-2.5" aria-hidden />
+                      {fmtReturnDate(ret.runDate, "MMM d")}
+                    </span>
+                  ) : null;
+                })()}
               </motion.button>
             );
           })}
@@ -486,6 +518,7 @@ function ItemLogger({
 }) {
   const create      = useCreateAuditEntry();
   const deleteEntry = useDeleteAuditEntry();
+  const update      = useUpdateAuditEntry();
   const [confirmDeleteEntry, setConfirmDeleteEntry] = useState<string | null>(null);
   const { data: trackedRaw = [] } = useTrackedItems();
   const items = trackedRaw.length > 0 ? trackedRaw : DEFAULT_TRACKED_ITEMS;
@@ -503,11 +536,13 @@ function ItemLogger({
 
   const [photosOpen, setPhotosOpen] = useState(false);
   const [note, setNote]           = useState("");
-  const [warn, setWarn]           = useState(false);
   const [showExtra, setShowExtra] = useState(false);
+  // Filed under tonight's covered route (swap or spare cover), so the return
+  // reminds that route's loads — not the truck that happened to carry it.
   const [routeOverride, setRouteOverride] = useState(
-    truck.state?.oos_spare_route?.toString() ?? "",
+    getCoverageRouteNumber(truck)?.toString() ?? "",
   );
+  const effectiveRoute = Number(routeOverride) || truck.truck_number;
 
   async function logItem(label: string, qty: number) {
     if (create.isPending) return;
@@ -517,11 +552,9 @@ function ItemLogger({
       item_label: label,
       quantity: qty,
       note: note.trim() || undefined,
-      warn_on_next_load: warn || undefined,
       ...(routeOverride ? { route_override: Number(routeOverride) } : {}),
     });
     setNote("");
-    setWarn(false);
   }
 
   return (
@@ -537,7 +570,12 @@ function ItemLogger({
         </button>
         <div className="flex-1 flex justify-center">
           <div className="inline-flex items-center gap-3 rounded-xl border-2 border-emerald-600/40 bg-emerald-950/30 px-6 py-2">
-            <span className="text-5xl font-black tabular-nums text-emerald-300">#{truck.truck_number}</span>
+            <span className="text-5xl font-black tabular-nums text-emerald-300">#{effectiveRoute}</span>
+            {effectiveRoute !== truck.truck_number && (
+              <span className="whitespace-nowrap font-mono text-2xl font-bold tabular-nums text-slate-300">
+                <span className="font-normal text-slate-500">→ on</span> #{truck.truck_number}
+              </span>
+            )}
             {entries.length > 0 && (
               <span className="rounded-full bg-emerald-900/70 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
                 {entries.length} logged
@@ -551,19 +589,6 @@ function ItemLogger({
       <div className="flex-1 min-h-0 overflow-y-auto space-y-5 p-3 md:p-6">
         {/* Modifier bar */}
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            onClick={() => setWarn((w) => !w)}
-            className={clsx(
-              "flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition",
-              warn
-                ? "border-amber-600 bg-amber-900/50 text-amber-300"
-                : "border-slate-700 bg-slate-800 text-slate-500 hover:bg-slate-700",
-            )}
-          >
-            warn on next load
-          </button>
-
           <button
             type="button"
             onClick={() => setShowExtra((x) => !x)}
@@ -606,7 +631,7 @@ function ItemLogger({
               />
             </label>
             <label className="text-sm">
-              <span className="mb-1 block text-xs font-semibold text-slate-400">Route override</span>
+              <span className="mb-1 block text-xs font-semibold text-slate-400">Filed under route</span>
               <input
                 className="input w-full"
                 type="number"
@@ -617,6 +642,8 @@ function ItemLogger({
             </label>
           </div>
         )}
+
+        <ReturnHistory route={effectiveRoute} runDate={runDate} onPick={handleQuickTap} />
 
         {/* Hierarchical item picker */}
         {recentRemoved && recentRemoved.length > 0 && (
@@ -644,6 +671,9 @@ function ItemLogger({
             <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-500">
               Logged this session
             </h4>
+            <p className="text-[11px] text-slate-500">
+              Each item shows on route {effectiveRoute}&apos;s loads for the next {LAST_RETURN_DAYS} days. Tap Reminds on a one-off to skip it.
+            </p>
       <div className="flex flex-wrap gap-2">
               {[...entries].reverse().map((e) => (
                 <div
@@ -660,6 +690,31 @@ function ItemLogger({
                       "{e.note}"
                     </span>
                   )}
+                  {(() => {
+                    const muted = isMuted(e);
+                    return (
+                      <button
+                        type="button"
+                        aria-pressed={!muted}
+                        disabled={update.isPending}
+                        onClick={() =>
+                          update.mutate(
+                            muted
+                              ? { id: e.id, warning_applied: false }
+                              : { id: e.id, warn_on_next_load: false, warning_applied: true },
+                          )
+                        }
+                        className={clsx(
+                          "inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-lg border px-3 text-sm font-semibold transition active:scale-95",
+                          muted
+                            ? "border-slate-700 bg-slate-800 text-slate-500"
+                            : "border-teal-700/60 bg-teal-950/40 text-teal-300",
+                        )}
+                      >
+                        {muted ? <><BellOff className="h-4 w-4" />No remind</> : <><Bell className="h-4 w-4" />Reminds</>}
+                      </button>
+                    );
+                  })()}
                   <button
                     type="button"
                     onClick={() => setConfirmDeleteEntry(e.id)}
@@ -743,6 +798,7 @@ export default function Audit() {
   const { data: entries      = [] } = useAuditEntries(runDate);
   const { data: topItems     = [] } = useAuditByRoute(7);
   const { data: auditDates  = [] } = useAuditDates();
+  const lastReturns = useLastReturns(runDate);
 
   const entriesByTruck = useMemo(() => {
     const map = new Map<number, AuditEntry[]>();
@@ -813,11 +869,13 @@ export default function Audit() {
           board={board}
           entriesByTruck={entriesByTruck}
           topItems={topItems}
+          lastReturnOf={lastReturns.forTruck}
           onSelect={(t) => { setSelected(t); }}
         />
         </div>
       ) : (
         <ItemLogger
+          key={selectedTruck.truck_number}
           truck={selectedTruck}
           entries={truckEntries}
           runDate={runDate}
@@ -826,6 +884,84 @@ export default function Audit() {
         />
       )}
     </motion.div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ReturnHistory — the route's past returns (tap an item to log it again)
+// ---------------------------------------------------------------------------
+
+function ReturnHistory({ route, runDate, onPick }: { route: number; runDate: string; onPick: (label: string) => void }) {
+  const itemDisplayName = useItemDisplayName();
+  const [showAll, setShowAll] = useState(false);
+  const base = new Date(`${runDate}T12:00:00`);
+  const since90 = isoDate(subDays(base, RETURN_HISTORY_DAYS));
+  const since14 = isoDate(subDays(base, LAST_RETURN_DAYS));
+  const { data } = useAuditReturns({ since: since90, before: runDate, route });
+  if (data === undefined) return null;
+  const rows = Array.isArray(data) ? data : [];
+  const days = groupReturnDays(rows).slice(0, 6);
+  // The day currently reminding loads — only meaningful for today.
+  const activeDate =
+    runDate === todayIso()
+      ? lastReturnByRoute(rows.filter((e) => e.run_date >= since14)).get(route)?.runDate
+      : undefined;
+  const shown = showAll ? days : days.slice(0, 2);
+  return (
+    <section className="space-y-2">
+      <div className="flex items-baseline justify-between">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Past returns · Route {route}</p>
+        <p className="text-[10px] text-slate-600">last {RETURN_HISTORY_DAYS} days</p>
+      </div>
+      {days.length === 0 ? (
+        <p className="text-xs text-slate-500">No returns logged for route {route} in the last {RETURN_HISTORY_DAYS} days.</p>
+      ) : (
+        <>
+          {shown.map((day) => (
+            <div key={day.runDate} className="space-y-1">
+              <div className="flex items-center gap-2">
+                <span className="w-[5.5rem] shrink-0 font-mono text-sm font-bold tabular-nums text-teal-300">
+                  {fmtReturnDate(day.runDate)}
+                </span>
+                {!day.trucks.includes(route) && (
+                  <span className="text-[11px] text-slate-500">on #{day.trucks.join(", #")}</span>
+                )}
+                {day.runDate === activeDate && (
+                  <span className="rounded-full bg-teal-500/15 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-teal-300">
+                    on loads
+                  </span>
+                )}
+              </div>
+              <div className="flex gap-2 overflow-x-auto pb-1">
+                {day.items.map((item) => (
+                  <button
+                    key={item.label}
+                    type="button"
+                    onClick={() => onPick(item.label)}
+                    title={item.muted ? "Not reminded on loads" : undefined}
+                    className={clsx(
+                      "inline-flex min-h-[44px] shrink-0 items-center gap-1.5 rounded-full bg-teal-900/40 px-4 text-sm font-semibold text-teal-200 transition hover:bg-teal-800/60 active:scale-95",
+                      item.muted && "opacity-50",
+                    )}
+                  >
+                    {item.muted && <BellOff className="h-3.5 w-3.5" aria-hidden />}
+                    {itemDisplayName(item.label)} ×{item.qty}
+                  </button>
+                ))}
+              </div>
+              {day.notes.map((n) => (
+                <p key={n} className="text-xs italic text-slate-500">“{n}”</p>
+              ))}
+            </div>
+          ))}
+          {days.length > 2 && !showAll && (
+            <button type="button" onClick={() => setShowAll(true)} className="text-xs font-semibold text-teal-300">
+              Show {days.length - 2} older
+            </button>
+          )}
+        </>
+      )}
+    </section>
   );
 }
 
