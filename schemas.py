@@ -766,6 +766,24 @@ class AuditSectionVM(BaseModel):
     cards: list[AuditTruckCardVM] = Field(default_factory=list, max_length=200)
 
 
+# ---- F.S. garments & NOGs ------------------------------------------------
+class CargoRowVM(BaseModel):
+    """One truck that was supposed to send garments / NOGs out with its load."""
+    truck_number: int
+    # Set when another truck carried this route's load (coverage), so the
+    # garments / NOGs rode on THAT truck — rendered ROUTE -> TRUCK.
+    carrier_truck: int | None = None
+    loaded: bool = False
+    status_label: str = Field(max_length=64)     # "Loaded · 7:12 AM" / "Not loaded"
+    status_hex: HexColor
+
+
+class CargoSectionVM(BaseModel):
+    kpis: list[ReportKpiVM] = Field(default_factory=list, max_length=8)
+    garments: list[CargoRowVM] = Field(default_factory=list, max_length=200)
+    nogs: list[CargoRowVM] = Field(default_factory=list, max_length=200)
+
+
 class ReportViewModel(BaseModel):
     run_date: date
     generated_at: datetime | None = None
@@ -776,6 +794,7 @@ class ReportViewModel(BaseModel):
     # Each section is present only when the user picked it in the section picker.
     batches: BatchesSectionVM | None = None
     coverage: CoverageSectionVM | None = None
+    cargo: CargoSectionVM | None = None
     load_times: LoadTimesSectionVM | None = None
     shortages: ShortagesSectionVM | None = None
     audit: AuditSectionVM | None = None

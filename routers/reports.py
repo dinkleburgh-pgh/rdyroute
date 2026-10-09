@@ -31,6 +31,7 @@ from routers.auth import require_non_guest
 from schemas import (
     AuditSectionVM,
     BatchesSectionVM,
+    CargoSectionVM,
     CoverageSectionVM,
     LoadTimesSectionVM,
     ReportViewModel,
@@ -264,6 +265,15 @@ tr.trucktot td { background: #111722; color: #fcd34d; font-weight: 700; }
 .covarrow { font-size: 16px; color: #7a8698; }
 .covchips { margin-top: 5px; }
 .covstat { margin-top: 5px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 4px; font-size: 9px; }
+.cg-cols { display: flex; gap: 8px; page-break-inside: avoid; }
+.cg-col { flex: 1 1 0; min-width: 0; border: 1px solid rgba(255,255,255,0.06); background: #161d2b;
+          border-radius: 12px; padding: 7px 10px; }
+.cg-title { font-size: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: .12em; margin-bottom: 2px; }
+.cg-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px;
+          border-top: 1px solid rgba(255,255,255,0.06); padding: 3px 0; }
+.cg-num { font-size: 13px; font-weight: 700; color: #e8eef8; }
+.cg-stat { font-size: 9px; }
+.cg-none { font-size: 9px; padding: 3px 0; }
 .ah { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
 .alist { list-style: none; margin: 0; padding: 0; }
 .alist li { display: flex; justify-content: space-between; gap: 8px; padding: 1px 0; font-size: 9.5px; }
@@ -380,6 +390,42 @@ def _coverage_html(c: CoverageSectionVM | None) -> str:
         chunk += ['<div class="cov spacer"></div>'] * (3 - len(chunk))
         rows.append(f'<div class="cov-row">{"".join(chunk)}</div>')
     out.append(f'{"".join(rows)}</section>')
+    return "".join(out)
+
+
+def _cargo_html(c: CargoSectionVM | None) -> str:
+    """Which trucks were supposed to send F.S. garments and NOGs out with
+    their load, and whether that load went. Two columns, one row per truck."""
+    if c is None:
+        return ""
+    out = ["<section>", _section_head("Load", "Garments & NOGs")]
+    if not c.garments and not c.nogs:
+        out.append('<div class="empty">No F.S. garments or NOGs were set for this day.</div></section>')
+        return "".join(out)
+    out.append(_kpis_html(c.kpis))
+
+    def column(title: str, tone: str, rows) -> str:
+        if not rows:
+            body = '<div class="dim cg-none">None set for this day.</div>'
+        else:
+            parts = []
+            for r in rows:
+                num = (
+                    f'<span class="route">#{int(r.truck_number)}</span> &#8594; #{int(r.carrier_truck)}'
+                    if r.carrier_truck is not None
+                    else f"#{int(r.truck_number)}"
+                )
+                parts.append(
+                    f'<div class="cg-row"><span class="mono cg-num">{num}</span>'
+                    f'<span class="cg-stat" style="color:{r.status_hex}">{_e(r.status_label)}</span></div>'
+                )
+            body = "".join(parts)
+        return f'<div class="cg-col"><div class="cg-title" style="color:{tone}">{_e(title)}</div>{body}</div>'
+
+    out.append(
+        f'<div class="cg-cols">{column("F.S. garments", "#fbbf24", c.garments)}'
+        f'{column("NOGs", "#fb7185", c.nogs)}</div></section>'
+    )
     return "".join(out)
 
 
@@ -660,6 +706,9 @@ def render_report_html(vm: ReportViewModel) -> str:
             # route is the first thing to know — followed by the shortage
             # summary. Every section after those starts a fresh page.
             _coverage_html(vm.coverage),
+            # Right after coverage: the garments / NOGs ride on the carrier
+            # the coverage section just named.
+            _cargo_html(vm.cargo),
             _shortages_html(vm.shortages),
             _short_grid_html(vm.shortages),
             _sheet_cards_html(vm.shortages),

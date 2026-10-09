@@ -80,7 +80,7 @@ import {
   type ReportSnapshot,
   type TrackedItem,
 } from "../api/hooks";
-import { buildOperationalDayContext, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
+import { buildOperationalDayContext, cargoCarriers, countUnloadedFromContext, nextRunDate, previousRunDate } from "../utils/truckStatus";
 import type { AuditEntry, BatchSummary, RecurringRouteSwap, RouteSwap, Shortage, SpareAssignment, TruckWithState } from "../types";
 import Modal from "../components/Modal";
 import PageStatus, { pageStatusFor } from "../components/PageStatus";
@@ -106,7 +106,7 @@ const TONE_HEX: Record<string, string> = {
 };
 
 // The report sections the PDF picker offers, in on-screen order.
-type SectionKey = "batches" | "coverage" | "loadTimes" | "shortages" | "shortSheet" | "audit";
+type SectionKey = "batches" | "coverage" | "cargo" | "loadTimes" | "shortages" | "shortSheet" | "audit";
 
 // topCatOf is imported from the shared picker module — this file used to keep
 // its own byte-identical copy "mirroring Audit.tsx", which is exactly how the
@@ -701,6 +701,39 @@ function ReportBody({
   const isRecurring = (routeTruck: number, loadOnTruck: number) =>
     recurringRules.some((r) => r.route_truck === routeTruck && r.load_on_truck === loadOnTruck && r.days.includes(loadDay));
 
+  // ---- F.S. garments & NOGs ----
+  // What was SUPPOSED to go out with each load (the day's garments / NOGs
+  // flags, set at Setup Day) and whether it did. Same rule as the Load page's
+  // strips: a flag is out the door once the truck CARRYING that route's load
+  // is loaded — its own truck, or the coverage carrier. A loaded truck whose
+  // freight still has to be crossloaded (taken out of service after loading)
+  // has NOT gone out: the coverage section shows it "Not moved yet", and this
+  // section must agree.
+  const cargo = useMemo(() => {
+    const carriers = cargoCarriers(board);
+    type CargoRow = { truck: number; carrier: number | null; loaded: boolean; loading: boolean; xload: boolean; finish: number | null };
+    const rowOf = (t: TruckWithState): CargoRow => {
+      const carrier = carriers.get(t.truck_number) ?? null;
+      const st = (carrier ?? t).state;
+      const xload = st?.needs_crossload === true || st?.crossload_to_truck != null;
+      return {
+        truck: t.truck_number,
+        carrier: carrier?.truck_number ?? null,
+        loaded: st?.status === "loaded" && !xload,
+        loading: st?.status === "in_progress",
+        xload,
+        finish: st?.load_finish_time ?? null,
+      };
+    };
+    const byNum = (a: TruckWithState, b: TruckWithState) => a.truck_number - b.truck_number;
+    const garments = board.filter((t) => t.state?.has_dust_garment === true).sort(byNum).map(rowOf);
+    const nogs = board.filter((t) => t.state?.has_nogs === true).sort(byNum).map(rowOf);
+    return { garments, nogs };
+  }, [board]);
+  const cargoLabel = (r: { loaded: boolean; loading: boolean; xload: boolean; finish: number | null }) =>
+    r.xload ? "Needs crossload" : r.loaded ? `Loaded${r.finish ? ` · ${clock(r.finish)}` : ""}` : r.loading ? "Loading…" : "Not loaded";
+  const cargoTotal = cargo.garments.length + cargo.nogs.length;
+
   // ---- Load times ----
   const finished = useMemo(
     () =>
@@ -851,7 +884,7 @@ function ReportBody({
   const [imgDone, setImgDone] = useState(0);
   const [imgErr, setImgErr] = useState(false);
   const [selected, setSelected] = useState<Record<SectionKey, boolean>>({
-    batches: true, coverage: true, loadTimes: true, shortages: true, shortSheet: true, audit: true,
+    batches: true, coverage: true, cargo: true, loadTimes: true, shortages: true, shortSheet: true, audit: true,
   });
 
   useEffect(() => {
@@ -932,6 +965,30 @@ function ReportBody({
             status_hex: done ? "#3b82f6" : "#7a8698",
           };
         }),
+      };
+    }
+
+    if (sel.cargo) {
+      const row = (r: (typeof cargo.garments)[number]) => ({
+        truck_number: r.truck,
+        carrier_truck: r.carrier,
+        loaded: r.loaded,
+        status_label: cargoLabel(r),
+        status_hex: r.xload ? "#f0abfc" : r.loaded ? "#3b82f6" : r.loading ? "#7a8698" : "#f59e0b",
+      });
+      const kpi = (label: string, rows: typeof cargo.garments) => {
+        const out = rows.filter((r) => r.loaded).length;
+        return {
+          label,
+          value: `${out}/${rows.length}`,
+          sub: rows.length === 0 ? "none set" : out === rows.length ? "all out the door" : `${rows.length - out} not loaded`,
+          tone: rows.length === 0 ? null : out === rows.length ? "#3b82f6" : "#f59e0b",
+        };
+      };
+      vm.cargo = {
+        kpis: [kpi("F.S. garments", cargo.garments), kpi("NOGs", cargo.nogs)],
+        garments: cargo.garments.map(row),
+        nogs: cargo.nogs.map(row),
       };
     }
 
@@ -1081,6 +1138,7 @@ function ReportBody({
   // whose route is the first thing to know), batches last.
   const sectionDefs: { key: SectionKey; label: string; phase: "Load" | "Unload"; hint?: string }[] = [
     { key: "coverage", label: "Routes covered", phase: "Load", hint: coverageRows.length ? undefined : "empty" },
+    { key: "cargo", label: "Garments & NOGs", phase: "Load", hint: cargoTotal ? undefined : "empty" },
     { key: "shortages", label: "Shortages", phase: "Load", hint: shorts.length ? undefined : "empty" },
     { key: "shortSheet", label: "Short sheet", phase: "Load", hint: shorts.length ? undefined : "empty" },
     { key: "loadTimes", label: "Load times", phase: "Load", hint: finished.length ? undefined : "empty" },
@@ -1118,6 +1176,7 @@ function ReportBody({
       shortSheet: shorts.length > 0,
       batches: (batches?.length ?? 0) > 0,
       coverage: coverageRows.length > 0,
+      cargo: cargoTotal > 0,
       loadTimes: finished.length > 0,
       audit: auditEntries.length > 0,
     };
@@ -1125,7 +1184,7 @@ function ReportBody({
     const live = sectionDefs.filter((d) => allowed(d) && has[d.key]);
     // Fall back to whatever is selected so kiosk mode is never empty.
     return (live.length > 0 ? live : sectionDefs.filter(allowed)).map((d) => d.key);
-  }, [selected, shorts.length, batches, coverageRows.length, finished.length, auditEntries.length, sectionDefs, showLoadTimer]);
+  }, [selected, shorts.length, batches, coverageRows.length, cargoTotal, finished.length, auditEntries.length, sectionDefs, showLoadTimer]);
 
   // null = nothing left to rotate: only Load times was picked and the Load
   // timer switch hides it. Show that plainly rather than an unpicked section.
@@ -1315,7 +1374,7 @@ function ReportBody({
         try {
           const blob = await captureNodeToPngBlob(node);
           const name = v.suffix ? `${def.label}-${v.suffix}` : def.label;
-          const safe = `ReadyRoute-${name}-${runDate}`.replace(/\s+/g, "-").replace(/[^\w.-]/g, "");
+          const safe = `ReadyRoute-${name}-${runDate}`.replace(/\s+/g, "-").replace(/[^\w.-]/g, "").replace(/-{2,}/g, "-");
           await exportFile(blob, `${safe}.png`, "image/png");
           setImgDone((n) => n + 1);
         } catch (e) {
@@ -1545,6 +1604,60 @@ function ReportBody({
               })}
             </div>
           </>)}
+        </Section>
+        )}
+        {/* ===================== LOAD · GARMENTS & NOGS ===================== */}
+        {showSection("cargo") && (
+        <Section eyebrow="Load" title="Garments & NOGs" sectionKey="cargo" downloadName={dlName("Garments-NOGs")}>
+          {cargoTotal === 0 ? (
+            <Empty>No F.S. garments or NOGs were set for this day.</Empty>
+          ) : (
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+              {([
+                { title: "F.S. garments", tone: "text-amber-400", rows: cargo.garments },
+                { title: "NOGs", tone: "text-rose-400", rows: cargo.nogs },
+              ] as const).map(({ title, tone, rows }) => {
+                const out = rows.filter((r) => r.loaded).length;
+                return (
+                  <div key={title} className="rounded-xl border border-hairline bg-surface p-4">
+                    <div className="mb-1 flex items-baseline justify-between gap-3">
+                      <p className={clsx("text-xs font-semibold uppercase tracking-wide", tone)}>{title}</p>
+                      {rows.length > 0 && (
+                        <p className={clsx("text-sm font-bold tabular-nums", out === rows.length ? "text-st-loaded" : "text-amber-400")}>
+                          {out}/{rows.length} out
+                        </p>
+                      )}
+                    </div>
+                    {rows.length === 0 ? (
+                      <p className="py-1 text-sm text-ink-faint">None set for this day.</p>
+                    ) : (
+                      <ul className="divide-y divide-hairline">
+                        {rows.map((r) => (
+                          <li key={r.truck} className="flex items-baseline justify-between gap-3 py-1.5">
+                            {/* Covered route: ROUTE → the truck its load rode on. */}
+                            <span className="font-mono text-lg font-black tabular-nums text-ink">
+                              {r.carrier != null ? (
+                                <>
+                                  <span className="text-sky-300">{r.truck}</span>
+                                  <span className="px-1 text-sm text-ink-faint">→</span>
+                                  {r.carrier}
+                                </>
+                              ) : (
+                                <>#{r.truck}</>
+                              )}
+                            </span>
+                            <span className={clsx("text-sm", r.xload ? "text-fuchsia-300" : r.loaded ? "text-st-loaded" : r.loading ? "text-ink-muted" : "text-amber-400")}>
+                              {cargoLabel(r)}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </Section>
         )}
         {/* ===================== LOAD · SHORTAGES ===================== */}

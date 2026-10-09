@@ -63,6 +63,21 @@ export interface CoverageSectionVM {
   rows: CoverageRowVM[];
 }
 
+export interface CargoRowVM {
+  truck_number: number;
+  /** Another truck carried this route's load — the garments / NOGs rode on it. */
+  carrier_truck?: number | null;
+  loaded: boolean;
+  status_label: string;
+  status_hex: string;
+}
+
+export interface CargoSectionVM {
+  kpis: ReportKpiVM[];
+  garments: CargoRowVM[];
+  nogs: CargoRowVM[];
+}
+
 export interface LoadTimeRowVM {
   truck_number: number;
   finish_label: string;
@@ -146,6 +161,7 @@ export interface ReportViewModel {
   title?: string;
   batches?: BatchesSectionVM | null;
   coverage?: CoverageSectionVM | null;
+  cargo?: CargoSectionVM | null;
   load_times?: LoadTimesSectionVM | null;
   shortages?: ShortagesSectionVM | null;
   audit?: AuditSectionVM | null;

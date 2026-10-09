@@ -27,8 +27,8 @@ export default function PDFReportsPanel() {
       <div>
         <h3 className="text-sm font-semibold uppercase tracking-wide text-ink-soft">Day report PDF</h3>
         <p className="mt-1 text-xs text-ink-muted">
-          The full run report — route coverage, shortages, the short sheet, load times, batches and
-          audit — rendered as a dark, selectable PDF. Same report as the Report page.
+          The full run report — route coverage, F.S. garments &amp; NOGs, shortages, the short sheet,
+          load times, batches and audit — rendered as a dark, selectable PDF. Same report as the Report page.
         </p>
       </div>
 
