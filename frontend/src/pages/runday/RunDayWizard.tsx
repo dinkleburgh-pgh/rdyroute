@@ -372,9 +372,21 @@ export default function RunDayWizard({
    *  were loaded and pushed the day before. This write lived on the removed
    *  "Trucks not here" page; it is load-bearing, so Finish does it silently.
    *  Guard: never downgrade a truck already in progress or loaded. */
+  // Only rows nobody has touched today. A truck the crew set Dirty by hand
+  // (or stamped arrived, started unloading, batched) came back with cargo
+  // whatever the schedule says, and the wizard must not wipe that back to
+  // Unloaded. Day-init rows are state_source "auto", the wizard's own
+  // garment/NOGs writes are "wizard"; every human action is "workflow".
   async function syncReturningTrucks() {
     const tasks = returningTrucks
-      .filter((t) => t.state?.status !== "in_progress" && t.state?.status !== "loaded")
+      .filter((t) => {
+        const st = t.state;
+        if (st == null) return true;
+        if (st.status === "in_progress" || st.status === "loaded" || st.status === "unfinished" || st.status === "unloaded") return false;
+        if (st.state_source === "workflow") return false;
+        if (st.arrived_at != null || st.unloading_started_at != null || st.batch_id != null) return false;
+        return true;
+      })
       .map((t) =>
         upsert.mutateAsync({
           truck_number: t.truck_number,

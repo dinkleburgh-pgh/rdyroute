@@ -518,7 +518,19 @@ export default function Unload() {
   function beginUnloading(t: TruckWithState) {
     if (isUnloadDone(t)) return;
     if (unloadingAt(t) != null) return;
-    upsert.mutate({ truck_number: t.truck_number, run_date: runDate, unloading_started_at: Date.now() / 1000 });
+    // The marker only fits Dirty/Unfinished (the server 409s "nothing to
+    // unload" otherwise). A truck listed here on a dead raw status — "oos"
+    // from an older OOS write, off, shop — is still physically on the dock
+    // with cargo, so set it Dirty in the same write; status + marker together
+    // is the one combination the server keeps the marker for.
+    const raw = t.state?.status ?? "dirty";
+    const needsDirty = raw !== "dirty" && raw !== "unfinished";
+    upsert.mutate({
+      truck_number: t.truck_number,
+      run_date: runDate,
+      ...(needsDirty ? { status: "dirty" as const } : {}),
+      unloading_started_at: Date.now() / 1000,
+    });
   }
 
   async function cancelUnloading(t: TruckWithState) {
