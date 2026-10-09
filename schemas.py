@@ -1022,6 +1022,11 @@ class NogsUsualOut(BaseModel):
     last_flagged: date
 
 
+class GarmentsUsualOut(NogsUsualOut):
+    """Same shape for F.S. garments: how often one Dust truck came back with
+    garments on one weekday (from garment_day_log)."""
+
+
 # ---------------------------------------------------------------------------
 # Notices
 # ---------------------------------------------------------------------------

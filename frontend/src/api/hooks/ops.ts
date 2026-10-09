@@ -885,3 +885,15 @@ export function useNogsUsual(weeks = 8) {
     staleTime: 10 * 60_000,
   });
 }
+
+/** The garments twin: how often each F.S. truck came back with garments per
+ *  weekday (0 = Monday), from the garment day log. Same row shape. */
+export type GarmentsUsual = NogsUsual;
+
+export function useGarmentsUsual(weeks = 8) {
+  return useQuery({
+    queryKey: ["garments-usual", weeks],
+    queryFn: async () => (await api.get<GarmentsUsual[]>("/trucks/garments-usual", { params: { weeks } })).data,
+    staleTime: 10 * 60_000,
+  });
+}

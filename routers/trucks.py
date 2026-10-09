@@ -50,6 +50,7 @@ from schemas import (
     CompletionDailyPoint,
     CycleDailyPoint,
     GarmentDayLogOut,
+    GarmentsUsualOut,
     NogsDayLogOut,
     NogsUsualOut,
     TruckStateCreate,
@@ -764,47 +765,38 @@ def get_nogs_log(
     ).all()
 
 
-@router.get("/nogs-usual", response_model=list[NogsUsualOut])
-def get_nogs_usual(
-    weeks: int = Query(default=8, ge=1, le=52),
-    db: Session = Depends(get_db),
-    _user: User = Depends(get_current_user),
-):
-    """How often each route carried NOGs on each weekday over the last N weeks
-    — the read a future auto-guess makes ("#84 had NOGs on 6 of the last 7
-    Tuesdays"). Final state per day only (the newest log row wins), measured
+def _usual_by_weekday(
+    db: Session,
+    weeks: int,
+    daily_final: dict[tuple[date, int], bool],
+    first_logged: date | None,
+) -> list[dict]:
+    """How often each truck's flag was ON per weekday over the window, measured
     against the days the plant actually ran (distinct truck_states run_dates),
-    so a closed Monday never counts against a route that always has NOGs on
-    Mondays. Nothing here guesses yet; it only reports."""
-    cutoff = (datetime.now(timezone.utc) - timedelta(weeks=weeks)).date()
-    rows = db.scalars(
-        select(NogsDayLog).where(NogsDayLog.run_date >= cutoff).order_by(NogsDayLog.created_at.asc())
-    ).all()
-    if not rows:
+    so a closed Monday never counts against a truck that always carries on
+    Mondays. `daily_final` is the flag's final value per (run_date, truck);
+    operating days count only from the first day the log covers — before that
+    nothing was being recorded, and counting those days made every share read
+    low until the window had filled with data."""
+    if not daily_final or first_logged is None:
         return []
-    # Operating days count only from the first day the log covers: before that
-    # a route without NOGs was not being recorded at all, and counting those
-    # days made every share read low until the window had filled with data.
-    first_logged = min(r.run_date for r in rows)
+    cutoff = (datetime.now(timezone.utc) - timedelta(weeks=weeks)).date()
     ran = set(
         db.scalars(
             select(TruckState.run_date).where(TruckState.run_date >= max(cutoff, first_logged)).distinct()
         ).all()
     )
-    final: dict[tuple[date, int], bool] = {}
-    for r in rows:  # ascending created_at, so the last write for a day wins
-        final[(r.run_date, r.truck_number)] = r.has_nogs
     operating_by_weekday: dict[int, int] = {}
     for d in ran:
         operating_by_weekday[d.weekday()] = operating_by_weekday.get(d.weekday(), 0) + 1
     flagged: dict[tuple[int, int], list[date]] = {}
-    for (d, n), v in final.items():
+    for (d, n), v in daily_final.items():
         if v and d in ran:
             flagged.setdefault((n, d.weekday()), []).append(d)
-    out: list[NogsUsualOut] = []
+    out: list[dict] = []
     for (n, wd), dates in sorted(flagged.items()):
         total = operating_by_weekday.get(wd, 0)
-        out.append(NogsUsualOut(
+        out.append(dict(
             truck_number=n,
             weekday=wd,
             flagged_days=len(dates),
@@ -813,6 +805,47 @@ def get_nogs_usual(
             last_flagged=max(dates),
         ))
     return out
+
+
+@router.get("/nogs-usual", response_model=list[NogsUsualOut])
+def get_nogs_usual(
+    weeks: int = Query(default=8, ge=1, le=52),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """How often each route carried NOGs on each weekday over the last N weeks
+    — the read behind Setup Day's "usual for Tuesdays" list ("#84 had NOGs on
+    6 of the last 7 Tuesdays"). Final state per day only (the newest log row
+    wins). Nothing here guesses; it only reports."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(weeks=weeks)).date()
+    rows = db.scalars(
+        select(NogsDayLog).where(NogsDayLog.run_date >= cutoff).order_by(NogsDayLog.created_at.asc())
+    ).all()
+    final: dict[tuple[date, int], bool] = {}
+    for r in rows:  # ascending created_at, so the last write for a day wins
+        final[(r.run_date, r.truck_number)] = r.has_nogs
+    first_logged = min((r.run_date for r in rows), default=None)
+    return [NogsUsualOut(**o) for o in _usual_by_weekday(db, weeks, final, first_logged)]
+
+
+@router.get("/garments-usual", response_model=list[GarmentsUsualOut])
+def get_garments_usual(
+    weeks: int = Query(default=8, ge=1, le=52),
+    db: Session = Depends(get_db),
+    _user: User = Depends(get_current_user),
+):
+    """The garments twin of /nogs-usual: how often each Dust truck came back
+    with F.S. garments on each weekday, from garment_day_log. Feeds Setup
+    Day's usual-first Garments page."""
+    cutoff = (datetime.now(timezone.utc) - timedelta(weeks=weeks)).date()
+    rows = db.scalars(
+        select(GarmentDayLog).where(GarmentDayLog.run_date >= cutoff).order_by(GarmentDayLog.created_at.asc())
+    ).all()
+    final: dict[tuple[date, int], bool] = {}
+    for r in rows:
+        final[(r.run_date, r.truck_number)] = r.has_garment
+    first_logged = min((r.run_date for r in rows), default=None)
+    return [GarmentsUsualOut(**o) for o in _usual_by_weekday(db, weeks, final, first_logged)]
 
 
 @router.get("/board", response_model=list[TruckWithState])

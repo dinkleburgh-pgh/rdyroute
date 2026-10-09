@@ -21,6 +21,7 @@ import {
   useSetHolidayUnload,
   useSetWizardCompleted,
   usePrevDayCarriers,
+  useGarmentsUsual,
   useNogsUsual,
   usePrevDaySplitHelpers,
   useUpsertSetting,
@@ -172,6 +173,28 @@ export default function RunDayWizard({
       ? nogsAllOrdered
       : nogsAllOrdered.filter((n) => usualNogs.includes(n) || nogsPicked.has(n));
   const WEEKDAY_NAMES = ["Mondays", "Tuesdays", "Wednesdays", "Thursdays", "Fridays", "Saturdays", "Sundays"];
+
+  // "Usual garments" for this weekday, from the garment day log — the same
+  // usual-first list as NOGs: the trucks that come back with F.S. garments
+  // most weeks on this weekday show first, the rest behind an expander.
+  const { data: garmentsUsualRaw } = useGarmentsUsual();
+  const [garmentsExpanded, setGarmentsExpanded] = useState(false);
+  const usualGarments = useMemo(() => {
+    const dustNums = new Set(dustTrucks.map((t) => t.truck_number));
+    return (Array.isArray(garmentsUsualRaw) ? garmentsUsualRaw : [])
+      .filter((r) => r.weekday === nogsWeekday && r.share >= 0.5 && dustNums.has(r.truck_number))
+      .sort((a, b) => b.share - a.share)
+      .map((r) => r.truck_number);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [garmentsUsualRaw, nogsWeekday, board]);
+  const garmentsAllOrdered = (() => {
+    const usualSet = new Set(usualGarments);
+    return [...usualGarments, ...dustTrucks.map((t) => t.truck_number).filter((n) => !usualSet.has(n))];
+  })();
+  const garmentsVisible =
+    garmentsExpanded || usualGarments.length === 0
+      ? garmentsAllOrdered
+      : garmentsAllOrdered.filter((n) => usualGarments.includes(n) || dustSelected.has(n));
 
   const { data: swaps = [] } = useRouteSwaps(runDate);
   const { data: spareAssignments = [] } = useSpareAssignments(runDate);
@@ -609,14 +632,37 @@ export default function RunDayWizard({
               <StepHeading title="F.S. garments" help="Tap each truck that came back with garments." />
               <ChipGroup
                 title="F.S. trucks with garments"
-                help="They flash on the Load Display while that truck loads."
+                help={
+                  usualGarments.length > 0 && !garmentsExpanded
+                    ? `Usual for ${WEEKDAY_NAMES[nogsWeekday]} — tap any that apply. They flash on the Load Display while that truck loads.`
+                    : "They flash on the Load Display while that truck loads."
+                }
                 tone="garments"
-                trucks={editableDustTrucks.map((t) => t.truck_number)}
+                trucks={garmentsVisible}
                 selected={dustSelected}
                 onToggle={toggleDust}
-                onSetAll={setAll(setDustSelected, editableDustTrucks.map((t) => t.truck_number))}
+                onSetAll={setAll(setDustSelected, garmentsVisible)}
                 empty="No F.S. trucks in fleet."
               />
+              {usualGarments.length > 0 && (
+                garmentsExpanded ? (
+                  <button
+                    type="button"
+                    className="w-full rounded-lg border border-dashed border-hairline bg-surface/40 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                    onClick={() => setGarmentsExpanded(false)}
+                  >
+                    Show the usual trucks only
+                  </button>
+                ) : garmentsAllOrdered.length > garmentsVisible.length ? (
+                  <button
+                    type="button"
+                    className="w-full rounded-lg border border-dashed border-hairline bg-surface/40 py-2 text-xs font-semibold text-ink-muted transition-colors hover:text-ink"
+                    onClick={() => setGarmentsExpanded(true)}
+                  >
+                    + {garmentsAllOrdered.length - garmentsVisible.length} more trucks
+                  </button>
+                ) : null
+              )}
             </div>
           )}
 

@@ -47,7 +47,12 @@ import { errorDetail } from "../../api/errors";
  * gap where someone is reading the next line off the paper sheet, splitting one
  * item's batch across several posts.
  */
-const AUTO_LOG_MS = 2500;
+// Idle before the batch posts itself. Longer while a quantity box still has
+// focus: a pause mid-number (reading the sheet, a glove fumble) must not save
+// and move on under the typist — the crew said 2.5s "saves and closes too
+// quick". Enter still commits at once.
+const AUTO_LOG_MS = 5000;
+const AUTO_LOG_FOCUSED_MS = 12000;
 
 interface SessionBatch {
   /** `${category}||${detail}` — one box per ITEM, merged across submits. */
@@ -88,6 +93,9 @@ export default function ItemFirstEntry({
   const [pickerResetKey, setPickerResetKey] = useState(0);
   const lastAddedRef = useRef<number | null>(null);
   const [autoArmed, setAutoArmed] = useState(false);
+  // Which truck's quantity box has focus (null = none) — the idle timer waits
+  // longer while someone is still in a box.
+  const [focusedQty, setFocusedQty] = useState<number | null>(null);
   /** Set when a post fails, so the idle timer stops retrying the same payload. */
   const autoBlockedRef = useRef(false);
   /**
@@ -417,9 +425,9 @@ export default function ItemFirstEntry({
     const t = window.setTimeout(() => {
       setAutoArmed(false);
       void submitRef.current();
-    }, AUTO_LOG_MS);
+    }, focusedQty != null ? AUTO_LOG_FOCUSED_MS : AUTO_LOG_MS);
     return () => window.clearTimeout(t);
-  }, [unsent, bulk.isPending]);
+  }, [unsent, bulk.isPending, focusedQty]);
 
   // Resolve each box's live rows and drop boxes whose rows were all undone
   // (an emptied box used to linger with no chips).
@@ -625,6 +633,8 @@ export default function ItemFirstEntry({
                             lastAddedRef.current = null;
                           }
                         }}
+                        onFocus={() => setFocusedQty(n)}
+                        onBlur={() => setFocusedQty((cur) => (cur === n ? null : cur))}
                         onChange={(e) => {
                           autoBlockedRef.current = false;
                           setAutoFailed(false);
@@ -686,7 +696,7 @@ export default function ItemFirstEntry({
                       Saving…
                     </>
                   ) : (
-                    <span className="text-slate-500">Keep tapping trucks — this logs itself once you pause.</span>
+                    <span className="text-slate-500">Keep tapping trucks — this logs itself a few seconds after you pause (Enter logs now).</span>
                   )}
                 </p>
               )}
